@@ -192,37 +192,39 @@ pub(super) fn spawn(
         let Some(source) = &sources[i] else {
             continue;
         };
-        let part = commands
-            .spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(
-                        rect.x + source.offset.x
-                            - if source.logical_size.x > 0.0 {
-                                1.0
-                            } else {
-                                0.0
-                            },
-                    ),
-                    top: Val::Px(rect.y + source.offset.y),
-                    width: Val::Px(source.size.x),
-                    height: Val::Px(source.size.y),
-                    ..default()
-                },
-                source.image.clone(),
-                if source.pending {
-                    Visibility::Hidden
-                } else {
-                    Visibility::Inherited
-                },
-                appearance::TextTintSource {
-                    owner,
-                    color: Some(fairygui_core::color::Color::WHITE),
-                },
-                bevy::picking::Pickable::IGNORE,
-                ChildOf(entity),
-            ))
-            .id();
+        let mut image = commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(
+                    rect.x + source.offset.x
+                        - if source.logical_size.x > 0.0 {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                ),
+                top: Val::Px(rect.y + source.offset.y),
+                width: Val::Px(source.size.x),
+                height: Val::Px(source.size.y),
+                ..default()
+            },
+            source.image.clone(),
+            if source.pending {
+                Visibility::Hidden
+            } else {
+                Visibility::Inherited
+            },
+            appearance::TextTintSource {
+                owner,
+                color: Some(fairygui_core::color::Color::WHITE),
+            },
+            bevy::picking::Pickable::IGNORE,
+            ChildOf(entity),
+        ));
+        if let Some(player) = source.movie.clone() {
+            image.insert(rich_text::InlineMovieClipPlayer::new(owner, player));
+        }
+        let part = image.id();
         parts.push(part);
     }
     for run in &layout.runs {

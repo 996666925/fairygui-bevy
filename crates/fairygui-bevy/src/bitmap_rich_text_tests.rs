@@ -1,4 +1,5 @@
 use super::*;
+use bevy::ecs::system::RunSystemOnce;
 
 fn fixture(name: &str, content: &str) -> (App, usize, GObjectId, GObjectId, Entity) {
     let package = FuiPackage::parse(
@@ -216,6 +217,82 @@ fn exported_bitmap_spans_scale_tint_images_and_underlines_and_keep_pool_and_rebu
         app.update();
         assert!(app.world().get_entity(entity).is_err());
     }
+}
+
+#[test]
+fn package_movie_clips_animate_as_bitmap_rich_text_inline_images() {
+    let (mut app, _, _, owner, entity) = fixture("n8", "");
+    let package = FuiPackage::parse(
+        "Bag",
+        include_bytes!("../../fairygui-demo/assets/ui/Bag.fui"),
+    )
+    .unwrap();
+    let (index, clip) = package
+        .items()
+        .iter()
+        .enumerate()
+        .find_map(|(index, item)| {
+            if item.item_type != fairygui_core::package::PackageItemType::MovieClip {
+                return None;
+            }
+            let clip = package
+                .load_movie_clip(index, &fairygui_core::package::LoadContext::none())
+                .ok()?;
+            (clip.frame_count() > 1).then_some((index, clip))
+        })
+        .expect("Bag fixture contains a multi-frame movie clip");
+    let url = format!("ui://{}{}", package.id(), package.item(index).unwrap().id);
+    let _bag_handle = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: package.clone(),
+            res_key: "ui/Bag".into(),
+        });
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, &format!("[img]{url}[/img]"));
+    app.update();
+    app.update();
+
+    let block = app.world().get::<BitmapRichText>(entity).unwrap();
+    let image = *block
+        .parts
+        .iter()
+        .find(|&&part| app.world().get::<ImageNode>(part).is_some())
+        .unwrap();
+    let player = app
+        .world()
+        .get::<InlineMovieClipPlayer>(image)
+        .expect("bitmap inline movie source keeps its player");
+    assert_eq!(player.frame_count(), clip.frame_count());
+    let first = player.frame();
+    for _ in 0..120 {
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_millis(100));
+        app.world_mut()
+            .run_system_once(advance_inline_movie_clips)
+            .unwrap();
+        if app
+            .world()
+            .get::<InlineMovieClipPlayer>(image)
+            .unwrap()
+            .frame()
+            != first
+        {
+            break;
+        }
+    }
+    assert_ne!(
+        app.world()
+            .get::<InlineMovieClipPlayer>(image)
+            .unwrap()
+            .frame(),
+        first,
+        "the bitmap inline clip advances while its FairyGUI owner is on stage"
+    );
 }
 
 fn point(app: &mut App, entity: Entity, logical: Vec2) {

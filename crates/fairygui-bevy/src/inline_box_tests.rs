@@ -100,6 +100,109 @@ fn source(app: &App, url: &str) -> InlineImageSource {
 }
 
 #[test]
+fn package_movie_clips_animate_as_rich_text_inline_images() {
+    let (mut app, _, text) = fixture();
+    let package = FuiPackage::parse(
+        "Bag",
+        include_bytes!("../../fairygui-demo/assets/ui/Bag.fui"),
+    )
+    .unwrap();
+    let (index, clip) = package
+        .items()
+        .iter()
+        .enumerate()
+        .find_map(|(index, item)| {
+            if item.item_type != fairygui_core::package::PackageItemType::MovieClip {
+                return None;
+            }
+            let clip = package
+                .load_movie_clip(index, &fairygui_core::package::LoadContext::none())
+                .ok()?;
+            (clip.frame_count() > 1).then_some((index, clip))
+        })
+        .expect("Bag fixture contains a multi-frame movie clip");
+    let url = format!("ui://{}{}", package.id(), package.item(index).unwrap().id);
+    let _bag_handle = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: package.clone(),
+            res_key: "ui/Bag".into(),
+        });
+    {
+        let assets = app.world().resource::<Assets<FuiAsset>>();
+        let own = assets
+            .iter()
+            .find_map(|(_, asset)| (asset.package.id() != package.id()).then_some(asset))
+            .unwrap();
+        assert!(matches!(
+            image_identity(
+                own,
+                assets,
+                app.world().resource::<AssetServer>(),
+                app.world().resource::<Assets<Image>>(),
+                &url,
+            ),
+            Some(InlineImageIdentity::PackageMovieClip { .. })
+        ));
+        assert!(
+            inline_image(
+                own,
+                assets,
+                app.world().resource::<AssetServer>(),
+                app.world().resource::<Assets<Image>>(),
+                &url,
+                Default::default(),
+            )
+            .is_some()
+        );
+    }
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_ubb_enabled(text, true);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(text, &format!("[img]{url}[/img]"));
+    app.update();
+    app.update();
+
+    let image = images(&app, text)[0];
+    let player = app
+        .world()
+        .get::<InlineMovieClipPlayer>(image)
+        .expect("inline movie source keeps its player");
+    assert_eq!(player.frame_count(), clip.frame_count());
+    let first = player.frame();
+    for _ in 0..120 {
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_millis(100));
+        app.world_mut()
+            .run_system_once(advance_inline_movie_clips)
+            .unwrap();
+        if app
+            .world()
+            .get::<InlineMovieClipPlayer>(image)
+            .unwrap()
+            .frame()
+            != first
+        {
+            break;
+        }
+    }
+    assert_ne!(
+        app.world()
+            .get::<InlineMovieClipPlayer>(image)
+            .unwrap()
+            .frame(),
+        first,
+        "the inline clip advances while its FairyGUI owner is on stage"
+    );
+}
+
+#[test]
 fn image_only_paragraphs_use_real_box_widths_and_wrap_without_phantom_glyphs() {
     let (mut app, _, text) = fixture();
     let url = "ui://9leh0eyfrpmb6";

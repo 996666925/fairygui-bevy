@@ -99,9 +99,12 @@ mod stage;
 pub(crate) use stage::sync_stage_hierarchy;
 #[path = "rich_text.rs"]
 mod rich_text;
+#[cfg(test)]
+pub(crate) use rich_text::InlineMovieClipPlayer;
 pub(crate) use rich_text::LinkHit;
 pub(crate) use rich_text::{
-    InlineImage, RichTextBlock, finalize_inline_images, sync_inline_image_hierarchy, sync_rich_text,
+    InlineImage, RichTextBlock, advance_inline_movie_clips, finalize_inline_images,
+    sync_inline_image_hierarchy, sync_rich_text,
 };
 pub use rich_text::{InlineImageOwner, InlineImageParts};
 

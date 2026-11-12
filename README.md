@@ -181,7 +181,7 @@ cargo run -p fairygui-core --bin dump_fui -- crates/fairygui-core/tests/fixtures
 | 关联的按比例模式 | 按增量处理；在「边距保持」语义下与官方等效 |
 | 文本自动尺寸 | 普通文本依赖引擎布局回读，存在一帧延迟；位图文本使用独立逻辑像素测量回填 Both/Height，包含空文本和缺字文本，保留 Shrink/Ellipsis 的外框 |
 | 文本换行的完整规则 | 普通与 UBB 位图文本已按 Laya 3.3 的命令、单词边界、标点回退与 UTF-16 字形测量处理；UBB 支持跨样式段移词和图片占位。普通/富文本依赖 Bevy，仍有断行差异；完整 Unicode 断行和普通文字的原版排版仍未覆盖 |
-| 富文本排版与链接 | UBB 与 HTML 采用原版转换/样式栈，支持实体、相对字号、嵌套/错配标签及默认链接下划线；RichText 关闭 UBB 后保留 HTML。粗细、斜体、下划线与删除线已映射到 Bevy，实际字形取决于字体支持；内联图片用 Bevy `InlineBox` 按原始画布和左右留白参与测量、换行，裁剪切片保留偏移并在本帧布局后定位；行内垂直居中、行高和取整仍与 Laya 存在差异；UBB 链接按实测文字段命中并原样携带地址，发布 `GuiLink` 和冒泡的 `EventKind::Link`；外部静态图片已接入两种文本后端，详见 [外部内联图片](docs/external-inline-images.md)；HTML 表单对象与内联图集动画仍未接入，详见 [标记解析](docs/markup.md) |
+| 富文本排版与链接 | UBB 与 HTML 采用原版转换/样式栈，支持实体、相对字号、嵌套/错配标签及默认链接下划线；RichText 关闭 UBB 后保留 HTML。粗细、斜体、下划线与删除线已映射到 Bevy，实际字形取决于字体支持；内联图片用 Bevy `InlineBox` 按原始画布和左右留白参与测量、换行，裁剪切片保留偏移并在本帧布局后定位；包内 MovieClip 地址会在普通和位图富文本中按舞台生命周期播放；行内垂直居中、行高和取整仍与 Laya 存在差异；UBB 链接按实测文字段命中并原样携带地址，发布 `GuiLink` 和冒泡的 `EventKind::Link`；外部静态图片已接入两种文本后端，详见 [外部内联图片](docs/external-inline-images.md)；HTML 表单对象仍未接入，详见 [标记解析](docs/markup.md) |
 | 文本描边的剩余边界 | 普通矢量文字已支持描边/填充预合成及透明度；原版浏览器字形像素、整串/逐字缓存边界、彩色字体描边和完整文本/容器离屏合成仍待对齐。详见 [描边说明](docs/text-stroke.md) |
 | 按钮的附加效果 | 选中状态与控制器页已联动，点击改变选择时投递一次 `StateChanged`；`downEffect` 已接入按下缩放与非文本直接子控件压色；松开恢复原尺度或白色，按住移出保持效果；`linkedPopup` 支持运行时绑定的对象/窗口，在按下时切换，普通弹层支持栈、外部按下关闭和保留视图重用；`fire_button_click` 接入原版内部点击逻辑及 Common 按钮 100/200 ms 反馈，不派发普通 `Click`，详见 [按钮交互](docs/button-interaction.md) |
 | 装载器的扩展内容 | 图片与序列帧使用独立内容节点；`ui://` 组件内容支持跨包资源、嵌套 Loader、缩放或 `useResize` 重排、按钮输入与过渡生命周期。已接入可配置失败提示图、FIFO 对象复用、加载状态查询和显式重试；切换 URL 清理旧内容。详见 [Loader 组件与加载状态](docs/loader-components.md) |

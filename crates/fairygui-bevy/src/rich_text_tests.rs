@@ -429,7 +429,7 @@ fn initially_plain_ubb_text_can_gain_images_and_missing_image_addresses_do_not_l
         ("plain", 0),
         ("[img]ui://9leh0eyfrpmb6[/img]", 1),
         ("[img]ui://does-not-exist[/img]", 0),
-        ("[img]ui://9leh0eyft9fj5f[/img]", 0), // A MovieClip is not an image texture.
+        ("[img]ui://9leh0eyft9fj5f[/img]", 1), // Package movie clips are valid animated inline images.
     ] {
         app.world_mut()
             .non_send_mut::<GuiRuntime>()

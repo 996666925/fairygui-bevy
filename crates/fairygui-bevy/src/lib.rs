@@ -143,6 +143,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::advance_tweens,
                 runtime::sync_movie_sources,
                 movie::advance_movie_clips,
+                runtime::advance_inline_movie_clips,
                 movie::discard_unused_animation_commands,
                 runtime::emit_animation_completions,
             )
