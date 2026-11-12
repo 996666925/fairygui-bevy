@@ -678,13 +678,15 @@ impl ObjectStore {
 
         for child in children {
             // 先把需要的数据取出来，避免后续改动时反复借用。
-            let Some((x, y, width, height, mut relations)) =
+            let Some((x, y, width, height, owner_pivot, owner_pivot_as_anchor, mut relations)) =
                 self.objects.get(child).map(|object| {
                     (
                         object.x,
                         object.y,
                         object.width,
                         object.height,
+                        Point::new(object.pivot_x, object.pivot_y),
+                        object.pivot_as_anchor,
                         object.relations.clone(),
                     )
                 })
@@ -701,13 +703,24 @@ impl ObjectStore {
 
             let (mut new_x, mut new_y) = (x, y);
             let (mut new_width, mut new_height) = (width, height);
-            relations.apply_on_target_resized(
+            let target = self.objects.get(container).unwrap();
+            relations.apply_on_target_resized_with_context(
                 &mut new_x,
                 &mut new_y,
                 &mut new_width,
                 &mut new_height,
-                d_width,
-                d_height,
+                crate::widget::relation::RelationResize::new(
+                    crate::widget::relation::RelationTarget {
+                        old_size: Point::new(target.width - d_width, target.height - d_height),
+                        new_size: Point::new(target.width, target.height),
+                        pivot: Point::new(target.pivot_x, target.pivot_y),
+                        pivot_as_anchor: target.pivot_as_anchor,
+                        is_parent: true,
+                        ..crate::widget::relation::RelationTarget::default()
+                    },
+                    owner_pivot,
+                    owner_pivot_as_anchor,
+                ),
             );
 
             if new_x != x || new_y != y {
@@ -757,13 +770,15 @@ impl ObjectStore {
                 continue;
             }
 
-            let Some((x, y, width, height, mut relations)) =
+            let Some((x, y, width, height, owner_pivot, owner_pivot_as_anchor, mut relations)) =
                 self.objects.get(sibling).map(|object| {
                     (
                         object.x,
                         object.y,
                         object.width,
                         object.height,
+                        Point::new(object.pivot_x, object.pivot_y),
+                        object.pivot_as_anchor,
                         object.relations.clone(),
                     )
                 })
@@ -781,13 +796,24 @@ impl ObjectStore {
 
             let (mut new_x, mut new_y) = (x, y);
             let (mut new_width, mut new_height) = (width, height);
-            relations.apply_on_target_resized(
+            let target = self.objects.get(changed).unwrap();
+            relations.apply_on_target_resized_with_context(
                 &mut new_x,
                 &mut new_y,
                 &mut new_width,
                 &mut new_height,
-                d_width,
-                d_height,
+                crate::widget::relation::RelationResize::new(
+                    crate::widget::relation::RelationTarget {
+                        old_size: Point::new(target.width - d_width, target.height - d_height),
+                        new_size: Point::new(target.width, target.height),
+                        position: Point::new(target.x, target.y),
+                        pivot: Point::new(target.pivot_x, target.pivot_y),
+                        pivot_as_anchor: target.pivot_as_anchor,
+                        ..crate::widget::relation::RelationTarget::default()
+                    },
+                    owner_pivot,
+                    owner_pivot_as_anchor,
+                ),
             );
 
             if new_x != x || new_y != y {
@@ -3429,6 +3455,115 @@ mod tests {
         let b = store.create(ObjectType::Image);
         assert_ne!(a, b, "句柄带版本号，回收后不应被复用");
         assert!(!store.contains(a));
+    }
+
+    #[test]
+    fn proportional_parent_relations_scale_positions_and_sizes_from_original_ratio() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        let child = store.create(ObjectType::Component);
+        store.set_parent(child, Some(parent));
+        store.set_size(parent, 100.0, 100.0);
+        store.set_size(child, 20.0, 10.0);
+        store.set_xy(child, 10.0, 20.0);
+        store.objects.get_mut(child).unwrap().relations.items = vec![
+            crate::widget::relation::RelationItem {
+                to_parent: true,
+                target_index: None,
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 3,
+                    percent: true,
+                    axis: 0,
+                }],
+            },
+            crate::widget::relation::RelationItem {
+                to_parent: true,
+                target_index: None,
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 14,
+                    percent: true,
+                    axis: 0,
+                }],
+            },
+        ];
+
+        store.set_size(parent, 200.0, 200.0);
+
+        let child = store.object(child).unwrap();
+        assert_eq!(child.x(), 30.0, "the child center keeps its parent ratio");
+        assert_eq!(child.width(), 40.0, "relative width scales with the parent");
+        assert_eq!(child.y(), 20.0, "unrelated axes stay unchanged");
+        assert_eq!(child.height(), 10.0);
+    }
+
+    #[test]
+    fn proportional_sibling_relations_scale_from_the_sibling_origin() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        let target = store.create(ObjectType::Component);
+        let owner = store.create(ObjectType::Component);
+        store.set_parent(target, Some(parent));
+        store.set_parent(owner, Some(parent));
+        store.set_xy(target, 50.0, 30.0);
+        store.set_size(target, 20.0, 20.0);
+        store.set_xy(owner, 60.0, 15.0);
+        store.set_size(owner, 10.0, 10.0);
+        store.objects.get_mut(owner).unwrap().relations.items = vec![
+            crate::widget::relation::RelationItem {
+                to_parent: false,
+                target_index: Some(0),
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 0,
+                    percent: true,
+                    axis: 0,
+                }],
+            },
+            crate::widget::relation::RelationItem {
+                to_parent: false,
+                target_index: Some(0),
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 14,
+                    percent: true,
+                    axis: 0,
+                }],
+            },
+        ];
+
+        store.set_size(target, 40.0, 40.0);
+
+        let owner = store.object(owner).unwrap();
+        assert_eq!(owner.x(), 70.0);
+        assert_eq!(owner.width(), 20.0);
+        assert_eq!(owner.y(), 15.0);
+        assert_eq!(owner.height(), 10.0);
+    }
+
+    #[test]
+    fn proportional_width_relations_keep_native_owner_pivot_semantics() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        let child = store.create(ObjectType::Component);
+        store.set_parent(child, Some(parent));
+        store.set_size(parent, 100.0, 100.0);
+        store.set_size(child, 20.0, 10.0);
+        store.set_xy(child, 10.0, 20.0);
+        store.set_pivot(child, 0.5, 0.0, true);
+        store.objects.get_mut(child).unwrap().relations.items =
+            vec![crate::widget::relation::RelationItem {
+                to_parent: true,
+                target_index: None,
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 14,
+                    percent: true,
+                    axis: 0,
+                }],
+            }];
+
+        store.set_size(parent, 200.0, 100.0);
+
+        let child = store.object(child).unwrap();
+        assert_eq!(child.width(), 40.0);
+        assert_eq!(child.x(), 20.0, "parent relation preserves xMin");
     }
 
     #[test]

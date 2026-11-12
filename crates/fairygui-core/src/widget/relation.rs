@@ -8,6 +8,7 @@
 
 use crate::binary::{ByteBuffer, StringTable};
 use crate::error::Result;
+use crate::geom::Point;
 
 /// 关联类型编号，取值与官方 `RelationType` 一致。
 pub type RelationType = u8;
@@ -37,9 +38,7 @@ pub struct RelationItem {
     pub to_parent: bool,
     /// 目标在容器内的位置。目标是父节点时为 `None`。
     ///
-    /// 相对兄弟对象的关联需要它来确定影响范围；当前只实现了相对父节点的部分，
-    /// 因此暂时没有读取点。
-    #[allow(dead_code)]
+    /// 相对兄弟对象的关联用它匹配发生尺寸变化的目标。
     pub target_index: Option<usize>,
     /// 关联定义。
     pub defs: Vec<RelationDef>,
@@ -50,6 +49,63 @@ pub struct RelationItem {
 pub struct Relations {
     /// 各目标对象的关联。
     pub items: Vec<RelationItem>,
+}
+
+/// Geometry needed to apply one target resize to its related objects.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RelationTarget {
+    pub old_size: Point,
+    pub new_size: Point,
+    pub position: Point,
+    pub pivot: Point,
+    pub pivot_as_anchor: bool,
+    pub is_parent: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RelationResize {
+    pub delta: Point,
+    scale: Point,
+    pub old_size: Point,
+    pub new_size: Point,
+    pub target_position: Point,
+    pub target_pivot: Point,
+    pub target_pivot_as_anchor: bool,
+    pub target_is_parent: bool,
+    pub owner_pivot: Point,
+    pub owner_pivot_as_anchor: bool,
+}
+
+impl RelationResize {
+    pub fn new(target: RelationTarget, owner_pivot: Point, owner_pivot_as_anchor: bool) -> Self {
+        let ratio = |new: f32, old: f32| {
+            if old == 0.0 { 0.0 } else { new / old }
+        };
+        Self {
+            delta: Point::new(
+                target.new_size.x - target.old_size.x,
+                target.new_size.y - target.old_size.y,
+            ),
+            scale: Point::ZERO,
+            old_size: target.old_size,
+            new_size: target.new_size,
+            target_position: target.position,
+            target_pivot: target.pivot,
+            target_pivot_as_anchor: target.pivot_as_anchor,
+            target_is_parent: target.is_parent,
+            owner_pivot,
+            owner_pivot_as_anchor,
+        }
+        .with_scale(
+            ratio(target.new_size.x, target.old_size.x),
+            ratio(target.new_size.y, target.old_size.y),
+        )
+    }
+
+    fn with_scale(mut self, x: f32, y: f32) -> Self {
+        self.scale = Point::new(x, y);
+        self
+    }
 }
 
 /// 展开一条定义（`Size` 会展开成两条）。
@@ -124,9 +180,10 @@ impl Relations {
 
     /// 目标尺寸变化时调整自身。
     ///
-    /// `delta` 为目标在对应轴上的尺寸增量。按比例的关联本应使用比例计算，
-    /// 但比例需要目标的原始尺寸才能换算，这里统一按增量处理，
-    /// 对「边距保持」这类最常见的用法结果一致。
+    /// Compatibility helper for increment-based relation tests and callers.
+    /// Runtime resize propagation supplies the full target geometry so percent
+    /// relations can use the native target-size ratio.
+    #[cfg(test)]
     pub fn apply_on_target_resized(
         &self,
         x: &mut f32,
@@ -136,27 +193,288 @@ impl Relations {
         d_width: f32,
         d_height: f32,
     ) {
+        self.apply_on_target_resized_with_context(
+            x,
+            y,
+            width,
+            height,
+            RelationResize {
+                delta: Point::new(d_width, d_height),
+                scale: Point::new(1.0, 1.0),
+                ..RelationResize::default()
+            },
+        );
+    }
+
+    pub fn apply_on_target_resized_with_context(
+        &self,
+        x: &mut f32,
+        y: &mut f32,
+        width: &mut f32,
+        height: &mut f32,
+        resize: RelationResize,
+    ) {
         for item in &self.items {
             for def in &item.defs {
-                let delta = if def.axis == 0 { d_width } else { d_height };
+                let delta = if def.axis == 0 {
+                    resize.delta.x
+                } else {
+                    resize.delta.y
+                };
+
+                if def.percent {
+                    let scale = if def.axis == 0 {
+                        resize.scale.x
+                    } else {
+                        resize.scale.y
+                    };
+                    let target_pos = if resize.target_is_parent {
+                        0.0
+                    } else if def.axis == 0 {
+                        resize.target_position.x
+                    } else {
+                        resize.target_position.y
+                    };
+                    let owner_pivot = if resize.owner_pivot_as_anchor {
+                        if def.axis == 0 {
+                            resize.owner_pivot.x
+                        } else {
+                            resize.owner_pivot.y
+                        }
+                    } else {
+                        0.0
+                    };
+
+                    match def.relation_type {
+                        0..=6 if def.axis == 0 => {
+                            let owner_size = *width;
+                            let min = *x - owner_size * owner_pivot;
+                            let next = match def.relation_type {
+                                0..=2 => target_pos + (min - target_pos) * scale,
+                                3 => {
+                                    target_pos + (min + owner_size * 0.5 - target_pos) * scale
+                                        - owner_size * 0.5
+                                }
+                                _ => {
+                                    target_pos + (min + owner_size - target_pos) * scale
+                                        - owner_size
+                                }
+                            };
+                            *x = next + owner_size * owner_pivot;
+                            continue;
+                        }
+                        7..=13 if def.axis == 1 => {
+                            let owner_size = *height;
+                            let min = *y - owner_size * owner_pivot;
+                            let next = match def.relation_type {
+                                7..=9 => target_pos + (min - target_pos) * scale,
+                                10 => {
+                                    target_pos + (min + owner_size * 0.5 - target_pos) * scale
+                                        - owner_size * 0.5
+                                }
+                                _ => {
+                                    target_pos + (min + owner_size - target_pos) * scale
+                                        - owner_size
+                                }
+                            };
+                            *y = next + owner_size * owner_pivot;
+                            continue;
+                        }
+                        WIDTH => {
+                            let old_width = *width;
+                            *width = resize.new_size.x + (*width - resize.old_size.x) * scale;
+                            if resize.target_is_parent && resize.owner_pivot_as_anchor {
+                                *x += (*width - old_width) * resize.owner_pivot.x;
+                            } else if !resize.target_is_parent && !resize.owner_pivot_as_anchor {
+                                *x -= (*width - old_width) * resize.owner_pivot.x;
+                            }
+                            continue;
+                        }
+                        HEIGHT => {
+                            let old_height = *height;
+                            *height = resize.new_size.y + (*height - resize.old_size.y) * scale;
+                            if resize.target_is_parent && resize.owner_pivot_as_anchor {
+                                *y += (*height - old_height) * resize.owner_pivot.y;
+                            } else if !resize.target_is_parent && !resize.owner_pivot_as_anchor {
+                                *y -= (*height - old_height) * resize.owner_pivot.y;
+                            }
+                            continue;
+                        }
+                        16..=17 => {
+                            let min = *x - *width * owner_pivot;
+                            let shift = target_pos + (min - target_pos) * scale - min;
+                            *width -= shift;
+                            *x = min + shift + *width * owner_pivot;
+                            continue;
+                        }
+                        18..=19 => {
+                            let min = *x - *width * owner_pivot;
+                            let edge = min + *width;
+                            *width += target_pos + edge * scale - edge;
+                            *x = min + *width * owner_pivot;
+                            continue;
+                        }
+                        20..=21 => {
+                            let min = *y - *height * owner_pivot;
+                            let shift = target_pos + (min - target_pos) * scale - min;
+                            *height -= shift;
+                            *y = min + shift + *height * owner_pivot;
+                            continue;
+                        }
+                        22..=23 => {
+                            let min = *y - *height * owner_pivot;
+                            let edge = min + *height;
+                            *height += target_pos + edge * scale - edge;
+                            *y = min + *height * owner_pivot;
+                            continue;
+                        }
+                        _ => continue,
+                    }
+                }
 
                 match def.relation_type {
-                    // 左边对左边、右边对左边：自身位置不变。
-                    0 | 4 | 7 | 11 => {}
+                    0 | 4 => {
+                        if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            *x -= delta * resize.target_pivot.x;
+                        }
+                    }
+                    7 | 11 => {
+                        if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            *y -= delta * resize.target_pivot.y;
+                        }
+                    }
                     // 对中心：移动一半。
                     1 | 3 | 5 | 8 | 10 | 12 => {
-                        if def.axis == 0 {
-                            *x += delta * 0.5;
+                        let pivot = if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            if def.axis == 0 {
+                                resize.target_pivot.x
+                            } else {
+                                resize.target_pivot.y
+                            }
                         } else {
-                            *y += delta * 0.5;
+                            0.0
+                        };
+                        if def.axis == 0 {
+                            *x += delta * (0.5 - pivot);
+                        } else {
+                            *y += delta * (0.5 - pivot);
                         }
                     }
                     // 对另一侧：整体跟随。
-                    2 | 6 => *x += delta,
-                    9 | 13 => *y += delta,
-                    // 尺寸跟随。
-                    WIDTH => *width += delta,
-                    HEIGHT => *height += delta,
+                    2 | 6 => {
+                        let pivot = if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            resize.target_pivot.x
+                        } else {
+                            0.0
+                        };
+                        *x += delta * (1.0 - pivot);
+                    }
+                    9 | 13 => {
+                        let pivot = if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            resize.target_pivot.y
+                        } else {
+                            0.0
+                        };
+                        *y += delta * (1.0 - pivot);
+                    }
+                    WIDTH => {
+                        *width += delta;
+                        if resize.target_is_parent && resize.owner_pivot_as_anchor {
+                            *x += resize.owner_pivot.x * delta;
+                        } else if !resize.target_is_parent && !resize.owner_pivot_as_anchor {
+                            *x -= resize.owner_pivot.x * delta;
+                        }
+                    }
+                    HEIGHT => {
+                        *height += delta;
+                        if resize.target_is_parent && resize.owner_pivot_as_anchor {
+                            *y += resize.owner_pivot.y * delta;
+                        } else if !resize.target_is_parent && !resize.owner_pivot_as_anchor {
+                            *y -= resize.owner_pivot.y * delta;
+                        }
+                    }
+                    16..=17 => {
+                        let pivot = if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            resize.target_pivot.x
+                        } else {
+                            0.0
+                        };
+                        let owner_pivot = if resize.owner_pivot_as_anchor {
+                            resize.owner_pivot.x
+                        } else {
+                            0.0
+                        };
+                        let min = *x - *width * owner_pivot;
+                        let factor = if def.relation_type == 16 {
+                            -pivot
+                        } else {
+                            1.0 - pivot
+                        };
+                        let shift = delta * factor;
+                        *width -= shift;
+                        *x = min + shift + *width * owner_pivot;
+                    }
+                    18..=19 => {
+                        let pivot = if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            resize.target_pivot.x
+                        } else {
+                            0.0
+                        };
+                        let owner_pivot = if resize.owner_pivot_as_anchor {
+                            resize.owner_pivot.x
+                        } else {
+                            0.0
+                        };
+                        let min = *x - *width * owner_pivot;
+                        let factor = if def.relation_type == 18 {
+                            -pivot
+                        } else {
+                            1.0 - pivot
+                        };
+                        *width += delta * factor;
+                        *x = min + *width * owner_pivot;
+                    }
+                    20..=21 => {
+                        let pivot = if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            resize.target_pivot.y
+                        } else {
+                            0.0
+                        };
+                        let owner_pivot = if resize.owner_pivot_as_anchor {
+                            resize.owner_pivot.y
+                        } else {
+                            0.0
+                        };
+                        let min = *y - *height * owner_pivot;
+                        let factor = if def.relation_type == 20 {
+                            -pivot
+                        } else {
+                            1.0 - pivot
+                        };
+                        let shift = delta * factor;
+                        *height -= shift;
+                        *y = min + shift + *height * owner_pivot;
+                    }
+                    22..=23 => {
+                        let pivot = if !resize.target_is_parent && resize.target_pivot_as_anchor {
+                            resize.target_pivot.y
+                        } else {
+                            0.0
+                        };
+                        let owner_pivot = if resize.owner_pivot_as_anchor {
+                            resize.owner_pivot.y
+                        } else {
+                            0.0
+                        };
+                        let min = *y - *height * owner_pivot;
+                        let factor = if def.relation_type == 22 {
+                            -pivot
+                        } else {
+                            1.0 - pivot
+                        };
+                        *height += delta * factor;
+                        *y = min + *height * owner_pivot;
+                    }
                     _ => {}
                 }
             }
@@ -263,5 +581,199 @@ mod tests {
         let (mut x, mut y, mut w, mut h) = (0.0, 0.0, 10.0, 10.0);
         vertical.apply_on_target_resized(&mut x, &mut y, &mut w, &mut h, 100.0, 100.0);
         assert_eq!((x, y), (0.0, 50.0));
+    }
+
+    #[test]
+    fn percent_position_relations_scale_edges_and_centers_from_parent_origin() {
+        let resize = RelationResize::new(
+            RelationTarget {
+                old_size: Point::new(100.0, 100.0),
+                new_size: Point::new(200.0, 200.0),
+                is_parent: true,
+                ..RelationTarget::default()
+            },
+            Point::ZERO,
+            false,
+        );
+        for (kind, expected_x) in [(0, 20.0), (3, 30.0), (6, 40.0)] {
+            let relations = Relations {
+                items: vec![RelationItem {
+                    to_parent: true,
+                    target_index: None,
+                    defs: vec![RelationDef {
+                        relation_type: kind,
+                        percent: true,
+                        axis: 0,
+                    }],
+                }],
+            };
+            let (mut x, mut y, mut width, mut height) = (10.0, 20.0, 20.0, 10.0);
+            relations.apply_on_target_resized_with_context(
+                &mut x,
+                &mut y,
+                &mut width,
+                &mut height,
+                resize,
+            );
+            assert_eq!(x, expected_x, "relation type {kind}");
+            assert_eq!(y, 20.0);
+            assert_eq!(width, 20.0);
+        }
+    }
+
+    #[test]
+    fn percent_size_and_extension_relations_follow_target_scale() {
+        for (relation_type, axis, initial, expected) in [
+            (WIDTH, 0, (10.0, 20.0, 40.0, 20.0), (10.0, 20.0, 80.0, 20.0)),
+            (
+                HEIGHT,
+                1,
+                (10.0, 20.0, 20.0, 40.0),
+                (10.0, 20.0, 20.0, 80.0),
+            ),
+            (16, 0, (10.0, 20.0, 40.0, 20.0), (20.0, 20.0, 30.0, 20.0)),
+            (18, 0, (10.0, 20.0, 40.0, 20.0), (10.0, 20.0, 90.0, 20.0)),
+        ] {
+            let relations = Relations {
+                items: vec![RelationItem {
+                    to_parent: true,
+                    target_index: None,
+                    defs: vec![RelationDef {
+                        relation_type,
+                        percent: true,
+                        axis,
+                    }],
+                }],
+            };
+            let (mut x, mut y, mut width, mut height) = initial;
+            relations.apply_on_target_resized_with_context(
+                &mut x,
+                &mut y,
+                &mut width,
+                &mut height,
+                RelationResize::new(
+                    RelationTarget {
+                        old_size: Point::new(100.0, 100.0),
+                        new_size: Point::new(200.0, 200.0),
+                        is_parent: true,
+                        ..RelationTarget::default()
+                    },
+                    Point::ZERO,
+                    false,
+                ),
+            );
+            assert_eq!(
+                (x, y, width, height),
+                expected,
+                "relation type {relation_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn percent_sibling_relation_scales_from_the_sibling_position() {
+        let relations = Relations {
+            items: vec![RelationItem {
+                to_parent: false,
+                target_index: Some(0),
+                defs: vec![RelationDef {
+                    relation_type: 0,
+                    percent: true,
+                    axis: 0,
+                }],
+            }],
+        };
+        let (mut x, mut y, mut width, mut height) = (60.0, 15.0, 20.0, 10.0);
+        relations.apply_on_target_resized_with_context(
+            &mut x,
+            &mut y,
+            &mut width,
+            &mut height,
+            RelationResize::new(
+                RelationTarget {
+                    old_size: Point::new(20.0, 20.0),
+                    new_size: Point::new(40.0, 40.0),
+                    position: Point::new(50.0, 30.0),
+                    ..RelationTarget::default()
+                },
+                Point::ZERO,
+                false,
+            ),
+        );
+        assert_eq!(x, 70.0, "distance from sibling left edge doubles");
+        assert_eq!(y, 15.0);
+    }
+
+    #[test]
+    fn nonpercent_sibling_alignment_uses_target_pivot_as_anchor() {
+        for (kind, expected_x) in [(0, 40.0), (1, 50.0), (2, 60.0)] {
+            let relations = Relations {
+                items: vec![RelationItem {
+                    to_parent: false,
+                    target_index: Some(0),
+                    defs: vec![RelationDef {
+                        relation_type: kind,
+                        percent: false,
+                        axis: 0,
+                    }],
+                }],
+            };
+            let (mut x, mut y, mut width, mut height) = (50.0, 10.0, 10.0, 10.0);
+            relations.apply_on_target_resized_with_context(
+                &mut x,
+                &mut y,
+                &mut width,
+                &mut height,
+                RelationResize::new(
+                    RelationTarget {
+                        old_size: Point::new(20.0, 20.0),
+                        new_size: Point::new(40.0, 40.0),
+                        pivot: Point::new(0.5, 0.5),
+                        pivot_as_anchor: true,
+                        ..RelationTarget::default()
+                    },
+                    Point::ZERO,
+                    false,
+                ),
+            );
+            assert_eq!(x, expected_x, "relation type {kind}");
+            assert_eq!(y, 10.0);
+        }
+    }
+
+    #[test]
+    fn extension_relations_use_owner_anchor_coordinates() {
+        let relations = Relations {
+            items: vec![RelationItem {
+                to_parent: false,
+                target_index: Some(0),
+                defs: vec![RelationDef {
+                    relation_type: 17,
+                    percent: false,
+                    axis: 0,
+                }],
+            }],
+        };
+        let (mut x, mut y, mut width, mut height) = (10.0, 20.0, 40.0, 10.0);
+        relations.apply_on_target_resized_with_context(
+            &mut x,
+            &mut y,
+            &mut width,
+            &mut height,
+            RelationResize::new(
+                RelationTarget {
+                    old_size: Point::new(20.0, 20.0),
+                    new_size: Point::new(40.0, 40.0),
+                    pivot: Point::new(0.5, 0.0),
+                    pivot_as_anchor: true,
+                    ..RelationTarget::default()
+                },
+                Point::new(0.5, 0.0),
+                true,
+            ),
+        );
+        assert_eq!(width, 30.0);
+        assert_eq!(x, 15.0, "xMin follows the sibling's right edge");
+        assert_eq!(y, 20.0);
     }
 }
