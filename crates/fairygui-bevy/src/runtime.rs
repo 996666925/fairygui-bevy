@@ -26,6 +26,18 @@ pub struct GObjectRef(pub GObjectId);
 #[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
 pub struct GuiListSelection(pub Vec<usize>);
 
+/// Current value projected from a FairyGUI progress bar.
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct GuiProgressValue(pub i32);
+
+/// Current value projected from a FairyGUI slider.
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct GuiSliderValue(pub i32);
+
+/// Current selected state projected from a FairyGUI button.
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct GuiButtonSelected(pub bool);
+
 /// ECS-owned FairyGUI root. Add this component to any entity to create the
 /// named component from an already requested `.fui` asset when it is ready.
 /// Removing the component removes the generated UI tree and its Bevy views.
@@ -1882,6 +1894,45 @@ pub fn sync_list_selection_components(
     }
 }
 
+/// Project current control values onto their ECS entities after model changes.
+#[allow(clippy::type_complexity)]
+pub fn sync_control_state_components(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    controls: Query<
+        (
+            Entity,
+            &GObjectRef,
+            Option<&GuiProgressValue>,
+            Option<&GuiSliderValue>,
+            Option<&GuiButtonSelected>,
+        ),
+        Or<(
+            With<GuiProgressValue>,
+            With<GuiSliderValue>,
+            With<GuiButtonSelected>,
+        )>,
+    >,
+) {
+    for (entity, object, progress, slider, button) in &controls {
+        if let (Some(current), Some(value)) = (progress, runtime.store().progress_value(object.0))
+            && current.0 != value
+        {
+            commands.entity(entity).insert(GuiProgressValue(value));
+        }
+        if let (Some(current), Some(value)) = (slider, runtime.store().slider_value(object.0))
+            && current.0 != value
+        {
+            commands.entity(entity).insert(GuiSliderValue(value));
+        }
+        if let (Some(current), Some(value)) = (button, runtime.store().button_selected(object.0))
+            && current.0 != value
+        {
+            commands.entity(entity).insert(GuiButtonSelected(value));
+        }
+    }
+}
+
 /// 为新建的界面生成实体树。
 pub fn spawn_pending_roots(
     mut commands: Commands,
@@ -2381,6 +2432,24 @@ fn spawn_object(
 
     if let Some(selection) = store.list_selections(object) {
         entity.insert(GuiListSelection(selection));
+    }
+    match gobject.control() {
+        ControlData::ProgressBar(_) => {
+            entity.insert(GuiProgressValue(
+                store.progress_value(object).unwrap_or_default(),
+            ));
+        }
+        ControlData::Slider(_) => {
+            entity.insert(GuiSliderValue(
+                store.slider_value(object).unwrap_or_default(),
+            ));
+        }
+        ControlData::Button(_) => {
+            entity.insert(GuiButtonSelected(
+                store.button_selected(object).unwrap_or_default(),
+            ));
+        }
+        _ => {}
     }
 
     // 图形控件的外观：填充走背景色，描边走边框，形状由圆角决定。

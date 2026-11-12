@@ -224,12 +224,19 @@ fn ecs_commands_set_slider_value_by_entity() {
         ControlData::Slider(data) => data.max,
         _ => unreachable!(),
     };
+    let initial_value = runtime.store().slider_value(slider).unwrap();
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .insert_non_send(runtime)
         .add_message::<GuiObjectCommand>()
-        .add_systems(Update, apply_object_commands);
-    let target = app.world_mut().spawn(GObjectRef(slider)).id();
+        .add_systems(
+            Update,
+            (apply_object_commands, sync_control_state_components).chain(),
+        );
+    let target = app
+        .world_mut()
+        .spawn((GObjectRef(slider), GuiSliderValue(initial_value)))
+        .id();
     app.world_mut()
         .resource_mut::<Messages<GuiObjectCommand>>()
         .write(GuiObjectCommand::new(
@@ -244,6 +251,66 @@ fn ecs_commands_set_slider_value_by_entity() {
             .store()
             .slider_value(slider),
         Some(max)
+    );
+    assert_eq!(
+        app.world().get::<GuiSliderValue>(target),
+        Some(&GuiSliderValue(max))
+    );
+}
+
+#[test]
+fn ecs_commands_project_button_selection_by_entity() {
+    let package = FuiPackage::parse(
+        "Basics",
+        include_bytes!("../../fairygui-demo/assets/ui/Basics.fui"),
+    )
+    .unwrap();
+    let mut runtime = GuiRuntime::default();
+    runtime
+        .create_root(Handle::default(), &package, "Demo_Button")
+        .unwrap();
+    let button = runtime
+        .store()
+        .iter()
+        .find_map(|(id, object)| {
+            matches!(
+                object.control(),
+                ControlData::Button(data)
+                    if data.mode != fairygui_core::widget::ButtonMode::Common
+            )
+            .then_some(id)
+        })
+        .unwrap();
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_non_send(runtime)
+        .add_message::<GuiObjectCommand>()
+        .add_systems(
+            Update,
+            (apply_object_commands, sync_control_state_components).chain(),
+        );
+    let target = app
+        .world_mut()
+        .spawn((GObjectRef(button), GuiButtonSelected(false)))
+        .id();
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetButtonSelected(true),
+        ));
+
+    app.update();
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .button_selected(button),
+        Some(true)
+    );
+    assert_eq!(
+        app.world().get::<GuiButtonSelected>(target),
+        Some(&GuiButtonSelected(true))
     );
 }
 
@@ -260,12 +327,19 @@ fn ecs_commands_set_progress_by_entity() {
         .unwrap();
     let root = runtime.root_object(root).unwrap();
     let progress = runtime.store().find_by_name(root, "b0").unwrap();
+    let initial_value = runtime.store().progress_value(progress).unwrap();
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .insert_non_send(runtime)
         .add_message::<GuiObjectCommand>()
-        .add_systems(Update, apply_object_commands);
-    let target = app.world_mut().spawn(GObjectRef(progress)).id();
+        .add_systems(
+            Update,
+            (apply_object_commands, sync_control_state_components).chain(),
+        );
+    let target = app
+        .world_mut()
+        .spawn((GObjectRef(progress), GuiProgressValue(initial_value)))
+        .id();
     app.world_mut()
         .resource_mut::<Messages<GuiObjectCommand>>()
         .write(GuiObjectCommand::new(
@@ -280,6 +354,10 @@ fn ecs_commands_set_progress_by_entity() {
             .store()
             .progress_value(progress),
         Some(37)
+    );
+    assert_eq!(
+        app.world().get::<GuiProgressValue>(target),
+        Some(&GuiProgressValue(37))
     );
 }
 

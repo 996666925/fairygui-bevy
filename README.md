@@ -99,8 +99,9 @@ ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、�
 不需要独占借用运行时。
 过渡命令还支持暂停/恢复、速度、反向播放和停止。临时界面也用 `FairyGuiRoot`
 实体管理；销毁所有者实体会自动回收对应 FairyGUI 对象树。
-列表实体带有 `GuiListSelection` 查询组件，选择通过 `GuiObjectCommand` 改动后，
-该组件在同帧同步为当前选中索引，可直接供其他 ECS 系统读取。
+列表、进度条、滑动条和按钮实体分别带有 `GuiListSelection`、`GuiProgressValue`、
+`GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在同帧 Sync 后反映最新的控件状态；
+状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
 
 Windows MSVC 示例构建自动使用 8 KiB PDB 页，容纳完整 Bevy 调试符号，避免默认页容量
 触发 `LNK1318 LIMIT`；其他目标保持原有链接配置。

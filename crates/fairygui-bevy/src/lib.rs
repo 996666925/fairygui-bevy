@@ -62,10 +62,11 @@ mod text_stroke;
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
-    FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiEvent, GuiFont, GuiLink, GuiListItemClick,
-    GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction,
-    GuiObjectCommand, GuiPullRelease, GuiRootInstance, GuiRuntime, GuiTextInput,
-    GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+    FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiEvent, GuiFont, GuiLink,
+    GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
+    GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease, GuiRootInstance,
+    GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback, GuiTransitionHook,
+    PopupMenuTemplates,
 };
 
 pub use fairygui_core as core;
@@ -86,11 +87,12 @@ pub enum GuiSystems {
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
     pub use crate::{
-        FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete, GuiEvent,
-        GuiFont, GuiInputSettings, GuiInputState, GuiLink, GuiListItemClick, GuiListSelection,
-        GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand,
-        GuiPullRelease, GuiRootInstance, GuiRuntime, GuiSystems, GuiTextInput,
-        GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+        FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
+        GuiButtonSelected, GuiEvent, GuiFont, GuiInputSettings, GuiInputState, GuiLink,
+        GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
+        GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease, GuiRootInstance,
+        GuiRuntime, GuiSliderValue, GuiSystems, GuiTextInput, GuiTransitionCallback,
+        GuiTransitionHook, PopupMenuTemplates,
     };
 }
 
@@ -217,7 +219,11 @@ impl Plugin for FairyGuiPlugin {
         );
         app.add_systems(
             Update,
-            runtime::sync_list_selection_components
+            (
+                runtime::sync_list_selection_components,
+                runtime::sync_control_state_components,
+            )
+                .chain()
                 .in_set(GuiSystems::Sync)
                 .after(runtime::play_queued_sounds),
         );
