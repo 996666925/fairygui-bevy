@@ -285,7 +285,8 @@ pub fn text_layout_for(data: &fairygui_core::widget::TextFieldData) -> TextLayou
 /// Align the measured text block inside its FairyGUI rectangle. With NoWrap,
 /// Bevy's Justify only aligns lines inside the block, not inside the UI node.
 /// Padding offsets the content without moving the object or its hit rectangle.
-/// TextLayoutInfo.size is already logical pixels (unlike ComputedNode.size).
+/// Bevy measures TextLayoutInfo.size in physical pixels; divide by its scale
+/// factor before comparing it with FairyGUI's logical object dimensions.
 pub fn align_text(
     runtime: NonSend<crate::runtime::GuiRuntime>,
     mut query: Query<(
@@ -305,7 +306,13 @@ pub fn align_text(
         if layout.size.y <= 0.0 {
             continue;
         }
-        let available = (Vec2::new(object.width(), object.height()) - layout.size).max(Vec2::ZERO);
+        let scale = if layout.scale_factor.is_finite() && layout.scale_factor > f32::EPSILON {
+            layout.scale_factor
+        } else {
+            1.0
+        };
+        let text_size = layout.size / scale;
+        let available = (Vec2::new(object.width(), object.height()) - text_size).max(Vec2::ZERO);
         let factor = |alignment| match alignment {
             1 => 0.5,
             2 => 1.0,

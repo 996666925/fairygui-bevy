@@ -218,13 +218,21 @@ fn menu_title_is_centered_without_moving_its_hit_rectangle() {
             node,
             text_layout,
             bevy::text::TextLayoutInfo {
-                size: Vec2::new(120.0, 24.0),
+                size: Vec2::new(120.0, 24.0) * 1.75,
                 scale_factor: 1.75,
                 ..default()
             },
         ))
         .id();
-    for _ in 0..30 {
+    for scale in [1.0, 1.75, 2.5] {
+        {
+            let mut info = app
+                .world_mut()
+                .get_mut::<bevy::text::TextLayoutInfo>(entity)
+                .unwrap();
+            info.scale_factor = scale;
+            info.size = Vec2::new(120.0, 24.0) * scale;
+        }
         app.update();
         let node = app.world().get::<Node>(entity).unwrap();
         assert_eq!(node.padding.left, Val::Px(60.0));
@@ -235,10 +243,14 @@ fn menu_title_is_centered_without_moving_its_hit_rectangle() {
         );
     }
     // A new label measurement and a resized object must recenter, not accumulate.
-    app.world_mut()
-        .get_mut::<bevy::text::TextLayoutInfo>(entity)
-        .unwrap()
-        .size = Vec2::new(160.0, 24.0);
+    {
+        let mut info = app
+            .world_mut()
+            .get_mut::<bevy::text::TextLayoutInfo>(entity)
+            .unwrap();
+        info.scale_factor = 2.5;
+        info.size = Vec2::new(160.0, 24.0) * 2.5;
+    }
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .store_mut()
