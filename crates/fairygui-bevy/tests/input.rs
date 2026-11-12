@@ -415,6 +415,190 @@ fn mouse_move_uses_current_hit_while_drag_uses_the_pressed_target() {
 }
 
 #[test]
+fn drag_drop_dispatches_payload_from_the_release_target_and_bubbles() {
+    use fairygui_core::object::EventData;
+    let (mut app, window) = setup();
+    let (source_entity, source) = target(&mut app, 1);
+    press(&mut app);
+    let (_, parent) = target(&mut app, 2);
+    let (drop_entity, drop_target) = target(&mut app, 3);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(drop_target, Some(parent));
+    let icon = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let icon = runtime.store_mut().create(ObjectType::Image);
+        runtime.start_drag(
+            source,
+            Some(icon),
+            Some("payload-5".into()),
+            fairygui_core::geom::Point::new(10.0, 10.0),
+        );
+        icon
+    };
+    app.world_mut()
+        .entity_mut(source_entity)
+        .insert(Hovered(false));
+    app.world_mut()
+        .entity_mut(drop_entity)
+        .insert(Hovered(true));
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .set_cursor_position(Some(Vec2::splat(50.0)));
+    app.update();
+    release(&mut app);
+
+    let events: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .collect();
+    let drops: Vec<_> = events
+        .iter()
+        .filter(|event| event.kind == EventKind::Drop)
+        .collect();
+    assert_eq!(drops.len(), 2, "events={events:#?}");
+    assert_eq!(
+        (drops[0].target, drops[0].current_target),
+        (drop_target, drop_target)
+    );
+    assert_eq!(
+        (drops[1].target, drops[1].current_target),
+        (drop_target, parent)
+    );
+    assert!(drops[1].bubbling);
+    for event in drops {
+        assert_eq!(event.touch_id, None);
+        assert_eq!(event.pointer, Some(fairygui_core::Point::new(50.0, 50.0)));
+        assert_eq!(
+            event.data,
+            EventData::Drop {
+                source,
+                data: Some("payload-5".into())
+            }
+        );
+    }
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object(icon)
+            .is_none()
+    );
+}
+
+#[test]
+fn drag_drop_cancellation_never_dispatches_even_with_a_cached_target() {
+    use bevy::ecs::system::RunSystemOnce;
+    for cancellation in 0..4 {
+        let (mut app, window) = setup();
+        let (source_entity, source) = target(&mut app, 1);
+        press(&mut app);
+        let (_, receiver) = target(&mut app, 2);
+        app.world_mut()
+            .entity_mut(source_entity)
+            .insert(Hovered(false));
+        let icon = {
+            let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+            let icon = gui.store_mut().create(ObjectType::Image);
+            gui.start_drag(
+                source,
+                Some(icon),
+                Some("cancelled".into()),
+                fairygui_core::Point::ZERO,
+            );
+            gui.update_drag(fairygui_core::Point::new(50.0, 50.0), Some(receiver));
+            icon
+        };
+        match cancellation {
+            0 => app.world_mut().get_mut::<Window>(window).unwrap().focused = false,
+            1 => app
+                .world_mut()
+                .get_mut::<Window>(window)
+                .unwrap()
+                .set_cursor_position(None),
+            2 => app
+                .world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .reset(MouseButton::Left),
+            _ => app
+                .world_mut()
+                .run_system_once(|mut commands: Commands, mut gui: NonSendMut<GuiRuntime>| {
+                    gui.cancel_drag(&mut commands);
+                })
+                .unwrap(),
+        }
+        app.update();
+        let gui = app.world().non_send::<GuiRuntime>();
+        assert!(!gui.is_dragging());
+        assert!(gui.store().object(icon).is_none());
+        assert!(
+            !app.world_mut()
+                .non_send_mut::<GuiRuntime>()
+                .drain_events()
+                .any(|e| e.kind == EventKind::Drop)
+        );
+    }
+}
+
+#[test]
+fn drag_drop_finish_rechecks_cached_receiver_policy_and_retains_its_result() {
+    use bevy::ecs::system::RunSystemOnce;
+    for policy in 0..5 {
+        let (mut app, _) = setup();
+        let (_, source) = target(&mut app, 1);
+        let (_, receiver) = target(&mut app, 2);
+        {
+            let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+            gui.start_drag(source, None, None, fairygui_core::Point::ZERO);
+            gui.update_drag(fairygui_core::Point::new(40.0, 60.0), Some(receiver));
+            match policy {
+                1 => {
+                    gui.store_mut().set_visible(receiver, false);
+                }
+                2 => {
+                    gui.store_mut().set_touchable(receiver, false);
+                }
+                3 => {
+                    gui.store_mut().detach_from_stage(receiver);
+                }
+                4 => {
+                    gui.store_mut().remove(receiver);
+                }
+                _ => {}
+            }
+        }
+        let result = app
+            .world_mut()
+            .run_system_once(|mut commands: Commands, mut gui: NonSendMut<GuiRuntime>| {
+                let result = gui.finish_drag(&mut commands);
+                assert!(gui.finish_drag(&mut commands).is_none());
+                result
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.source, source);
+        assert_eq!(result.target, Some(receiver));
+        let events: Vec<_> = app
+            .world_mut()
+            .non_send_mut::<GuiRuntime>()
+            .drain_events()
+            .filter(|e| e.kind == EventKind::Drop)
+            .collect();
+        assert_eq!(events.len(), usize::from(policy == 0));
+        if let Some(event) = events.first() {
+            assert_eq!(event.pointer, Some(fairygui_core::Point::new(40.0, 60.0)));
+            assert_eq!(
+                event.data,
+                fairygui_core::object::EventData::Drop { source, data: None }
+            );
+        }
+    }
+}
+
+#[test]
 fn release_over_another_target_does_not_click_or_transfer_capture() {
     let (mut app, _) = setup();
     let (entity, first) = target(&mut app, 0);

@@ -567,7 +567,7 @@ fn touch_scroll_drag_uses_rotated_local_axes_at_noninteger_dpi() {
 fn touch_drag_and_drop_is_owned_by_the_requested_finger() {
     let (mut app, window) = fixture();
     let (entity, source) = target(&mut app, 1);
-    let (other_entity, _) = target(&mut app, 2);
+    let (other_entity, other_target) = target(&mut app, 2);
     hits(&mut app, 1, &[entity]);
     hits(&mut app, 2, &[other_entity]);
     send(&mut app, window, 1, TouchPhase::Started, Vec2::splat(20.0));
@@ -586,6 +586,7 @@ fn touch_drag_and_drop_is_owned_by_the_requested_finger() {
     };
     send(&mut app, window, 2, TouchPhase::Ended, Vec2::splat(20.0));
     assert!(app.world().non_send::<GuiRuntime>().is_dragging());
+    hits(&mut app, 1, &[other_entity]);
     send(
         &mut app,
         window,
@@ -614,10 +615,46 @@ fn touch_drag_and_drop_is_owned_by_the_requested_finger() {
             .object(icon)
             .is_none()
     );
+    let events = events(&mut app);
+    assert!(
+        !events
+            .iter()
+            .any(|e| e.kind == EventKind::Click && e.touch_id == Some(1))
+    );
+    let drop = events.iter().find(|e| e.kind == EventKind::Drop).unwrap();
+    assert_eq!(drop.target, other_target);
+    assert_eq!(drop.touch_id, Some(1));
+    assert_eq!(
+        drop.data,
+        fairygui_core::object::EventData::Drop {
+            source,
+            data: Some("touch payload".into()),
+        }
+    );
+}
+
+#[test]
+fn cancelling_a_touch_owned_drop_reclaims_the_icon_without_drop_event() {
+    let (mut app, window) = fixture();
+    let (entity, source) = target(&mut app, 1);
+    let (drop_entity, _) = target(&mut app, 2);
+    hits(&mut app, 5, &[entity]);
+    send(&mut app, window, 5, TouchPhase::Started, Vec2::splat(20.0));
+    let icon = {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        let icon = gui.store_mut().create(ObjectType::Image);
+        gui.start_touch_drag(source, Some(icon), Some("cancelled".into()), Point::ZERO, 5);
+        icon
+    };
+    hits(&mut app, 5, &[drop_entity]);
+    send(&mut app, window, 5, TouchPhase::Canceled, Vec2::splat(80.0));
+    let gui = app.world().non_send::<GuiRuntime>();
+    assert!(!gui.is_dragging());
+    assert!(gui.store().object(icon).is_none());
     assert!(
         !events(&mut app)
             .iter()
-            .any(|e| e.kind == EventKind::Click && e.touch_id == Some(1))
+            .any(|event| event.kind == EventKind::Drop)
     );
 }
 

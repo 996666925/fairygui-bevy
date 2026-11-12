@@ -1358,7 +1358,7 @@ impl GuiRuntime {
     ///
     /// `icon` 是跟手图标对象，由使用方从包里创建；它会被挂到根节点的弹窗层，
     /// 随指针移动。「什么能拖」属于业务逻辑，因此**开始与否由使用方决定**；
-    /// 松手与命中判定则由输入层负责。
+    /// 松手与命中判定则由输入层负责。已有拖拽时忽略新请求。
     pub fn start_drag(
         &mut self,
         source: GObjectId,
@@ -1366,10 +1366,14 @@ impl GuiRuntime {
         data: Option<String>,
         pointer: fairygui_core::geom::Point,
     ) {
+        if self.is_dragging() {
+            return;
+        }
         self.drag_touch_id = None;
         self.drag_drop.start(&mut self.store, source, icon, data);
 
         if let Some(icon) = icon {
+            self.store.set_touchable(icon, false);
             if let Some(root) = self.root.as_mut() {
                 root.show_popup(&mut self.store, icon, false);
             }
@@ -1389,6 +1393,9 @@ impl GuiRuntime {
         pointer: fairygui_core::Point,
         touch_id: u64,
     ) {
+        if self.is_dragging() {
+            return;
+        }
         self.start_drag(source, icon, data, pointer);
         self.drag_touch_id = Some(touch_id);
     }
@@ -1409,13 +1416,16 @@ impl GuiRuntime {
         self.drag_drop.set_target(target);
     }
 
-    /// 结束拖拽，返回被拖对象与最终命中的放置目标。
+    /// 结束拖拽，返回结果，并向有效放置目标派发带完整数据的 Drop 事件。
     ///
     /// 跟手图标用完即销毁——它是临时对象，留着只会积攒。
     pub fn finish_drag(
         &mut self,
         commands: &mut Commands,
     ) -> Option<fairygui_core::drag_drop::DragResult> {
+        let data = self.drag_drop.data().map(str::to_owned);
+        let pointer = self.drag_drop.pointer();
+        let touch_id = self.drag_touch_id;
         self.drag_touch_id = None;
         let icon = self.drag_drop.icon();
         let result = self.drag_drop.finish(&mut self.store);
@@ -1423,7 +1433,32 @@ impl GuiRuntime {
         if let Some(icon) = icon {
             self.despawn_subtree(commands, icon);
         }
+        if let Some(result) = result
+            && let Some(target) = result.target
+            && self.store.object(result.source).is_some()
+            && crate::input::eligible(self, target)
+        {
+            let mut event =
+                fairygui_core::object::UiEvent::new(fairygui_core::object::EventKind::Drop, target)
+                    .with_pointer(pointer)
+                    .with_data(fairygui_core::object::EventData::Drop {
+                        source: result.source,
+                        data,
+                    });
+            event.touch_id = touch_id;
+            self.dispatch_event(event);
+        }
         result
+    }
+
+    /// Cancel the active drag, reclaiming its temporary icon without a Drop event.
+    pub fn cancel_drag(&mut self, commands: &mut Commands) {
+        self.drag_touch_id = None;
+        let icon = self.drag_drop.icon();
+        self.drag_drop.cancel(&mut self.store);
+        if let Some(icon) = icon {
+            self.despawn_subtree(commands, icon);
+        }
     }
 
     /// 销毁一棵子树：对象、实体与待生成队列一并清理。

@@ -126,6 +126,11 @@ pub enum EventData {
     Key(String),
     /// 文本内容。
     Text(String),
+    /// Completed FairyGUI drag-and-drop result.
+    Drop {
+        source: GObjectId,
+        data: Option<String>,
+    },
 }
 
 /// 一次事件投递。

@@ -358,6 +358,11 @@ Each slider, window or scroll pane has one gesture owner at a time, and distinct
 widgets can be manipulated concurrently. Releasing one finger does not clear a
 button still held by another pointer. To bind an application drag-and-drop to a
 finger, call `start_touch_drag` with its event ID; `start_drag` uses the mouse.
+When a drag ends over a live stage target, `GuiRuntime::finish_drag` dispatches
+`EventKind::Drop` to that target and its logical ancestors. The event carries the
+source and optional application data without consuming the returned `DragResult`;
+touch-owned drops also retain the finger ID. Ending outside the GUI or canceling
+the owning pointer produces no Drop event.
 
 A left-button edge captures the target and may begin a built-in gesture. A
 right-button edge captures independently and emits right-button events without

@@ -114,16 +114,14 @@ pub(super) fn route_touches(
             update_button_from_pointers(&mut runtime, &state, old);
         }
         if runtime.drag_touch_id == Some(id) {
-            runtime.update_drag(Point::new(capture.last.x, capture.last.y), None);
-            runtime.finish_drag(&mut commands);
+            runtime.cancel_drag(&mut commands);
         }
     }
     if runtime
         .drag_touch_id
         .is_some_and(|id| !state.touches.contains_key(&id))
     {
-        runtime.update_drag(Point::ZERO, None);
-        runtime.finish_drag(&mut commands);
+        runtime.cancel_drag(&mut commands);
     }
     let mut samples: Vec<_> = events.read().copied().collect();
     // Stationary fingers still accumulate gesture time and revalidate hover.
@@ -464,7 +462,11 @@ pub(super) fn route_touches(
             }
             roll_out(&mut runtime, &capture, event.id);
             if owns_drop {
-                runtime.finish_drag(&mut commands);
+                if event.phase == TouchPhase::Ended {
+                    runtime.finish_drag(&mut commands);
+                } else {
+                    runtime.cancel_drag(&mut commands);
+                }
             }
         } else {
             state.touches.insert(event.id, capture);

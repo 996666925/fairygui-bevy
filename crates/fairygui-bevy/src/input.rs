@@ -321,7 +321,7 @@ pub fn register(app: &mut App) {
 }
 
 /// Shared policy for clicks, wheel input, capture and drop targets.
-fn eligible(runtime: &GuiRuntime, target: GObjectId) -> bool {
+pub(crate) fn eligible(runtime: &GuiRuntime, target: GObjectId) -> bool {
     if !runtime.store().is_on_stage(target) {
         return false;
     }
@@ -910,7 +910,11 @@ fn route_pointer(
     if runtime.is_dragging() && runtime.drag_touch_id.is_none() {
         runtime.update_drag(Point::new(position.x, position.y), hit);
         if cursor.is_none() || !mouse.pressed(MouseButton::Left) {
-            runtime.finish_drag(&mut commands);
+            if cursor.is_some() && mouse.just_released(MouseButton::Left) {
+                runtime.finish_drag(&mut commands);
+            } else {
+                runtime.cancel_drag(&mut commands);
+            }
         }
     }
 }
