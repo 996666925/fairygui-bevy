@@ -68,6 +68,22 @@ Windows 下 demo 默认使用 DX12，避免部分 Vulkan 驱动的交换链异�
 演示入口与 Basics 的 20 个子页面并返回，失败时以非零状态退出。
 截图保存在工作目录的 `target/fairygui-demo-*.png`。
 
+常规界面用 ECS 实体表达所有权。`FairyGuiPlugin` 会等资产加载完成后创建根界面，
+并在组件移除或实体销毁时回收对象树和 Bevy 视图：
+
+```rust,ignore
+use bevy::prelude::*;
+use fairygui_bevy::prelude::*;
+
+fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>) {
+    commands.spawn(FairyGuiRoot::new(assets.load("ui/MainMenu.fui"), "Main"));
+}
+```
+
+运行时会在所有者实体上添加 `GuiRootInstance`，提供底层对象 ID 和 root handle。
+需要高级初始化时，可在 `GuiSystems::Respond` 中通过 `GuiRuntime` 修改模型；
+大多数界面的加载、挂载和销毁由 ECS 组件生命周期管理。
+
 Windows MSVC 示例构建自动使用 8 KiB PDB 页，容纳完整 Bevy 调试符号，避免默认页容量
 触发 `LNK1318 LIMIT`；其他目标保持原有链接配置。
 

@@ -29,21 +29,18 @@
 //!
 //! ```no_run
 //! # use bevy::prelude::*;
-//! # use fairygui_bevy::{FuiAsset, GuiRuntime};
-//! fn create_ui(
-//!     mut commands: Commands,
-//!     asset_server: Res<AssetServer>,
-//!     assets: Res<Assets<FuiAsset>>,
-//!     mut runtime: NonSendMut<GuiRuntime>,
-//! ) {
-//!     let handle: Handle<FuiAsset> = asset_server.load("ui/MainMenu.fui");
-//!     // 资产是异步加载的，等到可用之后再创建界面。
-//!     if let Some(asset) = assets.get(&handle) {
-//!         runtime.create_root(handle.clone(), &asset.package, "Main");
-//!         let _ = &mut commands;
-//!     }
+//! # use fairygui_bevy::FairyGuiRoot;
+//! fn spawn_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+//!     commands.spawn(FairyGuiRoot::new(
+//!         asset_server.load("ui/MainMenu.fui"),
+//!         "Main",
+//!     ));
 //! }
 //! ```
+//!
+//! The plugin waits for the asset, creates the root once and removes its view
+//! when the component is removed. `GuiRootInstance` exposes the created model
+//! object and manual root handle when application setup needs them.
 
 pub mod asset;
 pub mod backend;
@@ -59,9 +56,9 @@ mod text_stroke;
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
-    GObjectRef, GuiAnimationComplete, GuiEvent, GuiFont, GuiLink, GuiListItemClick,
-    GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiPullRelease, GuiRuntime, GuiTextInput,
-    GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+    FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiEvent, GuiFont, GuiLink, GuiListItemClick,
+    GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiPullRelease, GuiRootInstance, GuiRuntime,
+    GuiTextInput, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
 };
 
 pub use fairygui_core as core;
@@ -82,10 +79,10 @@ pub enum GuiSystems {
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
     pub use crate::{
-        FairyGuiPlugin, FuiAsset, GObjectRef, GuiAnimationComplete, GuiEvent, GuiFont,
-        GuiInputSettings, GuiInputState, GuiLink, GuiListItemClick, GuiLoaderFailure,
-        GuiLoaderState, GuiMenuAction, GuiPullRelease, GuiRuntime, GuiSystems, GuiTextInput,
-        GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+        FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete, GuiEvent,
+        GuiFont, GuiInputSettings, GuiInputState, GuiLink, GuiListItemClick, GuiLoaderFailure,
+        GuiLoaderState, GuiMenuAction, GuiPullRelease, GuiRootInstance, GuiRuntime, GuiSystems,
+        GuiTextInput, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
     };
 }
 
@@ -172,7 +169,7 @@ impl Plugin for FairyGuiPlugin {
                     runtime::sync_virtual_lists,
                 )
                     .chain(),
-                runtime::spawn_pending_roots,
+                (runtime::sync_ecs_roots, runtime::spawn_pending_roots).chain(),
                 runtime::spawn_pending_objects,
                 runtime::sync_text_inputs,
                 runtime::content::sync_content_layout,

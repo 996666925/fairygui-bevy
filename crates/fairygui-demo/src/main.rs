@@ -52,16 +52,20 @@ fn center_root(runtime: &mut GuiRuntime, index: usize, viewport: (f32, f32)) {
 /// 示例的运行状态。
 #[derive(Resource, Default)]
 struct Demo {
-    /// 主菜单的资产，请求出去后一直留着。
+    /// 主菜单的资产句柄。
     menu_asset: Option<Handle<FuiAsset>>,
+    /// ECS 实体拥有的主菜单根。
+    menu_owner: Option<Entity>,
+    /// ECS 实体拥有的关闭按钮根。
+    close_owner: Option<Entity>,
     /// 主菜单的根编号。
     menu: Option<usize>,
     /// 右下角的关闭按钮。
     close_button: Option<GObjectId>,
     /// 请求加载中的演示：包名与该包的资产。
     loading: Option<(String, Handle<FuiAsset>)>,
-    /// 已打开的演示：根编号与该包的资产。
-    open: Option<(usize, Handle<FuiAsset>, String)>,
+    /// 已打开的演示：根拥有实体与该包的资产。
+    open: Option<(Entity, Handle<FuiAsset>, String)>,
 }
 
 #[derive(Component)]
@@ -181,8 +185,8 @@ fn setup_camera(mut commands: Commands) {
 
 /// 加载主菜单。资产是异步的，因此每帧检查一次。
 fn boot_menu(
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
-    assets: Res<Assets<FuiAsset>>,
     font: Res<GuiFont>,
     windows: Query<&Window>,
     mut runtime: NonSendMut<GuiRuntime>,
@@ -192,29 +196,33 @@ fn boot_menu(
         return;
     }
 
-    // 先设一次字体：本系统与同步字体的系统之间没有先后约束，同帧谁先跑不定。
-    // 建界面只发生在第一帧，错过这一帧就再也没机会补上了。
-    runtime.set_font(font.0.clone());
+    if demo.menu_owner.is_none() {
+        runtime.set_font(font.0.clone());
+        let handle = asset_server.load::<FuiAsset>(MENU_PACKAGE);
+        demo.menu_owner = Some(
+            commands
+                .spawn(FairyGuiRoot::new(handle.clone(), MENU_ITEM))
+                .id(),
+        );
+        demo.close_owner = Some(
+            commands
+                .spawn(FairyGuiRoot::new(handle.clone(), CLOSE_ITEM))
+                .id(),
+        );
+        demo.menu_asset = Some(handle);
+        return;
+    }
 
-    // 先把菜单的资产请求出去；到达之前不做别的。
-    let handle = demo
-        .menu_asset
-        .get_or_insert_with(|| asset_server.load::<FuiAsset>(MENU_PACKAGE))
-        .clone();
-
-    let Some(asset) = assets.get(&handle) else {
+    let Some(index) = demo
+        .menu_owner
+        .and_then(|owner| runtime.ecs_root_handle(owner))
+    else {
         return;
     };
-
-    let Some(index) = runtime.create_root(handle.clone(), &asset.package, MENU_ITEM) else {
-        error!("主菜单界面 {MENU_ITEM} 不存在，请检查 {MENU_PACKAGE}");
-        return;
-    };
-
     // 关闭按钮与主界面平级挂在根节点下，对应官方示例里挂在 GRoot 上的做法。
-    // 它自带尺寸，因此单独建成一个根，摆到右下角。
-    if let Some(close_index) = runtime.create_root(handle.clone(), &asset.package, CLOSE_ITEM)
-        && let Some(close) = runtime.root_object(close_index)
+    // 它自带尺寸，因此单独由 ECS 实体拥有，并摆到右下角。
+    if let Some(close_owner) = demo.close_owner
+        && let Some(close) = runtime.ecs_root_object(close_owner)
     {
         let (width, height) = runtime
             .store()
@@ -242,12 +250,16 @@ fn boot_menu(
         center_root(&mut runtime, index, (window.width(), window.height()));
     }
 
+    demo.close_button = demo
+        .close_owner
+        .and_then(|owner| runtime.ecs_root_object(owner));
     info!("主菜单已就绪，点击条目进入演示");
     demo.menu = Some(index);
 }
 
 /// 演示包的资产到达后创建界面。
 fn open_pending_demo(
+    mut commands: Commands,
     assets: Res<Assets<FuiAsset>>,
     font: Res<GuiFont>,
     windows: Query<&Window>,
@@ -255,19 +267,45 @@ fn open_pending_demo(
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
+    runtime.set_font(font.0.clone());
+
+    if let Some((owner, handle, name)) = demo.open.clone() {
+        if controller.root.is_some() {
+            return;
+        }
+        let Some(root) = runtime.ecs_root_object(owner) else {
+            return;
+        };
+        if assets.get(&handle).is_none() {
+            return;
+        }
+        if let Some(window) = windows.iter().next()
+            && let Some(index) = runtime.ecs_root_handle(owner)
+        {
+            center_root(&mut runtime, index, (window.width(), window.height()));
+        }
+        demos::initialize_demo(&mut runtime, &name, root);
+        controller.package = Some(name.clone());
+        controller.root = Some(root);
+        controller.elapsed = 0.0;
+        info!("已打开演示：{name}");
+        return;
+    }
+
     let Some((name, handle)) = demo.loading.clone() else {
         return;
     };
-    runtime.set_font(font.0.clone());
     let Some(asset) = assets.get(&handle) else {
         return;
     };
-
-    let Some(index) = runtime.create_root(handle.clone(), &asset.package, "Main") else {
-        error!("{name} 包里的 Main 界面创建失败");
+    if asset.package.item_index_by_name("Main").is_none() {
+        error!("{name} 包里没有 Main 界面");
         demo.loading = None;
         return;
-    };
+    }
+    let owner = commands
+        .spawn(FairyGuiRoot::new(handle.clone(), "Main"))
+        .id();
 
     // 菜单让位：演示界面盖在上面。
     if let Some(menu) = demo.menu
@@ -279,18 +317,7 @@ fn open_pending_demo(
         runtime.store_mut().set_visible(close, true);
     }
 
-    if let Some(window) = windows.iter().next() {
-        center_root(&mut runtime, index, (window.width(), window.height()));
-    }
-
-    if let Some(root) = runtime.root_object(index) {
-        demos::initialize_demo(&mut runtime, &name, root);
-    }
-    controller.package = Some(name.clone());
-    controller.root = runtime.root_object(index);
-    controller.elapsed = 0.0;
-    info!("已打开演示：{name}");
-    demo.open = Some((index, handle, name));
+    demo.open = Some((owner, handle, name));
     demo.loading = None;
 }
 
@@ -390,8 +417,8 @@ fn close_demo(
         runtime.remove_root(&mut commands, index);
     }
     // 销毁演示界面，收起关闭按钮，把菜单放回来。
-    if let Some((index, _, _)) = demo.open.take() {
-        runtime.remove_root(&mut commands, index);
+    if let Some((owner, _, _)) = demo.open.take() {
+        commands.entity(owner).despawn();
     }
     controller.package = None;
     controller.root = None;
@@ -420,7 +447,7 @@ fn open_menu_entry(
         return;
     };
     let package = entry.0;
-    if demo.open.is_some() {
+    if demo.open.is_some() || demo.loading.is_some() {
         info!("请先关闭当前演示");
         return;
     }

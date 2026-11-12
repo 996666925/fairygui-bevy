@@ -200,6 +200,102 @@ fn renderer_mutations_are_reconciled_before_bevy_row_views_are_spawned() {
 }
 
 #[test]
+fn ecs_root_component_waits_for_asset_and_owns_view_lifetime() {
+    let package = FuiPackage::parse(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+    )
+    .unwrap();
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+        .init_asset::<FuiAsset>()
+        .init_asset::<Image>()
+        .init_asset::<Font>()
+        .init_resource::<GuiFont>();
+    let asset = Handle::<FuiAsset>::default();
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset.clone(), "Main"))
+        .id();
+    app.insert_non_send(GuiRuntime::default()).add_systems(
+        Update,
+        (sync_ecs_roots, spawn_pending_roots, spawn_pending_objects).chain(),
+    );
+
+    app.update();
+    assert!(app.world().get::<GuiRootInstance>(owner).is_none());
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .ecs_root_object(owner)
+            .is_none()
+    );
+    app.world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .insert(
+            asset.id(),
+            FuiAsset {
+                package,
+                res_key: "ui/VirtualList".into(),
+            },
+        )
+        .unwrap();
+
+    app.update();
+    let instance = *app.world().get::<GuiRootInstance>(owner).unwrap();
+    let view = {
+        let gui = app.world().non_send::<GuiRuntime>();
+        assert_eq!(gui.ecs_root_handle(owner), Some(instance.handle));
+        assert_eq!(gui.ecs_root_object(owner), Some(instance.object));
+        assert!(gui.store().is_on_stage(instance.object));
+        gui.entity_of(instance.object).unwrap()
+    };
+    assert!(app.world().get::<Node>(view).is_some());
+
+    app.update();
+    assert_eq!(app.world().non_send::<GuiRuntime>().root_count(), 1);
+
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .active = false;
+    app.update();
+    {
+        let gui = app.world().non_send::<GuiRuntime>();
+        assert!(!gui.store().is_on_stage(instance.object));
+        assert_eq!(gui.entity_of(instance.object), Some(view));
+    }
+
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .active = true;
+    app.update();
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .is_on_stage(instance.object)
+    );
+
+    app.world_mut().entity_mut(owner).remove::<FairyGuiRoot>();
+    app.update();
+    let gui = app.world().non_send::<GuiRuntime>();
+    assert!(gui.store().object(instance.object).is_none());
+    assert!(gui.entity_of(instance.object).is_none());
+    assert!(app.world().get::<GuiRootInstance>(owner).is_none());
+
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let instance = *app.world().get::<GuiRootInstance>(owner).unwrap();
+    app.world_mut().despawn(owner);
+    app.update();
+    let gui = app.world().non_send::<GuiRuntime>();
+    assert!(gui.store().object(instance.object).is_none());
+    assert!(gui.entity_of(instance.object).is_none());
+}
+
+#[test]
 fn exported_loop_list_retains_views_and_native_record_mapping_through_wraps_and_pooling() {
     let package = FuiPackage::parse(
         "LoopList",

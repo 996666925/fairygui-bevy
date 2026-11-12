@@ -19,6 +19,45 @@ use crate::backend;
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GObjectRef(pub GObjectId);
 
+/// ECS-owned FairyGUI root. Add this component to any entity to create the
+/// named component from an already requested `.fui` asset when it is ready.
+/// Removing the component removes the generated UI tree and its Bevy views.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct FairyGuiRoot {
+    pub asset: Handle<FuiAsset>,
+    pub item_name: String,
+    /// Detach the root from the stage while keeping its model and views alive.
+    pub active: bool,
+}
+
+impl FairyGuiRoot {
+    pub fn new(asset: Handle<FuiAsset>, item_name: impl Into<String>) -> Self {
+        Self {
+            asset,
+            item_name: item_name.into(),
+            active: true,
+        }
+    }
+}
+
+/// Runtime result attached to the entity that owns [`FairyGuiRoot`].
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuiRootInstance {
+    /// Stable `GuiRuntime` root slot for APIs that still require its handle.
+    pub handle: usize,
+    /// Authoritative root object in the FairyGUI object store.
+    pub object: GObjectId,
+}
+
+#[derive(Debug)]
+struct EcsRootBinding {
+    asset: Handle<FuiAsset>,
+    item_name: String,
+    handle: Option<usize>,
+    active: bool,
+    failed: bool,
+}
+
 #[derive(Component, Debug)]
 pub(crate) struct ScrollBarOverlay;
 
@@ -271,6 +310,7 @@ pub struct GuiRuntime {
     store: ObjectStore,
     entities: HashMap<GObjectId, Entity>,
     roots: Vec<GuiRoot>,
+    ecs_roots: HashMap<Entity, EcsRootBinding>,
     /// 已派发但尚未被取走的事件。
     events: fairygui_core::object::EventQueue,
     links: Vec<fairygui_core::object::UiEvent>,
@@ -498,6 +538,18 @@ impl GuiRuntime {
             .get(handle)
             .map(|root| root.object)
             .filter(|id| self.store.contains(*id))
+    }
+
+    /// Resolve the root currently owned by an ECS entity with [`FairyGuiRoot`].
+    pub fn ecs_root_object(&self, owner: Entity) -> Option<GObjectId> {
+        let handle = self.ecs_roots.get(&owner)?.handle?;
+        self.root_object(handle)
+    }
+
+    /// Resolve the manual root slot for an ECS-owned UI root.
+    pub fn ecs_root_handle(&self, owner: Entity) -> Option<usize> {
+        let handle = self.ecs_roots.get(&owner)?.handle?;
+        self.root_object(handle).map(|_| handle)
     }
 
     /// 撤下/重新挂载顶层界面，保留对象、实体及资源编号。
@@ -1720,6 +1772,125 @@ pub fn spawn_pending_roots(
             runtime.store.attach_to_stage(object);
         }
         runtime.roots[index].spawned = true;
+    }
+}
+
+/// Create, attach and dispose roots owned by ECS components.
+///
+/// Unavailable assets remain pending without creating partial model objects.
+/// Component removal/despawn reclaims the root and all generated views.
+pub fn sync_ecs_roots(
+    mut commands: Commands,
+    changed: Query<(Entity, &FairyGuiRoot), Changed<FairyGuiRoot>>,
+    roots: Query<&FairyGuiRoot>,
+    entities: Query<()>,
+    mut removed: RemovedComponents<FairyGuiRoot>,
+    assets: Res<Assets<FuiAsset>>,
+    mut runtime: NonSendMut<GuiRuntime>,
+) {
+    for owner in removed.read() {
+        if let Some(binding) = runtime.ecs_roots.remove(&owner)
+            && let Some(handle) = binding.handle
+        {
+            runtime.remove_root(&mut commands, handle);
+        }
+        if entities.get(owner).is_ok() {
+            commands.entity(owner).remove::<GuiRootInstance>();
+        }
+    }
+
+    for (owner, source) in &changed {
+        let unchanged = runtime.ecs_roots.get(&owner).is_some_and(|binding| {
+            binding.asset == source.asset && binding.item_name == source.item_name
+        });
+        if unchanged {
+            let handle = runtime.ecs_roots[&owner].handle;
+            if let Some(handle) = handle {
+                if runtime.root_object(handle).is_some() {
+                    let active = runtime.ecs_roots[&owner].active;
+                    if active != source.active {
+                        runtime.set_root_attached(handle, source.active);
+                        runtime.ecs_roots.get_mut(&owner).unwrap().active = source.active;
+                    }
+                    continue;
+                }
+
+                runtime.ecs_roots.get_mut(&owner).unwrap().handle = None;
+                commands.entity(owner).remove::<GuiRootInstance>();
+            }
+            runtime.ecs_roots.get_mut(&owner).unwrap().active = source.active;
+            continue;
+        }
+
+        if let Some(binding) = runtime.ecs_roots.remove(&owner)
+            && let Some(handle) = binding.handle
+        {
+            runtime.remove_root(&mut commands, handle);
+        }
+        commands.entity(owner).remove::<GuiRootInstance>();
+        runtime.ecs_roots.insert(
+            owner,
+            EcsRootBinding {
+                asset: source.asset.clone(),
+                item_name: source.item_name.clone(),
+                handle: None,
+                active: source.active,
+                failed: false,
+            },
+        );
+    }
+
+    let stale: Vec<_> = runtime
+        .ecs_roots
+        .iter()
+        .filter_map(|(&owner, binding)| {
+            binding
+                .handle
+                .filter(|&handle| runtime.root_object(handle).is_none())
+                .map(|_| owner)
+        })
+        .collect();
+    for owner in stale {
+        runtime.ecs_roots.get_mut(&owner).unwrap().handle = None;
+        commands.entity(owner).remove::<GuiRootInstance>();
+    }
+
+    let pending: Vec<_> = runtime
+        .ecs_roots
+        .iter()
+        .filter_map(|(&owner, binding)| {
+            (binding.handle.is_none() && !binding.failed).then_some(owner)
+        })
+        .collect();
+    for owner in pending {
+        let Ok(source) = roots.get(owner) else {
+            continue;
+        };
+        if runtime.ecs_roots[&owner].failed {
+            continue;
+        }
+        let Some(asset) = assets.get(&source.asset) else {
+            continue;
+        };
+        let Some(handle) =
+            runtime.create_root(source.asset.clone(), &asset.package, &source.item_name)
+        else {
+            tracing::warn!(
+                owner = ?owner,
+                item = %source.item_name,
+                "ECS FairyGUI root could not be created"
+            );
+            runtime.ecs_roots.get_mut(&owner).unwrap().failed = true;
+            continue;
+        };
+        runtime.set_root_attached(handle, source.active);
+        let object = runtime.root_object(handle).unwrap();
+        let binding = runtime.ecs_roots.get_mut(&owner).unwrap();
+        binding.handle = Some(handle);
+        binding.active = source.active;
+        commands
+            .entity(owner)
+            .insert(GuiRootInstance { handle, object });
     }
 }
 
