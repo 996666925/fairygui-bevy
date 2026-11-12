@@ -4,7 +4,9 @@
 //! keeping application behavior out of the shared input layer.
 
 use bevy::prelude::*;
-use fairygui_bevy::{GuiMenuAction, GuiRuntime, GuiTransitionHook};
+use fairygui_bevy::{
+    GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiRuntime, GuiTransitionHook,
+};
 use fairygui_core::object::GObjectId;
 
 /// Match the official Basics text example: the link replaces its own text.
@@ -433,7 +435,12 @@ pub fn handle_menu_actions(
 }
 
 /// 推进 Laya CooldownDemo 的两个循环进度条。
-pub fn tick(runtime: &mut GuiRuntime, controller: &mut DemoController, delta: f32) {
+pub fn tick(
+    runtime: &GuiRuntime,
+    controller: &mut DemoController,
+    delta: f32,
+    commands: &mut MessageWriter<GuiObjectCommand>,
+) {
     controller.elapsed += delta;
     let Some(root) = controller.root else { return };
     if controller.package.as_deref() != Some("Cooldown") {
@@ -448,8 +455,14 @@ pub fn tick(runtime: &mut GuiRuntime, controller: &mut DemoController, delta: f3
     };
     let first_value = ((controller.elapsed / 5.0) % 1.0 * 100.0) as i32;
     let second_value = (10.0 - (controller.elapsed / 10.0) % 10.0) as i32;
-    runtime.store_mut().set_progress(first, first_value);
-    runtime.store_mut().set_progress(second, second_value);
+    for (object, value) in [(first, first_value), (second, second_value)] {
+        if let Some(target) = runtime.entity_of(object) {
+            commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetProgress(value),
+            ));
+        }
+    }
 }
 
 pub fn copy_basics_input(runtime: &mut GuiRuntime, controller: &DemoController) {
@@ -474,9 +487,10 @@ pub fn copy_basics_input(runtime: &mut GuiRuntime, controller: &DemoController) 
 }
 
 pub fn handle_virtual_list_action(
-    runtime: &mut GuiRuntime,
+    runtime: &GuiRuntime,
     controller: &DemoController,
     listener: u64,
+    commands: &mut MessageWriter<GuiObjectCommand>,
 ) {
     let Some(root) = controller.root else {
         return;
@@ -486,10 +500,16 @@ pub fn handle_virtual_list_action(
     }
     match listener - DEMO_ACTION_BASE {
         0 => {
-            if let Some(list) = runtime.store().find_by_name(root, "mailList") {
-                runtime
-                    .store_mut()
-                    .add_list_selection_with_scroll(list, 500, true);
+            if let Some(list) = runtime.store().find_by_name(root, "mailList")
+                && let Some(target) = runtime.entity_of(list)
+            {
+                commands.write(GuiObjectCommand::new(
+                    target,
+                    GuiObjectAction::SelectListIndex {
+                        index: 500,
+                        scroll_to_view: true,
+                    },
+                ));
             }
         }
         1 | 2 => {
@@ -506,7 +526,15 @@ pub fn handle_virtual_list_action(
             } else {
                 max.y
             };
-            runtime.store_mut().set_scroll_pos(list, max.x, y, false);
+            if let Some(target) = runtime.entity_of(list) {
+                commands.write(GuiObjectCommand::new(
+                    target,
+                    GuiObjectAction::SetScrollPosition {
+                        position: Vec2::new(max.x, y),
+                        allow_bounce: false,
+                    },
+                ));
+            }
         }
         _ => {}
     }

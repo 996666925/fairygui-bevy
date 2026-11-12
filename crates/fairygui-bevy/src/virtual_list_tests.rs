@@ -127,6 +127,86 @@ fn virtual_thousand_rows_refresh_automatically_retain_views_and_dispose_their_po
 }
 
 #[test]
+fn ecs_commands_drive_virtual_list_selection_and_scroll() {
+    let (mut app, _root, list) = fixture();
+    let list_entity = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(list)
+        .unwrap();
+    app.add_message::<GuiObjectCommand>()
+        .add_systems(Update, apply_object_commands);
+
+    let max_scroll = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .scroll_pane(list)
+        .unwrap()
+        .max_scroll_pos();
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            list_entity,
+            GuiObjectAction::SelectListIndex {
+                index: 500,
+                scroll_to_view: true,
+            },
+        ));
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            list_entity,
+            GuiObjectAction::SetScrollPosition {
+                position: Vec2::new(max_scroll.x, max_scroll.y),
+                allow_bounce: false,
+            },
+        ));
+
+    app.update();
+    let runtime = app.world().non_send::<GuiRuntime>();
+    assert_eq!(runtime.store().list_selections(list), Some(vec![500]));
+    let position = runtime.store().scroll_pane(list).unwrap().pos();
+    assert_eq!(position, max_scroll);
+}
+
+#[test]
+fn ecs_commands_set_progress_by_entity() {
+    let package = FuiPackage::parse(
+        "Cooldown",
+        include_bytes!("../../fairygui-demo/assets/ui/Cooldown.fui"),
+    )
+    .unwrap();
+    let mut runtime = GuiRuntime::default();
+    let root = runtime
+        .create_root(Handle::default(), &package, "Main")
+        .unwrap();
+    let root = runtime.root_object(root).unwrap();
+    let progress = runtime.store().find_by_name(root, "b0").unwrap();
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_non_send(runtime)
+        .add_message::<GuiObjectCommand>()
+        .add_systems(Update, apply_object_commands);
+    let target = app.world_mut().spawn(GObjectRef(progress)).id();
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetProgress(37),
+        ));
+
+    app.update();
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .progress_value(progress),
+        Some(37)
+    );
+}
+
+#[test]
 fn renderer_mutations_are_reconciled_before_bevy_row_views_are_spawned() {
     use std::cell::Cell;
 

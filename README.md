@@ -93,7 +93,9 @@ commands.write_message(GuiObjectCommand::new(
 
 命令目标既可用根拥有者实体，也可用带 `GObjectRef` 的控件视图实体。`GuiRuntime`
 和 `ObjectStore` 仍可用于高级控件 API；大多数界面的创建、常见属性修改与销毁由
-ECS 组件和消息驱动。
+ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、文本、颜色、置灰、
+按钮选择、控制器切页、进度值、滚动位置、列表选中/滚入视口和过渡播放。命令在
+`GuiSystems::Sync` 应用，因此 observer 和业务系统只需写消息，不需要独占借用运行时。
 
 Windows MSVC 示例构建自动使用 8 KiB PDB 页，容纳完整 Bevy 调试符号，避免默认页容量
 触发 `LNK1318 LIMIT`；其他目标保持原有链接配置。

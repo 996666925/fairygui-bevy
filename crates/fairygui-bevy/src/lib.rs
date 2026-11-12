@@ -1,13 +1,19 @@
 //! FairyGUI 运行时的 Bevy 集成层。
 //!
-//! 本 crate 把 [`fairygui_core`] 的对象树镜像为 Bevy 的 ECS 实体树，并提供资产加载。
-//! 核心对象树是**唯一权威状态**，ECS 实体只是它的视图。
+//! 面向应用的界面生命周期、事件响应与控件修改都通过 Bevy ECS 完成：用
+//! [`FairyGuiRoot`] 拥有界面，用 [`GuiEvent`] observer 响应交互，再通过
+//! [`GuiObjectCommand`] 修改控件。
+//!
+//! [`fairygui_core`] 在内部执行 FairyGUI 包语义，运行时把结果同步到对应的 ECS
+//! 实体与 Bevy UI 组件。应用代码通常不需要直接访问 [`GuiRuntime`] 或
+//! `ObjectStore`；它们保留给尚未封装为 ECS 操作的高级能力。
 //!
 //! # 分层约定
 //!
 //! 核心层不依赖 Bevy。渲染表示由 [`backend`]、[`text`] 与 [`movie`] 负责，
-//! [`runtime`] 管理视图同步，[`input`] 管理指针路由与捕获。
-//! 应用事件处理系统放入 [`GuiSystems::Respond`]，在本帧视图同步之前修改对象树。
+//! [`runtime`] 管理模型与实体之间的同步，[`input`] 管理指针路由与捕获。
+//! 应用 observer 与消息处理系统放入 [`GuiSystems::Respond`]，发送的命令会在本帧
+//! [`GuiSystems::Sync`] 应用并同步到 Bevy UI 组件。
 //!
 //! # 渲染方案
 //!
@@ -38,9 +44,9 @@
 //! }
 //! ```
 //!
-//! The plugin waits for the asset, creates the root once and removes its view
-//! when the component is removed. `GuiRootInstance` exposes the created model
-//! object and manual root handle when application setup needs them.
+//! The plugin waits for the asset, creates the root once and removes it when
+//! the component is removed. `GuiRootInstance` exposes a stable entity-owned
+//! root reference when advanced package operations need it.
 
 pub mod asset;
 pub mod backend;

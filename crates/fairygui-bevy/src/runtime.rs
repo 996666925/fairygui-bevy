@@ -63,6 +63,11 @@ pub enum GuiObjectAction {
     SetColor(fairygui_core::color::Color),
     SetGrayed(bool),
     SetButtonSelected(bool),
+    SetControllerPage { name: String, index: i32 },
+    SetProgress(i32),
+    SetScrollPosition { position: Vec2, allow_bounce: bool },
+    SelectListIndex { index: usize, scroll_to_view: bool },
+    PlayTransition { name: String, times: i32 },
 }
 
 /// Entity-addressed FairyGUI mutation. Send this from application ECS systems
@@ -1784,11 +1789,39 @@ pub fn apply_object_commands(
             GuiObjectAction::SetButtonSelected(selected) => {
                 runtime.store_mut().set_button_selected(object, *selected);
             }
+            GuiObjectAction::SetControllerPage { name, index } => {
+                runtime
+                    .store_mut()
+                    .set_controller_page_index(object, name, *index);
+            }
+            GuiObjectAction::SetProgress(value) => {
+                runtime.store_mut().set_progress(object, *value);
+            }
+            GuiObjectAction::SetScrollPosition {
+                position,
+                allow_bounce,
+            } if position.is_finite() => {
+                runtime
+                    .store_mut()
+                    .set_scroll_pos(object, position.x, position.y, *allow_bounce);
+            }
+            GuiObjectAction::SelectListIndex {
+                index,
+                scroll_to_view,
+            } => {
+                runtime
+                    .store_mut()
+                    .add_list_selection_with_scroll(object, *index, *scroll_to_view);
+            }
+            GuiObjectAction::PlayTransition { name, times } => {
+                runtime.store_mut().play_transition(object, name, *times);
+            }
             GuiObjectAction::SetPosition(_)
             | GuiObjectAction::SetSize(_)
             | GuiObjectAction::SetAlpha(_)
             | GuiObjectAction::SetScale(_)
-            | GuiObjectAction::SetRotation(_) => {}
+            | GuiObjectAction::SetRotation(_)
+            | GuiObjectAction::SetScrollPosition { .. } => {}
         }
     }
 }

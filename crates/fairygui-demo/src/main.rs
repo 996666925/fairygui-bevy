@@ -590,7 +590,8 @@ fn play_transition_action(
 fn virtual_list_action(
     event: On<GuiEvent>,
     actions: Query<&DemoAction>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    runtime: NonSend<GuiRuntime>,
     controller: Res<demos::DemoController>,
 ) {
     if event.event().event.kind != fairygui_core::object::EventKind::Click {
@@ -599,7 +600,7 @@ fn virtual_list_action(
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
-    demos::handle_virtual_list_action(&mut runtime, &controller, action.0);
+    demos::handle_virtual_list_action(&runtime, &controller, action.0, &mut gui_commands);
 }
 
 fn basics_text_get_input(
@@ -615,8 +616,14 @@ fn basics_text_get_input(
 
 fn advance_demo_behaviors(
     time: Res<Time>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    runtime: NonSend<GuiRuntime>,
     mut controller: ResMut<demos::DemoController>,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
 ) {
-    demos::tick(&mut runtime, &mut controller, time.delta_secs());
+    demos::tick(
+        &runtime,
+        &mut controller,
+        time.delta_secs(),
+        &mut gui_commands,
+    );
 }
