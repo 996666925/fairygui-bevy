@@ -127,6 +127,79 @@ fn virtual_thousand_rows_refresh_automatically_retain_views_and_dispose_their_po
 }
 
 #[test]
+fn renderer_mutations_are_reconciled_before_bevy_row_views_are_spawned() {
+    use std::cell::Cell;
+
+    let package = FuiPackage::parse(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+    )
+    .unwrap();
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+        .init_asset::<FuiAsset>()
+        .init_asset::<Image>()
+        .init_asset::<Font>()
+        .init_resource::<GuiFont>();
+    let handle = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: package.clone(),
+            res_key: "ui/VirtualList".into(),
+        });
+    let mut gui = GuiRuntime::default();
+    let index = gui.create_root(handle, &package, "Main").unwrap();
+    let root = gui.root_object(index).unwrap();
+    let list = gui.store().child_by_name(root, "mailList").unwrap();
+    let changed = Cell::new(false);
+    gui.enable_virtual_list(list, move |store, index, row| {
+        store.set_object_text(row, &format!("Row {index}"));
+        if !changed.replace(true) {
+            store.set_virtual_item_count(list, 2).unwrap();
+            store.set_size(list, 400., 240.);
+        }
+    })
+    .unwrap();
+    gui.set_virtual_item_count(list, 1000).unwrap();
+    assert_eq!(gui.store().list_num_items(list), 2);
+    assert_eq!(gui.store().list_item_count(list), 2);
+    assert_eq!(gui.store().virtual_list_info(list).unwrap().active_count, 2);
+
+    app.insert_non_send(gui).add_systems(
+        Update,
+        (
+            spawn_pending_roots,
+            spawn_pending_objects,
+            sync_dirty,
+            sync_stage_hierarchy,
+        )
+            .chain(),
+    );
+    app.update();
+
+    let gui = app.world().non_send::<GuiRuntime>();
+    let rows = gui.store().list_items(list).unwrap();
+    assert_eq!(rows.len(), 2);
+    for (index, row) in rows.into_iter().enumerate() {
+        let entity = gui
+            .entity_of(row)
+            .expect("visible virtual row has an entity");
+        assert!(app.world().get::<Node>(entity).is_some());
+        assert_eq!(
+            app.world()
+                .get::<GObjectRef>(entity)
+                .map(|reference| reference.0),
+            Some(row)
+        );
+        let ControlData::Button(button) = gui.store().object(row).unwrap().control() else {
+            unreachable!();
+        };
+        assert_eq!(button.title, format!("Row {index}"));
+    }
+}
+
+#[test]
 fn exported_loop_list_retains_views_and_native_record_mapping_through_wraps_and_pooling() {
     let package = FuiPackage::parse(
         "LoopList",
