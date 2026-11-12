@@ -63,9 +63,11 @@ pub enum GuiObjectAction {
     SetColor(fairygui_core::color::Color),
     SetGrayed(bool),
     SetButtonSelected(bool),
+    SetSliderValue(i32),
     SetControllerPage { name: String, index: i32 },
     SetProgress(i32),
     SetScrollPosition { position: Vec2, allow_bounce: bool },
+    SetListSelection(i32),
     SelectListIndex { index: usize, scroll_to_view: bool },
     PlayTransition { name: String, times: i32 },
     SetTransitionPaused { name: String, paused: bool },
@@ -1793,6 +1795,9 @@ pub fn apply_object_commands(
             GuiObjectAction::SetButtonSelected(selected) => {
                 runtime.store_mut().set_button_selected(object, *selected);
             }
+            GuiObjectAction::SetSliderValue(value) => {
+                runtime.store_mut().set_slider_value(object, *value);
+            }
             GuiObjectAction::SetControllerPage { name, index } => {
                 runtime
                     .store_mut()
@@ -1800,6 +1805,9 @@ pub fn apply_object_commands(
             }
             GuiObjectAction::SetProgress(value) => {
                 runtime.store_mut().set_progress(object, *value);
+            }
+            GuiObjectAction::SetListSelection(index) => {
+                runtime.store_mut().set_list_selection(object, *index);
             }
             GuiObjectAction::SetScrollPosition {
                 position,

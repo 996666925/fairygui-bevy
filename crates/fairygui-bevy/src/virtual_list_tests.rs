@@ -162,12 +162,79 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
                 allow_bounce: false,
             },
         ));
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            list_entity,
+            GuiObjectAction::SetListSelection(123),
+        ));
 
     app.update();
-    let runtime = app.world().non_send::<GuiRuntime>();
-    assert_eq!(runtime.store().list_selections(list), Some(vec![500]));
-    let position = runtime.store().scroll_pane(list).unwrap().pos();
-    assert_eq!(position, max_scroll);
+    {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert_eq!(runtime.store().list_selections(list), Some(vec![123]));
+        let position = runtime.store().scroll_pane(list).unwrap().pos();
+        assert_eq!(position, max_scroll);
+    }
+
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            list_entity,
+            GuiObjectAction::SetListSelection(-1),
+        ));
+    app.update();
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_selections(list),
+        Some(vec![])
+    );
+}
+
+#[test]
+fn ecs_commands_set_slider_value_by_entity() {
+    let package = FuiPackage::parse(
+        "Basics",
+        include_bytes!("../../fairygui-demo/assets/ui/Basics.fui"),
+    )
+    .unwrap();
+    let mut runtime = GuiRuntime::default();
+    let root = runtime
+        .create_root(Handle::default(), &package, "Demo_Slider")
+        .unwrap();
+    let _root_object = runtime.root_object(root).unwrap();
+    let slider = runtime
+        .store()
+        .iter()
+        .find_map(|(id, object)| matches!(object.control(), ControlData::Slider(_)).then_some(id))
+        .unwrap();
+    let max = match runtime.store().object(slider).unwrap().control() {
+        ControlData::Slider(data) => data.max,
+        _ => unreachable!(),
+    };
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_non_send(runtime)
+        .add_message::<GuiObjectCommand>()
+        .add_systems(Update, apply_object_commands);
+    let target = app.world_mut().spawn(GObjectRef(slider)).id();
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetSliderValue(max),
+        ));
+
+    app.update();
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .slider_value(slider),
+        Some(max)
+    );
 }
 
 #[test]

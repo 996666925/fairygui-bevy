@@ -94,8 +94,9 @@ commands.write_message(GuiObjectCommand::new(
 命令目标既可用根拥有者实体，也可用带 `GObjectRef` 的控件视图实体。`GuiRuntime`
 和 `ObjectStore` 仍可用于高级控件 API；大多数界面的创建、常见属性修改与销毁由
 ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、文本、颜色、置灰、
-按钮选择、控制器切页、进度值、滚动位置、列表选中/滚入视口和过渡播放。命令在
-`GuiSystems::Sync` 应用，因此 observer 和业务系统只需写消息，不需要独占借用运行时。
+按钮选择、滑动条值、控制器切页、进度值、滚动位置、列表选择替换/清空/滚入视口和
+过渡播放。命令在 `GuiSystems::Sync` 应用，因此 observer 和业务系统只需写消息，
+不需要独占借用运行时。
 过渡命令还支持暂停/恢复、速度、反向播放和停止。临时界面也用 `FairyGuiRoot`
 实体管理；销毁所有者实体会自动回收对应 FairyGUI 对象树。
 
