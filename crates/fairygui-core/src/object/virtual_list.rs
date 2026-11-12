@@ -31,6 +31,8 @@ pub enum VirtualListError {
     UnstableRenderer,
     #[error("virtual list was removed during refresh")]
     Removed,
+    #[error("virtual list cannot be refreshed recursively from its renderer")]
+    ReentrantRefresh,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -375,6 +377,21 @@ impl ObjectStore {
         }
     }
     pub fn refresh_virtual_list(
+        &mut self,
+        list: GObjectId,
+        create: &mut VirtualItemFactory<'_>,
+        provider: &mut VirtualItemProvider<'_>,
+        render: &mut VirtualItemRenderer<'_>,
+    ) -> Result<usize, VirtualListError> {
+        if !self.refreshing_virtual_lists.insert(list) {
+            return Err(VirtualListError::ReentrantRefresh);
+        }
+        let result = self.refresh_virtual_list_inner(list, create, provider, render);
+        self.refreshing_virtual_lists.remove(&list);
+        result
+    }
+
+    fn refresh_virtual_list_inner(
         &mut self,
         list: GObjectId,
         create: &mut VirtualItemFactory<'_>,

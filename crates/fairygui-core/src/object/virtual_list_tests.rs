@@ -363,3 +363,40 @@ fn renderer_may_remove_the_list_without_panicking_or_retaining_pool_objects() {
     );
     assert_eq!(store.len(), 1);
 }
+
+#[test]
+fn renderer_cannot_recursively_refresh_the_same_virtual_list() {
+    let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, true, false);
+    let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));
+    store.enable_virtual_list(list, "a", &mut create).unwrap();
+    store.set_virtual_item_count(list, 1000).unwrap();
+    let nested = RefCell::new(None);
+
+    let rendered = store
+        .refresh_virtual_list(list, &mut create, &mut |_| None, &mut |store, _, _| {
+            if nested.borrow().is_none() {
+                *nested.borrow_mut() = Some(store.refresh_virtual_list(
+                    list,
+                    &mut |store, _| Some(button(store, 24., 20.)),
+                    &mut |_| None,
+                    &mut |_, _, _| {},
+                ));
+            }
+        })
+        .unwrap();
+
+    assert!(rendered > 0);
+    assert_eq!(
+        *nested.borrow(),
+        Some(Err(VirtualListError::ReentrantRefresh))
+    );
+    assert!(store.virtual_list_info(list).unwrap().active_count > 0);
+
+    store.invalidate_virtual_list(list, false);
+    assert!(
+        store
+            .refresh_virtual_list(list, &mut create, &mut |_| None, &mut |_, _, _| {},)
+            .is_ok(),
+        "the guard must be released after the outer refresh"
+    );
+}

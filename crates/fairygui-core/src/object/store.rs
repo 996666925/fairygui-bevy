@@ -180,6 +180,8 @@ pub struct ObjectStore {
     gear_tweens: Vec<GearTween>,
     /// 独立补间，由使用方通过 [`Self::add_tween`] 加入。
     tweens: crate::transition::TweenManager,
+    /// 正在刷新的虚拟列表，阻止渲染回调同步重入同一列表。
+    refreshing_virtual_lists: HashSet<GObjectId>,
     /// 各下拉框当前展开的弹层。
     combo_popups: std::collections::HashMap<GObjectId, crate::widget::ComboPopup>,
     /// 待播放的音效：(触发对象, 音效地址, 音量)。
@@ -271,6 +273,8 @@ impl ObjectStore {
             .retain(|(owner, _)| !removed_set.contains(owner));
         self.virtual_states
             .retain(|owner, _| !removed_set.contains(owner));
+        self.refreshing_virtual_lists
+            .retain(|owner| !removed_set.contains(owner));
         self.scroll_page_controllers
             .retain(|pane, (owner, _)| !removed_set.contains(pane) && !removed_set.contains(owner));
         self.pending_scroll_page_initialization
