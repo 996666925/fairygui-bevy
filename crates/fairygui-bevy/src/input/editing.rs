@@ -158,6 +158,16 @@ fn shortcut(input: &KeyboardInput, letter: &str, code: KeyCode) -> bool {
     }
 }
 
+fn logical_key_name(key: &Key) -> String {
+    match key {
+        Key::Character(value) => value.to_string(),
+        Key::Space => " ".to_owned(),
+        Key::Dead(_) => "Dead".to_owned(),
+        Key::Unidentified(_) => "Unidentified".to_owned(),
+        _ => format!("{key:?}"),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn keyboard_input(
     mut event: On<FocusedInput<KeyboardInput>>,
@@ -166,7 +176,7 @@ fn keyboard_input(
     settings: Res<GuiInputSettings>,
     windows: Query<(&Window, Has<PrimaryWindow>)>,
     mut focus: ResMut<InputFocus>,
-    runtime: NonSend<GuiRuntime>,
+    mut runtime: NonSendMut<GuiRuntime>,
 ) {
     if event.original_event_target() != event.focused_entity {
         return;
@@ -181,6 +191,14 @@ fn keyboard_input(
     {
         return;
     }
+    let kind = if event.input.state == ButtonState::Pressed {
+        EventKind::KeyDown
+    } else {
+        EventKind::KeyUp
+    };
+    runtime.dispatch_event(UiEvent::new(kind, owner.0).with_data(
+        fairygui_core::object::EventData::Key(logical_key_name(&event.input.logical_key)),
+    ));
     if editor.is_composing() {
         event.propagate(false);
         return;

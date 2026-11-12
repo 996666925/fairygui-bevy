@@ -104,15 +104,94 @@ fn fixture() -> (App, GObjectId, Entity, Entity) {
     (app, owner, entity, window)
 }
 fn key(app: &mut App, window: Entity, key: Key, code: KeyCode, value: Option<&str>) {
+    key_state(app, window, key, code, value, ButtonState::Pressed);
+}
+
+fn key_state(
+    app: &mut App,
+    window: Entity,
+    key: Key,
+    code: KeyCode,
+    value: Option<&str>,
+    state: ButtonState,
+) {
     app.world_mut().write_message(KeyboardInput {
         key_code: code,
         logical_key: key,
         text: value.map(Into::into),
-        state: ButtonState::Pressed,
+        state,
         repeat: false,
         window,
     });
     app.update();
+}
+
+#[test]
+fn focused_keyboard_down_and_up_events_preserve_key_and_bubble_once() {
+    let (mut app, owner, _entity, window) = fixture();
+    let parent = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .object(owner)
+        .unwrap()
+        .parent()
+        .unwrap();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .request_input_focus(Some(owner));
+    app.update();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .for_each(drop);
+
+    key(
+        &mut app,
+        window,
+        Key::Character("A".into()),
+        KeyCode::KeyA,
+        Some("A"),
+    );
+    let down: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .filter(|event| event.kind == EventKind::KeyDown)
+        .collect();
+    assert_eq!(down.len(), 2, "one target event and one parent bubble");
+    assert_eq!(down[0].target, owner);
+    assert_eq!(down[0].current_target, owner);
+    assert!(!down[0].bubbling);
+    assert_eq!(
+        down[0].data,
+        fairygui_core::object::EventData::Key("A".into())
+    );
+    assert_eq!(down[1].target, owner);
+    assert_eq!(down[1].current_target, parent);
+    assert!(down[1].bubbling);
+    assert_eq!(down[1].data, down[0].data);
+
+    key_state(
+        &mut app,
+        window,
+        Key::Character("A".into()),
+        KeyCode::KeyA,
+        None,
+        ButtonState::Released,
+    );
+    let up: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .filter(|event| event.kind == EventKind::KeyUp)
+        .collect();
+    assert_eq!(up.len(), 2, "one target event and one parent bubble");
+    assert_eq!(
+        up[0].data,
+        fairygui_core::object::EventData::Key("A".into())
+    );
+    assert_eq!(up[1].current_target, parent);
 }
 fn events(app: &mut App) -> Vec<EventKind> {
     app.world_mut()
