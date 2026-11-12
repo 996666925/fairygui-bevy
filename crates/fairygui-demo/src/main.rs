@@ -39,13 +39,41 @@ fn center_root(runtime: &mut GuiRuntime, index: usize, viewport: (f32, f32)) {
     else {
         return;
     };
+    runtime.store_mut().set_xy(
+        root,
+        (viewport.0 - width) / 2.0,
+        (viewport.1 - height) / 2.0,
+    );
+}
 
-    let position = ((viewport.0 - width) / 2.0, (viewport.1 - height) / 2.0);
-    runtime.store_mut().set_xy(root, position.0, position.1);
+fn center_root_command(
+    runtime: &GuiRuntime,
+    commands: &mut MessageWriter<GuiObjectCommand>,
+    index: usize,
+    viewport: (f32, f32),
+) {
+    let Some(root) = runtime.root_object(index) else {
+        return;
+    };
+    let Some((width, height)) = runtime
+        .store()
+        .object(root)
+        .map(|object| (object.width(), object.height()))
+    else {
+        return;
+    };
+
+    let position = Vec2::new((viewport.0 - width) / 2.0, (viewport.1 - height) / 2.0);
+    if let Some(target) = runtime.entity_of(root) {
+        commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetPosition(position),
+        ));
+    }
 
     info!(
         "界面 {width}×{height}，视口 {}×{}，摆到 ({}, {})",
-        viewport.0, viewport.1, position.0, position.1
+        viewport.0, viewport.1, position.x, position.y
     );
 }
 
@@ -186,6 +214,7 @@ fn setup_camera(mut commands: Commands) {
 /// 加载主菜单。资产是异步的，因此每帧检查一次。
 fn boot_menu(
     mut commands: Commands,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
     asset_server: Res<AssetServer>,
     font: Res<GuiFont>,
     windows: Query<&Window>,
@@ -235,19 +264,30 @@ fn boot_menu(
             .next()
             .map(|window| (window.width(), window.height()))
             .unwrap_or((1280.0, 720.0));
-        let store = runtime.store_mut();
-        store.set_xy(
-            close,
-            viewport_width - width - 10.0,
-            viewport_height - height - 10.0,
-        );
-        store.set_visible(close, false);
+        if let Some(target) = runtime.entity_of(close) {
+            gui_commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetPosition(Vec2::new(
+                    viewport_width - width - 10.0,
+                    viewport_height - height - 10.0,
+                )),
+            ));
+            gui_commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetVisible(false),
+            ));
+        }
         demo.close_button = Some(close);
     }
 
     // 界面摆到窗口中央。按实际窗口尺寸算，不用假设的分辨率。
     if let Some(window) = windows.iter().next() {
-        center_root(&mut runtime, index, (window.width(), window.height()));
+        center_root_command(
+            &runtime,
+            &mut gui_commands,
+            index,
+            (window.width(), window.height()),
+        );
     }
 
     demo.close_button = demo
@@ -258,8 +298,10 @@ fn boot_menu(
 }
 
 /// 演示包的资产到达后创建界面。
+#[allow(clippy::too_many_arguments)]
 fn open_pending_demo(
     mut commands: Commands,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
     assets: Res<Assets<FuiAsset>>,
     font: Res<GuiFont>,
     windows: Query<&Window>,
@@ -282,7 +324,12 @@ fn open_pending_demo(
         if let Some(window) = windows.iter().next()
             && let Some(index) = runtime.ecs_root_handle(owner)
         {
-            center_root(&mut runtime, index, (window.width(), window.height()));
+            center_root_command(
+                &runtime,
+                &mut gui_commands,
+                index,
+                (window.width(), window.height()),
+            );
         }
         demos::initialize_demo(&mut runtime, &name, root);
         controller.package = Some(name.clone());
@@ -310,11 +357,20 @@ fn open_pending_demo(
     // 菜单让位：演示界面盖在上面。
     if let Some(menu) = demo.menu
         && let Some(root) = runtime.root_object(menu)
+        && let Some(target) = runtime.entity_of(root)
     {
-        runtime.store_mut().set_visible(root, false);
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetVisible(false),
+        ));
     }
-    if let Some(close) = demo.close_button {
-        runtime.store_mut().set_visible(close, true);
+    if let Some(close) = demo.close_button
+        && let Some(target) = runtime.entity_of(close)
+    {
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetVisible(true),
+        ));
     }
 
     demo.open = Some((owner, handle, name));
@@ -402,6 +458,7 @@ fn bind_demo_observers(
 fn close_demo(
     event: On<GuiEvent>,
     mut commands: Commands,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
     mut runtime: NonSendMut<GuiRuntime>,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
@@ -423,13 +480,22 @@ fn close_demo(
     controller.package = None;
     controller.root = None;
     controller.elapsed = 0.0;
-    if let Some(close) = demo.close_button {
-        runtime.store_mut().set_visible(close, false);
+    if let Some(close) = demo.close_button
+        && let Some(target) = runtime.entity_of(close)
+    {
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetVisible(false),
+        ));
     }
     if let Some(menu) = demo.menu
         && let Some(root) = runtime.root_object(menu)
+        && let Some(target) = runtime.entity_of(root)
     {
-        runtime.store_mut().set_visible(root, true);
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetVisible(true),
+        ));
     }
     info!("已退回主菜单");
 }

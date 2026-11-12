@@ -81,8 +81,19 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>) {
 ```
 
 运行时会在所有者实体上添加 `GuiRootInstance`，提供底层对象 ID 和 root handle。
-需要高级初始化时，可在 `GuiSystems::Respond` 中通过 `GuiRuntime` 修改模型；
-大多数界面的加载、挂载和销毁由 ECS 组件生命周期管理。
+业务系统可在 `GuiSystems::Respond` 用实体发送 `GuiObjectCommand`，本帧 Sync 会把
+修改应用到对象模型并投影到 Bevy UI 视图：
+
+```rust,ignore
+commands.write_message(GuiObjectCommand::new(
+    root_entity,
+    GuiObjectAction::SetVisible(false),
+));
+```
+
+命令目标既可用根拥有者实体，也可用带 `GObjectRef` 的控件视图实体。`GuiRuntime`
+和 `ObjectStore` 仍可用于高级控件 API；大多数界面的创建、常见属性修改与销毁由
+ECS 组件和消息驱动。
 
 Windows MSVC 示例构建自动使用 8 KiB PDB 页，容纳完整 Bevy 调试符号，避免默认页容量
 触发 `LNK1318 LIMIT`；其他目标保持原有链接配置。

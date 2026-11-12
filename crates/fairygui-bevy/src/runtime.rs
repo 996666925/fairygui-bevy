@@ -49,6 +49,36 @@ pub struct GuiRootInstance {
     pub object: GObjectId,
 }
 
+/// Common model mutations addressed by the Bevy entity that owns a FairyGUI
+/// object (`GObjectRef`) or root (`GuiRootInstance`).
+#[derive(Debug, Clone)]
+pub enum GuiObjectAction {
+    SetPosition(Vec2),
+    SetSize(Vec2),
+    SetVisible(bool),
+    SetAlpha(f32),
+    SetScale(Vec2),
+    SetRotation(f32),
+    SetText(String),
+    SetColor(fairygui_core::color::Color),
+    SetGrayed(bool),
+    SetButtonSelected(bool),
+}
+
+/// Entity-addressed FairyGUI mutation. Send this from application ECS systems
+/// instead of borrowing the main-thread `GuiRuntime` for common property edits.
+#[derive(Message, Debug, Clone)]
+pub struct GuiObjectCommand {
+    pub target: Entity,
+    pub action: GuiObjectAction,
+}
+
+impl GuiObjectCommand {
+    pub fn new(target: Entity, action: GuiObjectAction) -> Self {
+        Self { target, action }
+    }
+}
+
 #[derive(Debug)]
 struct EcsRootBinding {
     asset: Handle<FuiAsset>,
@@ -1704,6 +1734,62 @@ pub fn emit_gui_events(
             continue;
         };
         commands.trigger(GuiEvent { entity, event });
+    }
+}
+
+/// Apply entity-addressed model changes in `GuiSystems::Sync`, before the
+/// authoritative properties are projected back onto Bevy UI components.
+pub fn apply_object_commands(
+    mut commands: MessageReader<GuiObjectCommand>,
+    objects: Query<&GObjectRef>,
+    roots: Query<&GuiRootInstance>,
+    mut runtime: NonSendMut<GuiRuntime>,
+) {
+    for command in commands.read() {
+        let object = objects
+            .get(command.target)
+            .map(|reference| reference.0)
+            .or_else(|_| roots.get(command.target).map(|root| root.object));
+        let Ok(object) = object else {
+            continue;
+        };
+        match &command.action {
+            GuiObjectAction::SetPosition(position) if position.is_finite() => {
+                runtime.store_mut().set_xy(object, position.x, position.y);
+            }
+            GuiObjectAction::SetSize(size) if size.is_finite() && size.min_element() >= 0.0 => {
+                runtime.store_mut().set_size(object, size.x, size.y);
+            }
+            GuiObjectAction::SetVisible(visible) => {
+                runtime.store_mut().set_visible(object, *visible);
+            }
+            GuiObjectAction::SetAlpha(alpha) if alpha.is_finite() => {
+                runtime.store_mut().set_alpha(object, *alpha);
+            }
+            GuiObjectAction::SetScale(scale) if scale.is_finite() => {
+                runtime.store_mut().set_scale(object, scale.x, scale.y);
+            }
+            GuiObjectAction::SetRotation(rotation) if rotation.is_finite() => {
+                runtime.store_mut().set_rotation(object, *rotation);
+            }
+            GuiObjectAction::SetText(text) => {
+                runtime.store_mut().set_object_text(object, text);
+            }
+            GuiObjectAction::SetColor(color) => {
+                runtime.store_mut().set_control_color(object, *color, None);
+            }
+            GuiObjectAction::SetGrayed(grayed) => {
+                runtime.store_mut().set_grayed(object, *grayed);
+            }
+            GuiObjectAction::SetButtonSelected(selected) => {
+                runtime.store_mut().set_button_selected(object, *selected);
+            }
+            GuiObjectAction::SetPosition(_)
+            | GuiObjectAction::SetSize(_)
+            | GuiObjectAction::SetAlpha(_)
+            | GuiObjectAction::SetScale(_)
+            | GuiObjectAction::SetRotation(_) => {}
+        }
     }
 }
 

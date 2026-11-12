@@ -296,6 +296,86 @@ fn ecs_root_component_waits_for_asset_and_owns_view_lifetime() {
 }
 
 #[test]
+fn ecs_object_commands_mutate_the_model_by_entity() {
+    let package = FuiPackage::parse(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+    )
+    .unwrap();
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+        .init_asset::<FuiAsset>()
+        .init_asset::<Image>()
+        .init_asset::<Font>()
+        .init_resource::<GuiFont>();
+    let asset = Handle::<FuiAsset>::default();
+    app.world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .insert(
+            asset.id(),
+            FuiAsset {
+                package,
+                res_key: "ui/VirtualList".into(),
+            },
+        )
+        .unwrap();
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.insert_non_send(GuiRuntime::default())
+        .add_message::<GuiObjectCommand>()
+        .add_systems(
+            Update,
+            (
+                sync_ecs_roots,
+                apply_object_commands,
+                spawn_pending_roots,
+                spawn_pending_objects,
+            )
+                .chain(),
+        );
+    app.update();
+    let instance = *app.world().get::<GuiRootInstance>(owner).unwrap();
+    let text = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .create(fairygui_core::package::ObjectType::Text);
+    let text_entity = app.world_mut().spawn(GObjectRef(text)).id();
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            owner,
+            GuiObjectAction::SetPosition(Vec2::new(37., 42.)),
+        ));
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            owner,
+            GuiObjectAction::SetSize(Vec2::new(640., 360.)),
+        ));
+    app.world_mut()
+        .resource_mut::<Messages<GuiObjectCommand>>()
+        .write(GuiObjectCommand::new(
+            text_entity,
+            GuiObjectAction::SetText("ECS message".into()),
+        ));
+    app.update();
+    let gui = app.world().non_send::<GuiRuntime>();
+    let object = gui.store().object(instance.object).unwrap();
+    assert_eq!((object.x(), object.y()), (37., 42.));
+    assert_eq!(object.size(), fairygui_core::geom::Size::new(640., 360.));
+    assert_eq!(
+        gui.store()
+            .object(text)
+            .unwrap()
+            .control()
+            .as_text_field()
+            .unwrap()
+            .text,
+        "ECS message"
+    );
+}
+
+#[test]
 fn exported_loop_list_retains_views_and_native_record_mapping_through_wraps_and_pooling() {
     let package = FuiPackage::parse(
         "LoopList",

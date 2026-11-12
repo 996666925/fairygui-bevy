@@ -57,8 +57,9 @@ pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiEvent, GuiFont, GuiLink, GuiListItemClick,
-    GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiPullRelease, GuiRootInstance, GuiRuntime,
-    GuiTextInput, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+    GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand,
+    GuiPullRelease, GuiRootInstance, GuiRuntime, GuiTextInput, GuiTransitionCallback,
+    GuiTransitionHook, PopupMenuTemplates,
 };
 
 pub use fairygui_core as core;
@@ -81,8 +82,9 @@ pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete, GuiEvent,
         GuiFont, GuiInputSettings, GuiInputState, GuiLink, GuiListItemClick, GuiLoaderFailure,
-        GuiLoaderState, GuiMenuAction, GuiPullRelease, GuiRootInstance, GuiRuntime, GuiSystems,
-        GuiTextInput, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+        GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiPullRelease,
+        GuiRootInstance, GuiRuntime, GuiSystems, GuiTextInput, GuiTransitionCallback,
+        GuiTransitionHook, PopupMenuTemplates,
     };
 }
 
@@ -125,6 +127,7 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiTextInput>()
         .add_message::<GuiListItemClick>()
         .add_message::<GuiPullRelease>()
+        .add_message::<GuiObjectCommand>()
         .init_asset::<FuiAsset>()
         .init_asset_loader::<FuiAssetLoader>()
         .init_non_send::<GuiRuntime>()
@@ -199,6 +202,12 @@ impl Plugin for FairyGuiPlugin {
             )
                 .chain()
                 .in_set(GuiSystems::Sync),
+        );
+        app.add_systems(
+            Update,
+            runtime::apply_object_commands
+                .in_set(GuiSystems::Sync)
+                .before(runtime::sync_loader_components),
         );
 
         app.add_systems(
