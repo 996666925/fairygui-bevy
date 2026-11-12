@@ -162,6 +162,7 @@ pub struct GearTween {
 pub struct ObjectStore {
     objects: slotmap::SlotMap<GObjectId, GObject>,
     dirty_ids: HashSet<GObjectId>,
+    relation_handling: HashSet<GObjectId>,
     syncing_list_controllers: HashSet<GObjectId>,
     scroll_page_controllers: std::collections::HashMap<GObjectId, (GObjectId, usize)>,
     syncing_scroll_controllers: HashSet<GObjectId>,
@@ -631,6 +632,91 @@ impl ObjectStore {
                 }
             }
             self.update_gear_state(id, crate::widget::GearKind::Xy);
+            self.apply_sibling_position_relations(id, delta.x, delta.y);
+        }
+    }
+
+    fn apply_sibling_position_relations(&mut self, target: GObjectId, dx: f32, dy: f32) {
+        if dx == 0.0 && dy == 0.0 {
+            return;
+        }
+        let Some(parent) = self.objects.get(target).and_then(|object| object.parent) else {
+            return;
+        };
+        let Some(target_index) = self.child_index(target) else {
+            return;
+        };
+        let Some(siblings) = self
+            .objects
+            .get(parent)
+            .map(|object| object.children.clone())
+        else {
+            return;
+        };
+
+        for owner in siblings {
+            if owner == target || self.relation_handling.contains(&owner) {
+                continue;
+            }
+            let Some((x, y, width, height, pivot, pivot_as_anchor, mut relations)) =
+                self.objects.get(owner).map(|object| {
+                    (
+                        object.x,
+                        object.y,
+                        object.width,
+                        object.height,
+                        Point::new(object.pivot_x, object.pivot_y),
+                        object.pivot_as_anchor,
+                        object.relations.clone(),
+                    )
+                })
+            else {
+                continue;
+            };
+            relations
+                .items
+                .retain(|item| !item.to_parent && item.target_index == Some(target_index));
+            if relations.is_empty() {
+                continue;
+            }
+
+            let (mut next_x, mut next_y, mut next_width, mut next_height) = (x, y, width, height);
+            relations.apply_on_target_moved(
+                &mut next_x,
+                &mut next_y,
+                &mut next_width,
+                &mut next_height,
+                crate::widget::relation::RelationMove {
+                    delta: Point::new(dx, dy),
+                    owner_pivot: pivot,
+                    owner_pivot_as_anchor: pivot_as_anchor,
+                },
+            );
+            if (next_x, next_y, next_width, next_height) == (x, y, width, height) {
+                continue;
+            }
+
+            self.relation_handling.insert(owner);
+            if next_x != x || next_y != y {
+                self.set_xy(owner, next_x, next_y);
+                self.update_gear_relations(
+                    owner,
+                    crate::widget::GearKind::Xy,
+                    next_x - x,
+                    next_y - y,
+                );
+                self.update_transition_relations(parent, owner, next_x - x, next_y - y);
+            }
+            if next_width != width || next_height != height {
+                self.set_size(owner, next_width, next_height);
+                self.update_gear_relations(
+                    owner,
+                    crate::widget::GearKind::Size,
+                    next_width - width,
+                    next_height - height,
+                );
+            }
+            self.relation_handling.remove(&owner);
         }
     }
 
@@ -677,6 +763,9 @@ impl ObjectStore {
         };
 
         for child in children {
+            if self.relation_handling.contains(&child) {
+                continue;
+            }
             // 先把需要的数据取出来，避免后续改动时反复借用。
             let Some((x, y, width, height, owner_pivot, owner_pivot_as_anchor, mut relations)) =
                 self.objects.get(child).map(|object| {
@@ -724,6 +813,7 @@ impl ObjectStore {
             );
 
             if new_x != x || new_y != y {
+                self.relation_handling.insert(child);
                 self.set_xy(child, new_x, new_y);
                 self.update_gear_relations(
                     child,
@@ -734,6 +824,7 @@ impl ObjectStore {
                 self.update_transition_relations(container, child, new_x - x, new_y - y);
             }
             if new_width != width || new_height != height {
+                self.relation_handling.insert(child);
                 self.set_size(child, new_width, new_height);
                 self.update_gear_relations(
                     child,
@@ -742,6 +833,7 @@ impl ObjectStore {
                     new_height - height,
                 );
             }
+            self.relation_handling.remove(&child);
         }
     }
 
@@ -766,7 +858,7 @@ impl ObjectStore {
         };
 
         for sibling in siblings {
-            if sibling == changed {
+            if sibling == changed || self.relation_handling.contains(&sibling) {
                 continue;
             }
 
@@ -817,6 +909,7 @@ impl ObjectStore {
             );
 
             if new_x != x || new_y != y {
+                self.relation_handling.insert(sibling);
                 self.set_xy(sibling, new_x, new_y);
                 self.update_gear_relations(
                     sibling,
@@ -827,6 +920,7 @@ impl ObjectStore {
                 self.update_transition_relations(parent, sibling, new_x - x, new_y - y);
             }
             if new_width != width || new_height != height {
+                self.relation_handling.insert(sibling);
                 self.set_size(sibling, new_width, new_height);
                 self.update_gear_relations(
                     sibling,
@@ -835,6 +929,7 @@ impl ObjectStore {
                     new_height - height,
                 );
             }
+            self.relation_handling.remove(&sibling);
         }
     }
 
@@ -3564,6 +3659,85 @@ mod tests {
         let child = store.object(child).unwrap();
         assert_eq!(child.width(), 40.0);
         assert_eq!(child.x(), 20.0, "parent relation preserves xMin");
+    }
+
+    #[test]
+    fn moving_a_sibling_target_updates_alignment_and_extension_relations() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        let target = store.create(ObjectType::Component);
+        let aligned = store.create(ObjectType::Component);
+        let extended = store.create(ObjectType::Component);
+        for child in [target, aligned, extended] {
+            store.set_parent(child, Some(parent));
+        }
+        store.set_xy(target, 10.0, 20.0);
+        store.set_xy(aligned, 50.0, 15.0);
+        store.set_xy(extended, 100.0, 30.0);
+        store.set_size(extended, 30.0, 10.0);
+        store.objects.get_mut(aligned).unwrap().relations.items =
+            vec![crate::widget::relation::RelationItem {
+                to_parent: false,
+                target_index: Some(0),
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 0,
+                    percent: false,
+                    axis: 0,
+                }],
+            }];
+        store.objects.get_mut(extended).unwrap().relations.items =
+            vec![crate::widget::relation::RelationItem {
+                to_parent: false,
+                target_index: Some(0),
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 17,
+                    percent: false,
+                    axis: 0,
+                }],
+            }];
+
+        store.set_xy(target, 20.0, 25.0);
+
+        let aligned = store.object(aligned).unwrap();
+        assert_eq!((aligned.x(), aligned.y()), (60.0, 15.0));
+        let extended = store.object(extended).unwrap();
+        assert_eq!((extended.x(), extended.width()), (110.0, 20.0));
+    }
+
+    #[test]
+    fn cyclic_sibling_relations_stop_at_the_native_handling_owner() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        let first = store.create(ObjectType::Component);
+        let second = store.create(ObjectType::Component);
+        store.set_parent(first, Some(parent));
+        store.set_parent(second, Some(parent));
+        store.objects.get_mut(first).unwrap().relations.items =
+            vec![crate::widget::relation::RelationItem {
+                to_parent: false,
+                target_index: Some(1),
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 0,
+                    percent: false,
+                    axis: 0,
+                }],
+            }];
+        store.objects.get_mut(second).unwrap().relations.items =
+            vec![crate::widget::relation::RelationItem {
+                to_parent: false,
+                target_index: Some(0),
+                defs: vec![crate::widget::relation::RelationDef {
+                    relation_type: 0,
+                    percent: false,
+                    axis: 0,
+                }],
+            }];
+
+        store.set_xy(first, 10.0, 0.0);
+
+        assert_eq!(store.object(first).unwrap().x(), 20.0);
+        assert_eq!(store.object(second).unwrap().x(), 10.0);
+        assert!(store.relation_handling.is_empty());
     }
 
     #[test]

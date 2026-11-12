@@ -63,6 +63,13 @@ pub struct RelationTarget {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+pub struct RelationMove {
+    pub delta: Point,
+    pub owner_pivot: Point,
+    pub owner_pivot_as_anchor: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 pub struct RelationResize {
     pub delta: Point,
     scale: Point,
@@ -474,6 +481,63 @@ impl Relations {
                         };
                         *height += delta * factor;
                         *y = min + *height * owner_pivot;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Move an object whose sibling relations refer to this target.
+    /// Position relations follow the target on their axis; extension relations
+    /// keep the opposite edge fixed while resizing around the moved edge.
+    pub fn apply_on_target_moved(
+        &self,
+        x: &mut f32,
+        y: &mut f32,
+        width: &mut f32,
+        height: &mut f32,
+        movement: RelationMove,
+    ) {
+        let dx = movement.delta.x;
+        let dy = movement.delta.y;
+        let pivot_x = if movement.owner_pivot_as_anchor {
+            movement.owner_pivot.x
+        } else {
+            0.0
+        };
+        let pivot_y = if movement.owner_pivot_as_anchor {
+            movement.owner_pivot.y
+        } else {
+            0.0
+        };
+        for item in &self.items {
+            if item.to_parent {
+                continue;
+            }
+            for def in &item.defs {
+                match def.relation_type {
+                    0..=6 => *x += dx,
+                    7..=13 => *y += dy,
+                    16..=17 => {
+                        let min = *x - *width * pivot_x;
+                        *width -= dx;
+                        *x = min + dx + *width * pivot_x;
+                    }
+                    18..=19 => {
+                        let min = *x - *width * pivot_x;
+                        *width += dx;
+                        *x = min + *width * pivot_x;
+                    }
+                    20..=21 => {
+                        let min = *y - *height * pivot_y;
+                        *height -= dy;
+                        *y = min + dy + *height * pivot_y;
+                    }
+                    22..=23 => {
+                        let min = *y - *height * pivot_y;
+                        *height += dy;
+                        *y = min + *height * pivot_y;
                     }
                     _ => {}
                 }
