@@ -142,6 +142,8 @@ pub struct UiEvent {
     pub current_target: GObjectId,
     /// 指针位置，来自输入系统时才有值。
     pub pointer: Option<Point>,
+    /// Touch identifier; absent for mouse, keyboard and programmatic events.
+    pub touch_id: Option<u64>,
     /// 附加数据。
     pub data: EventData,
     /// 是否为冒泡阶段。
@@ -156,6 +158,7 @@ impl UiEvent {
             target,
             current_target: target,
             pointer: None,
+            touch_id: None,
             data: EventData::None,
             bubbling: false,
         }
@@ -164,6 +167,12 @@ impl UiEvent {
     /// 设置指针位置。
     pub fn with_pointer(mut self, pointer: Point) -> Self {
         self.pointer = Some(pointer);
+        self
+    }
+
+    /// Attach a touch identifier without replacing the event payload.
+    pub fn with_touch(mut self, id: u64) -> Self {
+        self.touch_id = Some(id);
         self
     }
 

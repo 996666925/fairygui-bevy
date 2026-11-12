@@ -762,6 +762,61 @@ fn link_events(app: &mut App) -> Vec<fairygui_core::object::UiEvent> {
 }
 
 #[test]
+fn touch_link_activation_retains_both_finger_id_and_verbatim_href() {
+    use bevy::input::touch::{TouchInput, TouchPhase};
+    use bevy::picking::{backend::HitData, hover::HoverMap, pointer::PointerId};
+    let (mut app, window, entity, text) = pointer_fixture();
+    // This fixture supplies text geometry and picking positions directly.
+    // Removing the unmeasured global transform uses the picking backend's local hit.
+    app.world_mut()
+        .entity_mut(entity)
+        .remove::<UiGlobalTransform>();
+    let n = app
+        .world()
+        .get::<bevy::ui::RelativeCursorPosition>(entity)
+        .unwrap()
+        .normalized
+        .unwrap();
+    app.init_resource::<HoverMap>();
+    app.world_mut().resource_mut::<HoverMap>().insert(
+        PointerId::Touch(18),
+        [(
+            entity,
+            HitData::new(Entity::PLACEHOLDER, 0.0, Some(n.extend(0.0)), None),
+        )]
+        .into_iter()
+        .collect(),
+    );
+    for phase in [TouchPhase::Started, TouchPhase::Ended] {
+        app.world_mut().write_message(TouchInput {
+            id: 18,
+            phase,
+            window,
+            position: Vec2::splat(20.0),
+            force: None,
+        });
+        app.update();
+    }
+    let events = link_events(&mut app);
+    assert_eq!(events.len(), 2, "text and logical parent");
+    for event in events {
+        assert_eq!(event.target, text);
+        assert_eq!(event.touch_id, Some(18));
+        assert_eq!(
+            event.data,
+            fairygui_core::object::EventData::Text("event:xx".into())
+        );
+    }
+    let links: Vec<_> = app
+        .world_mut()
+        .resource_mut::<Messages<GuiLink>>()
+        .drain()
+        .collect();
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].href, "event:xx");
+}
+
+#[test]
 fn link_capture_spans_nested_styles_and_lines_and_publishes_verbatim_payload_once() {
     let (mut app, _, entity, text) = pointer_fixture();
     mouse(&mut app, true);

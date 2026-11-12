@@ -1,6 +1,11 @@
 //! Built-in widget actions.
 use super::*;
-pub(super) fn combo_click(runtime: &mut GuiRuntime, object: GObjectId, cursor: Vec2) -> bool {
+pub(super) fn combo_click(
+    runtime: &mut GuiRuntime,
+    object: GObjectId,
+    cursor: Vec2,
+    touch_id: Option<u64>,
+) -> bool {
     if let Some(combo) = runtime.store().combo_of_popup(object) {
         if let Some(index) = list_child_index(runtime, combo, object) {
             // Native defers the item handler, hides the complete root popup
@@ -8,10 +13,10 @@ pub(super) fn combo_click(runtime: &mut GuiRuntime, object: GObjectId, cursor: V
             runtime.hide_popup(None);
             runtime.store_mut().select_combo_index(combo, -1);
             runtime.store_mut().select_combo_index(combo, index as i32);
-            runtime.dispatch_event(
-                UiEvent::new(EventKind::StateChanged, combo)
-                    .with_pointer(Point::new(cursor.x, cursor.y)),
-            );
+            let mut event = UiEvent::new(EventKind::StateChanged, combo)
+                .with_pointer(Point::new(cursor.x, cursor.y));
+            event.touch_id = touch_id;
+            runtime.dispatch_event(event);
             return true;
         }
         return false;

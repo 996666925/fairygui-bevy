@@ -2,7 +2,7 @@ use super::*;
 use bevy::input::keyboard::Key;
 use fairygui_core::widget::ListSelectionMode;
 
-fn fixture() -> (App, GObjectId, Vec<GObjectId>, Vec<Entity>) {
+pub(super) fn fixture() -> (App, GObjectId, Vec<GObjectId>, Vec<Entity>) {
     let (mut app, _) = setup();
     let package = fairygui_core::FuiPackage::parse(
         "Basics",

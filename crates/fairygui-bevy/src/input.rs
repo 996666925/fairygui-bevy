@@ -1,18 +1,143 @@
-//! One pointer target, independent mouse-button captures and one gesture owner.
+//! Pointer targets, independent captures and exclusive widget gesture owners.
 //! Read `GuiInputState` after `GuiSystems::Input` to arbitrate game input.
 mod actions;
 pub(crate) mod editing;
 mod gestures;
 mod masks;
+mod touches;
 
 use crate::runtime::{GObjectRef, GuiRuntime};
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
-use bevy::picking::hover::Hovered;
+use bevy::picking::pointer::PointerId;
+use bevy::picking::{
+    backend::HitData,
+    hover::{HoverMap, Hovered},
+};
 use bevy::prelude::*;
 use bevy::ui::{ComputedStackIndex, RelativeCursorPosition};
 use fairygui_core::geom::Point;
 use fairygui_core::object::{EventKind, GObjectId, UiEvent};
 use gestures::{Gesture, PointerTransform};
+use std::collections::HashMap;
+
+#[derive(bevy::ecs::system::SystemParam)]
+struct PointerHover<'w, 's> {
+    map: Option<Res<'w, HoverMap>>,
+    parents: Query<'w, 's, &'static ChildOf>,
+}
+
+impl PointerHover<'_, '_> {
+    fn hits(&self, pointer: PointerId) -> Option<HashMap<Entity, (usize, &HitData)>> {
+        let map = self.map.as_ref()?;
+        let mut result = HashMap::new();
+        if let Some(hits) = map.get(&pointer) {
+            for (&entity, hit) in hits {
+                let mut current = Some(entity);
+                let mut distance = 0;
+                while let Some(entity) = current {
+                    // Text spans can be the picked entity while their owning UI
+                    // node carries GObjectRef. Mirror Bevy's inherited hover per pointer.
+                    let entry = result.entry(entity).or_insert((distance, hit));
+                    if distance < entry.0 {
+                        *entry = (distance, hit);
+                    }
+                    current = self.parents.get(entity).ok().map(ChildOf::parent);
+                    distance += 1;
+                }
+            }
+        }
+        Some(result)
+    }
+}
+
+type PointerTargets<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static GObjectRef,
+        &'static Hovered,
+        &'static ComputedNode,
+        Option<&'static ComputedStackIndex>,
+        Option<&'static RelativeCursorPosition>,
+        Option<&'static crate::runtime::PixelHitTest>,
+        Option<&'static crate::runtime::HitAreaFromChild>,
+        Option<&'static crate::graph::PolygonSurface>,
+    ),
+>;
+
+type PointerText<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Option<&'static crate::runtime::RichTextBlock>,
+        Option<&'static crate::runtime::BitmapRichText>,
+        Option<&'static bevy::text::ComputedTextBlock>,
+        Option<&'static bevy::text::TextLayoutInfo>,
+    ),
+>;
+
+fn pointer_anchor(
+    runtime: &GuiRuntime,
+    target: GObjectId,
+    targets: &PointerTargets,
+    geometry: &Query<(&UiGlobalTransform, &ComputedNode)>,
+    scale_factor: f32,
+) -> Vec2 {
+    targets
+        .iter()
+        .find(|(_, object, _, _, _, _, _, _, surface)| object.0 == target && surface.is_none())
+        .and_then(|(entity, ..)| {
+            let (global, computed) = geometry.get(entity).ok()?;
+            let physical = global.transform_point2(computed.border_box().min);
+            let root_geometry = runtime
+                .root_container()
+                .and_then(|id| runtime.entity_of(id))
+                .and_then(|entity| geometry.get(entity).ok());
+            Some(if let Some((root_global, root_computed)) = root_geometry {
+                (root_global.try_inverse()?.transform_point2(physical)
+                    - root_computed.content_box().min)
+                    * root_computed.inverse_scale_factor()
+            } else {
+                physical / scale_factor
+            })
+        })
+        .unwrap_or_else(|| {
+            runtime
+                .store()
+                .object(target)
+                .map_or(Vec2::ZERO, |object| Vec2::new(object.x(), object.y()))
+        })
+}
+
+fn press_popup(
+    runtime: &mut GuiRuntime,
+    commands: &mut Commands,
+    target: GObjectId,
+    input_child: bool,
+    anchor: Vec2,
+    viewport: fairygui_core::Size,
+    assets: &Assets<crate::asset::FuiAsset>,
+) {
+    let size = runtime
+        .store()
+        .object(target)
+        .map_or(fairygui_core::Size::ZERO, |o| o.size());
+    let anchor = fairygui_core::Rect::new(anchor.x, anchor.y, size.width, size.height);
+    runtime.toggle_button_popup(target, anchor, viewport);
+    let is_combo = matches!(
+        runtime.store().object(target).map(|o| o.control()),
+        Some(fairygui_core::widget::ControlData::ComboBox(_))
+    );
+    if is_combo && !input_child {
+        runtime.ensure_root(viewport);
+        if let Some(handle) = runtime.asset_handle_for(target)
+            && let Some(asset) = assets.get(&handle)
+        {
+            runtime.show_combo_dropdown_at(commands, target, &asset.package, anchor);
+        }
+    }
+}
 
 /// Bevy normalizes around the node center; FairyGUI uses its top-left.
 fn top_left_position(cursor: &RelativeCursorPosition) -> Option<Vec2> {
@@ -24,7 +149,7 @@ fn top_left_position(cursor: &RelativeCursorPosition) -> Option<Vec2> {
 fn graph_hit(
     runtime: &GuiRuntime,
     id: GObjectId,
-    relative: Option<&RelativeCursorPosition>,
+    normalized: Option<Vec2>,
     surface: Option<&crate::graph::PolygonSurface>,
 ) -> bool {
     use fairygui_core::{
@@ -48,7 +173,7 @@ fn graph_hit(
                     .is_some_and(|bar| runtime.store().is_scroll_bar_overlay(bar))
         }
         GraphType::Polygon | GraphType::RegularPolygon => {
-            let Some(n) = relative.and_then(top_left_position) else {
+            let Some(n) = normalized else {
                 return false;
             };
             let p = if let Some(surface) = surface {
@@ -91,6 +216,7 @@ pub struct GuiInputState {
     hovered: Option<GObjectId>,
     capture: Option<Capture>,
     right_capture: Option<RightCapture>,
+    touches: HashMap<u64, TouchCapture>,
     last_position: Option<Vec2>,
     focused: Option<GObjectId>,
     text_press: Option<(Entity, Vec2, f64, u8)>,
@@ -104,9 +230,26 @@ impl GuiInputState {
             .as_ref()
             .map(|c| c.target)
             .or_else(|| self.right_capture.as_ref().map(|c| c.target))
+            .or_else(|| {
+                self.touches
+                    .iter()
+                    .min_by_key(|(id, _)| *id)
+                    .map(|(_, c)| c.target)
+            })
+    }
+    /// The target captured by a particular active finger.
+    pub fn captured_touch(&self, id: u64) -> Option<GObjectId> {
+        self.touches.get(&id).map(|capture| capture.target)
+    }
+    /// The current eligible hit for a captured finger, which may leave its target.
+    pub fn hovered_touch(&self, id: u64) -> Option<GObjectId> {
+        self.touches.get(&id).and_then(|capture| capture.hovered)
     }
     pub fn wants_pointer_input(&self) -> bool {
-        self.hovered.is_some() || self.capture.is_some() || self.right_capture.is_some()
+        self.hovered.is_some()
+            || self.capture.is_some()
+            || self.right_capture.is_some()
+            || !self.touches.is_empty()
     }
     pub fn focused_input(&self) -> Option<GObjectId> {
         self.focused
@@ -137,9 +280,24 @@ struct RightCapture {
     dragged: bool,
 }
 
+#[derive(Debug)]
+struct TouchCapture {
+    target: GObjectId,
+    window: Entity,
+    start: Vec2,
+    last: Vec2,
+    moved: bool,
+    dragged: bool,
+    gesture: Gesture,
+    link: Option<crate::runtime::LinkHit>,
+    editing: Option<Entity>,
+    hovered: Option<GObjectId>,
+}
+
 pub fn register(app: &mut App) {
     app.init_resource::<GuiInputSettings>()
         .init_resource::<GuiInputState>()
+        .add_message::<bevy::input::touch::TouchInput>()
         .add_systems(
             Update,
             (
@@ -147,6 +305,7 @@ pub fn register(app: &mut App) {
                 crate::runtime::sync_input_policy,
                 crate::runtime::apply_input_edits,
                 route_pointer,
+                touches::route_touches,
                 editing::reconcile_focus,
             )
                 .chain()
@@ -235,6 +394,53 @@ fn update_button(
     }
 }
 
+fn update_button_from_pointers(runtime: &mut GuiRuntime, state: &GuiInputState, target: GObjectId) {
+    let Some(button) = pointer_button(runtime, target, false) else {
+        return;
+    };
+    let hovered = state
+        .hovered
+        .and_then(|id| pointer_button(runtime, id, false))
+        == Some(button)
+        || state.touches.values().any(|capture| {
+            capture
+                .hovered
+                .and_then(|id| pointer_button(runtime, id, false))
+                == Some(button)
+        });
+    let pressed = state
+        .capture
+        .as_ref()
+        .is_some_and(|capture| pointer_button(runtime, capture.target, true) == Some(button))
+        || state
+            .touches
+            .values()
+            .any(|capture| pointer_button(runtime, capture.target, true) == Some(button));
+    update_button(runtime, button, Some(hovered), Some(pressed));
+}
+
+fn pointer_button(runtime: &GuiRuntime, target: GObjectId, pressing: bool) -> Option<GObjectId> {
+    let stop = pressing
+        .then(|| runtime.store().scroll_bar_pointer_down_stop(target))
+        .flatten();
+    let mut current = Some(target);
+    while let Some(id) = current {
+        let object = runtime.store().object(id)?;
+        if matches!(
+            object.control(),
+            fairygui_core::widget::ControlData::Button(_)
+                | fairygui_core::widget::ControlData::ComboBox(_)
+        ) {
+            return Some(id);
+        }
+        if Some(id) == stop {
+            return None;
+        }
+        current = object.parent();
+    }
+    None
+}
+
 // A button's controller swaps its background children on hover/down. Capture
 // the button itself so that hiding the old background cannot cancel the press.
 fn stable_target(runtime: &GuiRuntime, target: GObjectId) -> GObjectId {
@@ -265,23 +471,8 @@ fn route_pointer(
     settings: Res<GuiInputSettings>,
     mut state: ResMut<GuiInputState>,
     windows: Query<(Entity, &Window, Option<&bevy::window::PrimaryWindow>)>,
-    targets: Query<(
-        Entity,
-        &GObjectRef,
-        &Hovered,
-        &ComputedNode,
-        Option<&ComputedStackIndex>,
-        Option<&RelativeCursorPosition>,
-        Option<&crate::runtime::PixelHitTest>,
-        Option<&crate::runtime::HitAreaFromChild>,
-        Option<&crate::graph::PolygonSurface>,
-    )>,
-    rich_text: Query<(
-        Option<&crate::runtime::RichTextBlock>,
-        Option<&crate::runtime::BitmapRichText>,
-        Option<&bevy::text::ComputedTextBlock>,
-        Option<&bevy::text::TextLayoutInfo>,
-    )>,
+    targets: PointerTargets,
+    rich_text: PointerText,
     geometry: Query<(&UiGlobalTransform, &ComputedNode)>,
     mut wheel: MessageReader<MouseWheel>,
     time: Res<Time>,
@@ -290,6 +481,7 @@ fn route_pointer(
     mut focus: ResMut<bevy::input_focus::InputFocus>,
     keys: Res<ButtonInput<bevy::input::keyboard::Key>>,
     mut editors: Query<&mut bevy::text::EditableText>,
+    hover: PointerHover,
 ) {
     runtime
         .store_mut()
@@ -303,12 +495,15 @@ fn route_pointer(
     let cursor = window
         .filter(|(_, w, _)| w.focused)
         .and_then(|(_, w, _)| w.cursor_position());
+    let mouse_hits = hover.hits(PointerId::Mouse);
     let raw_hit = cursor.and_then(|_| {
         targets
             .iter()
             .filter(
-                |(_, object, hovered, _, _, relative, pixel, child, surface)| {
-                    hovered.0
+                |(entity, object, hovered, _, _, relative, pixel, child, surface)| {
+                    mouse_hits
+                        .as_ref()
+                        .map_or(hovered.0, |hits| hits.contains_key(entity))
                         && child.is_none()
                         && eligible(&runtime, object.0)
                         && masks::allowed(
@@ -318,7 +513,12 @@ fn route_pointer(
                             &geometry,
                         )
                         && relative.is_none_or(|r| r.cursor_over())
-                        && graph_hit(&runtime, object.0, *relative, *surface)
+                        && graph_hit(
+                            &runtime,
+                            object.0,
+                            relative.and_then(top_left_position),
+                            *surface,
+                        )
                         && pixel.is_none_or(|p| {
                             relative.and_then(top_left_position).is_some_and(|n| {
                                 runtime.store().object(object.0).is_some_and(|o| {
@@ -329,7 +529,16 @@ fn route_pointer(
                 },
             )
             .max_by_key(|(entity, _, _, _, stack, _, _, _, _)| {
-                (stack.map_or(0, |s| s.0), entity.to_bits())
+                (
+                    stack.map_or(0, |s| s.0),
+                    std::cmp::Reverse(
+                        mouse_hits
+                            .as_ref()
+                            .and_then(|hits| hits.get(entity))
+                            .map_or(0, |hit| hit.0),
+                    ),
+                    entity.to_bits(),
+                )
             })
     });
     let hit = raw_hit.map(|(_, object, _, _, _, _, _, _, _)| stable_target(&runtime, object.0));
@@ -356,23 +565,28 @@ fn route_pointer(
             .is_some_and(|previous| previous != position);
     state.last_position = cursor.map(|_| position);
     if hit != state.hovered {
-        if let Some(old) = state.hovered {
-            if runtime.store().object(old).is_some() {
-                dispatch(&mut runtime, EventKind::RollOut, old, position);
-            }
-            update_button(&mut runtime, old, Some(false), None);
+        let old_hovered = state.hovered;
+        if let Some(old) = old_hovered
+            && runtime.store().object(old).is_some()
+        {
+            dispatch(&mut runtime, EventKind::RollOut, old, position);
         }
         if let Some(new) = hit {
             dispatch(&mut runtime, EventKind::RollOver, new, position);
-            update_button(&mut runtime, new, Some(true), None);
         }
         state.hovered = hit;
+        if let Some(old) = old_hovered {
+            update_button_from_pointers(&mut runtime, &state, old);
+        }
+        if let Some(new) = hit {
+            update_button_from_pointers(&mut runtime, &state, new);
+        }
     }
     if pointer_moved && let Some(target) = hit {
         dispatch(&mut runtime, EventKind::MouseMove, target, position);
     }
     if let Some(mut capture) = state.capture.take() {
-        if runtime.is_dragging() {
+        if runtime.is_dragging() && runtime.drag_touch_id.is_none() {
             capture.gesture.finish(&mut runtime, time.delta_secs());
             capture.gesture = Gesture::None;
             capture.moved = true;
@@ -433,7 +647,7 @@ fn route_pointer(
                         position,
                     );
                 }
-                update_button(&mut runtime, capture.target, None, Some(false));
+                update_button_from_pointers(&mut runtime, &state, capture.target);
             }
             if valid
                 && mouse.just_released(MouseButton::Left)
@@ -459,6 +673,7 @@ fn route_pointer(
                     position,
                     keys.pressed(bevy::input::keyboard::Key::Shift),
                     keys.pressed(bevy::input::keyboard::Key::Control),
+                    None,
                 );
             }
         }
@@ -590,74 +805,30 @@ fn route_pointer(
                         .map(|o| Point::new(p.x * o.width(), p.y * o.height()))
                 });
             runtime.store_mut().press_scroll_bar(target, local);
-            let anchor = targets
-                .iter()
-                .find(|(_, object, _, _, _, _, _, _, surface)| {
-                    object.0 == target && surface.is_none()
-                })
-                .and_then(|(entity, ..)| {
-                    let (global, computed) = geometry.get(entity).ok()?;
-                    let physical = global.transform_point2(computed.border_box().min);
-                    let root_geometry = runtime
-                        .root_container()
-                        .and_then(|id| runtime.entity_of(id))
-                        .and_then(|entity| geometry.get(entity).ok());
-                    let local = if let Some((root_global, root_computed)) = root_geometry {
-                        (root_global.try_inverse()?.transform_point2(physical)
-                            - root_computed.content_box().min)
-                            * root_computed.inverse_scale_factor()
-                    } else {
-                        physical / window.map_or(1.0, |(_, w, _)| w.scale_factor())
-                    };
-                    Some(local)
-                })
-                .unwrap_or_else(|| {
-                    runtime
-                        .store()
-                        .object(target)
-                        .map_or(Vec2::ZERO, |object| Vec2::new(object.x(), object.y()))
-                });
+            let scale_factor = window.map_or(1.0, |(_, w, _)| w.scale_factor());
+            let anchor = pointer_anchor(&runtime, target, &targets, &geometry, scale_factor);
             let size = runtime
                 .store()
                 .object(target)
-                .map_or(fairygui_core::geom::Size::ZERO, |object| object.size());
-            let viewport = window.map_or(size, |(_, window, _)| {
-                fairygui_core::geom::Size::new(window.width(), window.height())
+                .map_or(fairygui_core::Size::ZERO, |o| o.size());
+            let viewport = window.map_or(size, |(_, w, _)| {
+                fairygui_core::Size::new(w.width(), w.height())
             });
-            runtime.toggle_button_popup(
-                target,
-                fairygui_core::geom::Rect::new(anchor.x, anchor.y, size.width, size.height),
-                viewport,
-            );
-            let is_combo = matches!(
-                runtime
-                    .store()
-                    .object(target)
-                    .map(|object| object.control()),
-                Some(fairygui_core::widget::ControlData::ComboBox(_))
-            );
             let input_child = raw_hit.is_some_and(|(_, object, ..)| {
                 matches!(
-                    runtime
-                        .store()
-                        .object(object.0)
-                        .map(|object| object.control()),
+                    runtime.store().object(object.0).map(|o| o.control()),
                     Some(fairygui_core::widget::ControlData::TextInput(_))
                 )
             });
-            if is_combo && !input_child {
-                runtime.ensure_root(viewport);
-                if let Some(handle) = runtime.asset_handle_for(target)
-                    && let Some(asset) = assets.get(&handle)
-                {
-                    runtime.show_combo_dropdown_at(
-                        &mut commands,
-                        target,
-                        &asset.package,
-                        fairygui_core::geom::Rect::new(anchor.x, anchor.y, size.width, size.height),
-                    );
-                }
-            }
+            press_popup(
+                &mut runtime,
+                &mut commands,
+                target,
+                input_child,
+                anchor,
+                viewport,
+                &assets,
+            );
             let window_scale_factor = window.map_or(1.0, |(_, window, _)| window.scale_factor());
             let gesture_transforms: Vec<_> = targets
                 .iter()
@@ -670,7 +841,12 @@ fn route_pointer(
             let mut gesture = if input.is_some() {
                 Gesture::None
             } else {
-                Gesture::begin(&mut runtime, target, &gesture_transforms)
+                let occupied: Vec<_> = state
+                    .touches
+                    .values()
+                    .filter_map(|capture| capture.gesture.owner(&runtime))
+                    .collect();
+                Gesture::begin_excluding(&mut runtime, target, &gesture_transforms, &occupied)
             };
             let normalized = targets
                 .iter()
@@ -731,7 +907,7 @@ fn route_pointer(
                 .scroll_mouse_wheel_pixels(target, -event.x, -event.y);
         }
     }
-    if runtime.is_dragging() {
+    if runtime.is_dragging() && runtime.drag_touch_id.is_none() {
         runtime.update_drag(Point::new(position.x, position.y), hit);
         if cursor.is_none() || !mouse.pressed(MouseButton::Left) {
             runtime.finish_drag(&mut commands);
@@ -739,6 +915,7 @@ fn route_pointer(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_click(
     runtime: &mut GuiRuntime,
     commands: &mut Commands,
@@ -746,6 +923,7 @@ fn apply_click(
     cursor: Vec2,
     shift: bool,
     ctrl: bool,
+    touch_id: Option<u64>,
 ) {
     let mut button = Some(target);
     while let Some(id) = button {
@@ -758,7 +936,10 @@ fn apply_click(
                 | fairygui_core::widget::ControlData::ComboBox(_)
         ) {
             if runtime.store_mut().click_button(id) {
-                dispatch(runtime, EventKind::StateChanged, id, cursor);
+                let mut event = UiEvent::new(EventKind::StateChanged, id)
+                    .with_pointer(Point::new(cursor.x, cursor.y));
+                event.touch_id = touch_id;
+                runtime.dispatch_event(event);
             }
             break;
         }
@@ -774,11 +955,17 @@ fn apply_click(
         if hit.is_some() {
             runtime.activate_menu_item(target, Some(Point::new(cursor.x, cursor.y)));
         }
-    } else if !actions::combo_click(runtime, target, cursor) {
+    } else if !actions::combo_click(runtime, target, cursor, touch_id) {
         runtime
             .store_mut()
             .select_clicked_item_with_modifiers(target, shift, ctrl);
         runtime.store_mut().toggle_clicked_tree_node(target);
-        runtime.emit_list_item_click(target, Point::new(cursor.x, cursor.y), shift, ctrl);
+        runtime.emit_list_item_click(
+            target,
+            Point::new(cursor.x, cursor.y),
+            shift,
+            ctrl,
+            touch_id,
+        );
     }
 }

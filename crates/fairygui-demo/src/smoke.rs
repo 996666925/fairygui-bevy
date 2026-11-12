@@ -1193,13 +1193,12 @@ fn drive(
                             .unwrap()
                             .text;
                         assert!(value.ends_with("你点击了链接[/color]：event:xx"), "{value}");
-                        // The official replacement references a MovieClip in [img].
-                        // GHtmlImage only accepts Laya.Texture, so that is skipped.
                         assert_eq!(
                             inline_parts
                                 .get(entity)
                                 .map_or(0, |parts| parts.iter().count()),
-                            0
+                            1,
+                            "the replacement's package MovieClip renders as one owned inline image"
                         );
                         commands
                             .spawn(Screenshot::primary_window())

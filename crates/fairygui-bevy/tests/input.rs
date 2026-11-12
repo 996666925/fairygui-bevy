@@ -19,6 +19,8 @@ mod scroll_motion;
 mod scroll_pages;
 #[path = "input/scroll_wheel.rs"]
 mod scroll_wheel;
+#[path = "input/touches.rs"]
+mod touches;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;

@@ -344,6 +344,20 @@ that target. Button visuals and composite widget actions resolve through ancesto
 Pointer movement emits `MouseMove` on the current hit. Movement while either mouse
 button is held emits `MouseDrag` on its captured target, followed by `MouseDragEnd`
 after the matching button-up event when the capture ends.
+Bevy touch pointers use their own `HoverMap` hit results and independent captures.
+`TouchBegin`, `TouchMove` and `TouchEnd` retain the finger ID on `GuiEvent`; touch
+press/release also route primary mouse events so built-in widgets, list selection,
+and gestures work on touch screens. Policy invalidation and OS cancellation release
+that finger without synthesizing a click.
+`UiEvent::touch_id` stays separate from `EventData`, preserving link URLs and list
+item payloads. `captured_touch(id)` and `hovered_touch(id)` expose individual
+fingers, while `wants_pointer_input()` includes all captures. `captured()` prefers
+the left mouse button, then the right button, then the lowest active touch ID.
+Mouse picking uses only the mouse's hover map; another finger cannot redirect it.
+Each slider, window or scroll pane has one gesture owner at a time, and distinct
+widgets can be manipulated concurrently. Releasing one finger does not clear a
+button still held by another pointer. To bind an application drag-and-drop to a
+finger, call `start_touch_drag` with its event ID; `start_drag` uses the mouse.
 
 A left-button edge captures the target and may begin a built-in gesture. A
 right-button edge captures independently and emits right-button events without
@@ -366,10 +380,11 @@ primary window by default). `GuiInputState::hovered()`, `captured()`, and
 `wants_pointer_input()` let gameplay systems arbitrate pointer ownership after
 `GuiSystems::Input` without inspecting UI entities.
 
-The adapter currently supports one mouse pointer and one selected UI window.
-Independent simultaneous input in multiple windows, multitouch, keyboard focus/
-text editing, and inverse transforms for rotated/skewed drag surfaces are not
-implemented. Bevy remains responsible for rectangular hit geometry and clipping;
+The adapter routes one mouse pointer plus concurrent touch pointers within the
+selected UI window. Simultaneous input across multiple windows is not implemented.
+Touch hit candidates come from Bevy's latest completed picking pass, with per-event
+positions transformed into the node's local coordinates for geometry and gestures.
+Bevy remains responsible for rectangular hit geometry and clipping;
 pixel rejection does not bypass unrelated Bevy UI nodes with blocking `Pickable`
 policy. GUI nodes allow lower picking candidates so FairyGUI can reject pixel masks
 and disabled objects before choosing a target. Decorative glyphs and inline images

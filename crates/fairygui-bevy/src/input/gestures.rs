@@ -85,10 +85,20 @@ pub(super) enum Gesture {
 }
 
 impl Gesture {
-    pub(super) fn begin(
+    pub(super) fn owner(&self, runtime: &GuiRuntime) -> Option<GObjectId> {
+        match self {
+            Self::None => None,
+            Self::Slider(id) => Some(*id),
+            Self::Grip { container, .. } | Self::Scroll { container, .. } => Some(*container),
+            Self::Window { index, .. } => runtime.window(*index).map(|window| window.owner()),
+        }
+    }
+
+    pub(super) fn begin_excluding(
         runtime: &mut GuiRuntime,
         target: GObjectId,
         transforms: &[(GObjectId, PointerTransform)],
+        occupied: &[GObjectId],
     ) -> Self {
         if runtime.is_dragging() {
             return Self::None;
@@ -105,6 +115,9 @@ impl Gesture {
                 break;
             };
             if matches!(object.control(), ControlData::Slider(_)) {
+                if occupied.contains(&id) {
+                    return Self::None;
+                }
                 return Self::Slider(id);
             }
             if let Some(bar) = runtime.store().scroll_bar_of_part(id) {
@@ -116,6 +129,9 @@ impl Gesture {
                     && track > 0.0
                     && let Some(pane) = runtime.store().scroll_pane(container)
                 {
+                    if occupied.contains(&container) {
+                        return Self::None;
+                    }
                     let initial = if vertical {
                         pane.display_perc_y()
                     } else {
@@ -153,6 +169,9 @@ impl Gesture {
             })
         }) {
             let owner = runtime.window(index).unwrap().owner();
+            if occupied.contains(&owner) {
+                return Self::None;
+            }
             if let Some(object) = runtime.store().object(owner) {
                 let origin = Vec2::new(object.x(), object.y());
                 let transform = object.parent().map_or_else(
@@ -168,6 +187,9 @@ impl Gesture {
             }
         }
         if let Some(container) = scrollable_ancestor(runtime, target) {
+            if occupied.contains(&container) {
+                return Self::None;
+            }
             return Self::Scroll {
                 container,
                 started: false,

@@ -311,6 +311,7 @@ pub struct GuiRuntime {
     just_closed_popups: Vec<GObjectId>,
     /// 拖拽状态：被拖对象、跟手图标与当前命中的放置目标。
     drag_drop: fairygui_core::drag_drop::DragDrop,
+    pub(crate) drag_touch_id: Option<u64>,
     /// 已加载的包。跨包引用（`ui://别的包/条目`）靠它解析。
     registry: fairygui_core::package::PackageRegistry,
     /// 界面文本使用的字体。
@@ -1365,6 +1366,7 @@ impl GuiRuntime {
         data: Option<String>,
         pointer: fairygui_core::geom::Point,
     ) {
+        self.drag_touch_id = None;
         self.drag_drop.start(&mut self.store, source, icon, data);
 
         if let Some(icon) = icon {
@@ -1375,6 +1377,20 @@ impl GuiRuntime {
         }
 
         self.drag_drop.update(&mut self.store, pointer);
+    }
+
+    /// Start drag-and-drop owned by an already captured finger. Pass the
+    /// `UiEvent::touch_id` from a touch event; other fingers do not move or finish it.
+    pub fn start_touch_drag(
+        &mut self,
+        source: GObjectId,
+        icon: Option<GObjectId>,
+        data: Option<String>,
+        pointer: fairygui_core::Point,
+        touch_id: u64,
+    ) {
+        self.start_drag(source, icon, data, pointer);
+        self.drag_touch_id = Some(touch_id);
     }
 
     /// 是否正在拖拽。
@@ -1400,6 +1416,7 @@ impl GuiRuntime {
         &mut self,
         commands: &mut Commands,
     ) -> Option<fairygui_core::drag_drop::DragResult> {
+        self.drag_touch_id = None;
         let icon = self.drag_drop.icon();
         let result = self.drag_drop.finish(&mut self.store);
 
@@ -1549,14 +1566,16 @@ impl GuiRuntime {
         pointer: fairygui_core::Point,
         shift: bool,
         ctrl: bool,
+        touch_id: Option<u64>,
     ) {
         let Some((list, item, index)) = self.store.list_item_of(target) else {
             return;
         };
-        let event =
+        let mut event =
             fairygui_core::object::UiEvent::new(fairygui_core::object::EventKind::ClickItem, list)
                 .with_pointer(pointer)
                 .with_data(fairygui_core::object::EventData::Item(index.to_string()));
+        event.touch_id = touch_id;
         self.events.push(event.clone());
         self.list_clicks.push(GuiListItemClick {
             event,

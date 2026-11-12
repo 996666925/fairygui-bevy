@@ -222,6 +222,60 @@ fn value(app: &App, entity: Entity) -> String {
 }
 
 #[test]
+fn touch_press_focuses_the_native_editor_without_a_mouse_cursor() {
+    use bevy::input::touch::{TouchInput, TouchPhase};
+    use bevy::picking::{backend::HitData, hover::HoverMap, pointer::PointerId};
+    let (mut app, owner, entity, window) = fixture();
+    app.init_resource::<HoverMap>();
+    app.world_mut().resource_mut::<HoverMap>().insert(
+        PointerId::Touch(8),
+        [(
+            entity,
+            HitData::new(Entity::PLACEHOLDER, 0.0, Some(Vec3::ZERO), None),
+        )]
+        .into_iter()
+        .collect(),
+    );
+    app.world_mut().write_message(TouchInput {
+        id: 8,
+        phase: TouchPhase::Started,
+        window,
+        position: Vec2::splat(10.0),
+        force: None,
+    });
+    app.update();
+    assert_eq!(
+        app.world().resource::<GuiInputState>().focused_input(),
+        Some(owner)
+    );
+    assert_eq!(app.world().resource::<InputFocus>().get(), Some(entity));
+    key(
+        &mut app,
+        window,
+        Key::Character("A".into()),
+        KeyCode::KeyA,
+        Some("A"),
+    );
+    assert_eq!(value(&app, entity), "A");
+    app.world_mut().write_message(TouchInput {
+        id: 8,
+        phase: TouchPhase::Ended,
+        window,
+        position: Vec2::splat(10.0),
+        force: None,
+    });
+    app.update();
+    assert_eq!(
+        app.world().resource::<GuiInputState>().focused_input(),
+        Some(owner)
+    );
+    assert_eq!(
+        app.world().resource::<GuiInputState>().captured_touch(8),
+        None
+    );
+}
+
+#[test]
 fn actual_keyboard_dispatch_updates_real_value_and_native_input_enter_change_blur_order() {
     let (mut app, owner, entity, window) = fixture();
     app.world_mut()
