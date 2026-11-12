@@ -400,3 +400,53 @@ fn renderer_cannot_recursively_refresh_the_same_virtual_list() {
         "the guard must be released after the outer refresh"
     );
 }
+
+#[test]
+fn renderer_count_and_resize_changes_are_refreshed_before_return() {
+    for layout in [ListLayoutType::SingleColumn, ListLayoutType::Pagination] {
+        let (mut store, _, list) = fixture(layout, true, false);
+        let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));
+        store.enable_virtual_list(list, "a", &mut create).unwrap();
+        store.set_virtual_item_count(list, 1000).unwrap();
+        let changed = Cell::new(false);
+
+        store
+            .refresh_virtual_list(list, &mut create, &mut |_| None, &mut |store, _, _| {
+                if !changed.replace(true) {
+                    store.set_virtual_item_count(list, 2).unwrap();
+                    store.set_size(list, 200., 100.);
+                }
+            })
+            .unwrap();
+
+        let info = store.virtual_list_info(list).unwrap();
+        let pane = store.scroll_pane(list).unwrap();
+        assert_eq!(info.item_count, 2, "{layout:?}");
+        assert_eq!(info.active_count, 2, "{layout:?}");
+        assert_eq!(store.list_item_count(list), 2, "{layout:?}");
+        assert_eq!(info.real_item_count, 2, "{layout:?}");
+        assert_eq!(pane.view_size(), Size::new(200., 100.), "{layout:?}");
+        assert_eq!(
+            pane.content_size(),
+            if layout == ListLayoutType::SingleColumn {
+                Size::new(200., 42.)
+            } else {
+                Size::new(200., 100.)
+            },
+            "{layout:?}"
+        );
+        assert!((0..2).all(|index| store.virtual_item_object(list, index).is_some()));
+
+        store.invalidate_virtual_list(list, false);
+        store
+            .refresh_virtual_list(list, &mut create, &mut |_| None, &mut |store, _, _| {
+                store.set_virtual_item_count(list, 0).unwrap();
+            })
+            .unwrap();
+        let info = store.virtual_list_info(list).unwrap();
+        assert_eq!(info.item_count, 0, "{layout:?}");
+        assert_eq!(info.active_count, 0, "{layout:?}");
+        assert_eq!(store.list_item_count(list), 0, "{layout:?}");
+        assert_eq!(store.scroll_pane(list).unwrap().content_size(), Size::ZERO);
+    }
+}

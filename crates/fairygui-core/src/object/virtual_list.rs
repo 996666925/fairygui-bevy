@@ -399,7 +399,7 @@ impl ObjectStore {
         render: &mut VirtualItemRenderer<'_>,
     ) -> Result<usize, VirtualListError> {
         self.layout_scroll_bars(list);
-        let config = self
+        let mut config = self
             .virtual_config(list)
             .ok_or(VirtualListError::MissingPane)?;
         let revision = self
@@ -465,14 +465,66 @@ impl ObjectStore {
                     self.virtual_scroll_axis(list, force, create, provider, render)?
                 };
                 rendered += count;
-                if !again {
+                // Render callbacks receive &mut ObjectStore and may change the
+                // logical count, invalidate their data, or resize the list.
+                // Reconcile those changes before returning a stable row window.
+                self.layout_scroll_bars(list);
+                let next_config = self.virtual_config(list).ok_or(VirtualListError::Removed)?;
+                let state = self
+                    .virtual_states
+                    .get(&list)
+                    .ok_or(VirtualListError::Removed)?;
+                let restart =
+                    state.force || state.layout_dirty || next_config != state.geometry.config;
+                if restart {
+                    let item_size = self.virtual_states[&list].geometry.item_size;
+                    if !next_config.valid(item_size) {
+                        return Err(VirtualListError::InvalidGeometry);
+                    }
+                    let (line_items, page_rows) = next_config.counts(item_size);
+                    if line_items == 0
+                        || page_rows == 0
+                        || line_items > i32::MAX as usize
+                        || page_rows > i32::MAX as usize
+                    {
+                        return Err(VirtualListError::InvalidGeometry);
+                    }
+                    let looping = self.virtual_states[&list].looping;
+                    let content = {
+                        let state = self.virtual_states.get_mut(&list).unwrap();
+                        state.geometry.config = next_config;
+                        state.geometry.line_items = line_items;
+                        state.geometry.page_rows = page_rows;
+                        state.layout_dirty = false;
+                        state.force = false;
+                        let content = state.geometry.content_size();
+                        state.alignment = next_config.alignment(content);
+                        content
+                    };
+                    if looping {
+                        let pane = self.objects[list]
+                            .control
+                            .component_mut()
+                            .and_then(|c| c.scroll_pane.as_mut())
+                            .ok_or(VirtualListError::Removed)?;
+                        pane.set_loop_mode(
+                            pane.loop_mode(),
+                            Point::new(next_config.column_gap as f32, next_config.line_gap as f32),
+                        );
+                    }
+                    self.update_scroll_content_size(list, content);
+                    config = next_config;
+                    force = true;
+                } else {
+                    force = false;
+                }
+                if !again && !restart {
                     self.virtual_update_arch(list);
                     return Ok(rendered);
                 }
                 if pass == 20 {
                     return Err(VirtualListError::UnstableRenderer);
                 }
-                force = false;
             }
             unreachable!()
         })();
