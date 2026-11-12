@@ -2,6 +2,63 @@
 use super::*;
 use fairygui_core::widget::ControlData;
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct PointerTransform {
+    screen_to_local: Mat2,
+    local_to_screen_scale: Vec2,
+}
+
+impl PointerTransform {
+    pub(super) fn from_view(
+        transform: &UiGlobalTransform,
+        node: &ComputedNode,
+        window_scale_factor: f32,
+    ) -> Option<Self> {
+        let inverse = transform.try_inverse()?;
+        let screen_to_local = inverse.matrix2 * (window_scale_factor * node.inverse_scale_factor);
+        if !screen_to_local.x_axis.is_finite()
+            || !screen_to_local.y_axis.is_finite()
+            || screen_to_local.determinant().abs() <= f32::EPSILON
+        {
+            return None;
+        }
+        let local_to_screen = screen_to_local.inverse();
+        let local_to_screen_scale = Vec2::new(
+            local_to_screen.x_axis.length(),
+            local_to_screen.y_axis.length(),
+        );
+        (local_to_screen_scale.is_finite() && local_to_screen_scale.min_element() > 0.0).then_some(
+            Self {
+                screen_to_local,
+                local_to_screen_scale,
+            },
+        )
+    }
+
+    fn from_model_scale(scale: Vec2) -> Self {
+        let scale = Vec2::new(
+            if scale.x.abs() < f32::EPSILON {
+                1.0
+            } else {
+                scale.x.abs()
+            },
+            if scale.y.abs() < f32::EPSILON {
+                1.0
+            } else {
+                scale.y.abs()
+            },
+        );
+        Self {
+            screen_to_local: Mat2::from_diagonal(scale.recip()),
+            local_to_screen_scale: scale,
+        }
+    }
+
+    fn displacement(self, screen_delta: Vec2) -> Vec2 {
+        self.screen_to_local * screen_delta
+    }
+}
+
 #[derive(Debug)]
 pub(super) enum Gesture {
     None,
@@ -12,23 +69,27 @@ pub(super) enum Gesture {
         vertical: bool,
         track: f32,
         initial: f32,
-        scale: Vec2,
+        transform: PointerTransform,
     },
     Window {
         index: usize,
         origin: Vec2,
-        scale: Vec2,
+        transform: PointerTransform,
     },
     Scroll {
         container: GObjectId,
         started: bool,
-        scale: Vec2,
+        transform: PointerTransform,
         elapsed: f32,
     },
 }
 
 impl Gesture {
-    pub(super) fn begin(runtime: &mut GuiRuntime, target: GObjectId) -> Self {
+    pub(super) fn begin(
+        runtime: &mut GuiRuntime,
+        target: GObjectId,
+        transforms: &[(GObjectId, PointerTransform)],
+    ) -> Self {
         if runtime.is_dragging() {
             return Self::None;
         }
@@ -60,7 +121,7 @@ impl Gesture {
                     } else {
                         pane.display_perc_x()
                     };
-                    let scale = world_scale(runtime, bar);
+                    let transform = pointer_transform(runtime, bar, transforms);
                     runtime.store_mut().set_scroll_bar_grip_dragging(bar, true);
                     return Self::Grip {
                         bar,
@@ -68,7 +129,7 @@ impl Gesture {
                         vertical,
                         track,
                         initial,
-                        scale,
+                        transform,
                     };
                 }
                 // A nested graphic inside the grip can still resolve its parent.
@@ -94,14 +155,15 @@ impl Gesture {
             let owner = runtime.window(index).unwrap().owner();
             if let Some(object) = runtime.store().object(owner) {
                 let origin = Vec2::new(object.x(), object.y());
-                let scale = object
-                    .parent()
-                    .map_or(Vec2::ONE, |p| world_scale(runtime, p));
+                let transform = object.parent().map_or_else(
+                    || PointerTransform::from_model_scale(Vec2::ONE),
+                    |p| pointer_transform(runtime, p, transforms),
+                );
                 runtime.bring_window_to_front(index);
                 return Self::Window {
                     index,
                     origin,
-                    scale,
+                    transform,
                 };
             }
         }
@@ -109,7 +171,7 @@ impl Gesture {
             return Self::Scroll {
                 container,
                 started: false,
-                scale: world_scale(runtime, container),
+                transform: pointer_transform(runtime, container, transforms),
                 elapsed: 0.,
             };
         }
@@ -142,9 +204,9 @@ impl Gesture {
                 vertical,
                 track,
                 initial,
-                scale,
+                transform,
             } if moved => {
-                let delta = (cursor - start) / *scale;
+                let delta = transform.displacement(cursor - start);
                 runtime.store_mut().set_scroll_perc(
                     *container,
                     *vertical,
@@ -154,26 +216,26 @@ impl Gesture {
             Self::Window {
                 index,
                 origin,
-                scale,
+                transform,
             } if moved => {
                 if let Some(window) = runtime.window_mut(*index) {
                     window.set_dragging(true);
                     let owner = window.owner();
-                    let at = *origin + (cursor - start) / *scale;
+                    let at = *origin + transform.displacement(cursor - start);
                     runtime.store_mut().set_xy(owner, at.x, at.y);
                 }
             }
             Self::Scroll {
                 container,
                 started,
-                scale,
+                transform,
                 elapsed,
             } => {
                 *elapsed += dt;
                 if !moved {
                     return;
                 }
-                let delta = (cursor - if *started { last } else { start }) / *scale;
+                let delta = transform.displacement(cursor - if *started { last } else { start });
                 if !*started {
                     runtime.store_mut().begin_scroll_drag(*container);
                     *started = true;
@@ -183,7 +245,10 @@ impl Gesture {
                     delta.x,
                     delta.y,
                     *elapsed,
-                    Point::new(scale.x, scale.y),
+                    Point::new(
+                        transform.local_to_screen_scale.x,
+                        transform.local_to_screen_scale.y,
+                    ),
                 );
                 *elapsed = 0.;
             }
@@ -230,6 +295,17 @@ impl Gesture {
     }
 }
 
+fn pointer_transform(
+    runtime: &GuiRuntime,
+    target: GObjectId,
+    transforms: &[(GObjectId, PointerTransform)],
+) -> PointerTransform {
+    transforms
+        .iter()
+        .find_map(|(object, transform)| (*object == target).then_some(*transform))
+        .unwrap_or_else(|| PointerTransform::from_model_scale(world_scale(runtime, target)))
+}
+
 fn world_scale(runtime: &GuiRuntime, target: GObjectId) -> Vec2 {
     let mut scale = Vec2::ONE;
     let mut current = Some(target);
@@ -260,4 +336,61 @@ pub(super) fn scrollable_ancestor(runtime: &GuiRuntime, target: GObjectId) -> Op
         current = object.parent();
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::math::Affine2;
+
+    #[test]
+    fn pointer_transform_converts_rotation_skew_reflection_and_dpi() {
+        let cases = [
+            Mat2::from_angle(0.61) * Mat2::from_diagonal(Vec2::new(1.4, 0.7)),
+            Mat2::from_cols(Vec2::new(1.2, 0.25), Vec2::new(-0.4, 0.9)),
+            Mat2::from_cols(Vec2::new(-1.1, 0.2), Vec2::new(0.35, 1.6)),
+        ];
+        let local = Vec2::new(13.0, -7.5);
+        for dpi in [1.0, 1.75, 2.0] {
+            for matrix in cases {
+                let physical = matrix;
+                let transform = UiGlobalTransform::from(Affine2 {
+                    matrix2: physical,
+                    translation: Vec2::new(120.0, 85.0) * dpi,
+                });
+                let node = ComputedNode {
+                    inverse_scale_factor: 1.0 / dpi,
+                    ..default()
+                };
+                let pointer = PointerTransform::from_view(&transform, &node, dpi).unwrap();
+                let screen_delta = physical * local;
+                assert!(
+                    pointer
+                        .displacement(screen_delta)
+                        .abs_diff_eq(local, 0.0001)
+                );
+                let expected_scale = Vec2::new(physical.x_axis.length(), physical.y_axis.length());
+                assert!(
+                    pointer
+                        .local_to_screen_scale
+                        .abs_diff_eq(expected_scale, 0.0001)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pointer_transform_rejects_degenerate_and_nonfinite_views() {
+        let node = ComputedNode::default();
+        for matrix in [
+            Mat2::from_diagonal(Vec2::new(1.0, 0.0)),
+            Mat2::from_diagonal(Vec2::new(f32::NAN, 1.0)),
+        ] {
+            let transform = UiGlobalTransform::from(Affine2 {
+                matrix2: matrix,
+                translation: Vec2::ZERO,
+            });
+            assert!(PointerTransform::from_view(&transform, &node, 1.0).is_none());
+        }
+    }
 }

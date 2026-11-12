@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use bevy::ui::{ComputedStackIndex, RelativeCursorPosition};
 use fairygui_core::geom::Point;
 use fairygui_core::object::{EventKind, GObjectId, UiEvent};
-use gestures::Gesture;
+use gestures::{Gesture, PointerTransform};
 
 /// Bevy normalizes around the node center; FairyGUI uses its top-left.
 fn top_left_position(cursor: &RelativeCursorPosition) -> Option<Vec2> {
@@ -552,10 +552,19 @@ fn route_pointer(
                     );
                 }
             }
+            let window_scale_factor = window.map_or(1.0, |(_, window, _)| window.scale_factor());
+            let gesture_transforms: Vec<_> = targets
+                .iter()
+                .filter_map(|(entity, object, ..)| {
+                    let (transform, node) = geometry.get(entity).ok()?;
+                    PointerTransform::from_view(transform, node, window_scale_factor)
+                        .map(|transform| (object.0, transform))
+                })
+                .collect();
             let mut gesture = if input.is_some() {
                 Gesture::None
             } else {
-                Gesture::begin(&mut runtime, target)
+                Gesture::begin(&mut runtime, target, &gesture_transforms)
             };
             let normalized = targets
                 .iter()
