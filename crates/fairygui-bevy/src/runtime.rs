@@ -19,6 +19,13 @@ use crate::backend;
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GObjectRef(pub GObjectId);
 
+/// Current selected row indices projected onto a FairyGUI list entity.
+///
+/// This is a read-only ECS view: change selection through [`GuiObjectCommand`]
+/// so controller and virtual-list behavior stay synchronized.
+#[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
+pub struct GuiListSelection(pub Vec<usize>);
+
 /// ECS-owned FairyGUI root. Add this component to any entity to create the
 /// named component from an already requested `.fui` asset when it is ready.
 /// Removing the component removes the generated UI tree and its Bevy views.
@@ -1858,6 +1865,23 @@ pub fn apply_object_commands(
     }
 }
 
+/// Project native list selection onto ECS components after application commands
+/// have been applied. Input-driven selection is visible in the same frame too.
+pub fn sync_list_selection_components(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    lists: Query<(Entity, &GObjectRef, &GuiListSelection)>,
+) {
+    for (entity, object, current) in &lists {
+        let Some(selected) = runtime.store().list_selections(object.0) else {
+            continue;
+        };
+        if current.0 != selected {
+            commands.entity(entity).insert(GuiListSelection(selected));
+        }
+    }
+}
+
 /// 为新建的界面生成实体树。
 pub fn spawn_pending_roots(
     mut commands: Commands,
@@ -2354,6 +2378,10 @@ fn spawn_object(
         },
     ));
     let entity_id = entity.id();
+
+    if let Some(selection) = store.list_selections(object) {
+        entity.insert(GuiListSelection(selection));
+    }
 
     // 图形控件的外观：填充走背景色，描边走边框，形状由圆角决定。
     if let Some(style) = &graph {

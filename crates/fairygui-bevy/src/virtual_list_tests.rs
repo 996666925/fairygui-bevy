@@ -134,8 +134,10 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
         .non_send::<GuiRuntime>()
         .entity_of(list)
         .unwrap();
-    app.add_message::<GuiObjectCommand>()
-        .add_systems(Update, apply_object_commands);
+    app.add_message::<GuiObjectCommand>().add_systems(
+        Update,
+        (apply_object_commands, sync_list_selection_components).chain(),
+    );
 
     let max_scroll = app
         .world()
@@ -176,6 +178,10 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
         let position = runtime.store().scroll_pane(list).unwrap().pos();
         assert_eq!(position, max_scroll);
     }
+    assert_eq!(
+        app.world().get::<GuiListSelection>(list_entity),
+        Some(&GuiListSelection(vec![123]))
+    );
 
     app.world_mut()
         .resource_mut::<Messages<GuiObjectCommand>>()
@@ -190,6 +196,10 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
             .store()
             .list_selections(list),
         Some(vec![])
+    );
+    assert_eq!(
+        app.world().get::<GuiListSelection>(list_entity),
+        Some(&GuiListSelection(vec![]))
     );
 }
 
