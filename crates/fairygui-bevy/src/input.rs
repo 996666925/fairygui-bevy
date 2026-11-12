@@ -91,6 +91,7 @@ pub struct GuiInputState {
     hovered: Option<GObjectId>,
     capture: Option<Capture>,
     right_capture: Option<RightCapture>,
+    last_position: Option<Vec2>,
     focused: Option<GObjectId>,
     text_press: Option<(Entity, Vec2, f64, u8)>,
 }
@@ -121,6 +122,7 @@ struct Capture {
     start: Vec2,
     last: Vec2,
     moved: bool,
+    dragged: bool,
     gesture: Gesture,
     link: Option<crate::runtime::LinkHit>,
     editing: Option<Entity>,
@@ -132,6 +134,7 @@ struct RightCapture {
     start: Vec2,
     last: Vec2,
     moved: bool,
+    dragged: bool,
 }
 
 pub fn register(app: &mut App) {
@@ -347,6 +350,11 @@ fn route_pointer(
             .or_else(|| state.right_capture.as_ref().map(|capture| capture.last))
             .unwrap_or(Vec2::ZERO)
     });
+    let pointer_moved = cursor.is_some()
+        && state
+            .last_position
+            .is_some_and(|previous| previous != position);
+    state.last_position = cursor.map(|_| position);
     if hit != state.hovered {
         if let Some(old) = state.hovered {
             if runtime.store().object(old).is_some() {
@@ -360,6 +368,9 @@ fn route_pointer(
         }
         state.hovered = hit;
     }
+    if pointer_moved && let Some(target) = hit {
+        dispatch(&mut runtime, EventKind::MouseMove, target, position);
+    }
     if let Some(mut capture) = state.capture.take() {
         if runtime.is_dragging() {
             capture.gesture.finish(&mut runtime, time.delta_secs());
@@ -370,6 +381,12 @@ fn route_pointer(
             && eligible(&runtime, capture.target)
             && capture.gesture.valid(&runtime);
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
+        if position != capture.last {
+            capture.dragged = true;
+            if runtime.store().object(capture.target).is_some() {
+                dispatch(&mut runtime, EventKind::MouseDrag, capture.target, position);
+            }
+        }
         if valid && mouse.pressed(MouseButton::Left) {
             if let Some(entity) = capture.editing
                 && capture.moved
@@ -408,6 +425,14 @@ fn route_pointer(
             capture.gesture.finish(&mut runtime, time.delta_secs());
             if runtime.store().object(capture.target).is_some() {
                 dispatch(&mut runtime, EventKind::MouseUp, capture.target, position);
+                if capture.dragged {
+                    dispatch(
+                        &mut runtime,
+                        EventKind::MouseDragEnd,
+                        capture.target,
+                        position,
+                    );
+                }
                 update_button(&mut runtime, capture.target, None, Some(false));
             }
             if valid
@@ -441,6 +466,12 @@ fn route_pointer(
     if let Some(mut capture) = state.right_capture.take() {
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
         let valid = cursor.is_some() && eligible(&runtime, capture.target);
+        if position != capture.last {
+            capture.dragged = true;
+            if runtime.store().object(capture.target).is_some() {
+                dispatch(&mut runtime, EventKind::MouseDrag, capture.target, position);
+            }
+        }
         if valid && mouse.pressed(MouseButton::Right) {
             capture.last = position;
             state.right_capture = Some(capture);
@@ -452,6 +483,14 @@ fn route_pointer(
                     capture.target,
                     position,
                 );
+                if capture.dragged {
+                    dispatch(
+                        &mut runtime,
+                        EventKind::MouseDragEnd,
+                        capture.target,
+                        position,
+                    );
+                }
             }
             if valid
                 && mouse.just_released(MouseButton::Right)
@@ -483,6 +522,7 @@ fn route_pointer(
             start: position,
             last: position,
             moved: false,
+            dragged: false,
         });
     }
     if mouse.just_pressed(MouseButton::Left) && cursor.is_some() {
@@ -655,6 +695,7 @@ fn route_pointer(
                 start: position,
                 last: position,
                 moved: false,
+                dragged: false,
                 gesture,
                 link,
                 editing: input,

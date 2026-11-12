@@ -21,6 +21,9 @@ pub enum EventKind {
     RightClick,
     RightMouseDown,
     RightMouseUp,
+    MouseMove,
+    MouseDrag,
+    MouseDragEnd,
     /// Rich-text href, preserved verbatim in EventData::Text.
     Link,
     MouseDown,

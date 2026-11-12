@@ -363,6 +363,56 @@ fn moving_away_and_back_does_not_click_after_drag() {
 }
 
 #[test]
+fn mouse_move_uses_current_hit_while_drag_uses_the_pressed_target() {
+    let (mut app, window) = setup();
+    let (pressed_entity, pressed_target) = target(&mut app, 1);
+    press(&mut app);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .for_each(drop);
+
+    app.world_mut()
+        .entity_mut(pressed_entity)
+        .insert(Hovered(false));
+    let (_, move_target) = target(&mut app, 2);
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .set_cursor_position(Some(Vec2::splat(50.0)));
+    app.update();
+
+    let events: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .collect();
+    assert!(events.iter().any(|event| {
+        event.kind == EventKind::MouseMove && event.target == move_target && event.is_at_target()
+    }));
+    assert!(events.iter().any(|event| {
+        event.kind == EventKind::MouseDrag && event.target == pressed_target && event.is_at_target()
+    }));
+
+    release(&mut app);
+    let events: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .collect();
+    let up = events
+        .iter()
+        .position(|event| event.kind == EventKind::MouseUp && event.target == pressed_target)
+        .unwrap();
+    let drag_end = events
+        .iter()
+        .position(|event| event.kind == EventKind::MouseDragEnd && event.target == pressed_target)
+        .unwrap();
+    assert!(up < drag_end);
+    assert!(!events.iter().any(|event| event.kind == EventKind::Click));
+}
+
+#[test]
 fn release_over_another_target_does_not_click_or_transfer_capture() {
     let (mut app, _) = setup();
     let (entity, first) = target(&mut app, 0);
@@ -841,6 +891,16 @@ fn moving_away_and_back_does_not_right_click_after_drag_threshold() {
         !events
             .iter()
             .any(|event| event.kind == EventKind::RightClick)
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == EventKind::MouseDrag)
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == EventKind::MouseDragEnd)
     );
 }
 

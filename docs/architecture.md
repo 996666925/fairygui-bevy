@@ -341,12 +341,18 @@ One router selects the highest Bevy stack entry among eligible GUI hits. Visibil
 touchability (including ancestors), modality, child hit areas and pixel masks use
 the same policy for clicks, wheel input and drag starts. Events bubble once from
 that target. Button visuals and composite widget actions resolve through ancestors.
+Pointer movement emits `MouseMove` on the current hit. Movement while either mouse
+button is held emits `MouseDrag` on its captured target, followed by `MouseDragEnd`
+after the matching button-up event when the capture ends.
 
-A left-button edge captures the target. Holding the button over a different object
-cannot start a second gesture. Gesture priority is slider/scrollbar, window title
-area, then scroll content. Scrollbar arrows and track clicks cannot acquire grip
-dragging. Capture survives leaving the object, but ends on release, loss of focus,
-loss of cursor, removal, hiding or a modal/disabled-state change.
+A left-button edge captures the target and may begin a built-in gesture. A
+right-button edge captures independently and emits right-button events without
+running left-button widget actions. Holding a button over a different object
+cannot start a second capture for that button. Gesture priority is
+slider/scrollbar, window title area, then scroll content. Scrollbar arrows and
+track clicks cannot acquire grip dragging. Capture survives leaving the object,
+but ends on release, loss of focus, loss of cursor, removal, hiding or a
+modal/disabled-state change.
 
 The default drag threshold is six logical window pixels. Crossing it permanently
 suppresses the click for that press, even if the pointer returns to its starting
