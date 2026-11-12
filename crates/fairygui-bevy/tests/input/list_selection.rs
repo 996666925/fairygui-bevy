@@ -67,6 +67,47 @@ fn click(app: &mut App, entities: &[Entity], index: usize, shift: bool, ctrl: bo
 }
 
 #[test]
+fn right_clicking_a_list_row_does_not_change_list_or_button_selection() {
+    let (mut app, list, rows, entities) = fixture();
+    app.world_mut()
+        .entity_mut(entities[2])
+        .insert(Hovered(true));
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Right);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Right);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+
+    let gui = app.world().non_send::<GuiRuntime>();
+    assert_eq!(gui.store().list_selections(list), Some(Vec::new()));
+    assert_eq!(gui.store().button_selected(rows[2]), Some(false));
+    let events: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .collect();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == EventKind::RightClick)
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| { matches!(event.kind, EventKind::Click | EventKind::ClickItem) })
+    );
+}
+
+#[test]
 fn registered_bar_track_and_arrows_scroll_without_row_events_or_selection() {
     use fairygui_core::scroll::{ARROW1_NAME, ARROW2_NAME, BAR_NAME};
     let (mut app, list, rows, mut entities) = fixture();

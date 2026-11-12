@@ -91,6 +91,26 @@ fn release(app: &mut App) {
         .clear();
 }
 
+fn press_right(app: &mut App) {
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Right);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+}
+
+fn release_right(app: &mut App) {
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Right);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .clear();
+}
+
 fn clicks(app: &mut App) -> Vec<fairygui_core::object::UiEvent> {
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
@@ -689,6 +709,139 @@ fn demo_listener_on_parent_receives_one_bubbled_click() {
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].target, child);
     assert!(events[0].pointer.is_some());
+}
+
+#[test]
+fn right_pointer_events_bubble_without_emitting_left_click_events() {
+    let (mut app, _) = setup();
+    let (_, parent) = target(&mut app, 1);
+    let (_, child) = target(&mut app, 2);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(child, Some(parent));
+
+    press_right(&mut app);
+    assert_eq!(
+        app.world().resource::<GuiInputState>().captured(),
+        Some(child)
+    );
+    release_right(&mut app);
+
+    let events: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .collect();
+    let pointer_events: Vec<_> = events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.kind,
+                EventKind::RightMouseDown | EventKind::RightMouseUp | EventKind::RightClick
+            )
+        })
+        .collect();
+    assert_eq!(pointer_events.len(), 6);
+    for (event, kind) in pointer_events.iter().zip([
+        EventKind::RightMouseDown,
+        EventKind::RightMouseDown,
+        EventKind::RightMouseUp,
+        EventKind::RightMouseUp,
+        EventKind::RightClick,
+        EventKind::RightClick,
+    ]) {
+        assert_eq!(event.kind, kind);
+    }
+    for (event, (current_target, bubbling)) in pointer_events.iter().zip([
+        (child, false),
+        (parent, true),
+        (child, false),
+        (parent, true),
+        (child, false),
+        (parent, true),
+    ]) {
+        assert_eq!(event.target, child);
+        assert_eq!(event.current_target, current_target);
+        assert_eq!(event.bubbling, bubbling);
+        assert_eq!(
+            event.pointer,
+            Some(fairygui_core::geom::Point::new(10.0, 10.0))
+        );
+    }
+    assert!(!events.iter().any(|event| {
+        matches!(
+            event.kind,
+            EventKind::MouseDown | EventKind::MouseUp | EventKind::Click | EventKind::ClickItem
+        )
+    }));
+}
+
+#[test]
+fn right_release_on_another_target_sends_up_to_capture_but_does_not_click() {
+    let (mut app, _) = setup();
+    let (entity, captured) = target(&mut app, 1);
+    press_right(&mut app);
+    app.world_mut().entity_mut(entity).insert(Hovered(false));
+    target(&mut app, 2);
+    app.update();
+    release_right(&mut app);
+
+    let events: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .collect();
+    assert!(events.iter().any(|event| {
+        event.kind == EventKind::RightMouseUp && event.target == captured && event.is_at_target()
+    }));
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.kind == EventKind::RightClick)
+    );
+    assert!(!events.iter().any(|event| {
+        matches!(
+            event.kind,
+            EventKind::MouseDown | EventKind::MouseUp | EventKind::Click
+        )
+    }));
+}
+
+#[test]
+fn moving_away_and_back_does_not_right_click_after_drag_threshold() {
+    let (mut app, window) = setup();
+    let (entity, target) = target(&mut app, 0);
+    press_right(&mut app);
+    app.world_mut().entity_mut(entity).insert(Hovered(false));
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .set_cursor_position(Some(Vec2::splat(50.0)));
+    app.update();
+    app.world_mut().entity_mut(entity).insert(Hovered(true));
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .set_cursor_position(Some(Vec2::splat(10.0)));
+    app.update();
+    release_right(&mut app);
+
+    let events: Vec<_> = app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .collect();
+    assert!(
+        events
+            .iter()
+            .any(|event| { event.kind == EventKind::RightMouseUp && event.target == target })
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.kind == EventKind::RightClick)
+    );
 }
 
 #[test]

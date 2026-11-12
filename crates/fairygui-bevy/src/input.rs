@@ -1,4 +1,4 @@
-//! One pointer target, one capture and one gesture owner.
+//! One pointer target, independent mouse-button captures and one gesture owner.
 //! Read `GuiInputState` after `GuiSystems::Input` to arbitrate game input.
 mod actions;
 pub(crate) mod editing;
@@ -90,6 +90,7 @@ impl Default for GuiInputSettings {
 pub struct GuiInputState {
     hovered: Option<GObjectId>,
     capture: Option<Capture>,
+    right_capture: Option<RightCapture>,
     focused: Option<GObjectId>,
     text_press: Option<(Entity, Vec2, f64, u8)>,
 }
@@ -98,10 +99,13 @@ impl GuiInputState {
         self.hovered
     }
     pub fn captured(&self) -> Option<GObjectId> {
-        self.capture.as_ref().map(|c| c.target)
+        self.capture
+            .as_ref()
+            .map(|c| c.target)
+            .or_else(|| self.right_capture.as_ref().map(|c| c.target))
     }
     pub fn wants_pointer_input(&self) -> bool {
-        self.hovered.is_some() || self.capture.is_some()
+        self.hovered.is_some() || self.capture.is_some() || self.right_capture.is_some()
     }
     pub fn focused_input(&self) -> Option<GObjectId> {
         self.focused
@@ -120,6 +124,14 @@ struct Capture {
     gesture: Gesture,
     link: Option<crate::runtime::LinkHit>,
     editing: Option<Entity>,
+}
+
+#[derive(Debug)]
+struct RightCapture {
+    target: GObjectId,
+    start: Vec2,
+    last: Vec2,
+    moved: bool,
 }
 
 pub fn register(app: &mut App) {
@@ -327,7 +339,14 @@ fn route_pointer(
             rich?.link_at(&runtime, object.0, normalized, computed, block?, layout?)
         }
     });
-    let position = cursor.unwrap_or_else(|| state.capture.as_ref().map_or(Vec2::ZERO, |c| c.last));
+    let position = cursor.unwrap_or_else(|| {
+        state
+            .capture
+            .as_ref()
+            .map(|capture| capture.last)
+            .or_else(|| state.right_capture.as_ref().map(|capture| capture.last))
+            .unwrap_or(Vec2::ZERO)
+    });
     if hit != state.hovered {
         if let Some(old) = state.hovered {
             if runtime.store().object(old).is_some() {
@@ -418,6 +437,53 @@ fn route_pointer(
                 );
             }
         }
+    }
+    if let Some(mut capture) = state.right_capture.take() {
+        capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
+        let valid = cursor.is_some() && eligible(&runtime, capture.target);
+        if valid && mouse.pressed(MouseButton::Right) {
+            capture.last = position;
+            state.right_capture = Some(capture);
+        } else {
+            if runtime.store().object(capture.target).is_some() {
+                dispatch(
+                    &mut runtime,
+                    EventKind::RightMouseUp,
+                    capture.target,
+                    position,
+                );
+            }
+            if valid
+                && mouse.just_released(MouseButton::Right)
+                && !capture.moved
+                && hit == Some(capture.target)
+                && !runtime.is_dragging()
+            {
+                dispatch(
+                    &mut runtime,
+                    EventKind::RightClick,
+                    capture.target,
+                    position,
+                );
+            }
+        }
+    }
+    if mouse.just_pressed(MouseButton::Right)
+        && cursor.is_some()
+        && let Some(target) = hit
+    {
+        let stop = runtime.store().scroll_bar_pointer_down_stop(target);
+        runtime.dispatch_event_until(
+            UiEvent::new(EventKind::RightMouseDown, target)
+                .with_pointer(Point::new(position.x, position.y)),
+            stop,
+        );
+        state.right_capture = Some(RightCapture {
+            target,
+            start: position,
+            last: position,
+            moved: false,
+        });
     }
     if mouse.just_pressed(MouseButton::Left) && cursor.is_some() {
         let input = raw_hit
