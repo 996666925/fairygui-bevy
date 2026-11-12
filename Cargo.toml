@@ -1,0 +1,54 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/fairygui-core",
+    "crates/fairygui-bevy",
+    "crates/fairygui-bevy-macros",
+    "crates/fairygui-demo",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# 跟随 Bevy 0.20 的 MSRV，避免依赖解析器选择旧版依赖。
+rust-version = "1.97.1"
+license = "MIT"
+repository = "https://github.com/fairygui/FairyGUI-layabox"
+description = "FairyGUI runtime for the Bevy game engine"
+keywords = ["gamedev", "bevy", "gui", "fairygui", "ui"]
+categories = ["gui", "game-development"]
+
+[workspace.dependencies]
+# 内部 crate：依赖方向固定为 bevy -> core，core 永不反向依赖 bevy
+fairygui-core = { path = "crates/fairygui-core", version = "0.1.0" }
+fairygui-bevy = { path = "crates/fairygui-bevy", version = "0.1.0" }
+fairygui-bevy-macros = { path = "crates/fairygui-bevy-macros", version = "0.1.0" }
+
+# 第三方
+#
+# 注意：Cargo.lock 中把 `encase` 固定在 0.12.1。
+# 原因是 encase 0.12.2 把 `encase_derive_impl` 升到了 syn 3，而 `bevy_macro_utils`
+# 0.20.1 仍使用 syn 2，两者被 bevy_encase_derive 同时混用会导致编译失败。
+# 固定方式：`cargo update -p encase --precise 0.12.1`。
+# 升级 bevy 后请先验证该问题是否已在上游修复，再删除这条锁定。
+# Bevy 0.20 的 Parley 文本后端需要显式启用中日韩等复杂文字的分词数据。
+bevy = { version = "0.20.1", features = ["complex_script_segmentation", "system_font_discovery", "wav", "mp3"] }
+flate2 = { version = "1" }
+proc-macro2 = { version = "1" }
+quote = { version = "1" }
+regress = { version = "0.12", features = ["utf16"] }
+parley = { version = "0.11.1" }
+swash = { version = "0.2.10" }
+slotmap = { version = "1" }
+syn = { version = "2", features = ["full"] }
+thiserror = { version = "2" }
+tracing = { version = "0.1" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+todo = "warn"

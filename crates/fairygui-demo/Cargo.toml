@@ -1,0 +1,17 @@
+[package]
+name = "fairygui-demo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Runnable examples for fairygui-bevy"
+publish = false
+
+[dependencies]
+bevy.workspace = true
+fairygui-bevy.workspace = true
+fairygui-core.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

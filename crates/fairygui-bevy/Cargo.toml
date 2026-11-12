@@ -1,0 +1,23 @@
+[package]
+name = "fairygui-bevy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Bevy integration for the FairyGUI runtime: asset loading, ECS mirroring and input bridging"
+
+[dependencies]
+fairygui-core.workspace = true
+
+# 使用 Bevy 默认特性集合以便开箱即用；如需裁剪，可改为
+# `default-features = false` 并显式启用 bevy_asset/bevy_ui/bevy_text/bevy_render/
+# bevy_core_pipeline/bevy_winit/default_font/png 等所需特性。
+bevy.workspace = true
+parley.workspace = true
+swash.workspace = true
+
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
