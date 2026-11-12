@@ -5,7 +5,8 @@
 
 use bevy::prelude::*;
 use fairygui_bevy::{
-    GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiRuntime, GuiTransitionHook,
+    FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiRootInstance, GuiRuntime,
+    GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -13,25 +14,27 @@ use fairygui_core::object::GObjectId;
 pub fn handle_links(
     mut links: MessageReader<fairygui_bevy::GuiLink>,
     controller: Res<DemoController>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    runtime: NonSend<GuiRuntime>,
+    mut commands: MessageWriter<GuiObjectCommand>,
 ) {
     for link in links.read() {
         let Some(root) = controller
             .basics_page
-            .and_then(|index| runtime.root_object(index))
+            .and_then(|handle| runtime.root_object(handle))
         else {
             continue;
         };
         if controller.package.as_deref() == Some("Basics")
             && runtime.store().child_by_name(root, "n12") == Some(link.event.target)
+            && let Some(target) = runtime.entity_of(link.event.target)
         {
-            runtime.store_mut().set_object_text(
-                link.event.target,
-                &format!(
+            commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetText(format!(
                     "[img]ui://9leh0eyft9fj5f[/img][color=#FF0000]你点击了链接[/color]：{}",
                     link.href
-                ),
-            );
+                )),
+            ));
         }
     }
 }
@@ -47,8 +50,134 @@ pub struct DemoController {
     pub elapsed: f32,
     pub basics_page: Option<usize>,
     pub transition_sample: Option<usize>,
+    basics_page_owner: Option<Entity>,
+    transition_sample_owner: Option<Entity>,
     pub last_menu_action: Option<GuiMenuAction>,
     numeric_elapsed: Option<f32>,
+    transition_paused: bool,
+    transition_time_scale: f32,
+    transition_start_pending: bool,
+}
+
+/// Identifies dynamically loaded demo roots that need one-time setup.
+#[derive(Component, Debug, Clone, Copy)]
+pub enum DemoRootKind {
+    BasicsPage,
+    TransitionSample { index: usize },
+}
+
+#[derive(Component, Debug)]
+pub(super) struct DemoRootInitialized;
+
+pub fn dispose_dynamic_roots(commands: &mut Commands, controller: &mut DemoController) {
+    if let Some(owner) = controller.basics_page_owner.take() {
+        commands.entity(owner).despawn();
+    }
+    if let Some(owner) = controller.transition_sample_owner.take() {
+        commands.entity(owner).despawn();
+    }
+    controller.basics_page = None;
+    controller.transition_sample = None;
+    controller.numeric_elapsed = None;
+    controller.transition_start_pending = false;
+}
+
+/// Resolve roots created by FairyGuiRoot and issue their one-time setup through
+/// entity-addressed commands. This keeps temporary pages in ECS ownership too.
+pub fn initialize_demo_roots(
+    mut commands: Commands,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    roots: Query<(Entity, &GuiRootInstance, &DemoRootKind), Without<DemoRootInitialized>>,
+    runtime: NonSend<GuiRuntime>,
+    mut controller: ResMut<DemoController>,
+) {
+    for (entity, instance, kind) in &roots {
+        match *kind {
+            DemoRootKind::BasicsPage => {
+                let Some(root) = controller.root else {
+                    continue;
+                };
+                let container = runtime
+                    .store()
+                    .find_by_name(root, "container")
+                    .unwrap_or(root);
+                let Some(owner) = runtime.store().object(root) else {
+                    continue;
+                };
+                let y = owner.y() + runtime.store().object(container).map_or(70.0, |o| o.y());
+                gui_commands.write(GuiObjectCommand::new(
+                    entity,
+                    GuiObjectAction::SetPosition(Vec2::new(owner.x(), y)),
+                ));
+                controller.basics_page = Some(instance.handle);
+                controller.basics_page_owner = Some(entity);
+            }
+            DemoRootKind::TransitionSample { index } => {
+                let Some(root) = controller.root else {
+                    continue;
+                };
+                let Some(owner) = runtime.store().object(root) else {
+                    continue;
+                };
+                let Some(sample) = runtime.store().object(instance.object) else {
+                    continue;
+                };
+                let position = match index {
+                    3 => Vec2::new(
+                        owner.x() + owner.width() - sample.width() - 20.0,
+                        owner.y() + 100.0,
+                    ),
+                    4 => Vec2::new(
+                        owner.x() + 20.0,
+                        owner.y() + owner.height() - sample.height() - 100.0,
+                    ),
+                    _ => Vec2::new(owner.x(), owner.y()),
+                };
+                gui_commands.write(GuiObjectCommand::new(
+                    entity,
+                    GuiObjectAction::SetPosition(position),
+                ));
+                gui_commands.write(GuiObjectCommand::new(
+                    entity,
+                    GuiObjectAction::PlayTransition {
+                        name: "t0".into(),
+                        times: if index == 3 { 3 } else { 1 },
+                    },
+                ));
+                if index == 4 {
+                    for (name, value) in [("value", "10000"), ("add_value", "+2000")] {
+                        if let Some(target) = runtime
+                            .store()
+                            .find_by_name(instance.object, name)
+                            .and_then(|id| runtime.entity_of(id))
+                        {
+                            gui_commands.write(GuiObjectCommand::new(
+                                target,
+                                GuiObjectAction::SetText(value.into()),
+                            ));
+                        }
+                    }
+                }
+                if let Some(target) = runtime
+                    .store()
+                    .child_by_name(root, "g0")
+                    .and_then(|id| runtime.entity_of(id))
+                {
+                    gui_commands.write(GuiObjectCommand::new(
+                        target,
+                        GuiObjectAction::SetVisible(false),
+                    ));
+                }
+                controller.transition_sample = Some(instance.handle);
+                controller.transition_sample_owner = Some(entity);
+                controller.transition_paused = false;
+                controller.transition_time_scale = 1.0;
+                controller.transition_start_pending = true;
+                controller.numeric_elapsed = None;
+            }
+        }
+        commands.entity(entity).insert(DemoRootInitialized);
+    }
 }
 
 pub const BASICS_BACK: u64 = DEMO_ACTION_BASE + 100;
@@ -99,11 +228,6 @@ pub fn initialize_demo(runtime: &mut GuiRuntime, package: &str, root: GObjectId)
             .set_virtual_item_count(list, 1000)
             .expect("VirtualList renderer");
     }
-    if package == "Basics"
-        && let Some(back) = runtime.store().find_by_name(root, "btn_Back")
-    {
-        runtime.store_mut().set_visible(back, false);
-    }
 }
 
 pub fn demo_action_bindings(
@@ -139,10 +263,9 @@ pub fn demo_action_bindings(
 
 /// 官方过渡示例的六个播放入口。展示对象作为独立根，结束后回收。
 pub fn navigate_transition(
-    runtime: &mut GuiRuntime,
+    commands: &mut Commands,
     controller: &mut DemoController,
     handle: Handle<fairygui_bevy::FuiAsset>,
-    package: &fairygui_core::package::FuiPackage,
     listener: u64,
 ) -> bool {
     if controller.package.as_deref() != Some("Transition") {
@@ -151,12 +274,9 @@ pub fn navigate_transition(
     let Some(index) = listener.checked_sub(DEMO_ACTION_BASE).filter(|i| *i < 6) else {
         return false;
     };
-    if controller.transition_sample.is_some() {
+    if controller.transition_sample_owner.is_some() {
         return true;
     }
-    let Some(root) = controller.root else {
-        return true;
-    };
     let samples = [
         "BOSS",
         "BOSS_SKILL",
@@ -165,89 +285,91 @@ pub fn navigate_transition(
         "PowerUp",
         "PathDemo",
     ];
-    let Some(sample) = runtime.create_root(handle, package, samples[index as usize]) else {
-        return true;
-    };
-    let object = runtime.root_object(sample).unwrap();
-    let owner = runtime.store().object(root).unwrap();
-    let origin = Vec2::new(owner.x(), owner.y());
-    let size = Vec2::new(owner.width(), owner.height());
-    let sample_size = runtime.store().object(object).unwrap().size();
-    let position = match index {
-        3 => origin + Vec2::new(size.x - sample_size.width - 20.0, 100.0),
-        4 => origin + Vec2::new(20.0, size.y - sample_size.height - 100.0),
-        _ => origin,
-    };
-    runtime.store_mut().set_xy(object, position.x, position.y);
-    if index == 4 {
-        for (name, value) in [("value", "10000"), ("add_value", "+2000")] {
-            if let Some(id) = runtime.store().find_by_name(object, name) {
-                runtime.store_mut().set_object_text(id, value);
-            }
-        }
-    }
-    if let Some(group) = runtime.store().child_by_name(root, "g0") {
-        runtime.store_mut().set_visible(group, false);
-    }
-    runtime
-        .store_mut()
-        .play_transition(object, "t0", if index == 3 { 3 } else { 1 });
-    controller.transition_sample = Some(sample);
-    controller.numeric_elapsed = None;
+    let owner = commands
+        .spawn((
+            FairyGuiRoot::new(handle, samples[index as usize]),
+            DemoRootKind::TransitionSample {
+                index: index as usize,
+            },
+        ))
+        .id();
+    controller.transition_sample_owner = Some(owner);
     true
 }
 
 /// 处理 PowerUp 的数字钩子，并在有限过渡结束后恢复按钮组。
 pub fn advance_transition_demo(
     mut commands: Commands,
-    mut runtime: NonSendMut<GuiRuntime>,
+    runtime: NonSend<GuiRuntime>,
     mut controller: ResMut<DemoController>,
     time: Res<Time>,
     mut hooks: MessageReader<GuiTransitionHook>,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     let sample = controller
         .transition_sample
-        .and_then(|index| runtime.root_object(index));
+        .and_then(|handle| runtime.root_object(handle));
     for GuiTransitionHook(hook) in hooks.read() {
         if Some(hook.owner) == sample && hook.label == "play_num_now" && !hook.at_end {
             controller.numeric_elapsed = Some(0.0);
         }
     }
     let Some(object) = sample else { return };
+    if controller.transition_start_pending {
+        controller.transition_start_pending = false;
+        return;
+    }
     if keys.just_pressed(KeyCode::Space) {
-        let paused = runtime
-            .store()
-            .transition_paused(object, "t0")
-            .unwrap_or(false);
-        runtime
-            .store_mut()
-            .set_transition_paused(object, "t0", !paused);
+        controller.transition_paused = !controller.transition_paused;
+        if let Some(target) = runtime.entity_of(object) {
+            gui_commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetTransitionPaused {
+                    name: "t0".into(),
+                    paused: controller.transition_paused,
+                },
+            ));
+        }
     }
     if keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::ArrowDown) {
-        let rate = runtime
-            .store()
-            .transition_time_scale(object, "t0")
-            .unwrap_or(1.0);
-        let rate = if keys.just_pressed(KeyCode::ArrowUp) {
-            rate * 2.0
+        controller.transition_time_scale = if keys.just_pressed(KeyCode::ArrowUp) {
+            controller.transition_time_scale * 2.0
         } else {
-            rate * 0.5
+            controller.transition_time_scale * 0.5
         };
-        runtime
-            .store_mut()
-            .set_transition_time_scale(object, "t0", rate.clamp(0.25, 4.0));
+        controller.transition_time_scale = controller.transition_time_scale.clamp(0.25, 4.0);
+        if let Some(target) = runtime.entity_of(object) {
+            gui_commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetTransitionTimeScale {
+                    name: "t0".into(),
+                    scale: controller.transition_time_scale,
+                },
+            ));
+        }
     }
-    if keys.just_pressed(KeyCode::KeyR) {
-        runtime
-            .store_mut()
-            .play_transition_reverse(object, "t0", 0.0);
+    if keys.just_pressed(KeyCode::KeyR)
+        && let Some(target) = runtime.entity_of(object)
+    {
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::PlayTransitionReverse {
+                name: "t0".into(),
+                delay: 0.0,
+            },
+        ));
     }
     if let Some(elapsed) = &mut controller.numeric_elapsed {
         *elapsed = (*elapsed + time.delta_secs()).min(0.3);
         let value = (10000.0 + 2000.0 * *elapsed / 0.3).floor() as i32;
-        if let Some(id) = runtime.store().child_by_name(object, "value") {
-            runtime.store_mut().set_object_text(id, &value.to_string());
+        if let Some(id) = runtime.store().child_by_name(object, "value")
+            && let Some(target) = runtime.entity_of(id)
+        {
+            gui_commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetText(value.to_string()),
+            ));
         }
     }
     if runtime
@@ -255,14 +377,20 @@ pub fn advance_transition_demo(
         .transition_state(object, "t0")
         .is_some_and(|(playing, _)| !playing)
     {
-        let index = controller.transition_sample.take().unwrap();
-        runtime.remove_root(&mut commands, index);
+        controller.transition_sample = None;
+        if let Some(owner) = controller.transition_sample_owner.take() {
+            commands.entity(owner).despawn();
+        }
         controller.numeric_elapsed = None;
         if let Some(group) = controller
             .root
             .and_then(|id| runtime.store().child_by_name(id, "g0"))
+            .and_then(|id| runtime.entity_of(id))
         {
-            runtime.store_mut().set_visible(group, true);
+            gui_commands.write(GuiObjectCommand::new(
+                group,
+                GuiObjectAction::SetVisible(true),
+            ));
         }
     }
 }
@@ -273,8 +401,8 @@ pub fn navigate_basics(
     runtime: &mut GuiRuntime,
     controller: &mut DemoController,
     handle: Handle<fairygui_bevy::FuiAsset>,
-    package: &fairygui_core::package::FuiPackage,
     listener: u64,
+    gui_commands: &mut MessageWriter<GuiObjectCommand>,
 ) -> bool {
     if controller.package.as_deref() != Some("Basics") {
         return false;
@@ -290,38 +418,45 @@ pub fn navigate_basics(
     }
     runtime.hide_popup(None);
     controller.last_menu_action = None;
-    if let Some(index) = controller.basics_page.take() {
-        runtime.remove_root(commands, index);
+    if let Some(owner) = controller.basics_page_owner.take() {
+        commands.entity(owner).despawn();
     }
-    runtime
-        .store_mut()
-        .set_controller_page_index(root, "c1", i32::from(page.is_some()));
+    controller.basics_page = None;
+    if let Some(target) = runtime.entity_of(root) {
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetControllerPage {
+                name: "c1".into(),
+                index: i32::from(page.is_some()),
+            },
+        ));
+    }
     if let Some(page) = page {
-        let Some(index) = runtime.create_root(handle, package, &format!("Demo_{page}")) else {
-            return true;
-        };
-        let object = runtime.root_object(index).unwrap();
-        let container = runtime
-            .store()
-            .find_by_name(root, "container")
-            .unwrap_or(root);
-        // The container's x position is animated by the page controller. Use
-        // the settled content origin for this separately-owned demo root.
-        let owner = runtime.store().object(root).unwrap();
-        let at = Vec2::new(
-            owner.x(),
-            owner.y() + runtime.store().object(container).map_or(70.0, |o| o.y()),
-        );
-        runtime.store_mut().set_xy(object, at.x, at.y);
-        controller.basics_page = Some(index);
+        let owner = commands
+            .spawn((
+                FairyGuiRoot::new(handle, format!("Demo_{page}")),
+                DemoRootKind::BasicsPage,
+            ))
+            .id();
+        controller.basics_page_owner = Some(owner);
     }
     for name in BASICS_PAGES {
-        if let Some(button) = runtime.store().find_by_name(root, &format!("btn_{name}")) {
-            runtime.store_mut().set_visible(button, page.is_none());
+        if let Some(button) = runtime.store().find_by_name(root, &format!("btn_{name}"))
+            && let Some(target) = runtime.entity_of(button)
+        {
+            gui_commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetVisible(page.is_none()),
+            ));
         }
     }
-    if let Some(back) = runtime.store().find_by_name(root, "btn_Back") {
-        runtime.store_mut().set_visible(back, page.is_some());
+    if let Some(back) = runtime.store().find_by_name(root, "btn_Back")
+        && let Some(target) = runtime.entity_of(back)
+    {
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetVisible(page.is_some()),
+        ));
     }
     true
 }
@@ -349,7 +484,7 @@ pub fn show_basics_menu(
     {
         let Some(page) = controller
             .basics_page
-            .and_then(|index| runtime.root_object(index))
+            .and_then(|handle| runtime.root_object(handle))
         else {
             return;
         };
@@ -404,7 +539,8 @@ pub fn show_basics_menu(
 pub fn handle_menu_actions(
     mut actions: MessageReader<GuiMenuAction>,
     mut controller: ResMut<DemoController>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    runtime: NonSend<GuiRuntime>,
+    mut commands: MessageWriter<GuiObjectCommand>,
 ) {
     for action in actions.read() {
         if controller.package.as_deref() != Some("Basics")
@@ -416,19 +552,21 @@ pub fn handle_menu_actions(
         }
         let Some(page) = controller
             .basics_page
-            .and_then(|index| runtime.root_object(index))
+            .and_then(|handle| runtime.root_object(handle))
         else {
             continue;
         };
-        if let Some(button) = runtime.store().child_by_name(page, "n0") {
-            runtime.store_mut().set_object_text(
-                button,
-                &format!(
+        if let Some(button) = runtime.store().child_by_name(page, "n0")
+            && let Some(target) = runtime.entity_of(button)
+        {
+            commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetText(format!(
                     "{}{}",
                     action.caption,
                     if action.checked { " ✓" } else { "" }
-                ),
-            );
+                )),
+            ));
         }
         controller.last_menu_action = Some(action.clone());
     }
@@ -465,10 +603,14 @@ pub fn tick(
     }
 }
 
-pub fn copy_basics_input(runtime: &mut GuiRuntime, controller: &DemoController) {
+pub fn copy_basics_input(
+    runtime: &GuiRuntime,
+    controller: &DemoController,
+    commands: &mut MessageWriter<GuiObjectCommand>,
+) {
     let Some(page) = controller
         .basics_page
-        .and_then(|index| runtime.root_object(index))
+        .and_then(|handle| runtime.root_object(handle))
     else {
         return;
     };
@@ -481,8 +623,13 @@ pub fn copy_basics_input(runtime: &mut GuiRuntime, controller: &DemoController) 
         .and_then(|object| object.control().as_text_field())
         .map(|data| data.text.clone())
         .unwrap_or_default();
-    if let Some(output) = runtime.store().find_by_name(page, "n24") {
-        runtime.store_mut().set_object_text(output, &value);
+    if let Some(output) = runtime.store().find_by_name(page, "n24")
+        && let Some(target) = runtime.entity_of(output)
+    {
+        commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetText(value),
+        ));
     }
 }
 

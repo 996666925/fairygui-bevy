@@ -96,6 +96,8 @@ commands.write_message(GuiObjectCommand::new(
 ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、文本、颜色、置灰、
 按钮选择、控制器切页、进度值、滚动位置、列表选中/滚入视口和过渡播放。命令在
 `GuiSystems::Sync` 应用，因此 observer 和业务系统只需写消息，不需要独占借用运行时。
+过渡命令还支持暂停/恢复、速度、反向播放和停止。临时界面也用 `FairyGuiRoot`
+实体管理；销毁所有者实体会自动回收对应 FairyGUI 对象树。
 
 Windows MSVC 示例构建自动使用 8 KiB PDB 页，容纳完整 Bevy 调试符号，避免默认页容量
 触发 `LNK1318 LIMIT`；其他目标保持原有链接配置。

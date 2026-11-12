@@ -23,11 +23,7 @@ const MENU_ITEM: &str = "Main";
 /// 关闭按钮的条目名，与官方示例一致。
 const CLOSE_ITEM: &str = "CloseButton";
 
-/// 把界面摆到窗口中央。
-///
-/// 界面的原点在左上角，不理会的话它会贴着左上角铺开；界面尺寸与窗口不一致时
-/// 看起来就是整体偏在一边。窗口尺寸要**实测**——硬编码会在窗口被系统缩放、
-/// 或分辨率与假设不符时算错。
+/// Position manually created roots in the window for focused smoke fixtures.
 fn center_root(runtime: &mut GuiRuntime, index: usize, viewport: (f32, f32)) {
     let Some(root) = runtime.root_object(index) else {
         return;
@@ -160,7 +156,12 @@ fn main() -> AppExit {
             .chain()
             .in_set(GuiSystems::Respond),
     );
-    app.add_systems(Update, bind_demo_observers.after(GuiSystems::Sync));
+    app.add_systems(
+        Update,
+        (demos::initialize_demo_roots, bind_demo_observers)
+            .chain()
+            .after(GuiSystems::Sync),
+    );
 
     // Use the bundled OFL font so CJK demo text renders consistently across hosts.
     let font = app
@@ -332,6 +333,17 @@ fn open_pending_demo(
             );
         }
         demos::initialize_demo(&mut runtime, &name, root);
+        if name == "Basics"
+            && let Some(back) = runtime
+                .store()
+                .find_by_name(root, "btn_Back")
+                .and_then(|id| runtime.entity_of(id))
+        {
+            gui_commands.write(GuiObjectCommand::new(
+                back,
+                GuiObjectAction::SetVisible(false),
+            ));
+        }
         controller.package = Some(name.clone());
         controller.root = Some(root);
         controller.elapsed = 0.0;
@@ -432,7 +444,7 @@ fn bind_demo_observers(
     }
     if let Some(page) = controller
         .basics_page
-        .and_then(|index| runtime.root_object(index))
+        .and_then(|handle| runtime.root_object(handle))
     {
         if let Some(object) = runtime.store().find_by_name(page, "n25")
             && let Some(entity) = runtime.entity_of(object)
@@ -467,12 +479,7 @@ fn close_demo(
         return;
     }
     runtime.hide_popup(None);
-    if let Some(index) = controller.transition_sample.take() {
-        runtime.remove_root(&mut commands, index);
-    }
-    if let Some(index) = controller.basics_page.take() {
-        runtime.remove_root(&mut commands, index);
-    }
+    demos::dispose_dynamic_roots(&mut commands, &mut controller);
     // 销毁演示界面，收起关闭按钮，把菜单放回来。
     if let Some((owner, _, _)) = demo.open.take() {
         commands.entity(owner).despawn();
@@ -531,8 +538,8 @@ fn navigate_basics_action(
     event: On<GuiEvent>,
     actions: Query<&DemoAction>,
     mut commands: Commands,
-    assets: Res<Assets<FuiAsset>>,
     mut runtime: NonSendMut<GuiRuntime>,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
     demo: Res<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
@@ -543,9 +550,6 @@ fn navigate_basics_action(
         return;
     };
     let Some((_, handle, _)) = &demo.open else {
-        return;
-    };
-    let Some(asset) = assets.get(handle) else {
         return;
     };
     demos::navigate_basics(
@@ -553,16 +557,15 @@ fn navigate_basics_action(
         &mut runtime,
         &mut controller,
         handle.clone(),
-        &asset.package,
         action.0,
+        &mut gui_commands,
     );
 }
 
 fn play_transition_action(
     event: On<GuiEvent>,
     actions: Query<&DemoAction>,
-    assets: Res<Assets<FuiAsset>>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    mut commands: Commands,
     demo: Res<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
@@ -575,16 +578,7 @@ fn play_transition_action(
     let Some((_, handle, _)) = &demo.open else {
         return;
     };
-    let Some(asset) = assets.get(handle) else {
-        return;
-    };
-    demos::navigate_transition(
-        &mut runtime,
-        &mut controller,
-        handle.clone(),
-        &asset.package,
-        action.0,
-    );
+    demos::navigate_transition(&mut commands, &mut controller, handle.clone(), action.0);
 }
 
 fn virtual_list_action(
@@ -605,13 +599,14 @@ fn virtual_list_action(
 
 fn basics_text_get_input(
     event: On<GuiEvent>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    runtime: NonSend<GuiRuntime>,
     controller: Res<demos::DemoController>,
+    mut gui_commands: MessageWriter<GuiObjectCommand>,
 ) {
     if event.event().event.kind != fairygui_core::object::EventKind::Click {
         return;
     }
-    demos::copy_basics_input(&mut runtime, &controller);
+    demos::copy_basics_input(&runtime, &controller, &mut gui_commands);
 }
 
 fn advance_demo_behaviors(

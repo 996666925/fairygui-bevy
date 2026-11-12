@@ -68,6 +68,10 @@ pub enum GuiObjectAction {
     SetScrollPosition { position: Vec2, allow_bounce: bool },
     SelectListIndex { index: usize, scroll_to_view: bool },
     PlayTransition { name: String, times: i32 },
+    SetTransitionPaused { name: String, paused: bool },
+    SetTransitionTimeScale { name: String, scale: f32 },
+    PlayTransitionReverse { name: String, delay: f32 },
+    StopTransition { name: String },
 }
 
 /// Entity-addressed FairyGUI mutation. Send this from application ECS systems
@@ -1816,12 +1820,32 @@ pub fn apply_object_commands(
             GuiObjectAction::PlayTransition { name, times } => {
                 runtime.store_mut().play_transition(object, name, *times);
             }
+            GuiObjectAction::SetTransitionPaused { name, paused } => {
+                runtime
+                    .store_mut()
+                    .set_transition_paused(object, name, *paused);
+            }
+            GuiObjectAction::SetTransitionTimeScale { name, scale } if scale.is_finite() => {
+                runtime
+                    .store_mut()
+                    .set_transition_time_scale(object, name, *scale);
+            }
+            GuiObjectAction::PlayTransitionReverse { name, delay } if delay.is_finite() => {
+                runtime
+                    .store_mut()
+                    .play_transition_reverse(object, name, *delay);
+            }
+            GuiObjectAction::StopTransition { name } => {
+                runtime.store_mut().stop_transition(object, name);
+            }
             GuiObjectAction::SetPosition(_)
             | GuiObjectAction::SetSize(_)
             | GuiObjectAction::SetAlpha(_)
             | GuiObjectAction::SetScale(_)
             | GuiObjectAction::SetRotation(_)
-            | GuiObjectAction::SetScrollPosition { .. } => {}
+            | GuiObjectAction::SetScrollPosition { .. }
+            | GuiObjectAction::SetTransitionTimeScale { .. }
+            | GuiObjectAction::PlayTransitionReverse { .. } => {}
         }
     }
 }
