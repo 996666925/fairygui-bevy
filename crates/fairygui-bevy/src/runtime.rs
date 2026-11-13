@@ -213,6 +213,8 @@ mod scroll_extent;
 #[path = "scroll_pages_tests.rs"]
 mod scroll_pages_tests;
 pub(crate) use scroll_extent::sync_scroll_extents;
+#[path = "list_content.rs"]
+mod list_content;
 #[path = "virtual_lists.rs"]
 mod virtual_lists;
 pub(crate) use virtual_lists::sync_virtual_lists;
@@ -342,6 +344,7 @@ pub struct GuiListItemClick {
 /// Assign header/footer locks there before the release tween is finalized.
 #[derive(Message, Debug, Clone)]
 pub struct GuiPullRelease {
+    pub entity: Entity,
     pub event: fairygui_core::object::UiEvent,
 }
 
@@ -350,6 +353,9 @@ pub fn emit_pull_release_messages(
     mut messages: MessageWriter<GuiPullRelease>,
 ) {
     for (target, direction) in runtime.store_mut().drain_pull_releases() {
+        let Some(entity) = runtime.entity_of(target) else {
+            continue;
+        };
         let kind = match direction {
             fairygui_core::scroll::PullRelease::Down => {
                 fairygui_core::object::EventKind::PullDownRelease
@@ -360,7 +366,7 @@ pub fn emit_pull_release_messages(
         };
         let event = fairygui_core::object::UiEvent::new(kind, target);
         runtime.events.push(event.clone());
-        messages.write(GuiPullRelease { event });
+        messages.write(GuiPullRelease { entity, event });
     }
 }
 

@@ -100,6 +100,15 @@ impl GuiTransitions {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GuiRootView(pub Entity);
 
+/// Native refresh overlay. Sizes use logical pixels; source size is the
+/// exported size, independent of the current pull extent.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GuiPullPart {
+    pub entity: Entity,
+    pub size: Vec2,
+    pub source_size: Vec2,
+}
+
 /// Read-only scroll-pane state in logical pixels, refreshed before input events
 /// publish and after Sync. Absent on controls without a scroll pane.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
@@ -113,6 +122,11 @@ pub struct GuiScrollState {
     display_percentage: Vec2,
     current_page: IVec2,
     animating: bool,
+    header: Option<GuiPullPart>,
+    footer: Option<GuiPullPart>,
+    refresh_vertical: Option<bool>,
+    header_locked_size: f32,
+    footer_locked_size: f32,
 }
 
 impl GuiScrollState {
@@ -153,6 +167,73 @@ impl GuiScrollState {
 
     pub fn is_animating(&self) -> bool {
         self.animating
+    }
+    pub fn header(&self) -> Option<&GuiPullPart> {
+        self.header.as_ref()
+    }
+    pub fn footer(&self) -> Option<&GuiPullPart> {
+        self.footer.as_ref()
+    }
+    /// True for a vertical refresh axis, false for horizontal; absent without refresh resources.
+    pub fn refresh_vertical(&self) -> Option<bool> {
+        self.refresh_vertical
+    }
+    pub fn header_locked_size(&self) -> f32 {
+        self.header_locked_size
+    }
+    pub fn footer_locked_size(&self) -> f32 {
+        self.footer_locked_size
+    }
+}
+
+/// Read-only controller pages in package order. Updated before input events
+/// publish, before PostLayout, and at the end of Sync.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct GuiControllers(Vec<GuiControllerState>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuiControllerState {
+    name: String,
+    page_ids: Vec<String>,
+    page_names: Vec<String>,
+    selected_index: i32,
+    previous_index: i32,
+}
+impl GuiControllerState {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn page_ids(&self) -> &[String] {
+        &self.page_ids
+    }
+    pub fn page_names(&self) -> &[String] {
+        &self.page_names
+    }
+    pub fn selected_index(&self) -> i32 {
+        self.selected_index
+    }
+    pub fn previous_index(&self) -> i32 {
+        self.previous_index
+    }
+    pub fn selected_page_id(&self) -> Option<&str> {
+        usize::try_from(self.selected_index)
+            .ok()
+            .and_then(|index| self.page_ids.get(index))
+            .map(String::as_str)
+    }
+    pub fn selected_page_name(&self) -> Option<&str> {
+        usize::try_from(self.selected_index)
+            .ok()
+            .and_then(|index| self.page_names.get(index))
+            .map(String::as_str)
+    }
+}
+impl GuiControllers {
+    pub fn states(&self) -> &[GuiControllerState] {
+        &self.0
+    }
+    pub fn get(&self, name: &str) -> Option<&GuiControllerState> {
+        self.0.iter().find(|state| state.name == name)
     }
 }
 
@@ -323,6 +404,7 @@ pub struct GuiQuery<'w, 's> {
     scrolls: Query<'w, 's, &'static GuiScrollState>,
     transitions: Query<'w, 's, &'static GuiTransitions>,
     lists: Query<'w, 's, &'static GuiListState>,
+    controllers: Query<'w, 's, &'static GuiControllers>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -359,6 +441,12 @@ impl GuiQuery<'_, '_> {
 
     pub fn list(&self, entity: Entity) -> Option<&GuiListState> {
         self.lists.get(self.view(entity)?).ok()
+    }
+    pub fn controllers(&self, entity: Entity) -> Option<&GuiControllers> {
+        self.controllers.get(self.view(entity)?).ok()
+    }
+    pub fn controller(&self, entity: Entity, name: &str) -> Option<&GuiControllerState> {
+        self.controllers(entity)?.get(name)
     }
 
     pub fn transitions(&self, entity: Entity) -> Option<&GuiTransitions> {
@@ -460,6 +548,15 @@ pub(crate) fn sync_gui_scroll_state(
         };
         let point = |p: fairygui_core::geom::Point| Vec2::new(p.x, p.y);
         let size = |s: fairygui_core::geom::Size| Vec2::new(s.width, s.height);
+        let part = |id: Option<fairygui_core::object::GObjectId>| {
+            let id = id?;
+            let object = runtime.store().object(id)?;
+            Some(GuiPullPart {
+                entity: runtime.entity_of(id)?,
+                size: size(object.size()),
+                source_size: size(object.source_size()),
+            })
+        };
         let next = GuiScrollState {
             position: point(pane.pos()),
             display_position: point(pane.display_pos()),
@@ -470,6 +567,11 @@ pub(crate) fn sync_gui_scroll_state(
             display_percentage: Vec2::new(pane.display_perc_x(), pane.display_perc_y()),
             current_page: IVec2::new(pane.current_page_x(), pane.current_page_y()),
             animating: pane.is_animating(),
+            header: part(runtime.store().scroll_header(reference.0)),
+            footer: part(runtime.store().scroll_footer(reference.0)),
+            refresh_vertical: pane.refresh_axis(),
+            header_locked_size: pane.header_locked_size(),
+            footer_locked_size: pane.footer_locked_size(),
         };
         if current != Some(&next) {
             commands.entity(entity).insert(next);
@@ -574,5 +676,52 @@ pub(crate) fn sync_gui_objects(
             }
             _ => {}
         }
+    }
+}
+
+pub(crate) fn sync_gui_controllers(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    objects: Query<(Entity, &GObjectRef, Option<&GuiControllers>)>,
+) {
+    for (entity, reference, current) in &objects {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let source = runtime
+            .store()
+            .object(reference.0)
+            .and_then(|object| object.control().component())
+            .map_or(&[][..], |component| component.controllers.as_slice());
+        if source.is_empty() {
+            if current.is_some() {
+                commands.entity(entity).remove::<GuiControllers>();
+            }
+            continue;
+        }
+        if current.is_some_and(|current| {
+            current.0.len() == source.len()
+                && current.0.iter().zip(source).all(|(state, controller)| {
+                    state.name == controller.name
+                        && state.page_ids == controller.page_ids
+                        && state.page_names == controller.page_names
+                        && state.selected_index == controller.selected_index
+                        && state.previous_index == controller.previous_index
+                })
+        }) {
+            continue;
+        }
+        commands.entity(entity).insert(GuiControllers(
+            source
+                .iter()
+                .map(|controller| GuiControllerState {
+                    name: controller.name.clone(),
+                    page_ids: controller.page_ids.clone(),
+                    page_names: controller.page_names.clone(),
+                    selected_index: controller.selected_index,
+                    previous_index: controller.previous_index,
+                })
+                .collect(),
+        ));
     }
 }

@@ -1,4 +1,4 @@
-//! ECS configuration of synchronous, retained virtual-list rows.
+//! ECS list content, row membership and synchronous virtual-row rendering.
 use crate::{GObjectRef, GuiRuntime};
 
 #[cfg(test)]
@@ -64,6 +64,117 @@ impl GuiListItem<'_> {
 }
 
 type ItemRenderer = dyn Fn(usize, &mut GuiListItem<'_>) + Send + Sync;
+
+/// Configure every row of an ordinary list using its default item template.
+/// Existing leading rows keep their identity; shrinking disposes trailing rows.
+/// Removing the component stops configuration and keeps the current content.
+#[derive(Component, Clone)]
+pub struct GuiListContent {
+    pub item_count: usize,
+    renderer: Arc<ItemRenderer>,
+}
+impl std::fmt::Debug for GuiListContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuiListContent")
+            .field("item_count", &self.item_count)
+            .finish_non_exhaustive()
+    }
+}
+impl GuiListContent {
+    pub fn new(
+        item_count: usize,
+        renderer: impl Fn(usize, &mut GuiListItem<'_>) + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            item_count,
+            renderer: Arc::new(renderer),
+        }
+    }
+    pub fn set_renderer(
+        &mut self,
+        renderer: impl Fn(usize, &mut GuiListItem<'_>) + Send + Sync + 'static,
+    ) {
+        self.renderer = Arc::new(renderer);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum GuiListContentError {
+    #[error("ordinary list configuration requires a List control")]
+    NotList,
+    #[error("ordinary list content cannot configure a virtual list")]
+    VirtualList,
+    #[error("list default item cannot be resolved")]
+    MissingDefaultItem,
+    #[error("cannot construct list default item {0}")]
+    CreationFailed(String),
+}
+/// Last ordinary list configuration result. The actual count and row entities
+/// remain available in GuiListState even if configuration fails.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct GuiListContentState {
+    error: Option<GuiListContentError>,
+}
+impl GuiListContentState {
+    pub fn error(&self) -> Option<&GuiListContentError> {
+        self.error.as_ref()
+    }
+}
+#[derive(Component, Debug)]
+pub(crate) struct ContentBinding(GObjectId);
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn sync_list_content(
+    mut commands: Commands,
+    mut runtime: NonSendMut<GuiRuntime>,
+    configs: Query<(
+        Entity,
+        &GObjectRef,
+        Ref<GuiListContent>,
+        Option<&ContentBinding>,
+        Option<&GuiVirtualList>,
+        Option<&GuiListContentState>,
+    )>,
+    removed: Query<Entity, (With<ContentBinding>, Without<GuiListContent>)>,
+) {
+    for entity in &removed {
+        commands
+            .entity(entity)
+            .remove::<(ContentBinding, GuiListContentState)>();
+    }
+    for (entity, reference, config, binding, virtual_config, current) in &configs {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let conflict = virtual_config.is_some() || runtime.store().is_virtual_list(reference.0);
+        if !config.is_changed()
+            && binding.is_some_and(|binding| binding.0 == reference.0)
+            && current.is_some_and(|current| {
+                matches!(current.error, Some(GuiListContentError::VirtualList)) == conflict
+            })
+        {
+            continue;
+        }
+        let result = if conflict {
+            Err(GuiListContentError::VirtualList)
+        } else {
+            runtime.configure_list_content(
+                reference.0,
+                config.item_count,
+                |store, index, object| {
+                    (config.renderer)(index, &mut GuiListItem { store, object });
+                },
+            )
+        };
+        let next = GuiListContentState {
+            error: result.err(),
+        };
+        commands.entity(entity).insert(ContentBinding(reference.0));
+        if current != Some(&next) {
+            commands.entity(entity).insert(next);
+        }
+    }
+}
 
 /// Materialized content rows of a native list or tree, in logical child order.
 /// Pane bars and pull headers/footers are excluded. Pooled rows are not active

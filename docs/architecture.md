@@ -14,6 +14,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `ecs` | Root-to-view references and read-only identity, hierarchy, geometry, text, display and scroll queries |
 | `popup` | Entity-addressed popup/menu commands, pending asset requests and popup stack snapshots |
 | `list` | ECS virtual-list configuration, restricted synchronous row renderers and layout diagnostics |
+| `pull` | Entity-addressed refresh locks applied between Respond and Advance |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
@@ -82,6 +83,31 @@ and playback generations/one-shot effects remain unique. Changes that influence
 the virtual range or row creation belong in Respond, before native layout.
 PostLayout precedes Bevy PostUpdate layout and text measurement.
 
+`GuiListContent` configures every ordinary List row with the same restricted
+`GuiListItem` renderer used for virtual rows. It preserves leading row identities,
+creates growing rows from package-aware default templates, and disposes trailing
+rows on shrink. Templates are constructed and prepared before attachment; an
+unresolvable/failed growth leaves existing rows untouched. Registered pane
+overlays never participate in data counts or disposal. Removing the configuration
+releases its renderer and keeps the current content; count zero clears data rows.
+`GuiListContentState` reports configuration errors. Trees and virtual lists reject
+ordinary configuration; an attached `GuiVirtualList` takes precedence. Unchanged
+components do not rerun renderers. Mark changed or replace to retry/update data.
+
+`GuiControllers` stores controller page tables, selected/previous indices and
+selected page identity, refreshed before Publish, PostLayout, and at Sync end.
+Controls without controllers omit the component. Indirect controller actions
+therefore appear through ECS before application input handlers run.
+
+`GuiPullRelease.entity` identifies the original scroll container view. The scroll
+snapshot includes header/footer view entities, current/exported sizes, refresh
+axis and lock extents. `GuiPullCommand` locks a materialized header/footer using
+logical pixels, with zero releasing it. Commands execute in stream order after
+Respond and before Advance so the first release tick uses the response boundary.
+They discard missing targets and invalid sizes; no asset-waiting requests are
+retained. The pull demo uses ECS for its controller pages, timed jobs, ordinary
+row growth and refresh locks.
+
 ## Frame contract
 
 Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these ordered
@@ -90,6 +116,7 @@ Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these
 1. `GuiSystems::Input`: choose a target, update capture, apply built-in behavior.
 2. `GuiSystems::Publish`: refresh text/display/scroll snapshots, trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
 3. `GuiSystems::Respond`: application systems consume messages and send UI commands.
+   Pull lock commands are applied immediately after this set, before Advance.
 4. `GuiSystems::Advance`: advance builds, scrolling, transitions and animations.
 5. `GuiSystems::Sync`: reconcile ECS root ownership, apply commands, spawn pending views, refresh logical snapshots, run the nested `PostLayout` application set, apply its object commands, synchronize final state components and play sounds.
 

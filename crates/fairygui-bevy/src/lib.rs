@@ -58,18 +58,23 @@ pub mod input;
 pub mod list;
 pub mod movie;
 pub mod popup;
+pub mod pull;
 pub mod runtime;
 pub mod text;
 mod text_stroke;
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use ecs::{
-    GuiDisplay, GuiObjectInfo, GuiQuery, GuiRootView, GuiScrollState, GuiText, GuiTransform,
-    GuiTransitionState, GuiTransitions,
+    GuiControllerState, GuiControllers, GuiDisplay, GuiObjectInfo, GuiPullPart, GuiQuery,
+    GuiRootView, GuiScrollState, GuiText, GuiTransform, GuiTransitionState, GuiTransitions,
 };
 pub use input::{GuiInputSettings, GuiInputState};
-pub use list::{GuiListItem, GuiListRow, GuiListState, GuiVirtualList, GuiVirtualListState};
+pub use list::{
+    GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListRow,
+    GuiListState, GuiVirtualList, GuiVirtualListState,
+};
 pub use popup::{GuiPopupCommand, GuiPopupMenu, GuiPopupState};
+pub use pull::GuiPullCommand;
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
     GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
@@ -107,14 +112,16 @@ enum SyncPhase {
 pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
-        GuiButtonSelected, GuiConfig, GuiDisplay, GuiEvent, GuiFont, GuiInputSettings,
-        GuiInputState, GuiLink, GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection,
+        GuiButtonSelected, GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiEvent,
+        GuiFont, GuiInputSettings, GuiInputState, GuiLink, GuiListContent, GuiListContentError,
+        GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection,
         GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction,
         GuiObjectCommand, GuiObjectInfo, GuiPopupCommand, GuiPopupMenu, GuiPopupState,
-        GuiProgressValue, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime,
-        GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput, GuiTransform,
-        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
-        GuiTransitions, GuiVirtualList, GuiVirtualListState, PopupMenuTemplates,
+        GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
+        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState,
+        PopupMenuTemplates,
     };
 }
 
@@ -168,6 +175,7 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiTextInput>()
         .add_message::<GuiListItemClick>()
         .add_message::<GuiPullRelease>()
+        .add_message::<GuiPullCommand>()
         .add_message::<GuiObjectCommand>()
         .add_message::<GuiPopupCommand>()
         .init_resource::<GuiPopupState>()
@@ -175,6 +183,12 @@ impl Plugin for FairyGuiPlugin {
         .init_asset_loader::<FuiAssetLoader>()
         .init_resource::<GuiConfig>()
         .init_non_send::<GuiRuntime>()
+        .add_systems(
+            Update,
+            pull::apply_pull_commands
+                .after(GuiSystems::Respond)
+                .before(GuiSystems::Advance),
+        )
         .add_systems(
             Update,
             (
@@ -198,6 +212,7 @@ impl Plugin for FairyGuiPlugin {
             Update,
             (
                 ecs::sync_gui_properties,
+                ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 ecs::sync_gui_transitions,
                 popup::sync_popup_state,
@@ -220,6 +235,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_loader_status,
                 (
                     runtime::cleanup_retained_popups,
+                    list::sync_list_content,
                     list::sync_virtual_list_bindings,
                     runtime::sync_virtual_lists,
                 )
@@ -228,6 +244,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::spawn_pending_objects,
                 ecs::sync_gui_objects,
                 ecs::sync_gui_properties,
+                ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 list::sync_list_state,
                 list::sync_virtual_list_state,
@@ -287,6 +304,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_control_state_components,
                 ecs::sync_gui_objects,
                 ecs::sync_gui_properties,
+                ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 ecs::sync_gui_transitions,
                 runtime::emit_transition_hooks,

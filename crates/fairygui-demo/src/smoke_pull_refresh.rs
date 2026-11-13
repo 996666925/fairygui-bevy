@@ -146,6 +146,11 @@ fn drive(
     if let Some(menu) = demo.menu.and_then(|i| runtime.root_object(i)) {
         runtime.store_mut().set_visible(menu, false);
     }
+    if controller.root_owner.is_none()
+        && let Some(root) = state.root.and_then(|index| runtime.root_object(index))
+    {
+        controller.root_owner = runtime.entity_of(root);
+    }
     let handle = state
         .asset
         .get_or_insert_with(|| server.load("ui/PullToRefresh.fui"))
@@ -371,6 +376,7 @@ fn drive(
         }
         17 if elapsed >= 8 => {
             controller.root = None;
+            controller.root_owner = None;
             controller.package = None;
             runtime.remove_root(&mut commands, state.root.unwrap());
             state.step = 18;

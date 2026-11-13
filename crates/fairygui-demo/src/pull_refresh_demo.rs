@@ -1,85 +1,72 @@
-//! PullToRefreshDemo business timing, using the exported Header/Footer controls.
-use super::*;
-use fairygui_core::{
-    object::EventKind,
-    package::LoadContext,
-    widget::{ControlData, create_from_package},
-};
+//! PullToRefreshDemo business timing using ECS entities, data and pull commands.
+use crate::demos;
+use bevy::prelude::*;
+use fairygui_bevy::prelude::*;
+use fairygui_core::object::EventKind;
 
 #[derive(Default, Resource)]
 pub(crate) struct PullDemo {
-    root: Option<GObjectId>,
-    lists: [Option<GObjectId>; 2],
+    root: Option<Entity>,
+    lists: [Option<Entity>; 2],
     jobs: Vec<Job>,
 }
 struct Job {
-    list: GObjectId,
+    list: Entity,
     header: bool,
     due: f64,
     completion: bool,
 }
 
-fn update_titles(runtime: &mut GuiRuntime, list: GObjectId, reverse: bool) {
-    let rows = runtime.store().list_items(list).unwrap_or_default();
-    for (i, &row) in rows.iter().enumerate() {
-        let index = if reverse { rows.len() - i - 1 } else { i };
-        runtime
-            .store_mut()
-            .set_object_text(row, &format!("Item {index}"));
-    }
-    runtime.store_mut().layout_list(list);
-    runtime.store_mut().layout_scroll_bars(list);
+fn content(count: usize, reverse: bool) -> GuiListContent {
+    GuiListContent::new(count, move |index, row| {
+        let index = if reverse { count - index - 1 } else { index };
+        row.set_text(&format!("Item {index}"));
+    })
 }
-
-fn add_rows(runtime: &mut GuiRuntime, list: GObjectId, reverse: bool) {
-    let url = runtime
-        .store()
-        .object(list)
-        .and_then(|o| match o.control() {
-            ControlData::List(d) => d.default_item.clone(),
-            _ => None,
-        });
-    let Some(url) = url else {
-        return;
-    };
-    let Some((package, item)) = runtime.resolve_url(&url).map(|(p, i)| (p.clone(), i)) else {
-        return;
-    };
-    for _ in 0..5 {
-        if let Ok(row) =
-            create_from_package(runtime.store_mut(), &package, item, &LoadContext::none())
-        {
-            runtime.store_mut().set_parent(row, Some(list));
-            runtime.queue_subtree(row);
-        }
-    }
-    update_titles(runtime, list, reverse);
+fn page(commands: &mut Commands, target: Entity, index: i32) {
+    commands.write_message(GuiObjectCommand::new(
+        target,
+        GuiObjectAction::SetControllerPage {
+            name: "c1".into(),
+            index,
+        },
+    ));
+}
+fn lock(commands: &mut Commands, target: Entity, size: f32, header: bool) {
+    commands.write_message(if header {
+        GuiPullCommand::LockHeader { target, size }
+    } else {
+        GuiPullCommand::LockFooter { target, size }
+    });
 }
 
 pub(crate) fn update(
     mut state: ResMut<PullDemo>,
     controller: Res<demos::DemoController>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    gui: GuiQuery,
     mut releases: MessageReader<GuiPullRelease>,
+    mut commands: Commands,
     time: Res<Time>,
 ) {
     let events: Vec<_> = releases.read().cloned().collect();
-    if controller.package.as_deref() != Some("PullToRefresh") || controller.root.is_none() {
+    let root = controller.root_owner;
+    if controller.package.as_deref() != Some("PullToRefresh") || root.is_none() {
         state.root = None;
         state.jobs.clear();
         return;
     }
-    let root = controller.root.unwrap();
+    let root = root.unwrap();
     if state.root != Some(root) {
-        let first = runtime.store().child_by_name(root, "list1");
-        let second = runtime.store().child_by_name(root, "list2");
-        let Some((first, second)) = first.zip(second) else {
+        let Some((first, second)) = gui
+            .child_by_name(root, "list1")
+            .zip(gui.child_by_name(root, "list2"))
+        else {
             return;
         };
-        let Some((header, footer)) = runtime
-            .store()
-            .scroll_header(first)
-            .zip(runtime.store().scroll_footer(second))
+        let Some((header, footer)) = gui
+            .scroll(first)
+            .and_then(|scroll| scroll.header())
+            .zip(gui.scroll(second).and_then(|scroll| scroll.footer()))
         else {
             return;
         };
@@ -87,110 +74,74 @@ pub(crate) fn update(
         state.lists = [Some(first), Some(second)];
         state.jobs.clear();
         for (list, reverse) in [(first, true), (second, false)] {
-            for row in runtime
-                .store()
-                .list_items(list)
-                .unwrap_or_default()
-                .into_iter()
-                .skip(1)
-            {
-                runtime.store_mut().remove(row);
-            }
-            update_titles(&mut runtime, list, reverse);
+            commands.entity(list).insert(content(1, reverse));
         }
-        runtime
-            .store_mut()
-            .set_controller_page_index(header, "c1", 0);
-        runtime
-            .store_mut()
-            .set_controller_page_index(footer, "c1", 0);
+        page(&mut commands, header.entity, 0);
+        page(&mut commands, footer.entity, 0);
     }
-    let first = state.lists[0].unwrap();
-    let second = state.lists[1].unwrap();
-    let Some(header) = runtime.store().scroll_header(first) else {
+    let [Some(first), Some(second)] = state.lists else {
         return;
     };
-    let Some(footer) = runtime.store().scroll_footer(second) else {
+    let Some((header, footer)) = gui
+        .scroll(first)
+        .and_then(|scroll| scroll.header())
+        .zip(gui.scroll(second).and_then(|scroll| scroll.footer()))
+    else {
         return;
     };
-    let status = runtime
-        .store()
-        .object(header)
-        .and_then(|o| o.control().component())
-        .and_then(|c| c.controller("c1"))
-        .map_or(0, |c| c.selected_index);
+    let mut status = gui
+        .controller(header.entity, "c1")
+        .map_or(0, |controller| controller.selected_index());
     if status != 2 && status != 3 {
-        let object = runtime.store().object(header).unwrap();
-        let ready = object.height() > object.source_size().height;
-        runtime
-            .store_mut()
-            .set_controller_page_index(header, "c1", i32::from(ready));
+        status = i32::from(header.size.y > header.source_size.y);
+        page(&mut commands, header.entity, status);
     }
     for release in events {
-        let is_header =
-            release.event.kind == EventKind::PullDownRelease && release.event.target == first;
-        let is_footer =
-            release.event.kind == EventKind::PullUpRelease && release.event.target == second;
+        let is_header = release.event.kind == EventKind::PullDownRelease && release.entity == first;
+        let is_footer = release.event.kind == EventKind::PullUpRelease && release.entity == second;
         if is_header {
-            let o = runtime.store().object(header).unwrap();
-            if o.control()
-                .component()
-                .unwrap()
-                .controller("c1")
-                .unwrap()
-                .selected_index
-                != 1
-            {
+            if status != 1 {
                 continue;
             }
-            let height = o.source_size().height;
-            runtime
-                .store_mut()
-                .set_controller_page_index(header, "c1", 2);
-            runtime.store_mut().lock_scroll_header(first, height);
+            status = 2;
+            page(&mut commands, header.entity, 2);
+            lock(&mut commands, first, header.source_size.y, true);
         } else if is_footer {
-            let height = runtime.store().object(footer).unwrap().source_size().height;
-            runtime
-                .store_mut()
-                .set_controller_page_index(footer, "c1", 1);
-            runtime.store_mut().lock_scroll_footer(second, height);
+            page(&mut commands, footer.entity, 1);
+            lock(&mut commands, second, footer.source_size.y, false);
         } else {
             continue;
         }
         state.jobs.push(Job {
-            list: release.event.target,
+            list: release.entity,
             header: is_header,
             due: time.elapsed_secs_f64() + 2.,
             completion: false,
         });
     }
     state.jobs.retain_mut(|job| {
-        if !runtime.store().contains(job.list) {
+        let Some(list) = gui.list(job.list) else {
             return false;
-        }
+        };
         if time.elapsed_secs_f64() < job.due {
             return true;
         }
         if !job.completion {
-            add_rows(&mut runtime, job.list, job.header);
+            commands
+                .entity(job.list)
+                .insert(content(list.item_count() + 5, job.header));
             if job.header {
-                runtime
-                    .store_mut()
-                    .set_controller_page_index(header, "c1", 3);
-                runtime.store_mut().lock_scroll_header(first, 35.);
+                page(&mut commands, header.entity, 3);
+                lock(&mut commands, first, 35., true);
                 job.completion = true;
                 job.due = time.elapsed_secs_f64() + 2.;
                 return true;
             }
-            runtime
-                .store_mut()
-                .set_controller_page_index(footer, "c1", 0);
-            runtime.store_mut().lock_scroll_footer(second, 0.);
+            page(&mut commands, footer.entity, 0);
+            lock(&mut commands, second, 0., false);
         } else {
-            runtime
-                .store_mut()
-                .set_controller_page_index(header, "c1", 0);
-            runtime.store_mut().lock_scroll_header(first, 0.);
+            page(&mut commands, header.entity, 0);
+            lock(&mut commands, first, 0., true);
         }
         false
     });

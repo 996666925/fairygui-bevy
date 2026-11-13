@@ -282,6 +282,42 @@ if let Some(list) = gui.child_by_name(root_entity, "mailList") {
 该阶段早于 Bevy 的 PostUpdate 布局及文本测量；改变可见范围或行生成的配置应在
 `Respond` 修改，使本帧原生列表布局能使用它们。
 
+普通列表可挂 `GuiListContent`，用同一套行接口配置全部数据行：
+
+```rust,ignore
+commands.entity(list_entity).insert(GuiListContent::new(6, |index, row| {
+    row.set_text(&format!("Item {index}"));
+}));
+```
+
+更新配置会重绘所有行，前面的行保持对象和实体，新增行按来源包解析默认模板及其
+跨包依赖，缩减时销毁尾部行；滚动条、刷新头尾始终排除在数据行之外。移除组件
+会释放渲染回调并保留当前内容，清空内容可先设 `item_count = 0`。
+`GuiListContentState::error()` 提供配置错误；增长时若模板缺失，已有内容保持不变。
+配置只适用于普通 List，树和虚拟列表会报错，`GuiVirtualList` 的配置优先。
+业务数据更新后可替换渲染器、替换组件或标记组件已变更；失败配置也可这样重试。
+
+`GuiControllers`（或 `gui.controller(entity, "c1")`）提供当前和上一个页面索引、
+页面 ID 及名称表；无控制器的控件不带该组件。快照在 Publish 前、PostLayout 前和
+Sync 末尾刷新，因此业务可读到本帧输入或其他控制器动作引起的页面变化，再通过
+`SetControllerPage` 发送修改。
+
+下拉刷新消息 `GuiPullRelease.entity` 直接提供滚动容器实体。
+`GuiScrollState::header()`、`footer()` 提供刷新控件实体、当前尺寸和导出尺寸，
+另可读取刷新轴向及头尾锁定尺寸。在 `Respond` 发送专门的锁定命令：
+
+```rust,ignore
+commands.write_message(GuiPullCommand::LockHeader {
+    target: release.entity,
+    size: header.source_size.y,
+});
+```
+
+`LockFooter` 同样按逻辑像素锁定尾部，尺寸为零时解锁。命令按发送顺序在 Respond
+之后、Advance 之前处理，让松手后的第一个滚动动画 tick 使用正确边界。目标须为
+已经构建的滚动容器视图或根拥有者；无效目标、负数及非有限尺寸会被忽略。
+下拉刷新示例的页面切换、延迟加载、增加普通行和解锁全部通过 ECS 完成。
+
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
 会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长和分页阈值。
 导出包显式设置的显示方式及触摸/回弹开关优先。配置在创建时捕获，修改资源影响
