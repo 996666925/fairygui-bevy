@@ -212,7 +212,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-progress") {
+    if std::env::args().any(|arg| arg == "--smoke-slider-scroll") {
+        smoke::install_slider_scroll(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-progress") {
         smoke::install_progress(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-slider") {
         smoke::install_slider(&mut app);

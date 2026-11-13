@@ -19,6 +19,21 @@ pub(super) struct SliderBars {
 }
 
 impl ObjectStore {
+    /// GSlider stops MouseDown on its actual grip, including hits on nested
+    /// skin objects. Track presses continue through the slider to its parents.
+    pub fn slider_pointer_down_stop(&self, target: GObjectId) -> Option<GObjectId> {
+        let mut part = target;
+        while let Some(parent) = self.object(part)?.parent() {
+            if matches!(self.object(parent)?.control(), ControlData::Slider(_))
+                && self.child_by_name(parent, "grip") == Some(part)
+            {
+                return Some(part);
+            }
+            part = parent;
+        }
+        None
+    }
+
     fn remember_slider_bars(&mut self, owner: GObjectId) {
         if self.slider_bars.contains_key(&owner) {
             return;

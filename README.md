@@ -488,6 +488,12 @@ commands.write_message(GuiObjectCommand::new(slider,
 程序赋值不触发该事件。`--smoke-slider` 验证实际布局与 picking 下的缩放拖动、
 小数、取整、输入开关和销毁。
 
+grip 的按下事件在 grip 处停止冒泡，并独占该滑动条的拖动；其皮肤为按钮时仍以
+grip 按钮作为稳定目标。轨道在按下时取值一次，之后拖动可交给父滚动容器，
+`change_on_click=false` 也保留父滚动。鼠标和触摸共用这些规则，触摸状态变化保留
+原触摸 ID，第二根手指不能接管已占用的 grip。`--smoke-slider-scroll` 验证虚拟列表
+中实际 Slider 行的按下冒泡、轨道滚动和 grip 独占拖动。
+
 下拉框实体带有 `GuiComboBoxState`，也可用 `gui.combo_box(entity)` 读取选项、value、
 选中索引、可见项数、展开方向、绑定控制器以及当前 dropdown/list 视图。
 通过实体命令设置数据和选择：

@@ -150,3 +150,18 @@ fn track_click_is_relative_to_the_actual_grip_and_obeys_change_on_click() {
         );
     }
 }
+
+#[test]
+fn grip_press_stops_on_the_exported_part_but_tracks_and_detached_skins_do_not() {
+    let (mut store, owner) = fixture("Slider_HZ");
+    let grip = store.child_by_name(owner, "grip").unwrap();
+    let bar = store.child_by_name(owner, "bar").unwrap();
+    let skin = store.create(ObjectType::Component);
+    store.set_parent(skin, Some(grip));
+    assert_eq!(store.slider_pointer_down_stop(skin), Some(grip));
+    assert_eq!(store.slider_pointer_down_stop(grip), Some(grip));
+    assert_eq!(store.slider_pointer_down_stop(bar), None);
+    assert_eq!(store.slider_pointer_down_stop(owner), None);
+    store.set_parent(skin, None);
+    assert_eq!(store.slider_pointer_down_stop(skin), None);
+}

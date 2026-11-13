@@ -19,6 +19,8 @@ mod scroll_motion;
 mod scroll_pages;
 #[path = "input/scroll_wheel.rs"]
 mod scroll_wheel;
+#[path = "input/slider_scroll.rs"]
+mod slider_scroll;
 #[path = "input/state.rs"]
 mod state;
 #[path = "input/touches.rs"]

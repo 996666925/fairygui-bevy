@@ -209,19 +209,19 @@ pub(super) fn route_touches(
                 rich?.link_at(&runtime, owner.0, n, node, block?, layout?)
             }
         });
-        let positions: Vec<_> = targets
-            .iter()
-            .filter_map(|(entity, owner, _, _, _, _, _, _, surface)| {
-                surface
-                    .is_none()
-                    .then(|| normalized(entity).map(|p| (owner.0, p)))
-                    .flatten()
-            })
-            .collect();
         if event.phase == TouchPhase::Started {
             if state.touches.contains_key(&event.id) {
                 continue;
             }
+            let positions: Vec<_> = targets
+                .iter()
+                .filter_map(|(entity, owner, _, _, _, _, _, _, surface)| {
+                    surface
+                        .is_none()
+                        .then(|| normalized(entity).map(|p| (owner.0, p)))
+                        .flatten()
+                })
+                .collect();
             let input = raw_hit
                 .filter(|(entity, owner, ..)| {
                     editors.contains(*entity)
@@ -257,7 +257,7 @@ pub(super) fn route_touches(
                 position,
                 event.id,
             );
-            let stop = runtime.store().scroll_bar_pointer_down_stop(target);
+            let stop = pointer_down_stop(&runtime, target);
             runtime.dispatch_event_until(
                 touch_event(EventKind::TouchBegin, target, position, event.id),
                 stop,
@@ -277,6 +277,7 @@ pub(super) fn route_touches(
                         .map(|o| Point::new(n.x * o.width(), n.y * o.height()))
                 });
             runtime.store_mut().press_scroll_bar(target, local);
+            press_slider(&mut runtime, target, position, &positions, Some(event.id));
             let anchor = pointer_anchor(&runtime, target, &targets, &geometry, scale);
             let input_child = raw_hit.is_some_and(|(_, object, ..)| {
                 matches!(
@@ -313,15 +314,7 @@ pub(super) fn route_touches(
                 Gesture::begin_excluding(&mut runtime, target, &transforms, &occupied)
             };
             gesture.set_touch_id(event.id);
-            gesture.update(
-                &mut runtime,
-                position,
-                position,
-                position,
-                false,
-                0.0,
-                &positions,
-            );
+            gesture.update(&mut runtime, position, position, position, false, 0.0);
             state.touches.insert(
                 event.id,
                 TouchCapture {
@@ -430,7 +423,6 @@ pub(super) fn route_touches(
                 capture.start,
                 capture.moved,
                 dt,
-                &positions,
             );
         }
         capture.last = position;

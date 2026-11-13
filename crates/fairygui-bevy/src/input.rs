@@ -5,6 +5,8 @@ pub(crate) mod editing;
 pub use editing::GuiInputCommand;
 mod gestures;
 mod masks;
+mod slider;
+use slider::{pointer_down_stop, press_slider};
 #[cfg(test)]
 mod nested_scroll_tests;
 mod state;
@@ -444,7 +446,7 @@ fn update_button(
     pressed: Option<bool>,
 ) {
     let stop = (pressed == Some(true))
-        .then(|| runtime.store().scroll_bar_pointer_down_stop(target))
+        .then(|| pointer_down_stop(runtime, target))
         .flatten();
     let mut current = Some(target);
     while let Some(id) = current {
@@ -500,7 +502,7 @@ fn update_button_from_pointers(runtime: &mut GuiRuntime, state: &InputRouter, ta
 
 fn pointer_button(runtime: &GuiRuntime, target: GObjectId, pressing: bool) -> Option<GObjectId> {
     let stop = pressing
-        .then(|| runtime.store().scroll_bar_pointer_down_stop(target))
+        .then(|| pointer_down_stop(runtime, target))
         .flatten();
     let mut current = Some(target);
     while let Some(id) = current {
@@ -531,6 +533,12 @@ fn stable_target(runtime: &GuiRuntime, target: GObjectId) -> GObjectId {
         let Some(object) = runtime.store().object(id) else {
             break;
         };
+        if matches!(
+            object.control(),
+            fairygui_core::widget::ControlData::Slider(_)
+        ) {
+            return target;
+        }
         if matches!(
             object.control(),
             fairygui_core::widget::ControlData::Button(_)
@@ -696,15 +704,6 @@ fn route_pointer(
                     + editor.viewport.offset;
                 editor.queue_edit(bevy::text::TextEdit::ExtendSelectionToPoint(point));
             }
-            let normalized = targets
-                .iter()
-                .filter_map(|(_, o, _, _, _, r, _, _, surface)| {
-                    if surface.is_some() {
-                        return None;
-                    }
-                    r.and_then(top_left_position).map(|n| (o.0, n))
-                })
-                .collect::<Vec<_>>();
             capture.gesture.select_scroll(
                 &runtime,
                 position - capture.start,
@@ -718,7 +717,6 @@ fn route_pointer(
                 capture.start,
                 capture.moved,
                 time.delta_secs(),
-                &normalized,
             );
             capture.last = position;
             state.capture = Some(capture);
@@ -889,7 +887,7 @@ fn route_pointer(
         }
         runtime.check_popups(raw_hit.map(|(_, object, ..)| object.0));
         if let Some(target) = hit {
-            let stop = runtime.store().scroll_bar_pointer_down_stop(target);
+            let stop = pointer_down_stop(&runtime, target);
             runtime.dispatch_event_until(
                 UiEvent::new(EventKind::MouseDown, target)
                     .with_pointer(Point::new(position.x, position.y)),
@@ -942,6 +940,16 @@ fn route_pointer(
                         .map(|transform| (object.0, transform))
                 })
                 .collect();
+            let normalized = targets
+                .iter()
+                .filter_map(|(_, o, _, _, _, r, _, _, surface)| {
+                    if surface.is_some() {
+                        return None;
+                    }
+                    r.and_then(top_left_position).map(|n| (o.0, n))
+                })
+                .collect::<Vec<_>>();
+            press_slider(&mut runtime, target, position, &normalized, None);
             let mut gesture = if input.is_some() {
                 Gesture::None
             } else {
@@ -952,24 +960,7 @@ fn route_pointer(
                     .collect();
                 Gesture::begin_excluding(&mut runtime, target, &gesture_transforms, &occupied)
             };
-            let normalized = targets
-                .iter()
-                .filter_map(|(_, o, _, _, _, r, _, _, surface)| {
-                    if surface.is_some() {
-                        return None;
-                    }
-                    r.and_then(top_left_position).map(|n| (o.0, n))
-                })
-                .collect::<Vec<_>>();
-            gesture.update(
-                &mut runtime,
-                position,
-                position,
-                position,
-                false,
-                0.,
-                &normalized,
-            );
+            gesture.update(&mut runtime, position, position, position, false, 0.);
             state.capture = Some(Capture {
                 window: window_entity,
                 target,

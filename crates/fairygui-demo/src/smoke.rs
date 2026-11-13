@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_slider_scroll.rs"]
+mod slider_scroll;
+pub(super) fn install_slider_scroll(app: &mut App) {
+    slider_scroll::install(app);
+}
 #[path = "smoke_progress.rs"]
 mod progress;
 pub(super) fn install_progress(app: &mut App) {
