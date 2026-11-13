@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_input_properties.rs"]
+mod input_properties;
+pub(super) fn install_input_properties(app: &mut App) {
+    input_properties::install(app);
+}
 #[path = "smoke_visual_properties.rs"]
 mod visual_properties;
 pub(super) fn install_visual_properties(app: &mut App) {

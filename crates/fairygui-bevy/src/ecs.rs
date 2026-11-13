@@ -549,6 +549,7 @@ pub struct GuiQuery<'w, 's> {
     spaces: Query<'w, 's, &'static GuiSpace>,
     texts: Query<'w, 's, &'static GuiText>,
     text_formats: Query<'w, 's, &'static crate::GuiTextFormat>,
+    input_settings: Query<'w, 's, &'static crate::GuiTextInputSettings>,
     icons: Query<'w, 's, &'static GuiIcon>,
     colors: Query<'w, 's, &'static crate::GuiColor>,
     image_fills: Query<'w, 's, &'static crate::GuiImageFill>,
@@ -636,6 +637,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn text_format(&self, entity: Entity) -> Option<&crate::GuiTextFormat> {
         self.text_formats.get(self.view(entity)?).ok()
+    }
+
+    pub fn input_settings(&self, entity: Entity) -> Option<&crate::GuiTextInputSettings> {
+        self.input_settings.get(self.view(entity)?).ok()
     }
 
     pub fn color(&self, entity: Entity) -> Option<Color> {

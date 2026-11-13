@@ -32,7 +32,6 @@ pub(crate) fn sync_input_prompts(
         (
             Entity,
             &GObjectRef,
-            &Node,
             Option<&bevy::text::EditableText>,
             Option<&text_fonts::TextFontBinding>,
             Option<&InputPromptView>,
@@ -49,7 +48,7 @@ pub(crate) fn sync_input_prompts(
         With<InputPromptOwner>,
     >,
 ) {
-    for (entity, owner, node, editor, font, previous) in &owners {
+    for (entity, owner, editor, font, previous) in &owners {
         let Some(object) = runtime.store().object(owner.0) else {
             continue;
         };
@@ -108,10 +107,10 @@ pub(crate) fn sync_input_prompts(
                 .as_ref()
                 .map(|(asset, _)| (asset.package.id().to_owned(), asset.res_key.clone())),
         };
-        // Absolute children are positioned relative to the owner's padding box;
-        // compensate old content alignment before applying prompt alignment.
-        let left = -px(node.padding.left);
-        let top = -px(node.padding.top);
+        // Absolute children start at the owner's padding-box edge. Its content
+        // padding must not displace the prompt, which aligns independently.
+        let left = 0.;
+        let top = 0.;
         if let Some(previous) = previous
             && let Ok((old, mut visibility, mut node, layout)) = prompts.get_mut(previous.0)
             && *old == snapshot
@@ -128,10 +127,21 @@ pub(crate) fn sync_input_prompts(
             if snapshot.bitmap.is_none()
                 && let Some(layout) = layout
             {
-                let remainder = Vec2::new(
-                    (snapshot.size.width - layout.size.x).max(0.0),
-                    (snapshot.size.height - layout.size.y).max(0.0),
-                );
+                let scale = if layout.scale_factor.is_finite() && layout.scale_factor > f32::EPSILON
+                {
+                    layout.scale_factor
+                } else {
+                    1.
+                };
+                let gutter = if runtime.text_measurer.borrow().contains(owner.0) {
+                    2.
+                } else {
+                    0.
+                };
+                let remainder = (Vec2::new(snapshot.size.width, snapshot.size.height)
+                    - layout.size / scale
+                    - Vec2::splat(gutter * 2.))
+                .max(Vec2::ZERO);
                 let factor = |v| match v {
                     1 => 0.5,
                     2 => 1.,
@@ -139,14 +149,16 @@ pub(crate) fn sync_input_prompts(
                 };
                 let padding = UiRect {
                     left: Val::Px(
-                        if snapshot.data.single_line || snapshot.data.auto_size == 1 {
-                            remainder.x * factor(snapshot.data.align)
-                        } else {
-                            0.
-                        },
+                        gutter
+                            + if snapshot.data.single_line || snapshot.data.auto_size == 1 {
+                                remainder.x * factor(snapshot.data.align)
+                            } else {
+                                0.
+                            },
                     ),
-                    top: Val::Px(remainder.y * factor(snapshot.data.vertical_align)),
-                    ..UiRect::ZERO
+                    top: Val::Px(gutter + remainder.y * factor(snapshot.data.vertical_align)),
+                    right: Val::Px(gutter),
+                    bottom: Val::Px(gutter),
                 };
                 if node.padding != padding {
                     node.padding = padding;

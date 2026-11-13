@@ -61,6 +61,8 @@ pub mod extension;
 mod graph;
 mod image_fill;
 pub mod input;
+mod input_properties;
+pub use input_properties::GuiTextInputSettings;
 pub mod list;
 pub mod movie;
 pub mod popup;
@@ -171,8 +173,8 @@ pub mod prelude {
         GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
         GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
         GuiRuntime, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace,
-        GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTooltipCommand, GuiTooltipError,
-        GuiTooltipSettings, GuiTooltipState, GuiTransform, GuiTransitionCallback,
+        GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTooltipCommand,
+        GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTransform, GuiTransitionCallback,
         GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
         GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
         GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,

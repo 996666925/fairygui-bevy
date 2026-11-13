@@ -77,6 +77,37 @@ fn queue(app: &mut App, owner: Entity, edits: impl IntoIterator<Item = TextEdit>
 }
 
 #[test]
+fn prompt_alignment_uses_logical_metrics_without_subtracting_editor_padding() {
+    let (mut app, _, owner, entity) = fixture();
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        runtime.store_mut().set_object_text_align(owner, 1);
+        runtime.store_mut().set_object_text_vertical_align(owner, 1);
+        runtime.store_mut().set_object_single_line(owner, true);
+    }
+    app.update();
+    let view = prompt(&app, entity);
+    app.world_mut().get_mut::<Node>(entity).unwrap().padding = UiRect {
+        left: Val::Px(13.),
+        top: Val::Px(17.),
+        ..UiRect::ZERO
+    };
+    app.world_mut()
+        .entity_mut(view)
+        .insert(bevy::text::TextLayoutInfo {
+            size: Vec2::new(80., 40.),
+            scale_factor: 2.,
+            ..default()
+        });
+    app.update();
+    let node = app.world().get::<Node>(view).unwrap();
+    assert_eq!(node.left, Val::Px(0.));
+    assert_eq!(node.top, Val::Px(0.));
+    assert_eq!(node.padding.left, Val::Px(100.));
+    assert_eq!(node.padding.top, Val::Px(25.));
+}
+
+#[test]
 fn empty_prompt_keeps_model_empty_and_tracks_commit_preedit_color_alpha_and_stable_ownership() {
     let (mut app, _, owner, entity) = fixture();
     let view = prompt(&app, entity);

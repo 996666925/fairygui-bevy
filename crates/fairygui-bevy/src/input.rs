@@ -334,6 +334,9 @@ pub fn register(app: &mut App) {
         .add_systems(
             Update,
             (
+                // Pending keyboard/IME edits are consumed here, before Publish.
+                // Apply the input configuration before validating those edits.
+                crate::properties::sync_property::<crate::GuiTextInputSettings>,
                 crate::runtime::object_drag::prepare_object_drags,
                 crate::runtime::ecs_drag_drop::prepare_drag_targets,
                 crate::runtime::sync_text_inputs,

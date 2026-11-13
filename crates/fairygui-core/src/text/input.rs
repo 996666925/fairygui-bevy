@@ -1,11 +1,13 @@
 //! Laya Input/TextInputAdapter's committed-text validation.
 
+pub use regress::Error as InputRestrictionError;
+
 #[derive(Debug, Clone)]
 pub struct InputRestriction(Option<regress::Regex>);
 
 impl InputRestriction {
     /// Compile the native inverted character class, including its first ^^ removal.
-    pub fn new(source: Option<&str>) -> Result<Self, regress::Error> {
+    pub fn new(source: Option<&str>) -> Result<Self, InputRestrictionError> {
         let Some(source) = source.filter(|s| !s.is_empty()) else {
             return Ok(Self(None));
         };

@@ -46,6 +46,12 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_input_settings(&mut self, settings: crate::GuiTextInputSettings) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiTextInputSettings::read(self.runtime, self.object) {
+            settings.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn set_color(&mut self, color: Color) {
         use crate::properties::Property;
         let value = crate::GuiColor(color);

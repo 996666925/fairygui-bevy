@@ -528,6 +528,33 @@ UBB 和 HTML 开关。`font = None` 使用默认字体，也支持系统字体�
 即时操作可用 `GuiObjectMut::text_format` / `set_text_format`。无文字标题的控件不带
 该组件。`--smoke-text-format` 验证格式修改、普通/富文本/位图输入切换和真实按钮点击。
 
+输入框的编辑属性通过 `GuiTextInputSettings` 修改：
+
+```rust,ignore
+fn configure_input(mut inputs: Query<&mut GuiTextInputSettings>, target: Entity) {
+    if let Ok(mut input) = inputs.get_mut(target) {
+        input.editable = true;
+        input.password = true;
+        input.max_length = 6;
+        input.prompt_text = Some("请输入密码".into());
+        input.prompt_color = Color::srgb(0.4, 0.6, 0.8);
+        input.try_set_restrict(Some("0-9")).expect("valid character class");
+    }
+}
+```
+
+控件标题为输入框时也会转发这些属性，可用 `GuiQuery::input_settings` 查询。
+单行/多行通过 `GuiTextFormat.single_line` 设置；密码输入按原版使用单行编辑。
+`editable = false` 保留焦点、选择和复制，并阻止排队中的用户修改；程序通过
+`GuiText` 赋值继续生效。字符限制和 UTF-16 长度预算只约束用户输入、粘贴和 IME 提交，
+改变限制不截断已有值。密码遮罩保留真实编辑值，`GuiText` 始终提供真实提交值。
+
+提示文字按原版 UBB 移除模式处理，使用独立的 `prompt_color`，不进入模型文本或
+编辑缓冲。`try_set_restrict` 在修改组件前验证表达式并返回错误；直接写入非法
+`restrict` 时记录告警并恢复上次有效规则，其余字段仍会应用。未编辑的字段跟随
+原生变化，切换密码和只读状态保留输入实体。即时操作可用 `set_input_settings`。
+`--smoke-input-properties` 验证提示、真实键盘/IME、密码、只读和程序赋值。
+
 图片和 Loader 的常用属性也可直接修改：
 
 ```rust,ignore
