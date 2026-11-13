@@ -91,8 +91,11 @@ commands.write_message(GuiObjectCommand::new(
 ));
 ```
 
-命令目标既可用根拥有者实体，也可用带 `GObjectRef` 的控件视图实体。`GuiRuntime`
-和 `ObjectStore` 仍可用于高级控件 API；大多数界面的创建、常见属性修改与销毁由
+命令目标既可用根拥有者实体，也可用带 `GObjectRef` 的控件视图实体。
+对根拥有者的命令可以在 `spawn(FairyGuiRoot::new(...))` 后立即发送：资产等待期间
+按顺序保留，就绪后先应用命令再生成视图；根被移除、替换或销毁会取消其等待命令。
+
+`GuiRuntime` 和 `ObjectStore` 仍可用于高级控件 API；大多数界面的创建、常见属性修改与销毁由
 ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、文本、颜色、置灰、
 按钮选择、滑动条值、控制器切页、进度值、滚动位置、列表选择替换/清空/滚入视口和
 过渡播放。命令在 `GuiSystems::Sync` 应用，因此 observer 和业务系统只需写消息，

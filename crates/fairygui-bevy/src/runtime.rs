@@ -15,6 +15,10 @@ use fairygui_core::widget::{ControlData, OverflowType};
 use crate::asset::FuiAsset;
 use crate::backend;
 
+#[cfg(test)]
+#[path = "ecs_root_tests.rs"]
+mod ecs_root_tests;
+
 /// 实体所镜像的核心对象。
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GObjectRef(pub GObjectId);
@@ -104,6 +108,8 @@ pub enum GuiObjectAction {
 
 /// Entity-addressed FairyGUI mutation. Send this from application ECS systems
 /// instead of borrowing the main-thread `GuiRuntime` for common property edits.
+/// Commands for a root waiting on its asset are retained until it is created.
+/// Removing or replacing that root cancels its retained commands.
 #[derive(Message, Debug, Clone)]
 pub struct GuiObjectCommand {
     pub target: Entity,
@@ -1785,14 +1791,41 @@ pub fn apply_object_commands(
     mut commands: MessageReader<GuiObjectCommand>,
     objects: Query<&GObjectRef>,
     roots: Query<&GuiRootInstance>,
+    sources: Query<&FairyGuiRoot>,
+    mut removed: RemovedComponents<FairyGuiRoot>,
+    mut pending: Local<Vec<(FairyGuiRoot, GuiObjectCommand)>>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
-    for command in commands.read() {
+    for target in removed.read() {
+        pending.retain(|(_, command)| command.target != target);
+    }
+    let waiting = std::mem::take(&mut *pending);
+    for (expected, command) in waiting
+        .into_iter()
+        .map(|(source, command)| (Some(source), command))
+        .chain(commands.read().cloned().map(|command| (None, command)))
+    {
+        let source = sources.get(command.target).ok();
+        if let Some(expected) = expected
+            && source.is_none_or(|current| {
+                current.asset != expected.asset || current.item_name != expected.item_name
+            })
+        {
+            continue;
+        }
         let object = objects
             .get(command.target)
             .map(|reference| reference.0)
             .or_else(|_| roots.get(command.target).map(|root| root.object));
         let Ok(object) = object else {
+            if let Some(source) = source
+                && !runtime
+                    .ecs_roots
+                    .get(&command.target)
+                    .is_some_and(|binding| binding.failed)
+            {
+                pending.push((source.clone(), command));
+            }
             continue;
         };
         match &command.action {

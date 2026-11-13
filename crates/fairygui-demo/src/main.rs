@@ -234,11 +234,14 @@ fn boot_menu(
                 .spawn(FairyGuiRoot::new(handle.clone(), MENU_ITEM))
                 .id(),
         );
-        demo.close_owner = Some(
-            commands
-                .spawn(FairyGuiRoot::new(handle.clone(), CLOSE_ITEM))
-                .id(),
-        );
+        let close_owner = commands
+            .spawn(FairyGuiRoot::new(handle.clone(), CLOSE_ITEM))
+            .id();
+        demo.close_owner = Some(close_owner);
+        gui_commands.write(GuiObjectCommand::new(
+            close_owner,
+            GuiObjectAction::SetVisible(false),
+        ));
         demo.menu_asset = Some(handle);
         return;
     }
@@ -272,10 +275,6 @@ fn boot_menu(
                     viewport_width - width - 10.0,
                     viewport_height - height - 10.0,
                 )),
-            ));
-            gui_commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetVisible(false),
             ));
         }
         demo.close_button = Some(close);

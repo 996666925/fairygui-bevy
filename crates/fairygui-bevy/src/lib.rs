@@ -182,7 +182,7 @@ impl Plugin for FairyGuiPlugin {
                     runtime::sync_virtual_lists,
                 )
                     .chain(),
-                (runtime::sync_ecs_roots, runtime::spawn_pending_roots).chain(),
+                runtime::spawn_pending_roots,
                 runtime::spawn_pending_objects,
                 runtime::sync_text_inputs,
                 runtime::content::sync_content_layout,
@@ -215,7 +215,8 @@ impl Plugin for FairyGuiPlugin {
         );
         app.add_systems(
             Update,
-            runtime::apply_object_commands
+            (runtime::sync_ecs_roots, runtime::apply_object_commands)
+                .chain()
                 .in_set(GuiSystems::Sync)
                 .before(runtime::sync_loader_components),
         );
