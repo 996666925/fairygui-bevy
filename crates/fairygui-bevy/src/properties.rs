@@ -19,7 +19,13 @@ pub(crate) struct NativeValue<T: Property> {
     value: T,
 }
 
-type PropertyEntities<T> = QueryState<Entity, Or<(With<GObjectRef>, With<T>)>>;
+type PropertyEntities<T> = QueryState<
+    Entity,
+    (
+        Or<(With<GObjectRef>, With<T>)>,
+        Without<crate::graph::GraphSurface>,
+    ),
+>;
 type PropertyValues<T> = QueryState<(
     Option<&'static GObjectRef>,
     Option<&'static T>,
@@ -49,6 +55,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiControllers>(world);
     sync_property::<GuiButtonSettings>(world);
     sync_property::<GuiColor>(world);
+    sync_property::<GuiGraph>(world);
     sync_property::<GuiTextFormat>(world);
     sync_property::<GuiTextInputSettings>(world);
     sync_property::<GuiLoaderSettings>(world);

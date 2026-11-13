@@ -357,7 +357,7 @@ mod loader_layout_tests {
 }
 
 /// 矢量图形的数据。
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct GraphData {
     /// 图形种类，0 表示空。
     pub graph_type: i32,
@@ -379,6 +379,40 @@ pub struct GraphData {
     pub distances: Option<Vec<f32>>,
 }
 
+impl PartialEq for GraphData {
+    fn eq(&self, other: &Self) -> bool {
+        // NaN distances are a supported native spelling of the default 1.
+        // Retained snapshots must compare equal without rebuilding every frame.
+        fn number(a: f32, b: f32) -> bool {
+            a == b || a.is_nan() && b.is_nan()
+        }
+        fn values(a: Option<&[f32]>, b: Option<&[f32]>) -> bool {
+            match (a, b) {
+                (Some(a), Some(b)) => {
+                    a.len() == b.len() && a.iter().zip(b).all(|(&a, &b)| number(a, b))
+                }
+                (None, None) => true,
+                _ => false,
+            }
+        }
+        self.graph_type == other.graph_type
+            && self.line_size == other.line_size
+            && self.line_color == other.line_color
+            && self.fill_color == other.fill_color
+            && values(
+                self.corner_radius.as_ref().map(|v| v.as_slice()),
+                other.corner_radius.as_ref().map(|v| v.as_slice()),
+            )
+            && values(
+                self.polygon_points.as_deref(),
+                other.polygon_points.as_deref(),
+            )
+            && self.sides == other.sides
+            && number(self.start_angle, other.start_angle)
+            && values(self.distances.as_deref(), other.distances.as_deref())
+    }
+}
+
 /// 图形种类。取值与描述里写入的编号一致。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GraphType {
@@ -387,7 +421,7 @@ pub enum GraphType {
     Empty,
     /// 矩形。带圆角时是圆角矩形。
     Rect,
-    /// 椭圆。宽高相等时是正圆。
+    /// 原版名为 Ellipse，实际绘制半径为宽度一半的圆。
     Ellipse,
     /// 多边形。
     Polygon,
@@ -434,7 +468,7 @@ impl GraphData {
 
     /// 四角圆角半径。没有圆角数据时全为零。
     ///
-    /// 顺序与描述一致：左上、右上、右下、左下。
+    /// 顺序与描述一致：左上、右上、左下、右下。
     pub fn corner_radii(&self) -> [f32; 4] {
         self.corner_radius.unwrap_or([0.0; 4])
     }

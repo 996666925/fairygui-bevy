@@ -1,8 +1,37 @@
 //! Native GGraph polygon coordinates and LayaAir 3.3 closed-line geometry.
 use crate::{
-    Point, Size,
+    Point, Rect, Size,
     widget::{GraphData, GraphType},
 };
+
+/// GGraph's Ellipse command is a width-based circle centered in its declared
+/// rectangle. Its drawing and hit bounds may extend above/below that rectangle.
+pub fn circle_bounds(size: Size) -> Option<Rect> {
+    (size.width.is_finite() && size.height.is_finite() && size.width > 0. && size.height > 0.)
+        .then(|| Rect::new(0., (size.height - size.width) * 0.5, size.width, size.width))
+}
+
+/// Laya HitArea's graphics commands, independent of paint opacity. DrawPath
+/// (used for rounded rectangles, even zero radii) has no native hit branch.
+pub fn graph_contains(data: &GraphData, size: Size, point: Point) -> bool {
+    if size.width <= 0. || size.height <= 0. {
+        return false;
+    }
+    match data.graph_kind() {
+        GraphType::Rect if data.corner_radius.is_none() => {
+            point.x >= 0. && point.y >= 0. && point.x < size.width && point.y < size.height
+        }
+        GraphType::Ellipse => circle_bounds(size).is_some_and(|bounds| {
+            let x = point.x - (bounds.x + bounds.width * 0.5);
+            let y = point.y - (bounds.y + bounds.height * 0.5);
+            x * x + y * y < (bounds.width * 0.5).powi(2)
+        }),
+        GraphType::Polygon | GraphType::RegularPolygon => {
+            polygon_contains(&polygon_points(data, size), point)
+        }
+        _ => false,
+    }
+}
 
 /// Keep JS Number precision until stroke joins are constructed. Rounding regular
 /// vertices to f32 earlier can change native near-parallel/intersection branches.

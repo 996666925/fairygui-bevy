@@ -82,7 +82,7 @@ pub(crate) fn sync_appearance(
         ),
         (
             Or<(With<GObjectRef>, With<TextTintSource>)>,
-            Without<crate::graph::PolygonSurface>,
+            Without<crate::graph::GraphSurface>,
             Without<MaterialNode<crate::image_fill::FillMaterial>>,
         ),
     >,
@@ -113,9 +113,18 @@ pub(crate) fn sync_appearance(
         }
         if let Some(mut background) = background
             && (decoration.is_some() || matches!(object.control(), ControlData::Graph(_)))
-            && background.0 != color
         {
-            background.0 = color;
+            // Circles/polygons own a separate drawing surface; Empty has none.
+            let fill = if decoration.is_some()
+                || matches!(object.control(), ControlData::Graph(data) if data.graph_kind() == fairygui_core::widget::GraphType::Rect)
+            {
+                color
+            } else {
+                Color::NONE
+            };
+            if background.0 != fill {
+                background.0 = fill;
+            }
         }
         if let Some(mut border) = border
             && let ControlData::Graph(data) = object.control()
@@ -233,6 +242,15 @@ mod tests {
             ObjectType::Text,
         ] {
             let id = gui.store_mut().create(kind);
+            if kind == ObjectType::Graph {
+                gui.store_mut().set_graph(
+                    id,
+                    crate::core::widget::GraphData {
+                        graph_type: 1,
+                        ..default()
+                    },
+                );
+            }
             gui.store_mut().set_parent(id, Some(parent));
             gui.store_mut()
                 .set_control_color(id, GuiColor::new(1.0, 0.0, 0.0, 1.0), None);

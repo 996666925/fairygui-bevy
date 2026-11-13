@@ -1,6 +1,60 @@
 use super::*;
 
 #[test]
+fn circle_bounds_and_graph_hits_follow_native_commands_instead_of_the_declared_rectangle() {
+    let circle = GraphData {
+        graph_type: 2,
+        ..Default::default()
+    };
+    let wide = Size::new(100., 40.);
+    assert_eq!(circle_bounds(wide), Some(Rect::new(0., -30., 100., 100.)));
+    assert!(graph_contains(&circle, wide, Point::new(50., -20.)));
+    assert!(!graph_contains(&circle, wide, Point::new(0., 0.)));
+    assert!(!graph_contains(&circle, wide, Point::new(50., -30.)));
+    let tall = Size::new(40., 100.);
+    assert_eq!(circle_bounds(tall), Some(Rect::new(0., 30., 40., 40.)));
+    assert!(!graph_contains(&circle, tall, Point::new(20., 10.)));
+    assert!(graph_contains(&circle, tall, Point::new(20., 50.)));
+    for size in [
+        Size::ZERO,
+        Size::new(0., 100.),
+        Size::new(100., 0.),
+        Size::new(f32::NAN, 10.),
+    ] {
+        assert!(circle_bounds(size).is_none());
+        assert!(!graph_contains(&circle, size, Point::new(0., 0.)));
+    }
+    let mut rect = GraphData {
+        graph_type: 1,
+        ..Default::default()
+    };
+    assert!(graph_contains(&rect, wide, Point::new(0., 0.)));
+    assert!(!graph_contains(&rect, wide, Point::new(100., 20.)));
+    rect.corner_radius = Some([0.; 4]);
+    assert!(
+        !graph_contains(&rect, wide, Point::new(50., 20.)),
+        "DrawPath is unsupported by HitArea"
+    );
+}
+
+#[test]
+fn native_nan_distances_have_stable_drawing_snapshots_and_keep_default_vertex_radii() {
+    let data = GraphData {
+        graph_type: 4,
+        sides: 3,
+        distances: Some(vec![f32::NAN, 0.5]),
+        ..Default::default()
+    };
+    assert_eq!(data, data.clone());
+    let points = polygon_points(&data, Size::new(100., 100.));
+    assert_eq!(points.len(), 3);
+    assert!((points[0].x - 100.).abs() < 0.001);
+    let mut changed = data.clone();
+    changed.distances.as_mut().unwrap()[1] = 0.75;
+    assert_ne!(data, changed);
+}
+
+#[test]
 fn native_polygon_points_and_stroke_mesh_match_reference() {
     let mut name = "";
     let mut size = Size::ZERO;

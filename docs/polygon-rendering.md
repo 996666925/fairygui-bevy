@@ -1,25 +1,31 @@
 # Polygon rendering
 
 GGraph polygon and regular-polygon content uses Bevy 0.20.1's `UiMaterial`
-pipeline. Rectangles and the existing ellipse approximation continue to use
-ordinary UI backgrounds/borders. Package polygon controls now display instead
+pipeline. Rectangles use ordinary UI backgrounds/borders. Native Ellipse is a
+width-based circle on a separate square drawing node, centered in the declared
+rectangle; changing shape keeps the logical view and application children.
+Package polygon controls now display instead
 of warning and remaining blank.
 
-Use `ObjectStore::set_graph(id, GraphData)` to replace a graph's drawing command
-without replacing its object or Bevy view. Controllers and transitions that
-change graph color continue to use the ordinary color property path.
+Use mutable `GuiGraph` components for graph geometry, fill and stroke. The
+position/size remain in `GuiTransform`. Controllers and transitions still use
+the normal color property path. `GuiColor` captures its color gear;
+`GuiGraph.fill_color` updates the drawing parameters without capturing that gear.
+When both fields are explicitly edited, the graph's fill wins. Direct
+`GuiObjectMut::set_graph` and core `ObjectStore::set_graph` are also available.
 
 ```rust,ignore
-use fairygui_core::{color::Color, widget::GraphData};
-runtime.store_mut().set_graph(graph, GraphData {
-    graph_type: 4,
-    sides: 5,
-    start_angle: -90.0,
-    line_size: 3,
-    line_color: Color::new(0.7, 0.1, 0.05, 1.0),
-    fill_color: Color::new(1.0, 0.65, 0.05, 1.0),
-    ..Default::default()
-});
+use bevy::prelude::*;
+use fairygui_bevy::prelude::*;
+fn configure(mut graphs: Query<&mut GuiGraph>, entity: Entity) {
+    let Ok(mut graph) = graphs.get_mut(entity) else { return };
+    graph.kind = GraphType::RegularPolygon;
+    graph.sides = 5;
+    graph.start_angle = -90.;
+    graph.line_size = 3;
+    graph.line_color = Color::srgb(0.7, 0.1, 0.05);
+    graph.fill_color = Color::srgb(1., 0.65, 0.05);
+}
 ```
 
 ## Geometry and drawing
@@ -60,7 +66,10 @@ unshifted contour, independent of fill/stroke color, rather than the full layout
 rectangle. Bevy surfaces preserve the graph's GObject ID for event routing and
 convert their enlarged surface coordinates back into object space. A concave
 cutout can therefore pass input to a lower widget. Empty graphs do not hit.
-Existing rectangular/ellipse hit behavior is unchanged in this phase.
+Ordinary graphs and graphics masks share this contour test. A native Ellipse
+uses radius width/2 and center (width/2,height/2), even outside the declared
+rectangle. Plain rectangles use their bounds. Rounded rectangles emit DrawPath,
+which native HitArea does not handle; their graphics therefore do not hit.
 
 ## Evidence and limits
 
@@ -89,6 +98,6 @@ Basics/Graph and verifies actual clicks, dynamic updates and disposal.
 These checks do not establish native pixel parity. Laya's rasterization and
 antialiasing, its exact self-intersecting fill tessellation, legacy rgba fill's
 side effect of assigning the GObject alpha, and every degenerate input are not
-claimed equivalent. Existing ellipse/rounded-rectangle rendering is not replaced
-here. Storage-buffer materials require a Bevy rendering backend supporting that
+claimed equivalent. Circle/rounded-rectangle pixels still use Bevy's background
+and border rasterization. Storage-buffer materials require a Bevy rendering backend supporting that
 binding; input-only hosts can still use the model and routing without RenderApp.

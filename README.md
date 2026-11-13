@@ -528,6 +528,37 @@ UBB 和 HTML 开关。`font = None` 使用默认字体，也支持系统字体�
 即时操作可用 `GuiObjectMut::text_format` / `set_text_format`。无文字标题的控件不带
 该组件。`--smoke-text-format` 验证格式修改、普通/富文本/位图输入切换和真实按钮点击。
 
+图形绘制可通过 `GuiGraph` 修改，位置与尺寸继续使用 `GuiTransform`：
+
+```rust,ignore
+fn configure_graph(mut graphs: Query<&mut GuiGraph>, target: Entity) {
+    if let Ok(mut graph) = graphs.get_mut(target) {
+        graph.kind = GraphType::RegularPolygon;
+        graph.sides = 5;
+        graph.start_angle = -90.;
+        graph.distances = vec![1., 0.5, 1.2];
+        graph.fill_color = Color::srgb(0.2, 0.7, 1.);
+        graph.line_size = 3;
+        graph.line_color = Color::BLACK;
+    }
+}
+```
+
+支持 Empty、Rect、Ellipse、Polygon 和 RegularPolygon；按原版，Ellipse 实际是以宽度
+一半为半径、位于 `(width/2, height/2)` 的圆，绘制和命中可以超出声明矩形。任意多边形
+使用 `polygon_points: Vec<Vec2>`，缩放尺寸不改写这些局部坐标；正多边形使用较小尺寸
+生成顶点，缺少或为 NaN 的距离系数取 1。未修改字段跟随原生变化。
+
+`corner_radius` 顺序为左上、右上、左下、右下；`None` 使用普通矩形命中，提供圆角数组
+时沿用原版 DrawPath 不参与 HitArea 的行为。命中不取决于填充或描边透明度。
+Empty 不绘制也不命中。非有限坐标、角度、圆角或无限距离会恢复上次有效字段，其他
+修改仍可生效。有效 NaN 距离保留，不会造成逐帧组件改写或几何重建。
+
+`GuiColor` 也可改填充色，并按原版回写颜色齿轮；`GuiGraph.fill_color` 使用绘制参数
+路径，不回写图形自身的颜色齿轮。同帧同时修改两者时 `GuiGraph` 的显式填充色优先。
+可用 `GuiQuery::graph` 查询配置，或用 `GuiObjectMut::set_graph` 即时修改。
+`--smoke-graph-properties` 验证形状切换、原版圆的外扩绘制/命中、轮廓穿透和回收。
+
 按钮配置通过 `GuiButtonSettings` 修改：
 
 ```rust,ignore
@@ -1196,7 +1227,7 @@ cargo run -p fairygui-core --bin dump_fui -- crates/fairygui-core/tests/fixtures
 | 混合模式 | 接入 Normal、Add、Multiply、Screen、Erase、Mask，支持父级继承、显式 Normal 覆盖与 reset；滤镜边界将混合和累积透明度转移到合成结果。Screen 遵循所查 Laya 版本的加法因子；其余枚举和边界限制见 [离屏合成](docs/compositing.md) |
 | 九宫格平铺 | 已按 FairyGUI-Laya 链路接入 Image 和跨包 Loader，支持边缘/中心平铺、尾块裁剪、窄目标的按轴边框压缩、裁剪切片 UV、翻转及填充遮罩。原版把非零 `tileGridIndice` 转为统一平铺开关，并非九个格子的独立位。通过同一 UI 材质绘制，无需额外九个节点。详见 [九宫格绘制](docs/nine-grid.md) |
 | 列表虚拟化的项管理 | 五种非循环布局已接入可见行自动构建、同步 renderer/provider、尺寸缓存、按方向复用与 FIFO 池；离屏选择和定位使用逻辑索引，Bevy 保留池内实体并在滚动/改尺寸后自动刷新。VirtualList 使用 1000 条数据，原始视口通常只需 5 个行对象。循环列表支持原版允许的单列、单行和分页布局，使用六倍内部记录，并在命令、滚轮/箭头、拖拽与缓动期间重定位和映射索引；LoopList 已接入五张图片、中心放大和索引文字。原有手工范围/回收/通知 API 保留。详见 [虚拟列表](docs/virtual-lists.md)和[循环列表](docs/loop-lists.md) |
-| 图形控件的多边形 | 任意多边形与正多边形已通过 `UiMaterial` 绘制，支持凹轮廓、距离系数、填充与原版折角描边、动态尺寸/颜色/透明度、轮廓命中与凹口穿透。矩形与椭圆继续使用节点样式；原版像素抗锯齿、图形半透明填充对对象 alpha 的副作用尚未完全复刻。详见 [多边形绘制](docs/polygon-rendering.md) |
+| 图形控件 | `GuiGraph` 接入动态形状、线条、颜色、圆角、顶点与距离系数；多边形使用 `UiMaterial`，支持凹轮廓、原版折角描边和轮廓命中。矩形使用节点样式，圆使用保留声明布局的独立正方形节点，并统一普通图形/遮罩命中。原版像素抗锯齿、半透明填充对对象 alpha 的副作用尚未完全复刻。详见 [图形绘制](docs/polygon-rendering.md) |
 | 对象关联 | 支持父节点和兄弟目标，目标移动时同步对齐与扩展边；比例关系按目标尺寸比率缩放位置、尺寸与扩展边，非比例关系按尺寸增量应用；目标锚点参与兄弟关系计算，并在循环关系中阻止重入 |
 | 文本自动尺寸 | Both/Height 文本默认在原生布局与视图生成前同步测量，普通字体使用与渲染一致的窗口/DPI/UiScale 倍率，位图字体复用原生测量器；文字修改、空文本和迟到资源在本帧更新关联布局，字体未就绪时保留当前尺寸并重试。Fixed/Shrink/Ellipsis 保留外框；普通文字的断行差异见下一项 |
 | 文本换行的完整规则 | 普通与 UBB 位图文本已按 Laya 3.3 的命令、单词边界、标点回退与 UTF-16 字形测量处理；UBB 支持跨样式段移词和图片占位。普通/富文本依赖 Bevy，仍有断行差异；完整 Unicode 断行和普通文字的原版排版仍未覆盖 |

@@ -2510,15 +2510,15 @@ fn spawn_object(
 
     // Fill masks crop the drawn image via UiMaterial; layout/input stay full-size.
 
-    // Basic shapes use node styles; polygons receive material surfaces in Sync.
+    // Rectangles use their node; circles/polygons receive drawing surfaces in Sync.
     let graph = match gobject.control() {
-        ControlData::Graph(data) if data.graph_kind().is_basic_shape() => {
+        ControlData::Graph(data) if data.graph_kind() == fairygui_core::widget::GraphType::Rect => {
             Some(backend::graph_style(data))
         }
         _ => None,
     };
 
-    // 形状与描边都是节点自身的属性：圆角决定是直角、圆角还是椭圆，
+    // 矩形与描边都是节点自身的属性：圆角决定是直角还是圆角矩形，
     // 边框宽度决定描边画不画得出来（宽度为零就没有线）。
     if let Some(style) = &graph {
         if style.stroke_width > 0.0 {

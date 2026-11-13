@@ -51,7 +51,7 @@ pub(crate) fn install(app: &mut App) {
 }
 
 #[derive(Component, Debug)]
-pub(crate) struct PolygonSurface {
+pub(crate) struct GraphSurface {
     pub canvas: Vec4,
 }
 
@@ -129,7 +129,8 @@ pub(crate) fn sync_graphs(
     gui: NonSend<GuiRuntime>,
     materials: Option<ResMut<Assets<PolygonMaterial>>>,
     buffers: Option<ResMut<Assets<ShaderBuffer>>>,
-    roots: Query<(Entity, &GObjectRef, Option<&GraphRender>), Without<PolygonSurface>>,
+    roots: Query<(Entity, &GObjectRef, Option<&GraphRender>), Without<GraphSurface>>,
+    mut circles: Query<(&mut BackgroundColor, &mut BorderColor), With<GraphSurface>>,
 ) {
     let (Some(mut materials), Some(mut buffers)) = (materials, buffers) else {
         return;
@@ -152,6 +153,87 @@ pub(crate) fn sync_graphs(
                 material.uniform.fill = fill;
                 material.uniform.stroke = stroke;
             }
+            if data.graph_kind() == GraphType::Ellipse
+                && let Some(surface) = previous.and_then(|old| old.surface)
+                && let Ok((mut background, mut border)) = circles.get_mut(surface)
+            {
+                let fill = Color::linear_rgba(fill.x, fill.y, fill.z, fill.w);
+                let stroke =
+                    BorderColor::all(Color::linear_rgba(stroke.x, stroke.y, stroke.z, stroke.w));
+                if background.0 != fill {
+                    background.0 = fill;
+                }
+                if *border != stroke {
+                    *border = stroke;
+                }
+            }
+            continue;
+        }
+        if data.graph_kind() == GraphType::Ellipse {
+            commands
+                .entity(entity)
+                .remove::<(BackgroundColor, BorderColor)>();
+            commands
+                .entity(entity)
+                .entry::<Node>()
+                .and_modify(|mut node| {
+                    node.border = UiRect::ZERO;
+                    node.border_radius = BorderRadius::ZERO;
+                });
+            let bounds = fairygui_core::graph::circle_bounds(size);
+            let old_circle = previous
+                .filter(|old| old.material.is_none())
+                .and_then(|old| old.surface);
+            if let Some(old) = previous
+                .filter(|old| old.material.is_some())
+                .and_then(|old| old.surface)
+            {
+                commands.entity(old).despawn();
+            }
+            let surface = bounds.map(|bounds| {
+                let canvas = Vec4::new(bounds.x, bounds.y, bounds.width, bounds.height);
+                let mut node = surface_node(canvas);
+                node.border = UiRect::all(Val::Px(if data.has_stroke() {
+                    data.line_size as f32
+                } else {
+                    0.
+                }));
+                node.border_radius = BorderRadius::MAX;
+                let surface = old_circle.unwrap_or_else(|| {
+                    commands
+                        .spawn((
+                            GObjectRef(object.0),
+                            ChildOf(entity),
+                            ZIndex(-1),
+                            Name::new("FairyGUI circle surface"),
+                            bevy::picking::hover::Hovered::default(),
+                            bevy::picking::Pickable {
+                                should_block_lower: false,
+                                is_hoverable: true,
+                            },
+                            bevy::ui::RelativeCursorPosition::default(),
+                        ))
+                        .id()
+                });
+                commands.entity(surface).insert((
+                    node,
+                    GraphSurface { canvas },
+                    BackgroundColor(Color::linear_rgba(fill.x, fill.y, fill.z, fill.w)),
+                    BorderColor::all(Color::linear_rgba(stroke.x, stroke.y, stroke.z, stroke.w)),
+                ));
+                surface
+            });
+            if bounds.is_none()
+                && let Some(old) = old_circle
+            {
+                commands.entity(old).despawn();
+            }
+            commands.entity(entity).insert(GraphRender {
+                data: data.clone(),
+                size,
+                surface,
+                material: None,
+            });
             continue;
         }
         if !matches!(
@@ -230,9 +312,12 @@ pub(crate) fn sync_graphs(
             let surface = old.surface.unwrap();
             commands
                 .entity(surface)
-                .insert((surface_node(canvas), PolygonSurface { canvas }));
+                .insert((surface_node(canvas), GraphSurface { canvas }));
             (surface, handle)
         } else {
+            if let Some(old) = previous.and_then(|old| old.surface) {
+                commands.entity(old).despawn();
+            }
             let buffer = buffers.add(ShaderBuffer::new(vertices, default()));
             let handle = materials.add(PolygonMaterial {
                 uniform,
@@ -242,7 +327,7 @@ pub(crate) fn sync_graphs(
                 .spawn((
                     surface_node(canvas),
                     MaterialNode(handle.clone()),
-                    PolygonSurface { canvas },
+                    GraphSurface { canvas },
                     GObjectRef(object.0),
                     ChildOf(entity),
                     Name::new("FairyGUI polygon surface"),

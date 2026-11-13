@@ -59,6 +59,8 @@ mod compositor;
 pub mod ecs;
 pub mod extension;
 mod graph;
+mod graph_properties;
+pub use graph_properties::GuiGraph;
 mod image_fill;
 pub mod input;
 mod input_properties;
@@ -128,7 +130,7 @@ pub use tree::{
 };
 
 pub use fairygui_core as core;
-pub use fairygui_core::widget::{ButtonMode, ChildrenRenderOrder, FillMethod};
+pub use fairygui_core::widget::{ButtonMode, ChildrenRenderOrder, FillMethod, GraphType};
 
 use bevy::prelude::*;
 
@@ -162,12 +164,12 @@ enum SyncPhase {
 pub mod prelude {
     pub use crate::{
         ButtonMode, ChildrenRenderOrder, FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FillMethod,
-        FuiAsset, GObjectRef, GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState,
-        GuiButtonSelected, GuiButtonSettings, GuiColor, GuiComboBoxState, GuiConfig,
-        GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
+        FuiAsset, GObjectRef, GraphType, GuiAnimationComplete, GuiAnimationPlaySettings,
+        GuiAnimationState, GuiButtonSelected, GuiButtonSettings, GuiColor, GuiComboBoxState,
+        GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
         GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
         GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
-        GuiIcon, GuiImageFill, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink,
+        GuiGraph, GuiIcon, GuiImageFill, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink,
         GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
         GuiListRow, GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderSettings,
         GuiLoaderState, GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut,

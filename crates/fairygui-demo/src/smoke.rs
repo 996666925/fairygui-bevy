@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_graph_properties.rs"]
+mod graph_properties;
+pub(super) fn install_graph_properties(app: &mut App) {
+    graph_properties::install(app);
+}
 #[path = "smoke_button_properties.rs"]
 mod button_properties;
 pub(super) fn install_button_properties(app: &mut App) {

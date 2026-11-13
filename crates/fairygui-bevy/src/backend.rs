@@ -70,7 +70,8 @@ pub const GRAYED_TINT: bevy::prelude::Color = bevy::prelude::Color::srgb(0.62, 0
 /// 图形的渲染外观。
 ///
 /// 矩形与椭圆都能用节点自身的形状表达：矩形就是节点本身，椭圆靠把四角圆角
-/// 拉满得到（宽高相等时是正圆，不等时就是椭圆）。填充走背景色，描边走边框。
+/// 拉满得到。原版的圆由 graph 模块提供正方形绘制节点，保持声明的布局尺寸。
+/// 填充走背景色，描边走边框。
 #[derive(Debug, Clone, Copy)]
 pub struct GraphStyle {
     /// 填充色。不填充时是全透明的。

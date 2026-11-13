@@ -1,26 +1,9 @@
 //! GComponent's ChildHitArea is a graphics hit gate, not an alpha texture test.
 use super::*;
-use fairygui_core::{
-    graph::{polygon_contains, polygon_points},
-    widget::{ControlData, GraphData, GraphType, HitTestArea},
-};
+use fairygui_core::widget::{ControlData, GraphData, HitTestArea};
 
 pub(super) fn graph_contains(data: &GraphData, size: fairygui_core::Size, p: Vec2) -> bool {
-    match data.graph_kind() {
-        GraphType::Rect if data.corner_radius.is_none() => {
-            p.x >= 0. && p.y >= 0. && p.x < size.width && p.y < size.height
-        }
-        // GGraph emits DrawCircle even when its declared height differs.
-        GraphType::Ellipse => {
-            (p - Vec2::new(size.width * 0.5, size.height * 0.5)).length_squared()
-                < (size.width * 0.5).powi(2)
-        }
-        GraphType::Polygon | GraphType::RegularPolygon => {
-            polygon_contains(&polygon_points(data, size), Point::new(p.x, p.y))
-        }
-        // HitArea does not support the DrawPath command used by round rectangles.
-        _ => false,
-    }
+    fairygui_core::graph::graph_contains(data, size, Point::new(p.x, p.y))
 }
 
 pub(super) fn allowed(

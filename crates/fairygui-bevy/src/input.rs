@@ -70,7 +70,7 @@ type PointerTargets<'w, 's> = Query<
         Option<&'static RelativeCursorPosition>,
         Option<&'static crate::runtime::PixelHitTest>,
         Option<&'static crate::runtime::HitAreaFromChild>,
-        Option<&'static crate::graph::PolygonSurface>,
+        Option<&'static crate::graph::GraphSurface>,
     ),
 >;
 
@@ -158,12 +158,9 @@ fn graph_hit(
     runtime: &GuiRuntime,
     id: GObjectId,
     normalized: Option<Vec2>,
-    surface: Option<&crate::graph::PolygonSurface>,
+    surface: Option<&crate::graph::GraphSurface>,
 ) -> bool {
-    use fairygui_core::{
-        graph::{polygon_contains, polygon_points},
-        widget::{ControlData, GraphType},
-    };
+    use fairygui_core::widget::{ControlData, GraphType};
     let Some(object) = runtime.store().object(id) else {
         return false;
     };
@@ -180,7 +177,7 @@ fn graph_hit(
                     .scroll_bar_of_part(id)
                     .is_some_and(|bar| runtime.store().is_scroll_bar_overlay(bar))
         }
-        GraphType::Polygon | GraphType::RegularPolygon => {
+        _ => {
             let Some(n) = normalized else {
                 return false;
             };
@@ -192,9 +189,8 @@ fn graph_hit(
             } else {
                 Point::new(n.x * object.width(), n.y * object.height())
             };
-            polygon_contains(&polygon_points(data, object.size()), p)
+            fairygui_core::graph::graph_contains(data, object.size(), p)
         }
-        _ => true,
     }
 }
 
