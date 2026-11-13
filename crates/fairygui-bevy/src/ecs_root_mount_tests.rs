@@ -50,10 +50,6 @@ fn object(app: &App, owner: Entity) -> GObjectId {
 fn mount(app: &App, owner: Entity) -> GuiRootMountState {
     *app.world().get::<GuiRootMountState>(owner).unwrap()
 }
-fn send(app: &mut App, owner: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(owner, action));
-}
 fn child(app: &mut App, owner: Entity, name: &str) -> Entity {
     SystemState::<GuiQuery>::new(app.world_mut())
         .get(app.world())
@@ -110,12 +106,9 @@ fn pending_parent_keeps_a_ready_child_off_stage_then_mounts_before_its_first_ini
             Nested,
         ))
         .id();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetSliderRange { min: 0., max: 1. },
-    );
-    send(&mut app, owner, GuiObjectAction::SetSliderValue(0.25));
+    app.world_mut()
+        .entity_mut(owner)
+        .insert(crate::GuiSliderState::new(0., 1., 0.25));
     for _ in 0..3 {
         app.update();
     }

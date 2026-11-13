@@ -21,12 +21,15 @@ pub(crate) mod ecs_drag_drop;
 #[cfg(test)]
 #[path = "ecs_root_tests.rs"]
 mod ecs_root_tests;
+#[path = "edit.rs"]
+pub mod edit;
 #[path = "global_wait.rs"]
 pub(crate) mod global_wait;
 #[path = "object_drag.rs"]
 pub(crate) mod object_drag;
 #[path = "root_mount.rs"]
 pub(crate) mod root_mount;
+pub use edit::{GuiMut, GuiObjectMut, GuiWorldExt};
 #[path = "text_measure.rs"]
 pub(crate) mod text_measure;
 #[path = "tooltip.rs"]
@@ -42,8 +45,8 @@ pub struct GObjectRef(pub GObjectId);
 
 /// Current selected row indices projected onto a FairyGUI list entity.
 ///
-/// This is a read-only ECS view: change selection through [`GuiObjectCommand`]
-/// so controller and virtual-list behavior stay synchronized.
+/// Read-only projection. Use `GuiObjectMut::set_list_selection` or
+/// `select_list_index` so controllers and virtual lists stay synchronized.
 #[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
 pub struct GuiListSelection(pub Vec<usize>);
 
@@ -135,165 +138,6 @@ pub struct GuiRootInstance {
     pub handle: usize,
     /// Authoritative root object in the FairyGUI object store.
     pub object: GObjectId,
-}
-
-/// Common model mutations addressed by the Bevy entity that owns a FairyGUI
-/// object (`GObjectRef`) or root (`GuiRootInstance`).
-#[derive(Debug, Clone)]
-pub enum GuiObjectAction {
-    /// Animate from the current value, replacing only this property tween.
-    Tween {
-        target: crate::GuiTweenTarget,
-        duration: f32,
-        ease: i32,
-    },
-    StopTween(crate::GuiTweenProperty),
-    SetPosition(Vec2),
-    SetSize(Vec2),
-    SetVisible(bool),
-    SetTouchable(bool),
-    SetAlpha(f32),
-    SetScale(Vec2),
-    SetPivot {
-        pivot: Vec2,
-        as_anchor: bool,
-    },
-    SetRotation(f32),
-    SetText(String),
-    SetTooltips(Option<String>),
-    /// Resolve the current text's auto size synchronously, including relations.
-    /// Subsequent text/font changes keep this field measured before projection.
-    EnsureTextSize,
-    /// Set the native Loader/button/label/combo icon URL; empty clears it.
-    SetIcon(String),
-    SetColor(fairygui_core::color::Color),
-    SetGrayed(bool),
-    SetButtonSelected(bool),
-    /// Let application observers own selection instead of native click toggles.
-    SetButtonChangeStateOnClick(bool),
-    /// Native caption assignment, preserving/clamping the existing selection.
-    SetComboItems(Vec<String>),
-    SetComboValues(Vec<String>),
-    SetComboIcons(Option<Vec<Option<String>>>),
-    SetComboSelection(i32),
-    /// Missing values cancel selection; None selects the first empty value.
-    SetComboValue(Option<String>),
-    SetComboVisibleItemCount(i32),
-    SetComboPopupDirection(crate::GuiPopupDirection),
-    /// Bind to a controller on the combo's logical parent; None detaches it.
-    SetComboSelectionController(Option<String>),
-    SetAnimationPlaying(bool),
-    SetAnimationFrame(i32),
-    SetAnimationTimeScale(f32),
-    /// Configure a range and seek to its start, preserving Playing and speed.
-    SetAnimationPlaySettings(crate::GuiAnimationPlaySettings),
-    /// Native DeltaTime catch-up in seconds, independent of Playing and speed.
-    AdvanceAnimation(f32),
-    /// Rewind without restarting an ended finite playback.
-    RewindAnimation,
-    SetSliderValue(f64),
-    SetSliderRange {
-        min: f64,
-        max: f64,
-    },
-    SetSliderWholeNumbers(bool),
-    SetSliderChangeOnClick(bool),
-    SetSliderCanDrag(bool),
-    /// 0=Percent, 1=ValueAndMax, 2=Value, 3=Max.
-    SetSliderTitleType(i32),
-    SetControllerPage {
-        name: String,
-        index: i32,
-    },
-    SetProgress(f64),
-    SetProgressRange {
-        min: f64,
-        max: f64,
-    },
-    /// 0=Percent, 1=ValueAndMax, 2=Value, 3=Max.
-    SetProgressTitleType(i32),
-    /// Linear tweenValue: update the target immediately and animate the display.
-    TweenProgress {
-        value: f64,
-        duration: f32,
-    },
-    /// Freeze the display, retaining the target returned by the value getter.
-    StopProgressTween,
-    SetScrollPosition {
-        position: Vec2,
-        allow_bounce: bool,
-    },
-    /// Native programmatic scroll with page/item alignment and optional animation.
-    ScrollTo {
-        position: Vec2,
-        animated: bool,
-    },
-    SetScrollPercentage {
-        percentage: Vec2,
-        animated: bool,
-    },
-    /// Reveal a rectangle in the scroll pane's content coordinates.
-    ScrollToView {
-        rect: fairygui_core::geom::Rect,
-        animated: bool,
-        set_first: bool,
-    },
-    SetListSelection(i32),
-    SelectListIndex {
-        index: usize,
-        scroll_to_view: bool,
-    },
-    SetTreeExpanded {
-        index: usize,
-        expanded: bool,
-    },
-    ToggleTreeNode(usize),
-    ExpandTree,
-    CollapseTree,
-    /// Expand ancestors and add this logical node to the native selection.
-    SelectTreeNode {
-        index: usize,
-        scroll_to_view: bool,
-    },
-    PlayTransition {
-        name: String,
-        times: i32,
-    },
-    PlayTransitionWithOptions {
-        name: String,
-        options: fairygui_core::transition::TransitionPlayOptions,
-    },
-    SetTransitionPaused {
-        name: String,
-        paused: bool,
-    },
-    SetTransitionTimeScale {
-        name: String,
-        scale: f32,
-    },
-    PlayTransitionReverse {
-        name: String,
-        delay: f32,
-    },
-    StopTransition {
-        name: String,
-    },
-}
-
-/// Entity-addressed FairyGUI mutation. Send this from application ECS systems
-/// instead of borrowing the main-thread `GuiRuntime` for common property edits.
-/// Commands for a root waiting on its asset are retained until it is created.
-/// Removing or replacing that root cancels its retained commands.
-#[derive(Message, Debug, Clone)]
-pub struct GuiObjectCommand {
-    pub target: Entity,
-    pub action: GuiObjectAction,
-}
-
-impl GuiObjectCommand {
-    pub fn new(target: Entity, action: GuiObjectAction) -> Self {
-        Self { target, action }
-    }
 }
 
 #[derive(Debug)]
@@ -656,8 +500,6 @@ pub struct GuiRuntime {
     entities: HashMap<GObjectId, Entity>,
     roots: Vec<GuiRoot>,
     ecs_roots: HashMap<Entity, EcsRootBinding>,
-    object_command_cursor: bevy::ecs::message::MessageCursor<GuiObjectCommand>,
-    pending_object_commands: Vec<(ObjectCommandSource, GuiObjectCommand)>,
     ecs_windows: HashMap<Entity, windows::Binding>,
     global_wait: global_wait::GlobalWait,
     tooltip: tooltip::Tooltip,
@@ -2130,378 +1972,6 @@ pub(crate) fn emit_text_input_messages(
     }
 }
 
-#[derive(Clone)]
-pub(crate) enum ObjectCommandSource {
-    Root(FairyGuiRoot),
-    Window(windows::FairyGuiWindow),
-}
-impl ObjectCommandSource {
-    pub(crate) fn same_template(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Root(a), Self::Root(b)) => a.asset == b.asset && a.item_name == b.item_name,
-            (Self::Window(a), Self::Window(b)) => a.asset == b.asset && a.item_name == b.item_name,
-            _ => false,
-        }
-    }
-}
-
-pub(crate) fn discard_removed_object_commands(
-    mut removed: RemovedComponents<FairyGuiRoot>,
-    mut removed_windows: RemovedComponents<windows::FairyGuiWindow>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
-    for target in removed.read().chain(removed_windows.read()) {
-        runtime
-            .pending_object_commands
-            .retain(|(_, command)| command.target != target);
-    }
-}
-
-/// Both Sync passes share their cursor and pending requests. Commands sent in
-/// PostLayout apply this frame without replaying commands from Respond.
-pub(crate) fn apply_object_commands(
-    messages: Res<Messages<GuiObjectCommand>>,
-    objects: Query<&GObjectRef>,
-    roots: Query<&GuiRootInstance>,
-    sources: Query<&FairyGuiRoot>,
-    window_sources: Query<&windows::FairyGuiWindow>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
-    let incoming = runtime
-        .object_command_cursor
-        .read(&messages)
-        .cloned()
-        .collect::<Vec<_>>();
-    let waiting = std::mem::take(&mut runtime.pending_object_commands);
-    for (expected, command) in waiting
-        .into_iter()
-        .map(|(source, command)| (Some(source), command))
-        .chain(incoming.into_iter().map(|command| (None, command)))
-    {
-        let source = sources
-            .get(command.target)
-            .ok()
-            .cloned()
-            .map(ObjectCommandSource::Root)
-            .or_else(|| {
-                window_sources
-                    .get(command.target)
-                    .ok()
-                    .cloned()
-                    .map(ObjectCommandSource::Window)
-            });
-        if let Some(expected) = expected
-            && source
-                .as_ref()
-                .is_none_or(|current| !current.same_template(&expected))
-        {
-            continue;
-        }
-        let object = objects
-            .get(command.target)
-            .map(|reference| reference.0)
-            .or_else(|_| roots.get(command.target).map(|root| root.object))
-            .ok()
-            .or_else(|| runtime.ecs_window_object(command.target));
-        let Some(object) = object else {
-            if let Some(source) = source
-                && !runtime
-                    .ecs_roots
-                    .get(&command.target)
-                    .is_some_and(|binding| binding.failed)
-                && !runtime
-                    .ecs_windows
-                    .get(&command.target)
-                    .is_some_and(|binding| binding.failed)
-            {
-                runtime.pending_object_commands.push((source, command));
-            }
-            continue;
-        };
-        match &command.action {
-            GuiObjectAction::SetAnimationPlaying(playing) => {
-                runtime.store_mut().set_animation_playing(object, *playing);
-            }
-            GuiObjectAction::SetAnimationFrame(frame) => {
-                runtime.store_mut().set_animation_frame(object, *frame);
-            }
-            GuiObjectAction::SetAnimationTimeScale(scale) => {
-                runtime.store_mut().set_animation_time_scale(object, *scale);
-            }
-            GuiObjectAction::SetAnimationPlaySettings(settings) => {
-                runtime
-                    .store_mut()
-                    .set_animation_play_settings(object, *settings);
-            }
-            GuiObjectAction::AdvanceAnimation(seconds) => {
-                runtime.store_mut().advance_animation(object, *seconds);
-            }
-            GuiObjectAction::RewindAnimation => {
-                runtime.store_mut().rewind_animation(object);
-            }
-            GuiObjectAction::Tween {
-                target,
-                duration,
-                ease,
-            } => {
-                target.apply(runtime.store_mut(), object, *duration, *ease);
-            }
-            GuiObjectAction::StopTween(property) => {
-                runtime.store_mut().kill_tween_property(object, *property)
-            }
-            GuiObjectAction::SetPosition(position) if position.is_finite() => {
-                runtime.store_mut().set_xy(object, position.x, position.y);
-            }
-            GuiObjectAction::SetSize(size) if size.is_finite() && size.min_element() >= 0.0 => {
-                runtime.store_mut().set_size(object, size.x, size.y);
-            }
-            GuiObjectAction::SetVisible(visible) => {
-                runtime.store_mut().set_visible(object, *visible);
-            }
-            GuiObjectAction::SetTouchable(touchable) => {
-                runtime.store_mut().set_touchable(object, *touchable);
-            }
-            GuiObjectAction::SetAlpha(alpha) if alpha.is_finite() => {
-                runtime.store_mut().set_alpha(object, *alpha);
-            }
-            GuiObjectAction::SetScale(scale) if scale.is_finite() => {
-                runtime.store_mut().set_scale(object, scale.x, scale.y);
-            }
-            GuiObjectAction::SetPivot { pivot, as_anchor } if pivot.is_finite() => {
-                runtime
-                    .store_mut()
-                    .set_pivot(object, pivot.x, pivot.y, *as_anchor);
-            }
-            GuiObjectAction::SetRotation(rotation) if rotation.is_finite() => {
-                runtime.store_mut().set_rotation(object, *rotation);
-            }
-            GuiObjectAction::SetText(text) => {
-                runtime.store_mut().set_object_text(object, text);
-            }
-            GuiObjectAction::SetComboItems(items) => {
-                runtime.store_mut().set_combo_items(object, items.clone());
-            }
-            GuiObjectAction::SetComboValues(values) => {
-                runtime.store_mut().set_combo_values(object, values.clone());
-            }
-            GuiObjectAction::SetComboIcons(icons) => {
-                runtime.store_mut().set_combo_icons(object, icons.clone());
-            }
-            GuiObjectAction::SetComboSelection(index) => {
-                runtime.store_mut().select_combo_index(object, *index);
-            }
-            GuiObjectAction::SetComboValue(value) => {
-                runtime
-                    .store_mut()
-                    .select_combo_value(object, value.as_deref());
-            }
-            GuiObjectAction::SetComboVisibleItemCount(count) => {
-                runtime
-                    .store_mut()
-                    .set_combo_visible_item_count(object, *count);
-            }
-            GuiObjectAction::SetComboPopupDirection(direction) => {
-                let code = match direction {
-                    crate::GuiPopupDirection::Auto => 0,
-                    crate::GuiPopupDirection::Up => 1,
-                    crate::GuiPopupDirection::Down => 2,
-                };
-                runtime.store_mut().set_combo_popup_direction(object, code);
-            }
-            GuiObjectAction::SetComboSelectionController(name) => {
-                runtime
-                    .store_mut()
-                    .set_combo_selection_controller(object, name.as_deref());
-            }
-            GuiObjectAction::SetTooltips(text) => {
-                runtime.store_mut().set_tooltips(object, text.clone());
-            }
-            GuiObjectAction::EnsureTextSize => {
-                let measurer = runtime.text_measurer.clone();
-                measurer.borrow_mut().ensure(&mut runtime.store, object);
-            }
-            GuiObjectAction::SetIcon(icon) => {
-                runtime.store_mut().apply_icon_to(object, icon);
-            }
-            GuiObjectAction::SetColor(color) => {
-                runtime.store_mut().set_control_color(object, *color, None);
-            }
-            GuiObjectAction::SetGrayed(grayed) => {
-                runtime.store_mut().set_grayed(object, *grayed);
-            }
-            GuiObjectAction::SetButtonSelected(selected) => {
-                runtime.store_mut().set_button_selected(object, *selected);
-            }
-            GuiObjectAction::SetButtonChangeStateOnClick(enabled) => {
-                runtime
-                    .store_mut()
-                    .set_button_change_state_on_click(object, *enabled);
-            }
-            GuiObjectAction::SetSliderValue(value) => {
-                runtime.store_mut().set_slider_value(object, *value);
-            }
-            GuiObjectAction::SetSliderRange { min, max } => {
-                runtime.store_mut().set_slider_range(object, *min, *max);
-            }
-            GuiObjectAction::SetSliderWholeNumbers(whole) => {
-                runtime.store_mut().set_slider_whole_numbers(object, *whole);
-            }
-            GuiObjectAction::SetSliderChangeOnClick(change) => {
-                runtime
-                    .store_mut()
-                    .set_slider_change_on_click(object, *change);
-            }
-            GuiObjectAction::SetSliderCanDrag(can_drag) => {
-                runtime.store_mut().set_slider_can_drag(object, *can_drag);
-            }
-            GuiObjectAction::SetSliderTitleType(title_type) => {
-                runtime
-                    .store_mut()
-                    .set_slider_title_type(object, *title_type);
-            }
-            GuiObjectAction::SetControllerPage { name, index } => {
-                runtime
-                    .store_mut()
-                    .set_controller_page_index(object, name, *index);
-            }
-            GuiObjectAction::SetProgress(value) => {
-                runtime.store_mut().set_progress(object, *value);
-            }
-            GuiObjectAction::SetProgressRange { min, max } => {
-                runtime.store_mut().set_progress_range(object, *min, *max);
-            }
-            GuiObjectAction::SetProgressTitleType(title_type) => {
-                runtime
-                    .store_mut()
-                    .set_progress_title_type(object, *title_type);
-            }
-            GuiObjectAction::TweenProgress { value, duration } => {
-                runtime
-                    .store_mut()
-                    .tween_progress(object, *value, *duration);
-            }
-            GuiObjectAction::StopProgressTween => {
-                runtime.store_mut().stop_progress_tween(object);
-            }
-            GuiObjectAction::SetListSelection(index) => {
-                runtime.store_mut().set_list_selection(object, *index);
-            }
-            GuiObjectAction::SetTreeExpanded { index, expanded } => {
-                runtime
-                    .store_mut()
-                    .set_tree_node_expanded(object, *index, *expanded);
-            }
-            GuiObjectAction::ToggleTreeNode(index) => {
-                runtime.toggle_tree_node(object, *index);
-            }
-            GuiObjectAction::ExpandTree => {
-                runtime.expand_tree(object);
-            }
-            GuiObjectAction::CollapseTree => {
-                runtime.collapse_tree(object);
-            }
-            GuiObjectAction::SelectTreeNode {
-                index,
-                scroll_to_view,
-            } => {
-                let valid = matches!(runtime.store().object(object).map(|o|o.control()),Some(ControlData::Tree(data)) if *index<data.node_count());
-                if valid {
-                    runtime.expand_tree_to(object, *index);
-                    runtime.store_mut().add_list_selection_with_scroll(
-                        object,
-                        *index,
-                        *scroll_to_view,
-                    );
-                }
-            }
-            GuiObjectAction::SetScrollPosition {
-                position,
-                allow_bounce,
-            } if position.is_finite() => {
-                runtime
-                    .store_mut()
-                    .set_scroll_pos(object, position.x, position.y, *allow_bounce);
-            }
-            GuiObjectAction::SelectListIndex {
-                index,
-                scroll_to_view,
-            } => {
-                runtime
-                    .store_mut()
-                    .add_list_selection_with_scroll(object, *index, *scroll_to_view);
-            }
-            GuiObjectAction::ScrollTo { position, animated } if position.is_finite() => {
-                runtime.store_mut().layout_scroll_bars(object);
-                runtime
-                    .store_mut()
-                    .set_scroll_pos_animated(object, position.x, position.y, *animated);
-            }
-            GuiObjectAction::SetScrollPercentage {
-                percentage,
-                animated,
-            } if percentage.is_finite() => {
-                runtime.store_mut().layout_scroll_bars(object);
-                if let Some(pane) = runtime.store().scroll_pane(object) {
-                    let max = pane.max_scroll_pos();
-                    let position =
-                        percentage.clamp(Vec2::ZERO, Vec2::ONE) * Vec2::new(max.x, max.y);
-                    runtime
-                        .store_mut()
-                        .set_scroll_pos_animated(object, position.x, position.y, *animated);
-                }
-            }
-            GuiObjectAction::ScrollToView {
-                rect,
-                animated,
-                set_first,
-            } => {
-                runtime
-                    .store_mut()
-                    .scroll_rect_to_view(object, *rect, *animated, *set_first);
-            }
-            GuiObjectAction::PlayTransition { name, times } => {
-                runtime.store_mut().play_transition(object, name, *times);
-            }
-            GuiObjectAction::PlayTransitionWithOptions { name, options } => {
-                runtime
-                    .store_mut()
-                    .play_transition_with_options(object, name, *options);
-            }
-            GuiObjectAction::SetTransitionPaused { name, paused } => {
-                runtime
-                    .store_mut()
-                    .set_transition_paused(object, name, *paused);
-            }
-            GuiObjectAction::SetTransitionTimeScale { name, scale } if scale.is_finite() => {
-                runtime
-                    .store_mut()
-                    .set_transition_time_scale(object, name, *scale);
-            }
-            GuiObjectAction::PlayTransitionReverse { name, delay } if delay.is_finite() => {
-                runtime
-                    .store_mut()
-                    .play_transition_reverse(object, name, *delay);
-            }
-            GuiObjectAction::StopTransition { name } => {
-                runtime.store_mut().stop_transition(object, name);
-            }
-            GuiObjectAction::SetPosition(_)
-            | GuiObjectAction::SetSize(_)
-            | GuiObjectAction::SetAlpha(_)
-            | GuiObjectAction::SetScale(_)
-            | GuiObjectAction::SetPivot { .. }
-            | GuiObjectAction::SetRotation(_)
-            | GuiObjectAction::SetScrollPosition { .. }
-            | GuiObjectAction::ScrollTo { .. }
-            | GuiObjectAction::SetScrollPercentage { .. }
-            | GuiObjectAction::SetTransitionTimeScale { .. }
-            | GuiObjectAction::PlayTransitionReverse { .. } => {}
-        }
-    }
-}
-
-/// Project native list selection onto ECS components after application commands
-/// have been applied. Input-driven selection is visible in the same frame too.
 pub fn sync_list_selection_components(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,
@@ -2513,45 +1983,6 @@ pub fn sync_list_selection_components(
         };
         if current.0 != selected {
             commands.entity(entity).insert(GuiListSelection(selected));
-        }
-    }
-}
-
-/// Project current control values onto their ECS entities after model changes.
-#[allow(clippy::type_complexity)]
-pub fn sync_control_state_components(
-    mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
-    controls: Query<
-        (
-            Entity,
-            &GObjectRef,
-            Option<&GuiProgressValue>,
-            Option<&GuiSliderValue>,
-            Option<&GuiButtonSelected>,
-        ),
-        Or<(
-            With<GuiProgressValue>,
-            With<GuiSliderValue>,
-            With<GuiButtonSelected>,
-        )>,
-    >,
-) {
-    for (entity, object, progress, slider, button) in &controls {
-        if let (Some(current), Some(value)) = (progress, runtime.store().progress_value(object.0))
-            && current.0 != value
-        {
-            commands.entity(entity).insert(GuiProgressValue(value));
-        }
-        if let (Some(current), Some(value)) = (slider, runtime.store().slider_value(object.0))
-            && current.0 != value
-        {
-            commands.entity(entity).insert(GuiSliderValue(value));
-        }
-        if let (Some(current), Some(value)) = (button, runtime.store().button_selected(object.0))
-            && current.0 != value
-        {
-            commands.entity(entity).insert(GuiButtonSelected(value));
         }
     }
 }
@@ -3126,25 +2557,6 @@ fn spawn_object(
     if let Some(selection) = store.list_selections(object) {
         entity.insert(GuiListSelection(selection));
     }
-    match gobject.control() {
-        ControlData::ProgressBar(_) => {
-            entity.insert(GuiProgressValue(
-                store.progress_value(object).unwrap_or_default(),
-            ));
-        }
-        ControlData::Slider(_) => {
-            entity.insert(GuiSliderValue(
-                store.slider_value(object).unwrap_or_default(),
-            ));
-        }
-        ControlData::Button(_) => {
-            entity.insert(GuiButtonSelected(
-                store.button_selected(object).unwrap_or_default(),
-            ));
-        }
-        _ => {}
-    }
-
     // 图形控件的外观：填充走背景色，描边走边框，形状由圆角决定。
     if let Some(style) = &graph {
         entity.insert(BackgroundColor(style.fill));
@@ -4305,6 +3717,21 @@ pub fn sync_text_sizes(
         if changed {
             let id = object_ref.0;
             runtime.store_mut().set_size(id, size.x, size.y);
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum GuiOwnerTemplate {
+    Root(FairyGuiRoot),
+    Window(windows::FairyGuiWindow),
+}
+impl GuiOwnerTemplate {
+    pub(crate) fn same_template(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Root(a), Self::Root(b)) => a.asset == b.asset && a.item_name == b.item_name,
+            (Self::Window(a), Self::Window(b)) => a.asset == b.asset && a.item_name == b.item_name,
+            _ => false,
         }
     }
 }

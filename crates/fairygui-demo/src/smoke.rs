@@ -1560,19 +1560,17 @@ fn drive(
                 match smoke.movie_stage {
                     0 => {
                         smoke.movie_object = Some(entity);
-                        commands.write_message(GuiObjectCommand::new(
-                            entity,
-                            GuiObjectAction::SetAnimationTimeScale(4.),
-                        ));
-                        commands.write_message(GuiObjectCommand::new(
-                            entity,
-                            GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings {
+                        runtime.edit(entity, |object: &mut GuiObjectMut| {
+                            object.set_animation_time_scale(4.)
+                        });
+                        runtime.edit(entity, |object: &mut GuiObjectMut| {
+                            object.set_animation_play_settings(GuiAnimationPlaySettings {
                                 start: 1,
                                 end: 3,
                                 times: 2,
                                 end_at: 2,
-                            }),
-                        ));
+                            })
+                        });
                         smoke.movie_stage = 1;
                         return;
                     }
@@ -1584,10 +1582,9 @@ fn drive(
                         assert!(movie.is_playing());
                         assert_eq!(movie.frame(), 2);
                         assert_eq!(smoke.movie_completions, 1);
-                        commands.write_message(GuiObjectCommand::new(
-                            entity,
-                            GuiObjectAction::RewindAnimation,
-                        ));
+                        runtime.edit(entity, |object: &mut GuiObjectMut| {
+                            object.rewind_animation()
+                        });
                         smoke.movie_since = smoke.frames;
                         smoke.movie_stage = 2;
                         return;
@@ -1603,15 +1600,14 @@ fn drive(
                             "rewind alone must not restart an ended movie"
                         );
                         assert_eq!(smoke.movie_completions, 1);
-                        commands.write_message(GuiObjectCommand::new(
-                            entity,
-                            GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings {
+                        runtime.edit(entity, |object: &mut GuiObjectMut| {
+                            object.set_animation_play_settings(GuiAnimationPlaySettings {
                                 start: 1,
                                 end: 2,
                                 times: 1,
                                 end_at: 1,
-                            }),
-                        ));
+                            })
+                        });
                         smoke.movie_stage = 3;
                         return;
                     }

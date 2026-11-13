@@ -56,6 +56,7 @@ pub fn bind(
     pages: Query<(Entity, &FairyGuiRoot), Without<Joystick>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     gui: GuiQuery,
+    mut gui_edit: GuiMut,
 ) {
     let Ok(window) = windows.single() else { return };
     let viewport = Vec2::new(window.width(), window.height());
@@ -106,14 +107,12 @@ pub fn bind(
             .entity(button)
             .insert(Owner(page))
             .observe(returned);
-        commands.write_message(GuiObjectCommand::new(
-            button,
-            GuiObjectAction::SetButtonChangeStateOnClick(false),
-        ));
-        commands.write_message(GuiObjectCommand::new(
-            button,
-            GuiObjectAction::SetButtonSelected(false),
-        ));
+        gui_edit.edit(button, |object: &mut GuiObjectMut| {
+            object.set_button_change_state_on_click(false)
+        });
+        gui_edit.edit(button, |object: &mut GuiObjectMut| {
+            object.set_button_selected(false)
+        });
     }
 }
 
@@ -123,7 +122,7 @@ pub fn fit(
     mut pages: Query<(Entity, &FairyGuiRoot, Option<&mut Joystick>)>,
     windows: Query<&Window, With<PrimaryWindow>>,
     gui: GuiQuery,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     let Ok(window) = windows.single() else { return };
     let size = Vec2::new(window.width(), window.height());
@@ -135,13 +134,12 @@ pub fn fit(
             continue;
         };
         if transform.position() != Vec2::ZERO {
-            commands.write(GuiObjectCommand::new(
-                page,
-                GuiObjectAction::SetPosition(Vec2::ZERO),
-            ));
+            objects.edit(page, |object: &mut GuiObjectMut| {
+                object.set_position(Vec2::ZERO)
+            });
         }
         if transform.size() != size {
-            commands.write(GuiObjectCommand::new(page, GuiObjectAction::SetSize(size)));
+            objects.edit(page, |object: &mut GuiObjectMut| object.set_size(size));
         }
         if let Some(mut joystick) = joystick
             && joystick.viewport != size
@@ -149,50 +147,43 @@ pub fn fit(
             joystick.home.y += size.y - joystick.viewport.y;
             joystick.viewport = size;
             joystick.pointer = None;
-            commands.write(GuiObjectCommand::new(
-                joystick.button,
-                GuiObjectAction::StopTween(GuiTweenProperty::Xy),
-            ));
-            restore(&mut joystick, &gui, &mut commands);
-            commands.write(GuiObjectCommand::new(
-                joystick.output,
-                GuiObjectAction::SetText(String::new()),
-            ));
+            objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+                object.stop_tween(GuiTweenProperty::Xy)
+            });
+            restore(&mut joystick, &gui, &mut objects);
+            objects.edit(joystick.output, |object: &mut GuiObjectMut| {
+                object.set_text(String::new())
+            });
         }
     }
 }
 
-fn position(
-    entity: Entity,
-    center: Vec2,
-    gui: &GuiQuery,
-    commands: &mut MessageWriter<GuiObjectCommand>,
-) {
+fn position(entity: Entity, center: Vec2, gui: &GuiQuery, objects: &mut GuiMut) {
     if let Some(transform) = gui.transform(entity) {
-        commands.write(GuiObjectCommand::new(
-            entity,
-            GuiObjectAction::SetPosition(center - transform.size() / 2.),
-        ));
+        objects.edit(entity, |object: &mut GuiObjectMut| {
+            object.set_position(center - transform.size() / 2.)
+        });
     }
 }
 
-fn restore(
-    joystick: &mut Joystick,
-    gui: &GuiQuery,
-    commands: &mut MessageWriter<GuiObjectCommand>,
-) {
+fn restore(joystick: &mut Joystick, gui: &GuiQuery, objects: &mut GuiMut) {
     joystick.returning = false;
     joystick.rotation = 0.;
     joystick.button_center = joystick.home;
-    position(joystick.button, joystick.home, gui, commands);
-    position(joystick.center, joystick.home, gui, commands);
-    for (entity, action) in [
-        (joystick.button, GuiObjectAction::SetButtonSelected(false)),
-        (joystick.thumb, GuiObjectAction::SetRotation(0.)),
-        (joystick.center, GuiObjectAction::SetVisible(true)),
-    ] {
-        commands.write(GuiObjectCommand::new(entity, action));
-    }
+    position(joystick.button, joystick.home, gui, objects);
+    position(joystick.center, joystick.home, gui, objects);
+
+    objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+        object.set_button_selected(false)
+    });
+
+    objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
+        object.set_rotation(0.)
+    });
+
+    objects.edit(joystick.center, |object: &mut GuiObjectMut| {
+        object.set_visible(true)
+    });
 }
 
 fn pointer(
@@ -200,7 +191,7 @@ fn pointer(
     owners: Query<&Owner>,
     mut pages: Query<&mut Joystick>,
     gui: GuiQuery,
-    mut messages: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     mut commands: Commands,
 ) {
     let Ok(owner) = owners.get(event.entity) else {
@@ -235,24 +226,20 @@ fn pointer(
             joystick.last = point;
             joystick.button_center = point;
             joystick.rotation = (point - joystick.home).to_angle().to_degrees() + 90.;
-            messages.write(GuiObjectCommand::new(
-                joystick.button,
-                GuiObjectAction::StopTween(GuiTweenProperty::Xy),
-            ));
-            messages.write(GuiObjectCommand::new(
-                joystick.button,
-                GuiObjectAction::SetButtonSelected(true),
-            ));
-            messages.write(GuiObjectCommand::new(
-                joystick.center,
-                GuiObjectAction::SetVisible(true),
-            ));
-            position(joystick.center, point, &gui, &mut messages);
-            position(joystick.button, point, &gui, &mut messages);
-            messages.write(GuiObjectCommand::new(
-                joystick.thumb,
-                GuiObjectAction::SetRotation(joystick.rotation),
-            ));
+            objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+                object.stop_tween(GuiTweenProperty::Xy)
+            });
+            objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+                object.set_button_selected(true)
+            });
+            objects.edit(joystick.center, |object: &mut GuiObjectMut| {
+                object.set_visible(true)
+            });
+            position(joystick.center, point, &gui, &mut objects);
+            position(joystick.button, point, &gui, &mut objects);
+            objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
+                object.set_rotation(joystick.rotation)
+            });
         }
         EventKind::MouseDrag if joystick.pointer == Some(id) => {
             let Some(point) = event
@@ -270,11 +257,10 @@ fn pointer(
             center.x = center.x.max(0.);
             center.y = center.y.min(joystick.viewport.y);
             joystick.button_center = center;
-            position(joystick.button, center, &gui, &mut messages);
-            messages.write(GuiObjectCommand::new(
-                joystick.thumb,
-                GuiObjectAction::SetRotation(joystick.rotation),
-            ));
+            position(joystick.button, center, &gui, &mut objects);
+            objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
+                object.set_rotation(joystick.rotation)
+            });
             commands.trigger(Moving {
                 entity: owner.0,
                 degrees,
@@ -284,23 +270,20 @@ fn pointer(
             joystick.pointer = None;
             joystick.returning = true;
             joystick.rotation += 180.;
-            messages.write(GuiObjectCommand::new(
-                joystick.thumb,
-                GuiObjectAction::SetRotation(joystick.rotation),
-            ));
-            messages.write(GuiObjectCommand::new(
-                joystick.center,
-                GuiObjectAction::SetVisible(false),
-            ));
+            objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
+                object.set_rotation(joystick.rotation)
+            });
+            objects.edit(joystick.center, |object: &mut GuiObjectMut| {
+                object.set_visible(false)
+            });
             if let Some(button) = gui.transform(joystick.button) {
-                messages.write(GuiObjectCommand::new(
-                    joystick.button,
-                    GuiObjectAction::Tween {
-                        target: GuiTweenTarget::Position(joystick.home - button.size() / 2.),
-                        duration: 0.3,
-                        ease: 20, // CircOut
-                    },
-                ));
+                objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+                    object.tween(
+                        GuiTweenTarget::Position(joystick.home - button.size() / 2.),
+                        0.3,
+                        20,
+                    )
+                });
             }
             commands.trigger(Released { entity: owner.0 });
         }
@@ -313,7 +296,7 @@ fn returned(
     owners: Query<&Owner>,
     mut pages: Query<&mut Joystick>,
     gui: GuiQuery,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     if event.property != GuiTweenProperty::Xy {
         return;
@@ -325,31 +308,21 @@ fn returned(
         return;
     };
     if joystick.returning && joystick.pointer.is_none() {
-        restore(&mut joystick, &gui, &mut commands);
+        restore(&mut joystick, &gui, &mut objects);
     }
 }
 
-fn moving(
-    event: On<Moving>,
-    pages: Query<&Joystick>,
-    mut commands: MessageWriter<GuiObjectCommand>,
-) {
+fn moving(event: On<Moving>, pages: Query<&Joystick>, mut objects: GuiMut) {
     if let Ok(joystick) = pages.get(event.entity) {
-        commands.write(GuiObjectCommand::new(
-            joystick.output,
-            GuiObjectAction::SetText(event.degrees.to_string()),
-        ));
+        objects.edit(joystick.output, |object: &mut GuiObjectMut| {
+            object.set_text(event.degrees.to_string())
+        });
     }
 }
-fn released(
-    event: On<Released>,
-    pages: Query<&Joystick>,
-    mut commands: MessageWriter<GuiObjectCommand>,
-) {
+fn released(event: On<Released>, pages: Query<&Joystick>, mut objects: GuiMut) {
     if let Ok(joystick) = pages.get(event.entity) {
-        commands.write(GuiObjectCommand::new(
-            joystick.output,
-            GuiObjectAction::SetText(String::new()),
-        ));
+        objects.edit(joystick.output, |object: &mut GuiObjectMut| {
+            object.set_text(String::new())
+        });
     }
 }

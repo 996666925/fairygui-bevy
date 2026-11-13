@@ -134,9 +134,9 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
         .non_send::<GuiRuntime>()
         .entity_of(list)
         .unwrap();
-    app.add_message::<GuiObjectCommand>().add_systems(
+    app.add_systems(
         Update,
-        (apply_object_commands, sync_list_selection_components).chain(),
+        (crate::properties::sync, sync_list_selection_components).chain(),
     );
 
     let max_scroll = app
@@ -146,30 +146,15 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
         .scroll_pane(list)
         .unwrap()
         .max_scroll_pos();
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            list_entity,
-            GuiObjectAction::SelectListIndex {
-                index: 500,
-                scroll_to_view: true,
-            },
-        ));
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            list_entity,
-            GuiObjectAction::SetScrollPosition {
-                position: Vec2::new(max_scroll.x, max_scroll.y),
-                allow_bounce: false,
-            },
-        ));
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            list_entity,
-            GuiObjectAction::SetListSelection(123),
-        ));
+    if let Some(mut object) = app.world_mut().gui_mut(list_entity) {
+        object.select_list_index(500, true)
+    }
+    if let Some(mut object) = app.world_mut().gui_mut(list_entity) {
+        object.set_scroll_position(Vec2::new(max_scroll.x, max_scroll.y), false)
+    }
+    if let Some(mut object) = app.world_mut().gui_mut(list_entity) {
+        object.set_list_selection(123)
+    }
 
     app.update();
     {
@@ -183,12 +168,9 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
         Some(&GuiListSelection(vec![123]))
     );
 
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            list_entity,
-            GuiObjectAction::SetListSelection(-1),
-        ));
+    if let Some(mut object) = app.world_mut().gui_mut(list_entity) {
+        object.set_list_selection(-1)
+    }
     app.update();
     assert_eq!(
         app.world()
@@ -228,21 +210,12 @@ fn ecs_commands_set_slider_value_by_entity() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .insert_non_send(runtime)
-        .add_message::<GuiObjectCommand>()
-        .add_systems(
-            Update,
-            (apply_object_commands, sync_control_state_components).chain(),
-        );
+        .add_systems(Update, crate::properties::sync);
     let target = app
         .world_mut()
         .spawn((GObjectRef(slider), GuiSliderValue(initial_value)))
         .id();
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetSliderValue(max),
-        ));
+    app.world_mut().get_mut::<GuiSliderValue>(target).unwrap().0 = max;
 
     app.update();
     assert_eq!(
@@ -284,21 +257,15 @@ fn ecs_commands_project_button_selection_by_entity() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .insert_non_send(runtime)
-        .add_message::<GuiObjectCommand>()
-        .add_systems(
-            Update,
-            (apply_object_commands, sync_control_state_components).chain(),
-        );
+        .add_systems(Update, crate::properties::sync);
     let target = app
         .world_mut()
         .spawn((GObjectRef(button), GuiButtonSelected(false)))
         .id();
     app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetButtonSelected(true),
-        ));
+        .get_mut::<GuiButtonSelected>(target)
+        .unwrap()
+        .0 = true;
 
     app.update();
     assert_eq!(
@@ -331,21 +298,15 @@ fn ecs_commands_set_progress_by_entity() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .insert_non_send(runtime)
-        .add_message::<GuiObjectCommand>()
-        .add_systems(
-            Update,
-            (apply_object_commands, sync_control_state_components).chain(),
-        );
+        .add_systems(Update, crate::properties::sync);
     let target = app
         .world_mut()
         .spawn((GObjectRef(progress), GuiProgressValue(initial_value)))
         .id();
     app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetProgress(37.),
-        ));
+        .get_mut::<GuiProgressValue>(target)
+        .unwrap()
+        .0 = 37.;
 
     app.update();
     assert_eq!(
@@ -633,18 +594,16 @@ fn ecs_object_commands_mutate_the_model_by_entity() {
         )
         .unwrap();
     let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
-    app.insert_non_send(GuiRuntime::default())
-        .add_message::<GuiObjectCommand>()
-        .add_systems(
-            Update,
-            (
-                sync_ecs_roots,
-                apply_object_commands,
-                spawn_pending_roots,
-                spawn_pending_objects,
-            )
-                .chain(),
-        );
+    app.insert_non_send(GuiRuntime::default()).add_systems(
+        Update,
+        (
+            sync_ecs_roots,
+            crate::properties::sync,
+            spawn_pending_roots,
+            spawn_pending_objects,
+        )
+            .chain(),
+    );
     app.update();
     let instance = *app.world().get::<GuiRootInstance>(owner).unwrap();
     let text = app
@@ -653,24 +612,15 @@ fn ecs_object_commands_mutate_the_model_by_entity() {
         .store_mut()
         .create(fairygui_core::package::ObjectType::Text);
     let text_entity = app.world_mut().spawn(GObjectRef(text)).id();
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            owner,
-            GuiObjectAction::SetPosition(Vec2::new(37., 42.)),
-        ));
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            owner,
-            GuiObjectAction::SetSize(Vec2::new(640., 360.)),
-        ));
-    app.world_mut()
-        .resource_mut::<Messages<GuiObjectCommand>>()
-        .write(GuiObjectCommand::new(
-            text_entity,
-            GuiObjectAction::SetText("ECS message".into()),
-        ));
+    if let Some(mut object) = app.world_mut().gui_mut(owner) {
+        object.set_position(Vec2::new(37., 42.))
+    }
+    if let Some(mut object) = app.world_mut().gui_mut(owner) {
+        object.set_size(Vec2::new(640., 360.))
+    }
+    if let Some(mut object) = app.world_mut().gui_mut(text_entity) {
+        object.set_text("ECS message")
+    }
     app.update();
     let gui = app.world().non_send::<GuiRuntime>();
     let object = gui.store().object(instance.object).unwrap();

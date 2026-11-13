@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use fairygui_bevy::{
-    FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiPopupCommand, GuiPopupMenu,
-    GuiQuery, GuiRootInstance, GuiTransitionComplete, GuiTransitionHook,
+    FairyGuiRoot, GuiMenuAction, GuiMut, GuiObjectMut, GuiPopupCommand, GuiPopupMenu, GuiQuery,
+    GuiRootInstance, GuiTransitionComplete, GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -15,7 +15,7 @@ pub fn handle_links(
     mut links: MessageReader<fairygui_bevy::GuiLink>,
     controller: Res<DemoController>,
     gui: GuiQuery,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     for link in links.read() {
         let Some(root) = controller.basics_page_owner else {
@@ -24,13 +24,12 @@ pub fn handle_links(
         if controller.package.as_deref() == Some("Basics")
             && gui.child_by_name(root, "n12") == Some(link.entity)
         {
-            commands.write(GuiObjectCommand::new(
-                link.entity,
-                GuiObjectAction::SetText(format!(
+            objects.edit(link.entity, |object: &mut GuiObjectMut| {
+                object.set_text(format!(
                     "[img]ui://9leh0eyft9fj5f[/img][color=#FF0000]你点击了链接[/color]：{}",
                     link.href
-                )),
-            ));
+                ))
+            });
         }
     }
 }
@@ -83,7 +82,7 @@ pub fn dispose_dynamic_roots(commands: &mut Commands, controller: &mut DemoContr
 /// entity-addressed commands. This keeps temporary pages in ECS ownership too.
 pub fn initialize_demo_roots(
     mut commands: Commands,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     roots: Query<(Entity, &GuiRootInstance, &DemoRootKind), Without<DemoRootInitialized>>,
     gui: GuiQuery,
     mut controller: ResMut<DemoController>,
@@ -100,10 +99,9 @@ pub fn initialize_demo_roots(
                 let container = gui.find_by_name(root, "container").unwrap_or(root);
                 let y =
                     owner.position().y + gui.transform(container).map_or(70.0, |o| o.position().y);
-                gui_commands.write(GuiObjectCommand::new(
-                    entity,
-                    GuiObjectAction::SetPosition(Vec2::new(owner.position().x, y)),
-                ));
+                objects.edit(entity, |object: &mut GuiObjectMut| {
+                    object.set_position(Vec2::new(owner.position().x, y))
+                });
                 controller.basics_page = Some(instance.handle);
                 controller.basics_page_owner = Some(entity);
             }
@@ -122,32 +120,24 @@ pub fn initialize_demo_roots(
                     ),
                     _ => owner.position(),
                 };
-                gui_commands.write(GuiObjectCommand::new(
-                    entity,
-                    GuiObjectAction::SetPosition(position),
-                ));
-                gui_commands.write(GuiObjectCommand::new(
-                    entity,
-                    GuiObjectAction::PlayTransition {
-                        name: "t0".into(),
-                        times: if index == 3 { 3 } else { 1 },
-                    },
-                ));
+                objects.edit(entity, |object: &mut GuiObjectMut| {
+                    object.set_position(position)
+                });
+                objects.edit(entity, |object: &mut GuiObjectMut| {
+                    object.play_transition("t0", if index == 3 { 3 } else { 1 })
+                });
                 if index == 4 {
                     for (name, value) in [("value", "10000"), ("add_value", "+2000")] {
                         if let Some(target) = gui.find_by_name(entity, name) {
-                            gui_commands.write(GuiObjectCommand::new(
-                                target,
-                                GuiObjectAction::SetText(value.into()),
-                            ));
+                            objects
+                                .edit(target, |object: &mut GuiObjectMut| object.set_text(value));
                         }
                     }
                 }
                 if let Some(target) = gui.child_by_name(root, "g0") {
-                    gui_commands.write(GuiObjectCommand::new(
-                        target,
-                        GuiObjectAction::SetVisible(false),
-                    ));
+                    objects.edit(target, |object: &mut GuiObjectMut| {
+                        object.set_visible(false)
+                    });
                 }
                 controller.transition_sample = Some(instance.handle);
                 controller.transition_sample_owner = Some(entity);
@@ -270,7 +260,7 @@ pub fn advance_transition_demo(
         MessageReader<GuiTransitionHook>,
         MessageReader<GuiTransitionComplete>,
     ),
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     let (mut hooks, mut completions) = notifications;
@@ -307,10 +297,7 @@ pub fn advance_transition_demo(
             .root_owner
             .and_then(|root| gui.child_by_name(root, "g0"))
         {
-            gui_commands.write(GuiObjectCommand::new(
-                group,
-                GuiObjectAction::SetVisible(true),
-            ));
+            objects.edit(group, |object: &mut GuiObjectMut| object.set_visible(true));
         }
         return;
     }
@@ -320,13 +307,9 @@ pub fn advance_transition_demo(
     }
     if keys.just_pressed(KeyCode::Space) {
         controller.transition_paused = !controller.transition_paused;
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetTransitionPaused {
-                name: "t0".into(),
-                paused: controller.transition_paused,
-            },
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_transition_paused("t0", controller.transition_paused)
+        });
     }
     if keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::ArrowDown) {
         controller.transition_time_scale = if keys.just_pressed(KeyCode::ArrowUp) {
@@ -335,31 +318,22 @@ pub fn advance_transition_demo(
             controller.transition_time_scale * 0.5
         };
         controller.transition_time_scale = controller.transition_time_scale.clamp(0.25, 4.0);
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetTransitionTimeScale {
-                name: "t0".into(),
-                scale: controller.transition_time_scale,
-            },
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_transition_time_scale("t0", controller.transition_time_scale)
+        });
     }
     if keys.just_pressed(KeyCode::KeyR) {
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::PlayTransitionReverse {
-                name: "t0".into(),
-                delay: 0.0,
-            },
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.play_transition_reverse("t0", 0.0)
+        });
     }
     if let Some(elapsed) = &mut controller.numeric_elapsed {
         *elapsed = (*elapsed + time.delta_secs()).min(0.3);
         let value = (10000.0 + 2000.0 * *elapsed / 0.3).floor() as i32;
         if let Some(target) = gui.child_by_name(target, "value") {
-            gui_commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetText(value.to_string()),
-            ));
+            objects.edit(target, |object: &mut GuiObjectMut| {
+                object.set_text(value.to_string())
+            });
         }
     }
 }
@@ -371,7 +345,7 @@ pub fn navigate_basics(
     controller: &mut DemoController,
     handle: Handle<fairygui_bevy::FuiAsset>,
     listener: u64,
-    gui_commands: &mut MessageWriter<GuiObjectCommand>,
+    objects: &mut GuiMut,
 ) -> bool {
     if controller.package.as_deref() != Some("Basics") {
         return false;
@@ -391,13 +365,9 @@ pub fn navigate_basics(
         commands.entity(owner).despawn();
     }
     controller.basics_page = None;
-    gui_commands.write(GuiObjectCommand::new(
-        root,
-        GuiObjectAction::SetControllerPage {
-            name: "c1".into(),
-            index: i32::from(page.is_some()),
-        },
-    ));
+    objects.edit(root, |object: &mut GuiObjectMut| {
+        object.set_controller_page("c1", i32::from(page.is_some()))
+    });
     if let Some(page) = page {
         let owner = commands
             .spawn((
@@ -409,17 +379,15 @@ pub fn navigate_basics(
     }
     for name in BASICS_PAGES {
         if let Some(target) = gui.find_by_name(root, &format!("btn_{name}")) {
-            gui_commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetVisible(page.is_none()),
-            ));
+            objects.edit(target, |object: &mut GuiObjectMut| {
+                object.set_visible(page.is_none())
+            });
         }
     }
     if let Some(target) = gui.find_by_name(root, "btn_Back") {
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetVisible(page.is_some()),
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_visible(page.is_some())
+        });
     }
     true
 }
@@ -475,7 +443,7 @@ pub fn handle_menu_actions(
     mut actions: MessageReader<GuiMenuAction>,
     mut controller: ResMut<DemoController>,
     gui: GuiQuery,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     for action in actions.read() {
         if controller.package.as_deref() != Some("Basics")
@@ -489,26 +457,20 @@ pub fn handle_menu_actions(
             continue;
         };
         if let Some(target) = gui.child_by_name(page, "n0") {
-            commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetText(format!(
+            objects.edit(target, |object: &mut GuiObjectMut| {
+                object.set_text(format!(
                     "{}{}",
                     action.caption,
                     if action.checked { " ✓" } else { "" }
-                )),
-            ));
+                ))
+            });
         }
         controller.last_menu_action = Some(action.clone());
     }
 }
 
 /// 推进 Laya CooldownDemo 的两个循环进度条。
-pub fn tick(
-    gui: &GuiQuery,
-    controller: &mut DemoController,
-    delta: f32,
-    commands: &mut MessageWriter<GuiObjectCommand>,
-) {
+pub fn tick(gui: &GuiQuery, controller: &mut DemoController, delta: f32, objects: &mut GuiMut) {
     controller.elapsed += delta;
     let Some(root) = controller.root_owner else {
         return;
@@ -526,18 +488,13 @@ pub fn tick(
     let first_value = f64::from((controller.elapsed / 5.0) % 1.0 * 100.0);
     let second_value = f64::from(10.0 - (controller.elapsed / 10.0) % 10.0);
     for (target, value) in [(first, first_value), (second, second_value)] {
-        commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetProgress(value),
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_progress(value)
+        });
     }
 }
 
-pub fn copy_basics_input(
-    gui: &GuiQuery,
-    controller: &DemoController,
-    commands: &mut MessageWriter<GuiObjectCommand>,
-) {
+pub fn copy_basics_input(gui: &GuiQuery, controller: &DemoController, objects: &mut GuiMut) {
     let Some(page) = controller.basics_page_owner else {
         return;
     };
@@ -546,10 +503,9 @@ pub fn copy_basics_input(
     };
     let value = gui.text(input).unwrap_or_default();
     if let Some(target) = gui.find_by_name(page, "n24") {
-        commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetText(value.to_owned()),
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_text(value.to_owned())
+        });
     }
 }
 
@@ -557,7 +513,7 @@ pub fn handle_virtual_list_action(
     gui: &GuiQuery,
     controller: &DemoController,
     listener: u64,
-    commands: &mut MessageWriter<GuiObjectCommand>,
+    objects: &mut GuiMut,
 ) {
     let Some(root) = controller.root_owner else {
         return;
@@ -570,22 +526,17 @@ pub fn handle_virtual_list_action(
     };
     match listener.checked_sub(DEMO_ACTION_BASE) {
         Some(0) => {
-            commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SelectListIndex {
-                    index: 500,
-                    scroll_to_view: true,
-                },
-            ));
+            objects.edit(target, |object: &mut GuiObjectMut| {
+                object.select_list_index(500, true)
+            });
         }
         Some(index @ (1 | 2)) => {
-            commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetScrollPercentage {
-                    percentage: Vec2::new(0.0, if index == 1 { 0.0 } else { 1.0 }),
-                    animated: false,
-                },
-            ));
+            objects.edit(target, |object: &mut GuiObjectMut| {
+                object.set_scroll_percentage(
+                    Vec2::new(0.0, if index == 1 { 0.0 } else { 1.0 }),
+                    false,
+                )
+            });
         }
         _ => {}
     }

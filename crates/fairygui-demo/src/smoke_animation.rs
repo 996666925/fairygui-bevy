@@ -22,7 +22,7 @@ fn click(
     event: On<GuiEvent>,
     controls: Query<&Controls>,
     mut results: ResMut<Results>,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     if event.event.kind != fairygui_core::object::EventKind::Click {
         return;
@@ -32,24 +32,21 @@ fn click(
     };
     results.clicks += 1;
     for entity in controls.0 {
-        for action in if results.clicks == 1 {
-            vec![
-                GuiObjectAction::SetAnimationPlaying(false),
-                GuiObjectAction::SetAnimationFrame(1),
-            ]
+        let Some(mut object) = objects.get_mut(entity) else {
+            continue;
+        };
+        if results.clicks == 1 {
+            object.set_animation_playing(false);
+            object.set_animation_frame(1);
         } else {
-            vec![
-                GuiObjectAction::SetAnimationPlaying(true),
-                GuiObjectAction::SetAnimationTimeScale(100.),
-                GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings {
-                    start: 1,
-                    end: 2,
-                    times: 1,
-                    end_at: 3,
-                }),
-            ]
-        } {
-            commands.write(GuiObjectCommand::new(entity, action));
+            object.set_animation_playing(true);
+            object.set_animation_time_scale(100.);
+            object.set_animation_play_settings(GuiAnimationPlaySettings {
+                start: 1,
+                end: 2,
+                times: 1,
+                end_at: 3,
+            });
         }
     }
 }
@@ -57,16 +54,15 @@ fn completed(
     event: On<GuiAnimationComplete>,
     gui: GuiQuery,
     mut results: ResMut<Results>,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     let state = gui.animation(event.entity).unwrap();
     assert!(state.is_ended() && state.is_playing());
     assert_eq!(state.frame(), 3);
     results.completed.push((event.entity, state.frame()));
-    commands.write(GuiObjectCommand::new(
-        event.entity,
-        GuiObjectAction::SetAnimationPlaying(false),
-    ));
+    objects.edit(event.entity, |object: &mut GuiObjectMut| {
+        object.set_animation_playing(false)
+    });
 }
 
 pub(super) fn install(app: &mut App) {
@@ -101,6 +97,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -119,20 +116,13 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let page = commands
-                .spawn(FairyGuiRoot::new(
-                    assets.load("ui/Basics.fui"),
-                    "Demo_MovieClip",
-                ))
+                .spawn(
+                    FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Demo_MovieClip")
+                        .with_position(Vec2::new(50., 60.)),
+                )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                page,
-                GuiObjectAction::SetPosition(Vec2::new(50., 60.)),
-            ));
             state.page = Some(page);
             next = true;
         }
@@ -211,10 +201,9 @@ fn drive(
         }
         8 if elapsed >= 8 => {
             let loader = state.controls[1];
-            commands.write_message(GuiObjectCommand::new(
-                loader,
-                GuiObjectAction::SetIcon("ui://9leh0eyfrpmbf".into()),
-            ));
+            gui_edit.edit(loader, |object: &mut GuiObjectMut| {
+                object.set_icon("ui://9leh0eyfrpmbf")
+            });
             next = true;
         }
         9 if elapsed >= 6 => {
@@ -222,17 +211,15 @@ fn drive(
             assert_eq!(gui.animation(loader).unwrap().frame_count(), 0);
             assert!(players.get(loader).is_err());
             assert!(existing.contains(loader));
-            commands.write_message(GuiObjectCommand::new(
-                loader,
-                GuiObjectAction::SetIcon("ui://9leh0eyfhixt1v".into()),
-            ));
-            commands.write_message(GuiObjectCommand::new(
-                loader,
-                GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings {
+            gui_edit.edit(loader, |object: &mut GuiObjectMut| {
+                object.set_icon("ui://9leh0eyfhixt1v")
+            });
+            gui_edit.edit(loader, |object: &mut GuiObjectMut| {
+                object.set_animation_play_settings(GuiAnimationPlaySettings {
                     start: 2,
                     ..default()
-                }),
-            ));
+                })
+            });
             next = true;
         }
         10 if elapsed >= 6 => {

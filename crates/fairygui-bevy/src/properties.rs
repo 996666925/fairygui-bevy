@@ -1,0 +1,368 @@
+//! Writable ECS properties with native-value baselines to prevent feedback.
+use crate::{prelude::*, runtime::GuiRuntime};
+use bevy::prelude::*;
+use fairygui_core::{object::GObjectId, widget::ControlData};
+
+pub(crate) trait Property:
+    Component<Mutability = bevy::ecs::component::Mutable> + Clone + PartialEq
+{
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self>;
+    fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId);
+}
+
+#[derive(Component)]
+pub(crate) struct NativeValue<T: Property> {
+    object: GObjectId,
+    value: T,
+}
+
+/// Apply only fields changed by application code, then publish the current
+/// model value. Input, animation and relation changes never replay old writes.
+pub(crate) fn sync(world: &mut World) {
+    sync_property::<GuiTransform>(world);
+    sync_property::<GuiDisplay>(world);
+    sync_property::<GuiText>(world);
+    sync_property::<GuiIcon>(world);
+    sync_property::<GuiButtonSelected>(world);
+    sync_property::<GuiSliderState>(world);
+    sync_property::<GuiSliderValue>(world);
+    sync_property::<GuiProgressState>(world);
+    sync_property::<GuiProgressValue>(world);
+    sync_property::<GuiComboBoxState>(world);
+}
+
+fn sync_property<T: Property>(world: &mut World) {
+    let entities: Vec<_> = world
+        .query_filtered::<Entity, Or<(With<GObjectRef>, With<T>)>>()
+        .iter(world)
+        .collect();
+    for entity in entities {
+        let runtime = world.get_non_send::<GuiRuntime>().unwrap();
+        let object = world
+            .get::<GObjectRef>(entity)
+            .map(|r| r.0)
+            .or_else(|| runtime.ecs_root_object(entity))
+            .or_else(|| runtime.ecs_window_object(entity));
+        let Some(object) = object else { continue };
+        let Some(native) = T::read(runtime, object) else {
+            world.entity_mut(entity).remove::<(T, NativeValue<T>)>();
+            continue;
+        };
+        let value = world.get::<T>(entity).cloned();
+        let baseline = world
+            .get::<NativeValue<T>>(entity)
+            .filter(|p| p.object == object)
+            .map_or_else(|| native.clone(), |p| p.value.clone());
+        if let Some(value) = &value
+            && *value != native
+            && *value != baseline
+        {
+            value.apply(
+                &baseline,
+                &native,
+                &mut world.get_non_send_mut::<GuiRuntime>().unwrap(),
+                object,
+            );
+        }
+        let next = T::read(world.get_non_send::<GuiRuntime>().unwrap(), object).unwrap_or(native);
+        if value.as_ref() != Some(&next) {
+            world.entity_mut(entity).insert(next.clone());
+        }
+        if world
+            .get::<NativeValue<T>>(entity)
+            .is_none_or(|p| p.object != object || p.value != next)
+        {
+            world.entity_mut(entity).insert(NativeValue {
+                object,
+                value: next,
+            });
+        }
+    }
+}
+
+macro_rules! field {
+    ($value:ident, $previous:ident, $native:ident, $field:ident, $body:block) => {
+        if $value.$field != $previous.$field && $value.$field != $native.$field $body
+    };
+}
+
+impl Property for GuiText {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        runtime.store().object_text(object).map(Self::new)
+    }
+    fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.store_mut().set_object_text(object, &self.0);
+    }
+}
+impl Property for GuiIcon {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        let icon = match runtime.store().object(object)?.control() {
+            ControlData::Loader(data) => data.url.as_deref(),
+            ControlData::Button(data) => data.icon.as_deref(),
+            ControlData::Label(data) => data.icon.as_deref(),
+            ControlData::ComboBox(data) => data.icon.as_deref(),
+            _ => return None,
+        };
+        Some(Self::new(icon.unwrap_or_default()))
+    }
+    fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.store_mut().apply_icon_to(object, &self.0);
+    }
+}
+impl Property for GuiTransform {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        runtime.store().object(object).map(Self::from_object)
+    }
+    fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        field!(self, previous, native, size, {
+            if self.size.is_finite() && self.size.min_element() >= 0. {
+                runtime
+                    .store_mut()
+                    .set_size(object, self.size.x, self.size.y);
+            }
+        });
+        field!(self, previous, native, position, {
+            if self.position.is_finite() {
+                runtime
+                    .store_mut()
+                    .set_xy(object, self.position.x, self.position.y);
+            }
+        });
+        field!(self, previous, native, scale, {
+            if self.scale.is_finite() {
+                runtime
+                    .store_mut()
+                    .set_scale(object, self.scale.x, self.scale.y);
+            }
+        });
+        field!(self, previous, native, skew, {
+            if self.skew.is_finite() {
+                runtime
+                    .store_mut()
+                    .set_skew(object, self.skew.x, self.skew.y);
+            }
+        });
+        if (self.pivot, self.pivot_as_anchor) != (previous.pivot, previous.pivot_as_anchor)
+            && (self.pivot, self.pivot_as_anchor) != (native.pivot, native.pivot_as_anchor)
+            && self.pivot.is_finite()
+        {
+            runtime
+                .store_mut()
+                .set_pivot(object, self.pivot.x, self.pivot.y, self.pivot_as_anchor);
+        }
+        field!(self, previous, native, rotation, {
+            if self.rotation.is_finite() {
+                runtime.store_mut().set_rotation(object, self.rotation);
+            }
+        });
+    }
+}
+impl Property for GuiDisplay {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        let o = runtime.store().object(object)?;
+        Some(Self {
+            visible: o.visible(),
+            display_visible: runtime.store().display_visible(object),
+            on_stage: runtime.store().is_on_stage(object),
+            alpha: o.alpha(),
+            effective_alpha: runtime.store().effective_alpha(object),
+            grayed: o.grayed(),
+            touchable: o.touchable(),
+        })
+    }
+    fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        field!(self, previous, native, visible, {
+            runtime.store_mut().set_visible(object, self.visible);
+        });
+        field!(self, previous, native, alpha, {
+            if self.alpha.is_finite() {
+                runtime.store_mut().set_alpha(object, self.alpha);
+            }
+        });
+        field!(self, previous, native, grayed, {
+            runtime.store_mut().set_grayed(object, self.grayed);
+        });
+        field!(self, previous, native, touchable, {
+            runtime.store_mut().set_touchable(object, self.touchable);
+        });
+    }
+}
+impl Property for GuiButtonSelected {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        runtime.store().button_selected(object).map(Self)
+    }
+    fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.store_mut().set_button_selected(object, self.0);
+    }
+}
+impl Property for GuiSliderValue {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        runtime.store().slider_value(object).map(Self)
+    }
+    fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.store_mut().set_slider_value(object, self.0);
+    }
+}
+impl Property for GuiProgressValue {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        runtime.store().progress_value(object).map(Self)
+    }
+    fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.store_mut().set_progress(object, self.0);
+    }
+}
+impl Property for GuiSliderState {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        let ControlData::Slider(data) = runtime.store().object(object)?.control() else {
+            return None;
+        };
+        Some(Self {
+            min: data.min,
+            max: data.max,
+            value: data.value,
+            whole_numbers: data.whole_numbers,
+            reverse: data.reverse,
+            change_on_click: data.change_on_click,
+            can_drag: data.can_drag,
+            title_type: data.title_type,
+        })
+    }
+    fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        if (self.min, self.max) != (previous.min, previous.max)
+            && (self.min, self.max) != (native.min, native.max)
+        {
+            runtime
+                .store_mut()
+                .set_slider_range(object, self.min, self.max);
+        }
+        field!(self, previous, native, whole_numbers, {
+            runtime
+                .store_mut()
+                .set_slider_whole_numbers(object, self.whole_numbers);
+        });
+        field!(self, previous, native, change_on_click, {
+            runtime
+                .store_mut()
+                .set_slider_change_on_click(object, self.change_on_click);
+        });
+        field!(self, previous, native, can_drag, {
+            runtime
+                .store_mut()
+                .set_slider_can_drag(object, self.can_drag);
+        });
+        field!(self, previous, native, title_type, {
+            runtime
+                .store_mut()
+                .set_slider_title_type(object, self.title_type);
+        });
+        field!(self, previous, native, value, {
+            runtime.store_mut().set_slider_value(object, self.value);
+        });
+    }
+}
+impl Property for GuiProgressState {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        let ControlData::ProgressBar(data) = runtime.store().object(object)?.control() else {
+            return None;
+        };
+        Some(Self {
+            min: data.min,
+            max: data.max,
+            value: data.value,
+            displayed_value: runtime.store().progress_display_value(object)?,
+            title_type: data.title_type,
+            reverse: data.reverse,
+            tweening: runtime.store().progress_is_tweening(object),
+        })
+    }
+    fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        if (self.min, self.max) != (previous.min, previous.max)
+            && (self.min, self.max) != (native.min, native.max)
+        {
+            runtime
+                .store_mut()
+                .set_progress_range(object, self.min, self.max);
+        }
+        field!(self, previous, native, title_type, {
+            runtime
+                .store_mut()
+                .set_progress_title_type(object, self.title_type);
+        });
+        field!(self, previous, native, value, {
+            runtime.store_mut().set_progress(object, self.value);
+        });
+    }
+}
+
+impl Property for GuiComboBoxState {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        let ControlData::ComboBox(data) = runtime.store().object(object)?.control() else {
+            return None;
+        };
+        let popup = runtime.store().combo_popup(object);
+        Some(Self {
+            items: data.items.clone(),
+            values: data.values.clone(),
+            icons: data.icons.clone(),
+            selected_index: data.selected_index,
+            visible_item_count: data.visible_item_count,
+            direction: match data.popup_direction {
+                1 => GuiPopupDirection::Up,
+                2 => GuiPopupDirection::Down,
+                _ => GuiPopupDirection::Auto,
+            },
+            selection_controller: runtime
+                .store()
+                .combo_selection_controller(object)
+                .map(str::to_owned),
+            dropdown: popup.as_ref().and_then(|p| runtime.entity_of(p.dropdown)),
+            list: popup.as_ref().and_then(|p| runtime.entity_of(p.list)),
+        })
+    }
+    fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        field!(self, previous, native, items, {
+            runtime
+                .store_mut()
+                .set_combo_items(object, self.items.clone());
+        });
+        field!(self, previous, native, values, {
+            runtime
+                .store_mut()
+                .set_combo_values(object, self.values.clone());
+        });
+        field!(self, previous, native, icons, {
+            runtime
+                .store_mut()
+                .set_combo_icons(object, self.icons.clone());
+        });
+        field!(self, previous, native, selected_index, {
+            runtime
+                .store_mut()
+                .select_combo_index(object, self.selected_index);
+        });
+        field!(self, previous, native, visible_item_count, {
+            runtime
+                .store_mut()
+                .set_combo_visible_item_count(object, self.visible_item_count);
+        });
+        field!(self, previous, native, direction, {
+            runtime.store_mut().set_combo_popup_direction(
+                object,
+                match self.direction {
+                    GuiPopupDirection::Auto => 0,
+                    GuiPopupDirection::Up => 1,
+                    GuiPopupDirection::Down => 2,
+                },
+            );
+        });
+        field!(self, previous, native, selection_controller, {
+            runtime
+                .store_mut()
+                .set_combo_selection_controller(object, self.selection_controller.as_deref());
+        });
+    }
+}
+
+#[cfg(test)]
+#[path = "ecs_properties_tests.rs"]
+mod tests;

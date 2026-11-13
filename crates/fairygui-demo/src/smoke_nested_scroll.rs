@@ -37,6 +37,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -57,17 +58,14 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let owner = commands
-                .spawn(FairyGuiRoot::new(assets.load("ui/ScrollPane.fui"), "Main"))
+                .spawn(
+                    FairyGuiRoot::new(assets.load("ui/ScrollPane.fui"), "Main")
+                        .with_position(Vec2::new(40., 30.)),
+                )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                owner,
-                GuiObjectAction::SetPosition(Vec2::new(40., 30.)),
-            ));
+
             state.owner = Some(owner);
             next = true;
         }
@@ -184,13 +182,9 @@ fn drive(
             );
             mouse.release(MouseButton::Left);
             commands.write_message(GuiInputCommand::CancelScrollDrag(state.list.unwrap()));
-            commands.write_message(GuiObjectCommand::new(
-                state.list.unwrap(),
-                GuiObjectAction::ScrollTo {
-                    position: Vec2::new(0., 7000.),
-                    animated: false,
-                },
-            ));
+            gui_edit.edit(state.list.unwrap(), |object: &mut GuiObjectMut| {
+                object.scroll_to(Vec2::new(0., 7000.), false)
+            });
             next = true;
         }
         // Recycled row observers must use the new logical row's text.

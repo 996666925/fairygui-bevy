@@ -53,12 +53,7 @@ fn center_root(runtime: &mut GuiRuntime, index: usize, viewport: (f32, f32)) {
     );
 }
 
-fn center_root_command(
-    gui: &GuiQuery,
-    commands: &mut MessageWriter<GuiObjectCommand>,
-    owner: Entity,
-    viewport: (f32, f32),
-) {
+fn center_root_entity(gui: &GuiQuery, objects: &mut GuiMut, owner: Entity, viewport: (f32, f32)) {
     let Some(transform) = gui.transform(owner) else {
         return;
     };
@@ -67,10 +62,9 @@ fn center_root_command(
         y: height,
     } = transform.size();
     let position = Vec2::new((viewport.0 - width) / 2.0, (viewport.1 - height) / 2.0);
-    commands.write(GuiObjectCommand::new(
-        owner,
-        GuiObjectAction::SetPosition(position),
-    ));
+    objects.edit(owner, |object: &mut GuiObjectMut| {
+        object.set_position(position)
+    });
 
     info!(
         "界面 {width}×{height}，视口 {}×{}，摆到 ({}, {})",
@@ -291,14 +285,13 @@ fn keep_close_button_on_top(
 }
 
 fn fit_fullscreen_demo_roots(
-    roots: Query<(Entity, &FairyGuiRoot), Added<GuiRootView>>,
+    roots: Query<(&GuiRootView, &FairyGuiRoot), Added<GuiRootView>>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
-    gui: GuiQuery,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut transforms: Query<&mut GuiTransform>,
 ) {
     let Ok(window) = windows.single() else { return };
     let size = Vec2::new(window.width(), window.height());
-    for (owner, source) in &roots {
+    for (view, source) in &roots {
         if source.item_name != "Main"
             || !source.asset.path().is_some_and(|path| {
                 path.path().ends_with("Guide.fui")
@@ -308,16 +301,13 @@ fn fit_fullscreen_demo_roots(
         {
             continue;
         }
-        let Some(transform) = gui.transform(owner) else {
+        let Ok(mut transform) = transforms.get_mut(view.0) else {
             continue;
         };
         // Supersede generic centering on this root's first materialized frame.
-        commands.write(GuiObjectCommand::new(
-            owner,
-            GuiObjectAction::SetPosition(Vec2::ZERO),
-        ));
-        if transform.size() != size {
-            commands.write(GuiObjectCommand::new(owner, GuiObjectAction::SetSize(size)));
+        transform.position = Vec2::ZERO;
+        if transform.size != size {
+            transform.size = size;
         }
     }
 }
@@ -329,7 +319,7 @@ fn setup_camera(mut commands: Commands) {
 /// 加载主菜单。资产是异步的，因此每帧检查一次。
 fn boot_menu(
     mut commands: Commands,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     asset_server: Res<AssetServer>,
     windows: Query<&Window>,
     gui: GuiQuery,
@@ -348,13 +338,12 @@ fn boot_menu(
                 .id(),
         );
         let close_owner = commands
-            .spawn(FairyGuiRoot::new(handle.clone(), CLOSE_ITEM))
+            .spawn((
+                FairyGuiRoot::new(handle.clone(), CLOSE_ITEM),
+                GuiDisplay::hidden(),
+            ))
             .id();
         demo.close_owner = Some(close_owner);
-        gui_commands.write(GuiObjectCommand::new(
-            close_owner,
-            GuiObjectAction::SetVisible(false),
-        ));
         demo.menu_asset = Some(handle);
         return;
     }
@@ -381,22 +370,16 @@ fn boot_menu(
         .next()
         .map(|window| (window.width(), window.height()))
         .unwrap_or((1280.0, 720.0));
-    gui_commands.write(GuiObjectCommand::new(
-        close_owner,
-        GuiObjectAction::SetPosition(Vec2::new(
+    objects.edit(close_owner, |object: &mut GuiObjectMut| {
+        object.set_position(Vec2::new(
             viewport_width - transform.size().x - 10.0,
             viewport_height - transform.size().y - 10.0,
-        )),
-    ));
+        ))
+    });
 
     // 界面摆到窗口中央。按实际窗口尺寸算，不用假设的分辨率。
     if let Some(window) = windows.iter().next() {
-        center_root_command(
-            &gui,
-            &mut gui_commands,
-            owner,
-            (window.width(), window.height()),
-        );
+        center_root_entity(&gui, &mut objects, owner, (window.width(), window.height()));
     }
 
     demo.close_button = Some(close.object);
@@ -408,7 +391,7 @@ fn boot_menu(
 #[allow(clippy::too_many_arguments)]
 fn open_pending_demo(
     mut commands: Commands,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     assets: Res<Assets<FuiAsset>>,
     windows: Query<&Window>,
     gui: GuiQuery,
@@ -427,13 +410,10 @@ fn open_pending_demo(
         if assets.get(&handle).is_none() {
             return;
         }
-        if let Some(window) = windows.iter().next() {
-            center_root_command(
-                &gui,
-                &mut gui_commands,
-                owner,
-                (window.width(), window.height()),
-            );
+        if !matches!(name.as_str(), "Chat" | "Guide" | "Joystick")
+            && let Some(window) = windows.iter().next()
+        {
+            center_root_entity(&gui, &mut objects, owner, (window.width(), window.height()));
         }
         if name == "VirtualList"
             && let Some(list) = gui.child_by_name(owner, "mailList")
@@ -450,10 +430,7 @@ fn open_pending_demo(
         if name == "Basics"
             && let Some(back) = gui.find_by_name(owner, "btn_Back")
         {
-            gui_commands.write(GuiObjectCommand::new(
-                back,
-                GuiObjectAction::SetVisible(false),
-            ));
+            objects.edit(back, |object: &mut GuiObjectMut| object.set_visible(false));
         }
         controller.package = Some(name.clone());
         controller.root = Some(root);
@@ -474,22 +451,20 @@ fn open_pending_demo(
         demo.loading = None;
         return;
     }
-    let owner = commands
-        .spawn(FairyGuiRoot::new(handle.clone(), "Main"))
-        .id();
+    let mut source = FairyGuiRoot::new(handle.clone(), "Main");
+    if matches!(name.as_str(), "Chat" | "Guide" | "Joystick") {
+        source = source.with_position(Vec2::ZERO).with_window_size();
+    }
+    let owner = commands.spawn(source).id();
 
     // 菜单让位：演示界面盖在上面。
     if let Some(target) = demo.menu_owner {
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetVisible(false),
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_visible(false)
+        });
     }
     if let Some(target) = demo.close_owner {
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetVisible(true),
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| object.set_visible(true));
     }
 
     demo.open = Some((owner, handle, name));
@@ -567,7 +542,7 @@ fn bind_demo_observers(
 fn close_demo(
     event: On<GuiEvent>,
     mut commands: Commands,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
@@ -585,16 +560,12 @@ fn close_demo(
     controller.root_owner = None;
     controller.elapsed = 0.0;
     if let Some(target) = demo.close_owner {
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetVisible(false),
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_visible(false)
+        });
     }
     if let Some(target) = demo.menu_owner {
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetVisible(true),
-        ));
+        objects.edit(target, |object: &mut GuiObjectMut| object.set_visible(true));
     }
     info!("已退回主菜单");
 }
@@ -631,7 +602,7 @@ fn navigate_basics_action(
     actions: Query<&DemoAction>,
     mut commands: Commands,
     gui: GuiQuery,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     demo: Res<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
@@ -650,7 +621,7 @@ fn navigate_basics_action(
         &mut controller,
         handle.clone(),
         action.0,
-        &mut gui_commands,
+        &mut objects,
     );
 }
 
@@ -676,7 +647,7 @@ fn play_transition_action(
 fn virtual_list_action(
     event: On<GuiEvent>,
     actions: Query<&DemoAction>,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
     gui: GuiQuery,
     controller: Res<demos::DemoController>,
 ) {
@@ -686,26 +657,26 @@ fn virtual_list_action(
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
-    demos::handle_virtual_list_action(&gui, &controller, action.0, &mut gui_commands);
+    demos::handle_virtual_list_action(&gui, &controller, action.0, &mut objects);
 }
 
 fn basics_text_get_input(
     event: On<GuiEvent>,
     gui: GuiQuery,
     controller: Res<demos::DemoController>,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     if event.event().event.kind != fairygui_core::object::EventKind::Click {
         return;
     }
-    demos::copy_basics_input(&gui, &controller, &mut gui_commands);
+    demos::copy_basics_input(&gui, &controller, &mut objects);
 }
 
 fn advance_demo_behaviors(
     time: Res<Time>,
     gui: GuiQuery,
     mut controller: ResMut<demos::DemoController>,
-    mut gui_commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
-    demos::tick(&gui, &mut controller, time.delta_secs(), &mut gui_commands);
+    demos::tick(&gui, &mut controller, time.delta_secs(), &mut objects);
 }

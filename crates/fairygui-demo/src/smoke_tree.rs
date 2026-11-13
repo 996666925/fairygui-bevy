@@ -36,6 +36,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -56,17 +57,14 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let owner = commands
-                .spawn(FairyGuiRoot::new(assets.load("ui/TreeView.fui"), "Main"))
+                .spawn(
+                    FairyGuiRoot::new(assets.load("ui/TreeView.fui"), "Main")
+                        .with_position(Vec2::new(40., 30.)),
+                )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                owner,
-                GuiObjectAction::SetPosition(Vec2::new(40., 30.)),
-            ));
+
             state.owner = Some(owner);
             next = true;
         }
@@ -133,10 +131,9 @@ fn drive(
                     .view(),
                 Some(state.rows[1])
             );
-            commands.write_message(GuiObjectCommand::new(
-                state.tree.unwrap(),
-                GuiObjectAction::CollapseTree,
-            ));
+            gui_edit.edit(state.tree.unwrap(), |object: &mut GuiObjectMut| {
+                object.collapse_tree()
+            });
             next = true;
         }
         8 if elapsed >= 8 => {
@@ -144,13 +141,9 @@ fn drive(
                 gui.tree(state.tree.unwrap()).unwrap().visible_nodes(),
                 [0, 5]
             );
-            commands.write_message(GuiObjectCommand::new(
-                state.tree.unwrap(),
-                GuiObjectAction::SelectTreeNode {
-                    index: 3,
-                    scroll_to_view: true,
-                },
-            ));
+            gui_edit.edit(state.tree.unwrap(), |object: &mut GuiObjectMut| {
+                object.select_tree_node(3, true)
+            });
             next = true;
         }
         9 if elapsed >= 8 => {

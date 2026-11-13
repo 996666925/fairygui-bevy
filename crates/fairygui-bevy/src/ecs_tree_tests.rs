@@ -1,8 +1,8 @@
 use super::*;
 use crate::core::{package::FuiPackage, widget::ControlData};
 use crate::{
-    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiControllers, GuiDisplay, GuiObjectAction,
-    GuiObjectCommand, GuiQuery, GuiRootInstance, GuiText, GuiTransform,
+    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiControllers, GuiDisplay, GuiQuery, GuiRootInstance,
+    GuiText, GuiTransform, GuiWorldExt,
 };
 use bevy::ecs::system::SystemState;
 use bevy::picking::hover::Hovered;
@@ -53,9 +53,13 @@ fn tree(app: &mut App, owner: Entity) -> Entity {
         .child_by_name(owner, "tree")
         .unwrap()
 }
-fn send(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 
 #[test]
@@ -157,7 +161,9 @@ fn ecs_tree_commands_collapse_top_level_folders_reflow_retain_views_and_select_h
         .iter()
         .map(|n| n.view().unwrap())
         .collect();
-    send(&mut app, tree, GuiObjectAction::CollapseTree);
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.collapse_tree()
+    });
     app.update();
     let state = app.world().get::<GuiTreeState>(tree).unwrap();
     assert_eq!(state.visible_nodes(), [0, 5]);
@@ -173,19 +179,16 @@ fn ecs_tree_commands_collapse_top_level_folders_reflow_retain_views_and_select_h
     );
     assert!(!app.world().get::<GuiDisplay>(rows[1]).unwrap().visible());
     assert_eq!(state.node(1).unwrap().view(), Some(rows[1]));
-    send(
-        &mut app,
-        tree,
-        GuiObjectAction::SelectTreeNode {
-            index: 3,
-            scroll_to_view: true,
-        },
-    );
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.select_tree_node(3, true)
+    });
     app.update();
     let state = app.world().get::<GuiTreeState>(tree).unwrap();
     assert_eq!(state.visible_nodes(), [0, 1, 2, 3, 4, 5]);
     assert_eq!(state.selected_nodes(), [3]);
-    send(&mut app, tree, GuiObjectAction::ToggleTreeNode(0));
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.toggle_tree_node(0)
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -201,7 +204,9 @@ fn ecs_tree_commands_collapse_top_level_folders_reflow_retain_views_and_select_h
             .selected_nodes()
             .is_empty()
     );
-    send(&mut app, tree, GuiObjectAction::ExpandTree);
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.expand_tree()
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -218,14 +223,9 @@ fn ecs_tree_commands_collapse_top_level_folders_reflow_retain_views_and_select_h
             .selected_nodes()
             .is_empty()
     );
-    send(
-        &mut app,
-        tree,
-        GuiObjectAction::SelectTreeNode {
-            index: 3,
-            scroll_to_view: false,
-        },
-    );
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.select_tree_node(3, false)
+    });
     app.update();
     let tick = app
         .world()
@@ -233,23 +233,15 @@ fn ecs_tree_commands_collapse_top_level_folders_reflow_retain_views_and_select_h
         .get_ref::<GuiTreeState>()
         .unwrap()
         .last_changed();
-    send(
-        &mut app,
-        tree,
-        GuiObjectAction::SetTreeExpanded {
-            index: 1,
-            expanded: false,
-        },
-    );
-    send(&mut app, tree, GuiObjectAction::ToggleTreeNode(500));
-    send(
-        &mut app,
-        tree,
-        GuiObjectAction::SelectTreeNode {
-            index: 500,
-            scroll_to_view: true,
-        },
-    );
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.set_tree_expanded(1, false)
+    });
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.toggle_tree_node(500)
+    });
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.select_tree_node(500, true)
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -269,10 +261,9 @@ fn ecs_tree_commands_collapse_top_level_folders_reflow_retain_views_and_select_h
 }
 
 #[test]
-fn tree_commands_ignore_unrelated_pending_roots_and_expander_controller_updates_native_state() {
+fn tree_editors_require_ready_objects_and_expander_controller_updates_native_state() {
     let (mut app, handle, owner) = fixture(false);
-    // Unrelated root controls safely ignore retained tree actions after loading.
-    send(&mut app, owner, GuiObjectAction::CollapseTree);
+    assert!(app.world_mut().gui_mut(owner).is_none());
     for _ in 0..4 {
         app.update();
     }
@@ -287,14 +278,9 @@ fn tree_commands_ignore_unrelated_pending_roots_and_expander_controller_updates_
         .unwrap()
         .view()
         .unwrap();
-    send(
-        &mut app,
-        folder,
-        GuiObjectAction::SetControllerPage {
-            name: "expanded".into(),
-            index: 0,
-        },
-    );
+    send(&mut app, folder, |object: &mut crate::GuiObjectMut| {
+        object.set_controller_page("expanded", 0)
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -303,14 +289,9 @@ fn tree_commands_ignore_unrelated_pending_roots_and_expander_controller_updates_
             .visible_nodes(),
         [0, 5, 6]
     );
-    send(
-        &mut app,
-        folder,
-        GuiObjectAction::SetControllerPage {
-            name: "expanded".into(),
-            index: 1,
-        },
-    );
+    send(&mut app, folder, |object: &mut crate::GuiObjectMut| {
+        object.set_controller_page("expanded", 1)
+    });
     app.update();
     assert_eq!(
         app.world()

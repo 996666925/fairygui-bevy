@@ -92,7 +92,12 @@ fn descendant(gui: &GuiQuery, mut target: Entity, ancestor: Entity) -> bool {
     }
 }
 
-fn close_open_rows(event: On<GuiEvent>, gui: GuiQuery, mut commands: Commands) {
+fn close_open_rows(
+    event: On<GuiEvent>,
+    gui: GuiQuery,
+    mut commands: Commands,
+    mut gui_edit: GuiMut,
+) {
     if event.event.kind != EventKind::MouseDown {
         return;
     }
@@ -111,13 +116,9 @@ fn close_open_rows(event: On<GuiEvent>, gui: GuiQuery, mut commands: Commands) {
             }) {
                 return;
             }
-            commands.write_message(GuiObjectCommand::new(
-                row,
-                GuiObjectAction::ScrollTo {
-                    position: Vec2::ZERO,
-                    animated: true,
-                },
-            ));
+            gui_edit.edit(row, |object: &mut GuiObjectMut| {
+                object.scroll_to(Vec2::ZERO, true)
+            });
             commands.write_message(GuiInputCommand::CancelScrollDrag(row));
             commands.write_message(GuiInputCommand::CancelScrollDrag(event.entity));
             break;
@@ -125,19 +126,18 @@ fn close_open_rows(event: On<GuiEvent>, gui: GuiQuery, mut commands: Commands) {
     }
 }
 
-fn action(event: On<GuiEvent>, actions: Query<&Action>, gui: GuiQuery, mut commands: Commands) {
+fn action(event: On<GuiEvent>, actions: Query<&Action>, gui: GuiQuery, mut gui_edit: GuiMut) {
     if event.event.kind != EventKind::Click {
         return;
     }
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
-    commands.write_message(GuiObjectCommand::new(
-        action.label,
-        GuiObjectAction::SetText(format!(
+    gui_edit.edit(action.label, |object: &mut GuiObjectMut| {
+        object.set_text(format!(
             "{} {}",
             action.verb,
             gui.text(action.row).unwrap_or_default()
-        )),
-    ));
+        ))
+    });
 }

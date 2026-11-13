@@ -1,5 +1,7 @@
 use super::*;
+use crate::GuiWorldExt as _;
 use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiInputCommand, GuiQuery, GuiVirtualList};
+use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::system::SystemState;
 use bevy::window::PrimaryWindow;
 
@@ -237,13 +239,12 @@ fn cancel_scroll_command_keeps_animation_and_prevents_capture_restart_or_release
     assert!(offset(&app, rows[0]).x > 70.);
     app.world_mut()
         .write_message(GuiInputCommand::CancelScrollDrag(rows[0]));
-    app.world_mut().write_message(crate::GuiObjectCommand::new(
-        rows[0],
-        crate::GuiObjectAction::ScrollTo {
-            position: Vec2::ZERO,
-            animated: true,
-        },
-    ));
+    app.world_mut()
+        .run_system_once(crate::input::apply_scroll_drag_commands)
+        .unwrap();
+    if let Some(mut object) = app.world_mut().gui_mut(rows[0]) {
+        object.scroll_to(Vec2::ZERO, true)
+    }
     app.update();
     assert!(
         !app.world()

@@ -219,10 +219,7 @@ fn submit(event: On<Submit>, mut pages: Query<&mut Chat>, gui: GuiQuery, mut com
     commands
         .entity(chat.list)
         .insert(content(chat.messages.clone()));
-    commands.write_message(GuiObjectCommand::new(
-        chat.input,
-        GuiObjectAction::SetText(String::new()),
-    ));
+    commands.entity(chat.input).insert(GuiText::new(""));
 }
 fn emoji_clicked(
     event: On<GuiEvent>,
@@ -248,7 +245,7 @@ fn choose_emoji(
     owners: Query<&Owner>,
     pages: Query<&Chat>,
     gui: GuiQuery,
-    mut commands: Commands,
+    mut gui_edit: GuiMut,
 ) {
     let Ok(owner) = owners.get(event.entity) else {
         return;
@@ -257,28 +254,23 @@ fn choose_emoji(
     let Some(tag) = gui.text(event.item) else {
         return;
     };
-    commands.write_message(GuiObjectCommand::new(
-        chat.input,
-        GuiObjectAction::SetText(format!(
+    gui_edit.edit(chat.input, |object: &mut GuiObjectMut| {
+        object.set_text(format!(
             "{}[:{tag}]",
             gui.text(chat.input).unwrap_or_default()
-        )),
-    ));
+        ))
+    });
 }
 
-pub fn follow_bottom(mut pages: Query<&mut Chat>, mut commands: MessageWriter<GuiObjectCommand>) {
+pub fn follow_bottom(mut pages: Query<&mut Chat>, mut objects: GuiMut) {
     for mut chat in &mut pages {
         if !chat.follow_bottom {
             continue;
         }
         chat.follow_bottom = false;
-        commands.write(GuiObjectCommand::new(
-            chat.list,
-            GuiObjectAction::SetScrollPercentage {
-                percentage: Vec2::new(0., 1.),
-                animated: false,
-            },
-        ));
+        objects.edit(chat.list, |object: &mut GuiObjectMut| {
+            object.set_scroll_percentage(Vec2::new(0., 1.), false)
+        });
     }
 }
 
@@ -286,7 +278,7 @@ pub fn fit(
     pages: Query<Entity, With<Chat>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     gui: GuiQuery,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     let Ok(window) = windows.single() else { return };
     let size = Vec2::new(window.width(), window.height());
@@ -295,7 +287,7 @@ pub fn fit(
             .transform(page)
             .is_some_and(|transform| transform.size() != size)
         {
-            commands.write(GuiObjectCommand::new(page, GuiObjectAction::SetSize(size)));
+            objects.edit(page, |object: &mut GuiObjectMut| object.set_size(size));
         }
     }
 }

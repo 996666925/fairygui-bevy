@@ -1,4 +1,4 @@
-//! Read-only combo state. Mutate through entity-addressed GuiObjectCommand.
+//! Writable combo options and selection with read-only popup references.
 use crate::GuiPopupDirection;
 use bevy::prelude::*;
 
@@ -10,13 +10,13 @@ mod tests;
 /// after Sync. Programmatic setters do not emit a user StateChanged event.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct GuiComboBoxState {
-    pub(crate) items: Vec<String>,
-    pub(crate) values: Vec<String>,
-    pub(crate) icons: Option<Vec<Option<String>>>,
-    pub(crate) selected_index: i32,
-    pub(crate) visible_item_count: i32,
-    pub(crate) direction: GuiPopupDirection,
-    pub(crate) selection_controller: Option<String>,
+    pub items: Vec<String>,
+    pub values: Vec<String>,
+    pub icons: Option<Vec<Option<String>>>,
+    pub selected_index: i32,
+    pub visible_item_count: i32,
+    pub direction: GuiPopupDirection,
+    pub selection_controller: Option<String>,
     pub(crate) dropdown: Option<Entity>,
     pub(crate) list: Option<Entity>,
 }
@@ -61,5 +61,21 @@ impl GuiComboBoxState {
     }
     pub fn list(&self) -> Option<Entity> {
         self.list
+    }
+}
+
+impl GuiComboBoxState {
+    pub fn new(items: Vec<String>, values: Vec<String>) -> Self {
+        Self {
+            items,
+            values,
+            icons: None,
+            selected_index: 0,
+            visible_item_count: 10,
+            direction: GuiPopupDirection::Auto,
+            selection_controller: None,
+            dropdown: None,
+            list: None,
+        }
     }
 }

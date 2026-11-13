@@ -263,7 +263,8 @@ fn click_observers_read_current_button_state_and_write_commands_in_the_same_fram
         gui: GuiQuery,
         selected: Query<&GuiButtonSelected>,
         mut seen: ResMut<Selected>,
-        mut commands: Commands,
+        _commands: Commands,
+        mut gui_edit: crate::GuiMut,
     ) {
         if event.event.kind != EventKind::Click {
             return;
@@ -275,10 +276,9 @@ fn click_observers_read_current_button_state_and_write_commands_in_the_same_fram
         }
         let parent = gui.get(event.entity).unwrap().parent().unwrap();
         let label = gui.child_by_name(parent, "n8").unwrap();
-        commands.write_message(GuiObjectCommand::new(
-            label,
-            GuiObjectAction::SetText(format!("Checked: {checked}")),
-        ));
+        gui_edit.edit(label, |object: &mut crate::GuiObjectMut| {
+            object.set_text(format!("Checked: {checked}"))
+        });
     }
     let mut app = App::new();
     app.add_plugins((

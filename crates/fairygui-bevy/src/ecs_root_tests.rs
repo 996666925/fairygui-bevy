@@ -34,9 +34,13 @@ fn load(app: &mut App, asset: &Handle<FuiAsset>) {
         .unwrap();
 }
 
-fn send(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 
 fn assert_position(app: &App, owner: Entity, expected: Vec2) -> GObjectId {
@@ -52,22 +56,16 @@ fn assert_position(app: &App, owner: Entity, expected: Vec2) -> GObjectId {
 }
 
 #[test]
-fn startup_root_commands_apply_before_the_first_view_is_spawned() {
+fn startup_root_properties_apply_before_the_first_view_is_spawned() {
     #[derive(Resource)]
     struct Source(Handle<FuiAsset>);
     #[derive(Component)]
     struct Menu;
     fn spawn(mut commands: Commands, source: Res<Source>) {
-        let owner = commands
-            .spawn((FairyGuiRoot::new(source.0.clone(), "Main"), Menu))
-            .id();
-        commands.write_message(GuiObjectCommand::new(
-            owner,
-            GuiObjectAction::SetPosition(Vec2::new(37., 42.)),
-        ));
-        commands.write_message(GuiObjectCommand::new(
-            owner,
-            GuiObjectAction::SetVisible(false),
+        commands.spawn((
+            FairyGuiRoot::new(source.0.clone(), "Main").with_position(Vec2::new(37., 42.)),
+            Menu,
+            GuiDisplay::hidden(),
         ));
     }
 
@@ -309,16 +307,12 @@ fn root_geometry_builders_wait_for_assets_apply_before_initialize_and_edit_witho
         Vec2::new(900., 700.)
     );
     // Unchanged creation settings must not overwrite later commands or tweens.
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(200., 300.)),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetSize(Vec2::new(1000., 800.)),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_position(Vec2::new(200., 300.))
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_size(Vec2::new(1000., 800.))
+    });
     app.update();
     for active in [false, true] {
         app.world_mut()
@@ -343,7 +337,7 @@ fn root_geometry_builders_wait_for_assets_apply_before_initialize_and_edit_witho
 }
 
 #[test]
-fn root_geometry_validation_and_queued_command_precedence_preserve_native_geometry() {
+fn root_geometry_validation_and_initial_properties_preserve_native_geometry() {
     let (mut app, asset) = app();
     let owner = app
         .world_mut()
@@ -353,16 +347,12 @@ fn root_geometry_validation_and_queued_command_precedence_preserve_native_geomet
                 .with_size(Vec2::new(800., 600.)),
         )
         .id();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(60., 70.)),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetSize(Vec2::new(900., 700.)),
-    );
+    app.world_mut().entity_mut(owner).insert(GuiTransform {
+        position: Vec2::new(60., 70.),
+        size: Vec2::new(900., 700.),
+        ..default()
+    });
+    app.world_mut().get_mut::<GuiTransform>(owner).unwrap().size = Vec2::new(900., 700.);
     app.update();
     // Changing geometry does not change source identity or cancel queued commands.
     app.world_mut()
@@ -398,34 +388,36 @@ fn root_geometry_validation_and_queued_command_precedence_preserve_native_geomet
 }
 
 #[test]
-fn delayed_root_commands_outlive_message_retention_preserve_order_and_apply_once() {
+fn delayed_root_properties_survive_loading_and_do_not_replay_over_native_edits() {
     let (mut app, asset) = app();
     let owner = app
         .world_mut()
         .spawn(FairyGuiRoot::new(asset.clone(), "Main"))
         .id();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(10., 20.)),
-    );
-    send(&mut app, owner, GuiObjectAction::SetVisible(false));
+    app.world_mut().entity_mut(owner).insert(GuiTransform {
+        position: Vec2::new(10., 20.),
+        size: Vec2::new(900., 700.),
+        ..default()
+    });
+    app.world_mut()
+        .entity_mut(owner)
+        .insert(GuiDisplay::hidden());
     app.update();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(40., 50.)),
-    );
+    app.world_mut().entity_mut(owner).insert(GuiTransform {
+        position: Vec2::new(40., 50.),
+        size: Vec2::new(900., 700.),
+        ..default()
+    });
     for _ in 0..4 {
         app.update();
     }
     assert!(app.world().get::<GuiRootInstance>(owner).is_none());
     load(&mut app, &asset);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(60., 70.)),
-    );
+    app.world_mut().entity_mut(owner).insert(GuiTransform {
+        position: Vec2::new(60., 70.),
+        size: Vec2::new(900., 700.),
+        ..default()
+    });
     app.update();
     let root = assert_position(&app, owner, Vec2::new(60., 70.));
     let view = app
@@ -446,18 +438,14 @@ fn delayed_root_commands_outlive_message_retention_preserve_order_and_apply_once
 }
 
 #[test]
-fn replacing_or_removing_a_pending_root_cancels_old_commands() {
+fn pending_roots_expose_no_imperative_editor_across_template_replacement() {
     for replace in [0, 1, 2] {
         let (mut app, asset) = app();
         let owner = app
             .world_mut()
             .spawn(FairyGuiRoot::new(asset.clone(), "Main"))
             .id();
-        send(
-            &mut app,
-            owner,
-            GuiObjectAction::SetPosition(Vec2::new(37., 42.)),
-        );
+        assert!(app.world_mut().gui_mut(owner).is_none());
         app.update();
         let loaded_asset = if replace == 1 {
             app.world_mut()
@@ -487,7 +475,7 @@ fn replacing_or_removing_a_pending_root_cancels_old_commands() {
 }
 
 #[test]
-fn ready_root_replacement_applies_new_commands_to_its_new_model() {
+fn ready_root_replacement_applies_owner_properties_to_its_new_model() {
     let (mut app, asset) = app();
     load(&mut app, &asset);
     let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
@@ -497,11 +485,10 @@ fn ready_root_replacement_applies_new_commands_to_its_new_model() {
         .get_mut::<FairyGuiRoot>(owner)
         .unwrap()
         .item_name = "CloseButton".into();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(37., 42.)),
-    );
+    app.world_mut().entity_mut(owner).insert(GuiTransform {
+        position: Vec2::new(37., 42.),
+        ..default()
+    });
     app.update();
     let new = assert_position(&app, owner, Vec2::new(37., 42.));
     assert_ne!(new, old);
@@ -509,17 +496,16 @@ fn ready_root_replacement_applies_new_commands_to_its_new_model() {
 }
 
 #[test]
-fn pending_commands_are_discarded_when_the_owner_is_despawned() {
+fn pending_properties_are_discarded_when_the_owner_is_despawned() {
     let (mut app, asset) = app();
     let old = app
         .world_mut()
         .spawn(FairyGuiRoot::new(asset.clone(), "Main"))
         .id();
-    send(
-        &mut app,
-        old,
-        GuiObjectAction::SetPosition(Vec2::new(37., 42.)),
-    );
+    app.world_mut().entity_mut(old).insert(GuiTransform {
+        position: Vec2::new(37., 42.),
+        ..default()
+    });
     app.update();
     app.world_mut().despawn(old);
     let owner = app
@@ -688,18 +674,27 @@ fn ecs_geometry_preserves_logical_coordinates_and_updates_views_in_the_same_sync
             *gui.transform(child).unwrap(),
         )
     };
-    for action in [
-        GuiObjectAction::SetPosition(Vec2::new(-10., 20.)),
-        GuiObjectAction::SetSize(Vec2::new(200., 80.)),
-        GuiObjectAction::SetScale(Vec2::new(-2., 0.5)),
-        GuiObjectAction::SetPivot {
-            pivot: Vec2::new(0.25, 0.75),
-            as_anchor: true,
-        },
-        GuiObjectAction::SetRotation(90.),
-    ] {
-        send(&mut app, owner, action);
-    }
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_position(Vec2::new(-10., 20.))
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_size(Vec2::new(200., 80.))
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_scale(Vec2::new(-2., 0.5))
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_pivot(Vec2::new(0.25, 0.75), true)
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_rotation(90.)
+    });
+
     app.update();
     let geometry = {
         let gui = query.get(app.world()).unwrap();
@@ -734,14 +729,9 @@ fn ecs_geometry_preserves_logical_coordinates_and_updates_views_in_the_same_sync
         .get_ref::<GuiTransform>()
         .unwrap()
         .last_changed();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPivot {
-            pivot: Vec2::new(f32::NAN, 0.),
-            as_anchor: false,
-        },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_pivot(Vec2::new(f32::NAN, 0.), false)
+    });
     app.world_mut()
         .get_mut::<FairyGuiRoot>(owner)
         .unwrap()
@@ -762,11 +752,9 @@ fn ecs_geometry_preserves_logical_coordinates_and_updates_views_in_the_same_sync
 
     // Transforms on an ancestor do not turn local geometry into world
     // coordinates, even when the child is temporarily off stage.
-    send(
-        &mut app,
-        child,
-        GuiObjectAction::SetPosition(Vec2::new(17., 23.)),
-    );
+    send(&mut app, child, |object: &mut crate::GuiObjectMut| {
+        object.set_position(Vec2::new(17., 23.))
+    });
     app.update();
     assert_eq!(
         query
@@ -815,11 +803,9 @@ fn ecs_geometry_tracks_indirect_group_member_movement() {
         )
     };
     let delta = Vec2::new(37., -21.);
-    send(
-        &mut app,
-        group,
-        GuiObjectAction::SetPosition(old_group.position() + delta),
-    );
+    send(&mut app, group, |object: &mut crate::GuiObjectMut| {
+        object.set_position(old_group.position() + delta)
+    });
     app.update();
     let gui = query.get(app.world()).unwrap();
     assert_eq!(
@@ -867,16 +853,21 @@ fn ecs_text_is_current_before_observers_and_their_commands_sync_in_the_same_fram
         input: Entity,
         output: Entity,
     }
-    fn copy(event: On<GuiEvent>, gui: GuiQuery, sources: Query<&CopyText>, mut commands: Commands) {
+    fn copy(
+        event: On<GuiEvent>,
+        gui: GuiQuery,
+        sources: Query<&CopyText>,
+        _commands: Commands,
+        mut gui_edit: crate::GuiMut,
+    ) {
         if event.event().event.kind != EventKind::Click {
             return;
         }
         let source = sources.get(event.entity).unwrap();
         assert!(!gui.display(source.input).unwrap().touchable());
-        commands.write_message(GuiObjectCommand::new(
-            source.output,
-            GuiObjectAction::SetText(gui.text(source.input).unwrap().to_owned()),
-        ));
+        gui_edit.edit(source.output, |object: &mut crate::GuiObjectMut| {
+            object.set_text(gui.text(source.input).unwrap().to_owned())
+        });
     }
     let (mut app, asset) = app();
     load(&mut app, &asset);
@@ -952,7 +943,9 @@ fn ecs_text_is_current_before_observers_and_their_commands_sync_in_the_same_fram
             .last_changed(),
         changed
     );
-    send(&mut app, input, GuiObjectAction::SetText(String::new()));
+    send(&mut app, input, |object: &mut crate::GuiObjectMut| {
+        object.set_text(String::new())
+    });
     app.update();
     assert_eq!(app.world().get::<GuiText>(input).unwrap().value(), "");
 }
@@ -995,15 +988,27 @@ fn ecs_display_keeps_visibility_stage_alpha_and_input_policy_independent() {
         .child_by_name(button, "title")
         .unwrap();
     assert!(query.get(app.world()).unwrap().text(owner).is_none());
-    for (target, action) in [
-        (owner, GuiObjectAction::SetAlpha(0.5)),
-        (button, GuiObjectAction::SetAlpha(0.4)),
-        (button, GuiObjectAction::SetTouchable(false)),
-        (button, GuiObjectAction::SetGrayed(true)),
-        (owner, GuiObjectAction::SetVisible(false)),
-    ] {
-        send(&mut app, target, action);
-    }
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_alpha(0.5)
+    });
+
+    send(&mut app, button, |object: &mut crate::GuiObjectMut| {
+        object.set_alpha(0.4)
+    });
+
+    send(&mut app, button, |object: &mut crate::GuiObjectMut| {
+        object.set_touchable(false)
+    });
+
+    send(&mut app, button, |object: &mut crate::GuiObjectMut| {
+        object.set_grayed(true)
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_visible(false)
+    });
+
     app.update();
     {
         let gui = query.get(app.world()).unwrap();
@@ -1026,7 +1031,9 @@ fn ecs_display_keeps_visibility_stage_alpha_and_input_policy_independent() {
         assert!(!state.touchable());
         assert_eq!(gui.display(title).unwrap().effective_alpha(), 0.2);
     }
-    send(&mut app, group, GuiObjectAction::SetVisible(false));
+    send(&mut app, group, |object: &mut crate::GuiObjectMut| {
+        object.set_visible(false)
+    });
     app.update();
     {
         let gui = query.get(app.world()).unwrap();
@@ -1081,9 +1088,15 @@ fn ecs_display_keeps_visibility_stage_alpha_and_input_policy_independent() {
         .get_mut::<FairyGuiRoot>(owner)
         .unwrap()
         .active = true;
-    send(&mut app, owner, GuiObjectAction::SetVisible(true));
-    send(&mut app, button, GuiObjectAction::SetTouchable(true));
-    send(&mut app, button, GuiObjectAction::SetGrayed(false));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_visible(true)
+    });
+    send(&mut app, button, |object: &mut crate::GuiObjectMut| {
+        object.set_touchable(true)
+    });
+    send(&mut app, button, |object: &mut crate::GuiObjectMut| {
+        object.set_grayed(false)
+    });
     app.update();
     let gui = query.get(app.world()).unwrap();
     assert!(gui.display(button).unwrap().on_stage());

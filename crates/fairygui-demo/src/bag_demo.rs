@@ -94,21 +94,18 @@ fn open(event: On<GuiEvent>, buttons: Query<&OpenBag>, gui: GuiQuery, mut comman
 fn select(
     event: On<GuiListItemClick>,
     previews: Query<&Preview>,
-    gui: GuiQuery,
-    mut commands: Commands,
+    mut properties: ParamSet<(Query<&GuiIcon>, Query<&mut GuiIcon>, Query<&mut GuiText>)>,
 ) {
     let Ok(preview) = previews.get(event.entity) else {
         return;
     };
-    let Some(icon) = gui.icon(event.item) else {
+    let Ok(icon) = properties.p0().get(event.item).map(|icon| icon.0.clone()) else {
         return;
     };
-    commands.write_message(GuiObjectCommand::new(
-        preview.icon,
-        GuiObjectAction::SetIcon(icon.into()),
-    ));
-    commands.write_message(GuiObjectCommand::new(
-        preview.label,
-        GuiObjectAction::SetText(icon.into()),
-    ));
+    if let Ok(mut target) = properties.p1().get_mut(preview.icon) {
+        target.set(icon.clone());
+    }
+    if let Ok(mut target) = properties.p2().get_mut(preview.label) {
+        target.set(icon);
+    }
 }

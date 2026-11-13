@@ -47,11 +47,18 @@ fn fixture(loaded: bool) -> (App, Entity, Handle<FuiAsset>, Entity) {
     };
     window.set_cursor_position(Some(Vec2::new(50., 10.)));
     let window = app.world_mut().spawn((window, PrimaryWindow)).id();
+    if loaded {
+        app.update();
+    }
     (app, owner, handle, window)
 }
-fn send(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 fn slider(app: &mut App, owner: Entity) -> GuiSliderState {
     *SystemState::<GuiQuery>::new(app.world_mut())
@@ -103,7 +110,7 @@ fn mouse(app: &mut App, down: bool) {
 }
 
 #[test]
-fn slider_commands_wait_for_assets_and_initialize_fractional_geometry_on_the_first_frame() {
+fn slider_properties_wait_for_assets_and_initialize_fractional_geometry_on_the_first_frame() {
     #[derive(Resource, Default)]
     struct Initial(bool);
     fn inspect(
@@ -126,17 +133,9 @@ fn slider_commands_wait_for_assets_and_initialize_fractional_geometry_on_the_fir
     let (mut app, owner, handle, _) = fixture(false);
     app.init_resource::<Initial>()
         .add_systems(Update, inspect.in_set(GuiSystems::Initialize));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetSliderRange { min: -2., max: 2. },
-    );
-    send(&mut app, owner, GuiObjectAction::SetSliderValue(-0.5));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetSliderChangeOnClick(false),
-    );
+    let mut settings = GuiSliderState::new(-2., 2., -0.5);
+    settings.change_on_click = false;
+    app.world_mut().entity_mut(owner).insert(settings);
     for _ in 0..4 {
         app.update();
     }
@@ -160,7 +159,9 @@ fn slider_commands_wait_for_assets_and_initialize_fractional_geometry_on_the_fir
             .last_changed(),
         tick
     );
-    send(&mut app, owner, GuiObjectAction::SetSliderValue(12.345));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_slider_value(12.345)
+    });
     app.update();
     assert_eq!(slider(&mut app, owner).value(), 12.345);
     assert_eq!(app.world().get::<GuiSliderValue>(view).unwrap().0, 12.345);
@@ -197,7 +198,9 @@ fn grip_drag_does_not_jump_round_unrequested_values_or_lose_the_event_snapshot()
     app.update();
     assert_eq!(slider(&mut app, owner).value(), 62.5);
     assert_eq!(app.world().resource::<Events>().0, [62.5]);
-    send(&mut app, owner, GuiObjectAction::SetSliderCanDrag(false));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_slider_can_drag(false)
+    });
     app.update();
     app.world_mut()
         .get_mut::<Window>(window)
@@ -206,11 +209,9 @@ fn grip_drag_does_not_jump_round_unrequested_values_or_lose_the_event_snapshot()
     app.update();
     assert_eq!(slider(&mut app, owner).value(), 62.5);
     mouse(&mut app, false);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetSliderWholeNumbers(true),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_slider_whole_numbers(true)
+    });
     app.update();
     mouse(&mut app, true);
     assert!(
@@ -225,7 +226,9 @@ fn grip_drag_does_not_jump_round_unrequested_values_or_lose_the_event_snapshot()
     assert_eq!(slider(&mut app, owner).value(), 64.);
     mouse(&mut app, false);
     let count = app.world().resource::<Events>().0.len();
-    send(&mut app, owner, GuiObjectAction::SetSliderValue(12.25));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_slider_value(12.25)
+    });
     app.update();
     assert_eq!(slider(&mut app, owner).value(), 12.25);
     assert_eq!(
@@ -239,15 +242,15 @@ fn grip_drag_does_not_jump_round_unrequested_values_or_lose_the_event_snapshot()
 fn holding_the_grip_does_not_normalize_programmatic_values() {
     let (mut app, owner, _, _) = fixture(true);
     app.update();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetSliderWholeNumbers(true),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_slider_whole_numbers(true)
+    });
     let grip = part(&mut app, owner, "grip");
     hover(&mut app, grip);
     for value in [2.5, -12.25, 112.25] {
-        send(&mut app, owner, GuiObjectAction::SetSliderValue(value));
+        send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+            object.set_slider_value(value)
+        });
         app.update();
         mouse(&mut app, true);
         for _ in 0..3 {

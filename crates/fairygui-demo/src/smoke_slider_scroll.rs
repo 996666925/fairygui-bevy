@@ -54,6 +54,7 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -81,17 +82,11 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let prefab = commands
                 .spawn(FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Slider_HZ"))
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                prefab,
-                GuiObjectAction::SetVisible(false),
-            ));
+            commands.entity(prefab).insert(GuiDisplay::hidden());
             let page = commands
                 .spawn((
                     FairyGuiRoot::new(assets.load("ui/ListEffect.fui"), "Main")
@@ -145,17 +140,12 @@ fn drive(
             assert!((offset() - 100.).abs() < 0.1);
             assert_eq!(value(), state.value);
             mouse.release(MouseButton::Left);
-            commands.write_message(GuiObjectCommand::new(
-                state.list.unwrap(),
-                GuiObjectAction::ScrollTo {
-                    position: Vec2::ZERO,
-                    animated: false,
-                },
-            ));
-            commands.write_message(GuiObjectCommand::new(
-                state.slider.unwrap(),
-                GuiObjectAction::SetSliderValue(50.),
-            ));
+            gui_edit.edit(state.list.unwrap(), |object: &mut GuiObjectMut| {
+                object.scroll_to(Vec2::ZERO, false)
+            });
+            gui_edit.edit(state.slider.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_slider_value(50.)
+            });
             next = true;
         }
         6 if elapsed >= 8 => {
@@ -176,10 +166,9 @@ fn drive(
             assert!(offset().abs() < 0.1);
             assert_eq!((events.pane_presses, events.values.len()), (1, 2));
             mouse.release(MouseButton::Left);
-            commands.write_message(GuiObjectCommand::new(
-                state.slider.unwrap(),
-                GuiObjectAction::SetSliderChangeOnClick(false),
-            ));
+            gui_edit.edit(state.slider.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_slider_change_on_click(false)
+            });
             next = true;
         }
         10 if elapsed >= 4 => {

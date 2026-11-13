@@ -7,14 +7,14 @@ mod tests;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct GuiSliderState {
-    pub(crate) min: f64,
-    pub(crate) max: f64,
-    pub(crate) value: f64,
-    pub(crate) whole_numbers: bool,
+    pub min: f64,
+    pub max: f64,
+    pub value: f64,
+    pub whole_numbers: bool,
     pub(crate) reverse: bool,
-    pub(crate) change_on_click: bool,
-    pub(crate) can_drag: bool,
-    pub(crate) title_type: i32,
+    pub change_on_click: bool,
+    pub can_drag: bool,
+    pub title_type: i32,
 }
 impl GuiSliderState {
     pub fn min(&self) -> f64 {
@@ -40,5 +40,20 @@ impl GuiSliderState {
     }
     pub fn title_type(&self) -> i32 {
         self.title_type
+    }
+}
+
+impl GuiSliderState {
+    pub fn new(min: f64, max: f64, value: f64) -> Self {
+        Self {
+            min,
+            max,
+            value,
+            whole_numbers: false,
+            reverse: false,
+            change_on_click: true,
+            can_drag: true,
+            title_type: 0,
+        }
     }
 }

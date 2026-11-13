@@ -37,6 +37,7 @@ fn drive(
     existing: Query<()>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -51,10 +52,7 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let horizontal = commands
                 .spawn(
                     FairyGuiRoot::new(assets.load("ui/Basics.fui"), "ProgressBar")
@@ -68,18 +66,12 @@ fn drive(
                         .with_position(Vec2::new(750., 100.)),
                 )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                radial,
-                GuiObjectAction::SetScale(Vec2::splat(3.)),
-            ));
+
             state.owners = vec![horizontal, radial];
             for &owner in &state.owners {
-                for action in [
-                    GuiObjectAction::SetProgressRange { min: 0., max: 1. },
-                    GuiObjectAction::SetProgress(0.25),
-                ] {
-                    commands.write_message(GuiObjectCommand::new(owner, action));
-                }
+                commands
+                    .entity(owner)
+                    .insert(GuiProgressState::new(0., 1., 0.25));
             }
             next = true;
         }
@@ -89,17 +81,17 @@ fn drive(
                 .iter()
                 .all(|&owner| gui.progress(owner).is_some()) =>
         {
+            gui_edit
+                .get_mut(state.owners[1])
+                .unwrap()
+                .set_scale(Vec2::splat(3.));
             for &owner in &state.owners {
                 let progress = gui.progress(owner).unwrap();
                 assert_eq!((progress.value(), progress.displayed_value()), (0.25, 0.25));
                 commands.entity(gui.view(owner).unwrap()).observe(completed);
-                commands.write_message(GuiObjectCommand::new(
-                    owner,
-                    GuiObjectAction::TweenProgress {
-                        value: 0.75,
-                        duration: 4.,
-                    },
-                ));
+                gui_edit.edit(owner, |object: &mut GuiObjectMut| {
+                    object.tween_progress(0.75, 4.)
+                });
             }
             next = true;
         }
@@ -108,10 +100,9 @@ fn drive(
                 let progress = gui.progress(owner).unwrap();
                 assert_eq!(progress.value(), 0.75);
                 assert!(progress.is_tweening() && progress.displayed_value() < 0.7);
-                commands.write_message(GuiObjectCommand::new(
-                    owner,
-                    GuiObjectAction::StopProgressTween,
-                ));
+                gui_edit.edit(owner, |object: &mut GuiObjectMut| {
+                    object.stop_progress_tween()
+                });
             }
             assert!(events.0.is_empty());
             next = true;
@@ -126,7 +117,13 @@ fn drive(
                     let expected = (495. * progress.percent()).round() as f32;
                     assert_eq!(geometry.size().x, expected);
                     let node = nodes.get(bar).unwrap();
-                    assert!((node.size().x * node.inverse_scale_factor() - expected).abs() < 0.1);
+                    let rendered = node.size().x * node.inverse_scale_factor();
+                    // Bevy rounds the two physical pixel edges independently.
+                    assert!(
+                        (rendered - expected).abs() <= node.inverse_scale_factor(),
+                        "progress width: model={expected}, rendered={rendered}, physical pixel={}",
+                        node.inverse_scale_factor()
+                    );
                 } else {
                     assert_eq!(
                         geometry.size(),
@@ -148,13 +145,9 @@ fn drive(
         4 if elapsed >= 8 => {
             for (&owner, &displayed) in state.owners.iter().zip(&state.displayed) {
                 assert_eq!(gui.progress(owner).unwrap().displayed_value(), displayed);
-                commands.write_message(GuiObjectCommand::new(
-                    owner,
-                    GuiObjectAction::TweenProgress {
-                        value: 0.25,
-                        duration: 0.2,
-                    },
-                ));
+                gui_edit.edit(owner, |object: &mut GuiObjectMut| {
+                    object.tween_progress(0.25, 0.2)
+                });
             }
             next = true;
         }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::GuiWorldExt as _;
 use crate::{FairyGuiPlugin, GuiQuery, GuiRootView, GuiSystems};
 use bevy::ecs::system::SystemState;
 use fairygui_core::package::FuiPackage;
@@ -72,14 +73,12 @@ fn anchored_popup_uses_live_anchor_geometry_directions_and_retained_owner_views(
     source.active = false;
     let popup = app.world_mut().spawn(source).id();
     app.update();
-    app.world_mut().write_message(crate::GuiObjectCommand::new(
-        anchor,
-        crate::GuiObjectAction::SetSize(Vec2::new(40., 20.)),
-    ));
-    app.world_mut().write_message(crate::GuiObjectCommand::new(
-        popup,
-        crate::GuiObjectAction::SetSize(Vec2::new(150., 70.)),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(anchor) {
+        object.set_size(Vec2::new(40., 20.))
+    }
+    if let Some(mut object) = app.world_mut().gui_mut(popup) {
+        object.set_size(Vec2::new(150., 70.))
+    }
     let view = app.world().get::<GuiRootView>(popup).unwrap().0;
     // Native GRoot.showPopup branches: overflow shifts by anchor width minus
     // popup width; Up adds -1; an above-screen popup shifts x by half the anchor.
@@ -110,10 +109,9 @@ fn anchored_popup_uses_live_anchor_geometry_directions_and_retained_owner_views(
             Vec2::new(20., 30.),
         ),
     ] {
-        app.world_mut().write_message(crate::GuiObjectCommand::new(
-            anchor,
-            crate::GuiObjectAction::SetPosition(position),
-        ));
+        if let Some(mut object) = app.world_mut().gui_mut(anchor) {
+            object.set_position(position)
+        }
         send(
             &mut app,
             GuiPopupCommand::ShowAnchored {

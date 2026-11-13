@@ -49,6 +49,7 @@ pub fn bind(
 /// hiding delayed rows never flashes a fully visible unanimated first frame.
 pub fn play(
     mut commands: Commands,
+    mut gui_edit: GuiMut,
     lists: Query<(Entity, &GuiListState), With<Pending>>,
     mail_items: Query<&MailItem>,
     gui: GuiQuery,
@@ -65,7 +66,7 @@ pub fn play(
                 continue;
             };
             debug_assert!(gui.text(mail.time).is_some());
-            mail.play_effect(&mut commands, index as f32 * 0.2);
+            mail.play_effect(&mut gui_edit, index as f32 * 0.2);
         }
         commands.entity(list).remove::<Pending>();
     }

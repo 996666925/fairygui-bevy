@@ -11,7 +11,7 @@ use crate::{
     GuiRuntime, PopupMenuTemplates,
 };
 
-use crate::runtime::ObjectCommandSource;
+use crate::runtime::GuiOwnerTemplate;
 
 #[cfg(test)]
 #[path = "ecs_popup_tests.rs"]
@@ -122,7 +122,7 @@ pub(crate) fn apply_popup_commands(
     window_sources: Query<&FairyGuiWindow>,
     mut removed: RemovedComponents<FairyGuiRoot>,
     mut removed_windows: RemovedComponents<FairyGuiWindow>,
-    mut pending: Local<Vec<(ObjectCommandSource, GuiPopupCommand)>>,
+    mut pending: Local<Vec<(GuiOwnerTemplate, GuiPopupCommand)>>,
     assets: Res<Assets<FuiAsset>>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
     settings: Res<GuiInputSettings>,
@@ -167,13 +167,13 @@ pub(crate) fn apply_popup_commands(
                 .get(target)
                 .ok()
                 .cloned()
-                .map(ObjectCommandSource::Root)
+                .map(GuiOwnerTemplate::Root)
                 .or_else(|| {
                     window_sources
                         .get(target)
                         .ok()
                         .cloned()
-                        .map(ObjectCommandSource::Window)
+                        .map(GuiOwnerTemplate::Window)
                 });
             if let Some(expected) = expected
                 && source

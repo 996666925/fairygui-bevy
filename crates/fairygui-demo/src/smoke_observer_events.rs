@@ -18,10 +18,9 @@ struct Events {
 }
 fn child(
     mut event: On<GuiEvent>,
-    gui: GuiQuery,
+    mut gui: ParamSet<(GuiQuery, Query<&mut GuiText>)>,
     selected: Query<&GuiButtonSelected>,
     mut events: ResMut<Events>,
-    mut commands: Commands,
 ) {
     if event.event.kind != EventKind::Click {
         return;
@@ -36,14 +35,21 @@ fn child(
     } else {
         event.event.data = EventData::Text("shared".into());
     }
-    let root = gui.get(event.entity).unwrap().parent().unwrap();
-    let label = gui.child_by_name(root, "n8").unwrap();
-    commands.write_message(GuiObjectCommand::new(
-        label,
-        GuiObjectAction::SetText(format!("Local: {checked}")),
-    ));
+    let label = {
+        let query = gui.p0();
+        let root = query.get(event.entity).unwrap().parent().unwrap();
+        query.child_by_name(root, "n8").unwrap()
+    };
+    gui.p1()
+        .get_mut(label)
+        .unwrap()
+        .set(format!("Local: {checked}"));
 }
-fn parent(event: On<GuiEvent>, gui: GuiQuery, mut events: ResMut<Events>, mut commands: Commands) {
+fn parent(
+    event: On<GuiEvent>,
+    mut gui: ParamSet<(GuiQuery, Query<&mut GuiText>)>,
+    mut events: ResMut<Events>,
+) {
     if event.event.kind != EventKind::Click {
         return;
     }
@@ -51,12 +57,10 @@ fn parent(event: On<GuiEvent>, gui: GuiQuery, mut events: ResMut<Events>, mut co
     assert_ne!(event.target, Some(event.entity));
     assert_eq!(event.event.data, EventData::Text("shared".into()));
     events.parent_clicks += 1;
-    let label = gui.child_by_name(event.entity, "n8").unwrap();
-    commands.write_message(GuiObjectCommand::new(
-        label,
-        GuiObjectAction::SetText("Parent: false".into()),
-    ));
+    let label = gui.p0().child_by_name(event.entity, "n8").unwrap();
+    gui.p1().get_mut(label).unwrap().set("Parent: false");
 }
+
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>()
         .init_resource::<Events>()
@@ -82,6 +86,7 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -100,10 +105,7 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             state.owner = Some(
                 commands
                     .spawn(

@@ -41,6 +41,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -61,17 +62,14 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let page = commands
-                .spawn(FairyGuiRoot::new(assets.load("ui/Bag.fui"), "Main"))
+                .spawn(
+                    FairyGuiRoot::new(assets.load("ui/Bag.fui"), "Main")
+                        .with_position(Vec2::new(40., 20.)),
+                )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                page,
-                GuiObjectAction::SetPosition(Vec2::new(40., 20.)),
-            ));
+
             state.page = Some(page);
             next = true;
         }
@@ -128,13 +126,9 @@ fn drive(
                 .observe(save_to_disk("target/fairygui-demo-ecs-bag.png"));
             let list = state.list.unwrap();
             let size = gui.scroll(list).unwrap().view_size();
-            commands.write_message(GuiObjectCommand::new(
-                list,
-                GuiObjectAction::ScrollTo {
-                    position: Vec2::new(size.x * 2., 0.),
-                    animated: false,
-                },
-            ));
+            gui_edit.edit(list, |object: &mut GuiObjectMut| {
+                object.scroll_to(Vec2::new(size.x * 2., 0.), false)
+            });
             next = true;
         }
         8 if elapsed >= 16 => {

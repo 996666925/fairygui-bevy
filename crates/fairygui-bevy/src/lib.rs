@@ -2,7 +2,7 @@
 //!
 //! 面向应用的界面生命周期、事件响应与控件修改都通过 Bevy ECS 完成：用
 //! [`FairyGuiRoot`] 拥有界面，用 [`GuiQuery`] 查找控件实体，用 [`GuiEvent`]
-//! observer 响应交互，再通过 [`GuiObjectCommand`] 修改控件。
+//! observer 响应交互，直接修改可变属性组件；播放、滚动等使用 [`GuiMut`]。
 //!
 //! [`fairygui_core`] 在内部执行 FairyGUI 包语义，运行时把结果同步到对应的 ECS
 //! 实体与 Bevy UI 组件。应用代码通常不需要直接访问 [`GuiRuntime`] 或
@@ -12,7 +12,7 @@
 //!
 //! 核心层不依赖 Bevy。渲染表示由 [`backend`]、[`text`] 与 [`movie`] 负责，
 //! [`runtime`] 管理模型与实体之间的同步，[`input`] 管理指针路由与捕获。
-//! 应用 observer 与消息处理系统放入 [`GuiSystems::Respond`]，发送的命令会在本帧
+//! 应用 observer 与消息处理系统放入 [`GuiSystems::Respond`]，修改的组件会在本帧
 //! [`GuiSystems::Sync`] 应用并同步到 Bevy UI 组件。
 //!
 //! # 渲染方案
@@ -64,10 +64,12 @@ pub mod list;
 pub mod movie;
 pub mod popup;
 pub mod progress;
+mod properties;
 pub mod pull;
 pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;
 pub use runtime::root_mount::GuiRootMountState;
+pub use runtime::{GuiMut, GuiObjectMut, GuiWorldExt};
 pub mod slider;
 pub use slider::GuiSliderState;
 pub mod text;
@@ -107,9 +109,9 @@ pub use runtime::windows::{FairyGuiWindow, GuiWindowAction, GuiWindowCommand, Gu
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
     GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
-    GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease,
-    GuiRootInstance, GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback,
-    GuiTransitionComplete, GuiTransitionHook, PopupMenuTemplates,
+    GuiMenuAction, GuiProgressValue, GuiPullRelease, GuiRootInstance, GuiRuntime, GuiSliderValue,
+    GuiTextInput, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+    PopupMenuTemplates,
 };
 pub use tree::{
     GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
@@ -134,7 +136,7 @@ pub enum GuiSystems {
     /// to configure newly loaded roots before their first rendered frame.
     Initialize,
     /// Inside Sync, after native list layout and row spawning, before projection.
-    /// Read fresh logical snapshots and send same-frame object commands here.
+    /// Read fresh logical snapshots and edit components or call direct methods here.
     /// This precedes Bevy's PostUpdate UI layout and text measurement.
     PostLayout,
 }
@@ -157,18 +159,18 @@ pub mod prelude {
         GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
         GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,
         GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
-        GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
-        GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPointerCapture,
-        GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
-        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
-        GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
-        GuiScrollState, GuiSliderState, GuiSliderValue, GuiSpace, GuiSystems, GuiText,
-        GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
-        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
-        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
-        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
+        GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiMut,
+        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiPointerCapture, GuiPointerId,
+        GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
+        GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease,
+        GuiQuery, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollState,
+        GuiSliderState, GuiSliderValue, GuiSpace, GuiSystems, GuiText, GuiTextInput,
+        GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTransform,
+        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
+        GuiTransitions, GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem,
+        GuiTreeNode, GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
+        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand,
+        GuiWindowState, GuiWorldExt, PopupMenuTemplates,
     };
 }
 
@@ -231,7 +233,6 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiListItemClick>()
         .add_message::<GuiPullRelease>()
         .add_message::<GuiPullCommand>()
-        .add_message::<GuiObjectCommand>()
         .add_message::<GuiPopupCommand>()
         .add_message::<GuiWindowCommand>()
         .add_message::<GuiGlobalWaitCommand>()
@@ -275,13 +276,8 @@ impl Plugin for FairyGuiPlugin {
         .add_systems(
             Update,
             (
-                (
-                    runtime::sync_list_selection_components,
-                    runtime::sync_control_state_components,
-                )
-                    .chain(),
-                ecs::sync_gui_properties,
-                ecs::sync_gui_icons,
+                runtime::sync_list_selection_components,
+                properties::sync,
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 (ecs::sync_gui_transitions, animation::sync_state).chain(),
@@ -317,8 +313,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::cleanup_retained_popups,
                 runtime::spawn_pending_roots,
                 ecs::sync_gui_objects,
-                ecs::sync_gui_properties,
-                ecs::sync_gui_icons,
+                properties::sync,
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 extension::construct,
@@ -330,7 +325,7 @@ impl Plugin for FairyGuiPlugin {
             Update,
             (
                 input::apply_scroll_drag_commands,
-                runtime::apply_object_commands,
+                properties::sync,
                 runtime::text_measure::sync_sizes,
                 (
                     list::sync_list_content,
@@ -349,8 +344,7 @@ impl Plugin for FairyGuiPlugin {
                 )
                     .chain(),
                 ecs::sync_gui_objects,
-                ecs::sync_gui_properties,
-                ecs::sync_gui_icons,
+                properties::sync,
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 (tree::sync_tree_state, list::sync_list_state).chain(),
@@ -369,7 +363,7 @@ impl Plugin for FairyGuiPlugin {
             Update,
             (
                 input::apply_scroll_drag_commands,
-                runtime::apply_object_commands,
+                properties::sync,
                 (
                     runtime::sync_movie_sources,
                     movie::sync_movie_controls,
@@ -382,11 +376,10 @@ impl Plugin for FairyGuiPlugin {
                     runtime::tooltip::sync_tooltips,
                     runtime::spawn_pending_objects,
                     ecs::sync_gui_objects,
-                    ecs::sync_gui_properties,
-                    ecs::sync_gui_icons,
+                    properties::sync,
                     ecs::sync_gui_controllers,
                     extension::construct,
-                    runtime::apply_object_commands,
+                    properties::sync,
                 )
                     .chain(),
                 runtime::sync_text_inputs,
@@ -436,9 +429,8 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_ecs_roots,
                 runtime::windows::sync_ecs_windows,
                 runtime::root_mount::sync_mounts,
-                runtime::discard_removed_object_commands,
                 input::apply_scroll_drag_commands,
-                runtime::apply_object_commands,
+                properties::sync,
                 runtime::windows::apply_window_commands,
                 popup::apply_popup_commands,
                 runtime::ecs_drag_drop::apply_drag_commands,
@@ -453,10 +445,9 @@ impl Plugin for FairyGuiPlugin {
             Update,
             (
                 runtime::sync_list_selection_components,
-                runtime::sync_control_state_components,
+                properties::sync,
                 ecs::sync_gui_objects,
-                ecs::sync_gui_properties,
-                ecs::sync_gui_icons,
+                properties::sync,
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 ecs::sync_gui_transitions,

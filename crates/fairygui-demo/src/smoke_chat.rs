@@ -61,6 +61,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -180,10 +181,9 @@ fn drive(
         }
         21 if elapsed >= 2 => {
             let chat = chats.get(state.page.unwrap()).unwrap();
-            commands.write_message(GuiObjectCommand::new(
-                chat.input,
-                GuiObjectAction::SetText(format!("History {} [:cool]", state.sent)),
-            ));
+            gui_edit.edit(chat.input, |object: &mut GuiObjectMut| {
+                object.set_text(format!("History {} [:cool]", state.sent))
+            });
             next = true;
         }
         24 if elapsed >= 3 => {
@@ -199,13 +199,9 @@ fn drive(
                 state.since = state.frame;
             } else {
                 assert_eq!(chat.messages.len(), 100);
-                commands.write_message(GuiObjectCommand::new(
-                    chat.list,
-                    GuiObjectAction::ScrollTo {
-                        position: Vec2::new(0., 120.),
-                        animated: false,
-                    },
-                ));
+                gui_edit.edit(chat.list, |object: &mut GuiObjectMut| {
+                    object.scroll_to(Vec2::new(0., 120.), false)
+                });
                 next = true;
             }
         }
@@ -213,10 +209,9 @@ fn drive(
             let chat = chats.get(state.page.unwrap()).unwrap();
             state.before = gui.scroll(chat.list).unwrap().position();
             assert!(state.before.y < gui.scroll(chat.list).unwrap().max_position().y);
-            commands.write_message(GuiObjectCommand::new(
-                chat.input,
-                GuiObjectAction::SetText("Keep my history position".into()),
-            ));
+            gui_edit.edit(chat.input, |object: &mut GuiObjectMut| {
+                object.set_text("Keep my history position")
+            });
             state.count = chat.messages.len();
             next = true;
         }

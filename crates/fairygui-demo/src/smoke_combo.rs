@@ -46,6 +46,7 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -97,19 +98,27 @@ fn drive(
             {
                 assert_eq!(exported.items().len(), 8);
                 commands.entity(combo).observe(changed);
-                for action in [
-                    GuiObjectAction::SetComboItems(vec![
-                        "Apple".into(),
-                        "Banana".into(),
-                        "Cherry".into(),
-                    ]),
-                    GuiObjectAction::SetComboValues(vec!["a".into(), "b".into(), "c".into()]),
-                    GuiObjectAction::SetComboVisibleItemCount(2),
-                    GuiObjectAction::SetComboPopupDirection(GuiPopupDirection::Down),
-                    GuiObjectAction::SetComboSelection(1),
-                ] {
-                    commands.write_message(GuiObjectCommand::new(combo, action));
-                }
+
+                gui_edit.edit(combo, |object: &mut GuiObjectMut| {
+                    object.set_combo_items(vec!["Apple".into(), "Banana".into(), "Cherry".into()])
+                });
+
+                gui_edit.edit(combo, |object: &mut GuiObjectMut| {
+                    object.set_combo_values(vec!["a".into(), "b".into(), "c".into()])
+                });
+
+                gui_edit.edit(combo, |object: &mut GuiObjectMut| {
+                    object.set_combo_visible_item_count(2)
+                });
+
+                gui_edit.edit(combo, |object: &mut GuiObjectMut| {
+                    object.set_combo_popup_direction(GuiPopupDirection::Down)
+                });
+
+                gui_edit.edit(combo, |object: &mut GuiObjectMut| {
+                    object.set_combo_selection(1)
+                });
+
                 state.combo = Some(combo);
                 next = true;
             }
@@ -161,10 +170,9 @@ fn drive(
         }
         19 if elapsed > 6 => {
             assert_eq!(events.0, [(0, "a".into()), (0, "a".into())]);
-            commands.write_message(GuiObjectCommand::new(
-                state.combo.unwrap(),
-                GuiObjectAction::SetComboValue(Some("c".into())),
-            ));
+            gui_edit.edit(state.combo.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_combo_value(Some("c".into()))
+            });
             next = true;
         }
         20 if elapsed > 5 => {
@@ -179,10 +187,9 @@ fn drive(
                 2,
                 "programmatic selection must not emit a user change"
             );
-            commands.write_message(GuiObjectCommand::new(
-                state.combo.unwrap(),
-                GuiObjectAction::SetComboValue(Some("missing".into())),
-            ));
+            gui_edit.edit(state.combo.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_combo_value(Some("missing".into()))
+            });
             next = true;
         }
         21 if elapsed > 5 => {
@@ -192,15 +199,27 @@ fn drive(
                     .selected_index(),
                 -1
             );
-            for action in [
-                GuiObjectAction::SetComboItems(vec!["Reloaded A".into(), "Reloaded B".into()]),
-                GuiObjectAction::SetComboValues(vec!["new-a".into(), "new-b".into()]),
-                GuiObjectAction::SetComboVisibleItemCount(1),
-                GuiObjectAction::SetComboPopupDirection(GuiPopupDirection::Up),
-                GuiObjectAction::SetComboSelection(1),
-            ] {
-                commands.write_message(GuiObjectCommand::new(state.combo.unwrap(), action));
-            }
+
+            gui_edit.edit(state.combo.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_combo_items(vec!["Reloaded A".into(), "Reloaded B".into()])
+            });
+
+            gui_edit.edit(state.combo.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_combo_values(vec!["new-a".into(), "new-b".into()])
+            });
+
+            gui_edit.edit(state.combo.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_combo_visible_item_count(1)
+            });
+
+            gui_edit.edit(state.combo.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_combo_popup_direction(GuiPopupDirection::Up)
+            });
+
+            gui_edit.edit(state.combo.unwrap(), |object: &mut GuiObjectMut| {
+                object.set_combo_selection(1)
+            });
+
             next = true;
         }
         22 if elapsed > 5 => {

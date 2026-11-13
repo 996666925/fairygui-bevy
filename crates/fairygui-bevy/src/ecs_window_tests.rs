@@ -1,5 +1,6 @@
 use super::*;
-use crate::{FairyGuiPlugin, GuiObjectAction, GuiObjectCommand, GuiQuery};
+use crate::GuiTransform;
+use crate::{FairyGuiPlugin, GuiQuery, GuiWorldExt};
 use bevy::ecs::system::SystemState;
 
 fn app(loaded: bool) -> (App, Handle<FuiAsset>) {
@@ -53,10 +54,10 @@ fn ecs_windows_wait_for_assets_keep_hidden_views_and_dispose_on_owner_removal() 
         .spawn(FairyGuiWindow::new(asset.clone(), "WindowA"))
         .id();
     send(&mut app, owner, GuiWindowAction::Hide);
-    app.world_mut().write_message(GuiObjectCommand::new(
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(23., 37.)),
-    ));
+    app.world_mut().entity_mut(owner).insert(GuiTransform {
+        position: Vec2::new(23., 37.),
+        ..default()
+    });
     app.update();
     assert!(app.world().get::<GuiWindowState>(owner).is_none());
     assert_eq!(app.world().non_send::<GuiRuntime>().window_count(), 0);
@@ -176,10 +177,9 @@ fn ecs_window_pending_requests_are_cancelled_on_replacement_removal_and_despawn(
         source.visible = false;
         let owner = app.world_mut().spawn(source.clone()).id();
         send(&mut app, owner, GuiWindowAction::Show);
-        app.world_mut().write_message(GuiObjectCommand::new(
-            owner,
-            GuiObjectAction::SetPosition(Vec2::new(17., 29.)),
-        ));
+        if let Some(mut object) = app.world_mut().gui_mut(owner) {
+            object.set_position(Vec2::new(17., 29.))
+        }
         app.update();
         match replacement {
             0 => {

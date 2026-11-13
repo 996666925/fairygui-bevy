@@ -36,11 +36,18 @@ fn fixture(loaded: bool) -> (App, Entity, Handle<FuiAsset>) {
         .world_mut()
         .spawn(FairyGuiRoot::new(handle.clone(), "ComboBox"))
         .id();
+    if loaded {
+        app.update();
+    }
     (app, owner, handle)
 }
-fn send(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 fn snapshot(app: &mut App, owner: Entity) -> GuiComboBoxState {
     SystemState::<GuiQuery>::new(app.world_mut())
@@ -95,27 +102,14 @@ fn queued_combo_setters_apply_before_initialize_without_rebuilding_and_keep_snap
     let (mut app, owner, handle) = fixture(false);
     app.init_resource::<Initial>()
         .add_systems(Update, inspect.in_set(GuiSystems::Initialize));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboItems(vec!["One".into(), "Two".into()]),
+    let mut settings = GuiComboBoxState::new(
+        vec!["One".into(), "Two".into()],
+        vec!["one".into(), "two".into()],
     );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboValues(vec!["one".into(), "two".into()]),
-    );
-    send(&mut app, owner, GuiObjectAction::SetComboSelection(1));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboVisibleItemCount(3),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboPopupDirection(GuiPopupDirection::Up),
-    );
+    settings.selected_index = 1;
+    settings.visible_item_count = 3;
+    settings.direction = GuiPopupDirection::Up;
+    app.world_mut().entity_mut(owner).insert(settings);
     for _ in 0..4 {
         app.update();
     }
@@ -139,11 +133,9 @@ fn queued_combo_setters_apply_before_initialize_without_rebuilding_and_keep_snap
             .last_changed(),
         tick
     );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboValue(Some("one".into())),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_value(Some("one".into()))
+    });
     app.update();
     assert_eq!(snapshot(&mut app, owner).selected_index(), 0);
     assert_eq!(view(&app, owner), entity);
@@ -152,22 +144,18 @@ fn queued_combo_setters_apply_before_initialize_without_rebuilding_and_keep_snap
 #[test]
 fn combo_value_icon_arrays_and_items_setters_preserve_native_independent_arrays() {
     let (mut app, owner, _) = fixture(true);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboItems(vec!["A".into(), "B".into()]),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboValues(vec!["".into(), "b".into()]),
-    );
-    send(&mut app, owner, GuiObjectAction::SetIcon("custom".into()));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboValue(Some("b".into())),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_items(vec!["A".into(), "B".into()])
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_values(vec!["".into(), "b".into()])
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_icon("custom")
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_value(Some("b".into()))
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -176,36 +164,36 @@ fn combo_value_icon_arrays_and_items_setters_preserve_native_independent_arrays(
             .value(),
         "custom"
     );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboIcons(Some(vec![Some("first".into())])),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_icons(Some(vec![Some("first".into())]))
+    });
     app.update();
     assert_eq!(snapshot(&mut app, owner).icons().unwrap().len(), 1);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboValue(Some("absent".into())),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_value(Some("absent".into()))
+    });
     app.update();
     let state = snapshot(&mut app, owner);
     assert_eq!(state.selected_index(), -1);
     assert!(state.value().is_none());
-    send(&mut app, owner, GuiObjectAction::SetComboValue(None));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_value(None)
+    });
     app.update();
     assert_eq!(snapshot(&mut app, owner).value(), Some(""));
-    send(&mut app, owner, GuiObjectAction::SetComboSelection(10));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_selection(10)
+    });
     app.update();
     assert_eq!(snapshot(&mut app, owner).selected_index(), 10);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboItems(vec!["Only".into()]),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_items(vec!["Only".into()])
+    });
     app.update();
     assert_eq!(snapshot(&mut app, owner).selected_index(), 0);
-    send(&mut app, owner, GuiObjectAction::SetComboItems(Vec::new()));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_items(Vec::new())
+    });
     app.update();
     let state = snapshot(&mut app, owner);
     assert!(state.items().is_empty());
@@ -226,20 +214,18 @@ fn combo_observers_read_current_selection_and_programmatic_edits_do_not_emit_cha
     }
     let (mut app, owner, _) = fixture(true);
     app.init_resource::<Seen>();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboItems(vec!["A".into(), "B".into()]),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboValues(vec!["a".into(), "b".into()]),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_items(vec!["A".into(), "B".into()])
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_values(vec!["a".into(), "b".into()])
+    });
     app.update();
     let entity = view(&app, owner);
     app.world_mut().entity_mut(entity).observe(observe);
-    send(&mut app, owner, GuiObjectAction::SetComboSelection(1));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_selection(1)
+    });
     app.update();
     assert!(app.world().resource::<Seen>().0.is_empty());
     let object = app.world().get::<GObjectRef>(entity).unwrap().0;
@@ -255,32 +241,24 @@ fn combo_observers_read_current_selection_and_programmatic_edits_do_not_emit_cha
 #[test]
 fn combo_popup_direction_uses_native_up_one_down_two_codes() {
     let (mut app, owner, _) = fixture(true);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(100., 200.)),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboItems(vec!["A".into(), "B".into()]),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboPopupDirection(GuiPopupDirection::Up),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_position(Vec2::new(100., 200.))
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_items(vec!["A".into(), "B".into()])
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_popup_direction(GuiPopupDirection::Up)
+    });
     app.update();
     open(&mut app, owner);
     let pane = snapshot(&mut app, owner).dropdown().unwrap();
     assert!(app.world().get::<GuiTransform>(pane).unwrap().position().y < 200.);
     app.world_mut().write_message(GuiPopupCommand::HideAll);
     app.update();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboPopupDirection(GuiPopupDirection::Down),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_popup_direction(GuiPopupDirection::Down)
+    });
     app.update();
     open(&mut app, owner);
     assert_eq!(snapshot(&mut app, owner).dropdown(), Some(pane));
@@ -290,16 +268,12 @@ fn combo_popup_direction_uses_native_up_one_down_two_codes() {
 #[test]
 fn combo_popup_reuses_views_refreshes_options_on_reopen_and_is_disposed_with_owner() {
     let (mut app, owner, _) = fixture(true);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboItems(vec!["A".into(), "B".into()]),
-    );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboValues(vec!["a".into(), "b".into()]),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_items(vec!["A".into(), "B".into()])
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_values(vec!["a".into(), "b".into()])
+    });
     app.update();
     open(&mut app, owner);
     let state = snapshot(&mut app, owner);
@@ -308,11 +282,9 @@ fn combo_popup_reuses_views_refreshes_options_on_reopen_and_is_disposed_with_own
     app.world_mut().write_message(GuiPopupCommand::HideAll);
     app.update();
     assert!(!snapshot(&mut app, owner).is_open());
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetComboItems(vec!["New".into()]),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_combo_items(vec!["New".into()])
+    });
     app.update();
     open(&mut app, owner);
     let state = snapshot(&mut app, owner);

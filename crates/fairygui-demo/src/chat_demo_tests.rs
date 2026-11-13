@@ -64,10 +64,9 @@ fn click(app: &mut App, entity: Entity) {
 }
 fn set_input(app: &mut App, page: Entity, text: &str) {
     let input = app.world().get::<Chat>(page).unwrap().input;
-    app.world_mut().write_message(GuiObjectCommand::new(
-        input,
-        GuiObjectAction::SetText(text.into()),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(input) {
+        object.set_text(text)
+    }
     app.update();
 }
 fn verify_rows(app: &mut App, page: Entity) {
@@ -177,13 +176,9 @@ fn chat_entity_observers_send_enter_select_emoji_cap_history_preserve_scroll_and
     assert!(bottom.max_position().y > 0.);
     assert_eq!(bottom.position().y, bottom.max_position().y);
     verify_rows(&mut app, page);
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 120.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::new(0., 120.), false)
+    }
     app.update();
     let before = app.world().get::<GuiScrollState>(list).unwrap().position();
     app.world_mut().trigger(Submit {

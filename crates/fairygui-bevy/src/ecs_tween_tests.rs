@@ -1,7 +1,5 @@
 use super::*;
-use crate::{
-    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand, GuiTransform,
-};
+use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiTransform, GuiWorldExt};
 
 #[derive(Resource, Default)]
 struct Completions(Vec<(Entity, GuiTweenProperty, Vec2)>);
@@ -53,24 +51,21 @@ fn completion_fixture() -> (App, Entity, Entity) {
     (app, owner, view)
 }
 
-fn command(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn command(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 
 #[test]
 fn natural_completion_observes_final_geometry_once_on_the_view() {
     let (mut app, owner, view) = completion_fixture();
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::new(120., 70.)),
-            duration: 0.2,
-            ease: 0,
-        },
-    );
-    app.update(); // The tween starts in Sync, after Advance.
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::new(120., 70.)), 0.2, 0)
+    });
     app.update();
     assert!(app.world().resource::<Completions>().0.is_empty());
     app.update();
@@ -83,15 +78,9 @@ fn natural_completion_observes_final_geometry_once_on_the_view() {
     }
     assert_eq!(app.world().resource::<Completions>().0.len(), 1);
 
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::new(5., 6.)),
-            duration: 0.,
-            ease: 0,
-        },
-    );
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::new(5., 6.)), 0., 0)
+    });
     app.update();
     assert_eq!(
         app.world().resource::<Completions>().0[1],
@@ -113,64 +102,38 @@ fn stop_replacement_and_disposal_suppress_unconsumed_completions() {
         GuiTweenTarget::Position(Vec2::splat(100.)),
         GuiTweenTarget::Alpha(0.),
     ] {
-        command(
-            &mut app,
-            owner,
-            GuiObjectAction::Tween {
-                target,
-                duration: 0.1,
-                ease: 0,
-            },
-        );
+        command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+            object.tween(target, 0.1, 0)
+        });
     }
-    app.update();
-    // Both finish in Advance; Sync replaces XY but leaves Alpha's event intact.
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::splat(200.)),
-            duration: 1.,
-            ease: 0,
-        },
-    );
+    app.world_mut()
+        .non_send_mut::<crate::GuiRuntime>()
+        .store_mut()
+        .advance_tweens(0.1);
+    // Replace XY before pending completions are published, leaving Alpha intact.
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::splat(200.)), 1., 0)
+    });
     app.update();
     assert_eq!(
         app.world().resource::<Completions>().0,
-        [(view, GuiTweenProperty::Alpha, Vec2::splat(100.))]
+        [(view, GuiTweenProperty::Alpha, Vec2::splat(110.))]
     );
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::StopTween(GuiTweenProperty::Xy),
-    );
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.stop_tween(GuiTweenProperty::Xy)
+    });
     // Start and stop an immediate tween in one command pass: no completion.
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Rotation(90.),
-            duration: 0.,
-            ease: 0,
-        },
-    );
-    command(
-        &mut app,
-        view,
-        GuiObjectAction::StopTween(GuiTweenProperty::Rotation),
-    );
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Rotation(90.), 0., 0)
+    });
+    command(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.stop_tween(GuiTweenProperty::Rotation)
+    });
     app.update();
     assert_eq!(app.world().resource::<Completions>().0.len(), 1);
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::ZERO),
-            duration: 0.1,
-            ease: 0,
-        },
-    );
-    app.update();
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::ZERO), 0.1, 0)
+    });
     app.world_mut().entity_mut(owner).despawn();
     app.update(); // Completes in Advance, disposed before notifications in Sync.
     assert_eq!(app.world().resource::<Completions>().0.len(), 1);
@@ -180,25 +143,13 @@ fn stop_replacement_and_disposal_suppress_unconsumed_completions() {
 #[test]
 fn invalid_replacement_preserves_the_original_completion() {
     let (mut app, owner, view) = completion_fixture();
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::ONE),
-            duration: 0.1,
-            ease: 0,
-        },
-    );
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::ONE), 0.1, 0)
+    });
     app.update();
-    command(
-        &mut app,
-        owner,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::splat(f32::NAN)),
-            duration: 0.,
-            ease: 0,
-        },
-    );
+    command(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::splat(f32::NAN)), 0., 0)
+    });
     app.update();
     assert_eq!(
         app.world().resource::<Completions>().0,
@@ -235,38 +186,27 @@ fn property_tween_commands_replace_per_property_stop_validate_and_dispose() {
         .world_mut()
         .spawn(FairyGuiRoot::new(asset, "GuideLayer"))
         .id();
-    let send = |app: &mut App, action| {
-        app.world_mut()
-            .write_message(GuiObjectCommand::new(owner, action));
+    app.update();
+    let send = |app: &mut App, action: fn(&mut crate::GuiObjectMut)| {
+        action(
+            &mut app
+                .world_mut()
+                .gui_mut(owner)
+                .expect("GUI object must be ready"),
+        );
     };
-    send(
-        &mut app,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::new(100., 50.)),
-            duration: 1.,
-            ease: 0,
-        },
-    );
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::new(100., 50.)), 1., 0)
+    });
     app.update();
     let view = app.world().get::<crate::GuiRootView>(owner).unwrap().0;
-    app.update();
     assert!((app.world().get::<GuiTransform>(view).unwrap().position().x - 10.).abs() < 0.01);
-    send(
-        &mut app,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::new(200., 100.)),
-            duration: 1.,
-            ease: 0,
-        },
-    );
-    send(
-        &mut app,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Alpha(0.),
-            duration: 1.,
-            ease: 0,
-        },
-    );
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::new(200., 100.)), 1., 0)
+    });
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Alpha(0.), 1., 0)
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -275,14 +215,9 @@ fn property_tween_commands_replace_per_property_stop_validate_and_dispose() {
             .tween_count(),
         2
     );
-    send(
-        &mut app,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Position(Vec2::splat(f32::NAN)),
-            duration: 1.,
-            ease: 0,
-        },
-    );
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Position(Vec2::splat(f32::NAN)), 1., 0)
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -291,7 +226,9 @@ fn property_tween_commands_replace_per_property_stop_validate_and_dispose() {
             .tween_count(),
         2
     );
-    send(&mut app, GuiObjectAction::StopTween(GuiTweenProperty::Xy));
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.stop_tween(GuiTweenProperty::Xy)
+    });
     app.update();
     let stopped = app.world().get::<GuiTransform>(view).unwrap().position();
     app.update();
@@ -306,35 +243,20 @@ fn property_tween_commands_replace_per_property_stop_validate_and_dispose() {
             .tween_count(),
         1
     );
-    send(
-        &mut app,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Scale(Vec2::splat(2.)),
-            duration: 0.,
-            ease: 5,
-        },
-    );
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Scale(Vec2::splat(2.)), 0., 5)
+    });
     app.update();
     assert_eq!(
         app.world().get::<GuiTransform>(view).unwrap().scale(),
         Vec2::splat(2.)
     );
-    send(
-        &mut app,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Size(Vec2::new(160., 80.)),
-            duration: 0.,
-            ease: 5,
-        },
-    );
-    send(
-        &mut app,
-        GuiObjectAction::Tween {
-            target: GuiTweenTarget::Rotation(45.),
-            duration: 0.,
-            ease: 5,
-        },
-    );
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Size(Vec2::new(160., 80.)), 0., 5)
+    });
+    send(&mut app, |object: &mut crate::GuiObjectMut| {
+        object.tween(GuiTweenTarget::Rotation(45.), 0., 5)
+    });
     app.update();
     assert_eq!(
         app.world().get::<GuiTransform>(view).unwrap().size(),

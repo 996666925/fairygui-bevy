@@ -110,13 +110,9 @@ fn visible_mail_rows_start_once_with_native_stagger_and_offscreen_rows_remain_un
         assert!(gui.display(row).unwrap().visible());
         assert!(!gui.transition(row, "t0").unwrap().is_playing());
     }
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 500.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::new(0., 500.), false)
+    }
     app.update();
     assert_eq!(
         query

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     FairyGuiPlugin, GuiDragCommand, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget, GuiIcon,
-    GuiObjectAction, GuiObjectCommand,
+    GuiWorldExt,
 };
 use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::picking::hover::Hovered;
@@ -9,12 +9,16 @@ use bevy::ui::{ComputedStackIndex, RelativeCursorPosition};
 
 #[derive(Resource, Default)]
 struct Drops(Vec<GuiDrop>);
-fn receive(event: On<GuiDrop>, mut drops: ResMut<Drops>, mut commands: Commands) {
+fn receive(
+    event: On<GuiDrop>,
+    mut drops: ResMut<Drops>,
+    _commands: Commands,
+    mut gui_edit: crate::GuiMut,
+) {
     drops.0.push(event.event().clone());
-    commands.write_message(GuiObjectCommand::new(
-        event.entity,
-        GuiObjectAction::SetIcon(event.data.clone().unwrap_or_default()),
-    ));
+    gui_edit.edit(event.entity, |object: &mut crate::GuiObjectMut| {
+        object.set_icon(event.data.clone().unwrap_or_default())
+    });
 }
 
 fn fixture() -> (App, Entity, Entity, Entity, Entity) {
@@ -205,10 +209,9 @@ fn ecs_drag_cancellation_source_disposal_and_hidden_source_never_deliver_or_rest
                 app.world_mut().despawn(owner);
             }
             2 => {
-                app.world_mut().write_message(GuiObjectCommand::new(
-                    source,
-                    GuiObjectAction::SetVisible(false),
-                ));
+                if let Some(mut object) = app.world_mut().gui_mut(source) {
+                    object.set_visible(false)
+                }
             }
             3 => {
                 app.world_mut().get_mut::<Window>(window).unwrap().focused = false;
@@ -220,10 +223,9 @@ fn ecs_drag_cancellation_source_disposal_and_hidden_source_never_deliver_or_rest
                     .active = false;
             }
             5 => {
-                app.world_mut().write_message(GuiObjectCommand::new(
-                    source,
-                    GuiObjectAction::SetTouchable(false),
-                ));
+                if let Some(mut object) = app.world_mut().gui_mut(source) {
+                    object.set_touchable(false)
+                }
             }
             _ => {
                 let handle = app

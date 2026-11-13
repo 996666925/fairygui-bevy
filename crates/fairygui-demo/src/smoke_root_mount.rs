@@ -54,6 +54,7 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -74,10 +75,7 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             for (position, scale) in [(Vec2::new(100., 100.), 1.25), (Vec2::new(650., 100.), 1.)] {
                 let owner = commands
                     .spawn(
@@ -86,10 +84,12 @@ fn drive(
                             .with_position(position),
                     )
                     .id();
-                commands.write_message(GuiObjectCommand::new(
-                    owner,
-                    GuiObjectAction::SetScale(Vec2::splat(scale)),
-                ));
+                commands.entity(owner).insert(GuiTransform {
+                    position,
+                    size: Vec2::new(300., 180.),
+                    scale: Vec2::splat(scale),
+                    ..default()
+                });
                 state.panels.push(owner);
             }
             let nested = commands
@@ -100,10 +100,9 @@ fn drive(
                         .with_size(Vec2::new(140., 36.)),
                 )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                nested,
-                GuiObjectAction::SetText("Mounted child".into()),
-            ));
+            commands
+                .entity(nested)
+                .insert(GuiText::new("Mounted child"));
             state.nested = Some(nested);
             next = true;
         }

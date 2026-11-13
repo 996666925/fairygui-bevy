@@ -70,6 +70,7 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -91,10 +92,7 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             for (name, position, size, scale) in [
                 (
                     "Slider_HZ",
@@ -116,13 +114,16 @@ fn drive(
                             .with_size(size),
                     )
                     .id();
-                for action in [
-                    GuiObjectAction::SetScale(Vec2::splat(scale)),
-                    GuiObjectAction::SetSliderRange { min: 0., max: 1. },
-                    GuiObjectAction::SetSliderValue(0.25),
-                ] {
-                    commands.write_message(GuiObjectCommand::new(owner, action));
-                }
+
+                commands.entity(owner).insert((
+                    GuiSliderState::new(0., 1., 0.25),
+                    GuiTransform {
+                        position,
+                        size,
+                        scale: Vec2::splat(scale),
+                        ..default()
+                    },
+                ));
                 state.owners.push(owner);
             }
             next = true;
@@ -156,13 +157,19 @@ fn drive(
             assert_eq!(events.0.len(), 1);
             near(events.0[0].1, 0.375);
             mouse.release(MouseButton::Left);
-            for action in [
-                GuiObjectAction::SetSliderRange { min: 0., max: 10. },
-                GuiObjectAction::SetSliderWholeNumbers(true),
-                GuiObjectAction::SetSliderValue(2.5),
-            ] {
-                commands.write_message(GuiObjectCommand::new(state.owners[0], action));
-            }
+
+            gui_edit.edit(state.owners[0], |object: &mut GuiObjectMut| {
+                object.set_slider_range(0., 10.)
+            });
+
+            gui_edit.edit(state.owners[0], |object: &mut GuiObjectMut| {
+                object.set_slider_whole_numbers(true)
+            });
+
+            gui_edit.edit(state.owners[0], |object: &mut GuiObjectMut| {
+                object.set_slider_value(2.5)
+            });
+
             next = true;
         }
         5 if elapsed >= 4 => {
@@ -182,10 +189,9 @@ fn drive(
         9 if elapsed >= 4 => {
             verify(&gui, state.owners[0], false, 4., 115.);
             assert_eq!(events.0.len(), 2);
-            commands.write_message(GuiObjectCommand::new(
-                state.owners[0],
-                GuiObjectAction::SetSliderCanDrag(false),
-            ));
+            gui_edit.edit(state.owners[0], |object: &mut GuiObjectMut| {
+                object.set_slider_can_drag(false)
+            });
             next = true;
         }
         10 if elapsed >= 4 => {
@@ -197,10 +203,9 @@ fn drive(
             verify(&gui, state.owners[0], false, 4., 115.);
             assert_eq!(events.0.len(), 2);
             mouse.release(MouseButton::Left);
-            commands.write_message(GuiObjectCommand::new(
-                state.owners[0],
-                GuiObjectAction::SetSliderChangeOnClick(false),
-            ));
+            gui_edit.edit(state.owners[0], |object: &mut GuiObjectMut| {
+                object.set_slider_change_on_click(false)
+            });
             next = true;
         }
         12 if elapsed >= 4 => {

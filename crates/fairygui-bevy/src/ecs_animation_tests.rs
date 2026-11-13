@@ -1,5 +1,6 @@
 use super::*;
 use crate::prelude::*;
+use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::system::SystemState;
 
 #[derive(Resource, Default)]
@@ -69,9 +70,13 @@ fn fixture(item: &str, delayed: bool) -> (App, Entity, Handle<FuiAsset>, FuiAsse
         },
     )
 }
-fn send(app: &mut App, entity: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(entity, action));
+fn send(app: &mut App, entity: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(entity)
+            .expect("GUI object must be ready"),
+    );
 }
 fn view(app: &App, owner: Entity) -> Entity {
     app.world().get::<GuiRootView>(owner).unwrap().0
@@ -102,21 +107,26 @@ fn assert_painted_frame(app: &App, entity: Entity) {
 }
 
 #[test]
-fn pending_root_animation_commands_and_post_layout_commands_apply_in_the_same_sync() {
+fn initial_and_post_layout_animation_methods_apply_in_the_same_sync() {
     let (mut app, owner, handle, asset) = fixture("movie", true);
-    send(&mut app, owner, GuiObjectAction::SetAnimationPlaying(false));
-    send(&mut app, owner, GuiObjectAction::SetAnimationTimeScale(2.));
-    send(&mut app, owner, GuiObjectAction::SetAnimationFrame(3));
-    send(&mut app, owner, GuiObjectAction::AdvanceAnimation(0.25));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings {
-            start: 1,
-            end: 3,
-            times: 1,
-            end_at: 2,
-        }),
+    app.add_systems(
+        Update,
+        (|roots: Query<Entity, Added<GuiRootView>>, mut gui: GuiMut| {
+            for owner in &roots {
+                let mut object = gui.get_mut(owner).unwrap();
+                object.set_animation_playing(false);
+                object.set_animation_time_scale(2.);
+                object.set_animation_frame(3);
+                object.advance_animation(0.25);
+                object.set_animation_play_settings(GuiAnimationPlaySettings {
+                    start: 1,
+                    end: 3,
+                    times: 1,
+                    end_at: 2,
+                });
+            }
+        })
+        .in_set(GuiSystems::Initialize),
     );
     for _ in 0..4 {
         app.update();
@@ -153,17 +163,23 @@ fn pending_root_animation_commands_and_post_layout_commands_apply_in_the_same_sy
 
     #[derive(Resource)]
     struct Target(Entity);
-    fn edit(mut target: ResMut<Target>, mut commands: MessageWriter<GuiObjectCommand>) {
+    fn edit(mut target: ResMut<Target>, mut commands: crate::GuiMut) {
         if target.0 == Entity::PLACEHOLDER {
             return;
         }
-        for action in [
-            GuiObjectAction::RewindAnimation,
-            GuiObjectAction::AdvanceAnimation(0.5),
-            GuiObjectAction::SetAnimationFrame(2),
-        ] {
-            commands.write(GuiObjectCommand::new(target.0, action));
-        }
+
+        commands.edit(target.0, |object: &mut crate::GuiObjectMut| {
+            object.rewind_animation()
+        });
+
+        commands.edit(target.0, |object: &mut crate::GuiObjectMut| {
+            object.advance_animation(0.5)
+        });
+
+        commands.edit(target.0, |object: &mut crate::GuiObjectMut| {
+            object.set_animation_frame(2)
+        });
+
         target.0 = Entity::PLACEHOLDER;
     }
     app.insert_resource(Target(owner))
@@ -176,19 +192,23 @@ fn pending_root_animation_commands_and_post_layout_commands_apply_in_the_same_sy
 }
 
 fn play_once(app: &mut App, owner: Entity) {
-    send(app, owner, GuiObjectAction::SetAnimationPlaying(true));
-    send(app, owner, GuiObjectAction::SetAnimationTimeScale(100.));
-    send(
-        app,
-        owner,
-        GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings {
+    send(app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_playing(true)
+    });
+    send(app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_time_scale(100.)
+    });
+    send(app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_play_settings(GuiAnimationPlaySettings {
             start: 1,
             end: 2,
             times: 1,
             end_at: 3,
-        }),
-    );
-    app.update(); // range configured in Sync, without advancing a frame
+        })
+    });
+    app.world_mut()
+        .run_system_once(crate::animation::sync_state)
+        .unwrap();
 }
 
 #[test]
@@ -215,7 +235,9 @@ fn completion_targets_the_view_with_final_snapshot_and_rewind_does_not_restart()
             .collect::<Vec<_>>(),
         [GuiAnimationComplete { entity }]
     );
-    send(&mut app, owner, GuiObjectAction::RewindAnimation);
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.rewind_animation()
+    });
     for _ in 0..3 {
         app.update();
     }
@@ -235,28 +257,38 @@ fn replacement_and_disposal_suppress_old_completions_but_invalid_requests_do_not
     app.world_mut().entity_mut(entity).observe(completed);
     play_once(&mut app, owner);
     app.update(); // end frame reached; next Advance produces completion
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings::default()),
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_play_settings(GuiAnimationPlaySettings::default())
+    });
     app.update();
     assert!(!state(&mut app, owner).is_ended());
     assert!(app.world().resource::<Completed>().0.is_empty());
     play_once(&mut app, owner);
     app.update();
-    for action in [
-        GuiObjectAction::SetAnimationTimeScale(f32::NAN),
-        GuiObjectAction::SetAnimationTimeScale(-1.),
-        GuiObjectAction::AdvanceAnimation(f32::INFINITY),
-        GuiObjectAction::AdvanceAnimation(-1.),
-        GuiObjectAction::SetAnimationPlaySettings(GuiAnimationPlaySettings {
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_time_scale(f32::NAN)
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_time_scale(-1.)
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.advance_animation(f32::INFINITY)
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.advance_animation(-1.)
+    });
+
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_play_settings(GuiAnimationPlaySettings {
             start: -1,
             ..default()
-        }),
-    ] {
-        send(&mut app, owner, action);
-    }
+        })
+    });
+
     app.update();
     assert_eq!(app.world().resource::<Completed>().0.len(), 1);
     assert_eq!(state(&mut app, owner).time_scale(), 100.);
@@ -284,31 +316,31 @@ fn loader_source_changes_and_controls_refresh_state_without_replacing_the_contro
         .unwrap()
         .to_owned();
     assert!(state(&mut app, loader).frame_count() > 3);
-    send(
-        &mut app,
-        loader,
-        GuiObjectAction::SetAnimationPlaying(false),
-    );
-    send(
-        &mut app,
-        loader,
-        GuiObjectAction::SetAnimationFrame(i32::MAX),
-    );
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_playing(false)
+    });
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_frame(i32::MAX)
+    });
     app.update();
     let current = state(&mut app, loader);
     assert_eq!(current.frame(), current.frame_count() as i32 - 1);
     assert_painted_frame(&app, loader);
-    send(
-        &mut app,
-        loader,
-        GuiObjectAction::SetIcon("ui://9leh0eyfrpmbf".into()),
-    );
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.set_icon("ui://9leh0eyfrpmbf")
+    });
     app.update();
     assert_eq!(state(&mut app, loader).frame_count(), 0);
     assert!(app.world().get::<MovieClipPlayer>(loader).is_none());
-    send(&mut app, loader, GuiObjectAction::SetIcon(movie_url));
-    send(&mut app, loader, GuiObjectAction::SetAnimationFrame(-4));
-    send(&mut app, loader, GuiObjectAction::AdvanceAnimation(0.25));
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.set_icon(movie_url)
+    });
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.set_animation_frame(-4)
+    });
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.advance_animation(0.25)
+    });
     app.update();
     let expected = {
         let mut player = app.world().get::<MovieClipPlayer>(loader).unwrap().clone();
@@ -322,20 +354,16 @@ fn loader_source_changes_and_controls_refresh_state_without_replacing_the_contro
     app.world_mut().entity_mut(loader).observe(completed);
     play_once(&mut app, loader);
     app.update();
-    // The old movie finishes in Advance, but switching to an image in Sync
+    // Switching to an image before the next Advance
     // must suppress its notification on the retained Loader entity.
-    send(
-        &mut app,
-        loader,
-        GuiObjectAction::SetIcon("ui://9leh0eyfrpmbf".into()),
-    );
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.set_icon("ui://9leh0eyfrpmbf")
+    });
     app.update();
     assert!(app.world().resource::<Completed>().0.is_empty());
-    send(
-        &mut app,
-        loader,
-        GuiObjectAction::SetIcon("ui://9leh0eyfhixt1v".into()),
-    );
+    send(&mut app, loader, |object: &mut crate::GuiObjectMut| {
+        object.set_icon("ui://9leh0eyfhixt1v")
+    });
     play_once(&mut app, loader);
     app.update();
     app.update();

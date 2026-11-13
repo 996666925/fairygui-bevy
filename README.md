@@ -54,7 +54,7 @@ commands.write_message(GuiPopupCommand::ShowMenu {
 1280×720，已有舞台则沿用其尺寸。等待 `.fui` 的根拥有者可提前接收显示请求，
 资产就绪后执行；根被替换、移除或销毁会取消等待请求。`HideAll` 同时取消全部
 等待显示，`Hide` 取消对应目标的等待显示，`DisposeMenu` 取消等待中的菜单显示。
-两类命令在 Sync 中按 `GuiObjectCommand`、`GuiPopupCommand` 的顺序执行；
+对象属性在 Sync 中同步，随后处理 `GuiPopupCommand`；
 同一类消息保持顺序。
 
 `ShowAnchored { popup, anchor, direction }` 根据锚点控件当帧的逻辑坐标放置已有
@@ -130,7 +130,7 @@ commands.spawn(
 尺寸和位置使用逻辑像素。之后也可修改根组件上的 `size` / `position`
 （类型均为 `Option<Vec2>`），保留当前实体并更新关联布局；未改变的配置不会覆盖
 命令或动画的结果。默认 `None` 保留导出值，已创建后改回 `None` 保留当前值。
-排队的 `GuiObjectCommand` 在创建配置之后执行。当前实际几何请读取 `GuiTransform`。
+拥有者上的属性组件在创建配置之后应用。当前实际几何请读取 `GuiTransform`。
 
 需要根界面跟随窗口尺寸时，直接使用：
 
@@ -195,12 +195,9 @@ fn bind_menu(
     }
 }
 
-fn on_menu_button(event: On<GuiEvent>, mut commands: Commands) {
+fn on_menu_button(event: On<GuiEvent>, mut texts: Query<&mut GuiText>) {
     if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
-        commands.write_message(GuiObjectCommand::new(
-            event.entity,
-            GuiObjectAction::SetText("Clicked".into()),
-        ));
+        if let Ok(mut text) = texts.get_mut(event.entity) { text.set("Clicked"); }
     }
 }
 
@@ -227,25 +224,22 @@ app.add_systems(Update, bind_menu.in_set(GuiSystems::Initialize));
 或祖先变换，也不依赖 Bevy 布局是否已完成。例如根界面居中只需查询 ECS：
 
 ```rust,ignore
-fn center_root(gui: &GuiQuery, commands: &mut Commands, root: Entity, viewport: Vec2) {
-    if let Some(transform) = gui.transform(root) {
-        commands.write_message(GuiObjectCommand::new(
-            root,
-            GuiObjectAction::SetPosition((viewport - transform.size()) * 0.5),
-        ));
+fn center_root(transforms: &mut Query<&mut GuiTransform>, view: Entity, viewport: Vec2) {
+    if let Ok(mut transform) = transforms.get_mut(view) {
+        transform.position = (viewport - transform.size) * 0.5;
     }
 }
 ```
 
-几何状态在 Sync 末尾更新，包含本帧命令、控制器、分组和动画引起的变化，
-未变化时不会触发 `Changed<GuiTransform>`。通过 `SetPivot { pivot, as_anchor }`
+几何状态在 Sync 末尾更新，包含本帧修改、控制器、分组和动画引起的变化，
+未变化时不会触发 `Changed<GuiTransform>`。通过 `set_pivot { pivot, as_anchor }`
 可同时配置比例轴心与锚点定位。`GuiFont` 资源也在根构建前同步，首帧和后续动态
 界面会直接使用配置的字体，无需业务系统手工调用 `GuiRuntime::set_font`。
 
 新建视图的绑定和初始配置放入 `GuiSystems::Initialize`：此时根视图、逻辑子控件和
 几何/文本快照已就绪，列表与树的数据尚未准备。此阶段挂载的 `GuiListContent`、
 `GuiVirtualList`、`GuiTreeContent` 会在同帧生成行，随后 `GuiSystems::PostLayout`
-可读取完成布局的行快照并发命令。demo 的菜单、关闭按钮、演示页和动态子页通过
+可读取完成布局的行快照并修改组件。demo 的菜单、关闭按钮、演示页和动态子页通过
 Initialize 完成初始定位与绑定，首次绘制就使用业务配置。普通文本在 Bevy 完成本帧测量后
 同步逻辑与物理内边距，首批字形就按正确位置绘制；`--smoke-first-frame` 在每个
 视图首次完成布局的帧检查位置和文本对齐，并实际打开 Basics 的 Button 页面、
@@ -265,9 +259,9 @@ IME 预编辑或翻译/UBB 渲染结果。无文本属性的控件没有 `GuiTex
 显示状态，不包含祖先显隐、裁剪或遮挡；隐藏和离开舞台也是独立状态。
 
 文本和显示状态会在发布输入事件前、Sync 结束时各刷新一次，因此 observer 能读取
-本帧输入刚提交的值，再发命令在同帧更新其他控件。没有变化时保留 ECS 变更标记。
-`SetTouchable(bool)` 通过命令修改输入开关。富文本链接消息 `GuiLink.entity`
-直接提供原始目标的控件实体，可据此查询、发命令或匹配业务组件。
+本帧输入刚提交的值，再修改组件在同帧更新其他控件。没有变化时保留 ECS 变更标记。
+`GuiDisplay::touchable` 修改输入开关。富文本链接消息 `GuiLink.entity`
+直接提供原始目标的控件实体，可据此查询、修改或匹配业务组件。
 
 列表和树可在控件实体上直接监听 `GuiListItemClick`，无需扫描全局消息或读取选择：
 
@@ -308,7 +302,7 @@ fn on_child(mut event: On<GuiEvent>) {
 原生截断位置，之后换父节点或渲染辅助节点不会改变这条路径；没有视图的接收者跳过。
 这是对通知传播的控制，不会撤销输入阶段已完成的按钮/列表选择，也不会取消另行发布的
 `GuiListItemClick`、`GuiTextInput` 或 `GuiLink`。按钮选择、列表选择和控件值在发布通知前
-刷新，observer 发出的对象命令仍在同帧 Sync 生效。
+刷新，observer 对组件的修改仍在同帧 Sync 生效。
 `GuiEvent::new(entity, event)` 可构造只投递给一个实体的直接通知。
 `--smoke-observer-events` 验证实际复选框点击、停止/继续冒泡、共享载荷和同帧文字更新。
 
@@ -386,7 +380,7 @@ fn on_drop(event: On<GuiDrop>) {
 `GuiDragState` 资源提供源、临时图标、当前目标、数据和所属触摸 ID；
 `GuiDragCommand::Start` 支持业务主动启动已捕获指针的拖放，`Cancel` 取消当前拖放。
 源销毁、隐藏、离台或被模态界面阻挡时自动取消；取消后需重新按下才会自动开始。
-`GuiIcon` / `gui.icon(entity)` 读取原生图标地址，`SetIcon` 修改图标，空字符串清除。
+`GuiIcon` / `gui.icon(entity)` 读取原生图标地址，`set_icon` 修改图标，空字符串清除。
 Basics 的 b→c 拖放使用这套接口，`--smoke-drag-drop` 可运行真实窗口专项回归。
 
 移动控件本身使用 `GuiDraggable`；自由拖动不创建代理，边界可指定舞台矩形或另一个
@@ -409,25 +403,22 @@ commands.entity(bounded).insert(GuiDraggable {
 滚动容器上的只读 `GuiScrollState`（或 `gui.scroll(entity)`）提供逻辑目标位置、
 动画当前显示位置、视口/内容尺寸、最大位置、两种位置对应的进度比例及当前页。
 它在输入事件发布前和 Sync 结束时更新，没有滚动容器的对象不带该组件。
-`ScrollTo { position, animated }` 按原生分页/条目对齐规则滚动；
-`SetScrollPercentage { percentage, animated }` 将比例限制在 0～1，并在执行时读取
+`scroll_to { position, animated }` 按原生分页/条目对齐规则滚动；
+`set_scroll_percentage { percentage, animated }` 将比例限制在 0～1，并在执行时读取
 实际范围，因此到顶部/底部无需业务代码提前计算尺寸：
 
 ```rust,ignore
-commands.write_message(GuiObjectCommand::new(
-    list_entity,
-    GuiObjectAction::SetScrollPercentage { percentage: Vec2::Y, animated: false },
-));
+gui_edit.edit(list_entity, |object: &mut GuiObjectMut| object.set_scroll_percentage(Vec2::Y, false));
 ```
 
-`ScrollToView { rect, animated, set_first }` 把内容坐标中的矩形滚入视口；
+`scroll_to_view { rect, animated, set_first }` 把内容坐标中的矩形滚入视口；
 `set_first` 为真时优先对齐矩形起点，最终位置仍受分页、条目吸附和边界约束。
-原有 `SetScrollPosition` 直接设置
+原有 `set_scroll_position` 直接设置
 位置，允许选择是否越界；动画是否进行中可通过 `is_animating()` 查询。
 
 `GuiTransitions` 提供控件上全部过渡的 ECS 快照；`gui.transition(entity, "t0")`
 可读取播放中、暂停、反向、时间、导出时长、速度及播放编号。状态在 Publish 前和
-Sync 末尾更新。`PlayTransitionWithOptions { name, options }` 支持延迟、区间、
+Sync 末尾更新。`play_transition_with_options { name, options }` 支持延迟、区间、
 重复次数和反向播放，与核心 `TransitionPlayOptions` 使用同一规则。
 
 自然播放结束通过 `GuiTransitionComplete { entity, transition, play_generation }`
@@ -438,31 +429,49 @@ Sync 末尾更新。`PlayTransitionWithOptions { name, options }` 支持延迟�
 `GuiTransitionHook` 使用 `entity` 与 `hook` 字段，`GuiTransitionCallback` 使用
 `entity` 与 `callback` 字段，也在 Sync 后发布。demo 通过完成消息回收临时界面。
 
-业务系统可在 `GuiSystems::Respond` 用实体发送 `GuiObjectCommand`，本帧 Sync 会把
-修改应用到对象模型并投影到 Bevy UI 视图：
+普通属性直接修改 ECS 组件：`GuiText`、`GuiIcon`、`GuiTransform`、`GuiDisplay`、
+`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
+将业务系统放在 `GuiSystems::Respond`，插件会在本帧 Sync 应用修改并更新 Bevy UI。
 
 ```rust,ignore
-commands.write_message(GuiObjectCommand::new(
-    root_entity,
-    GuiObjectAction::SetVisible(false),
-));
+fn update_label(mut labels: Query<&mut GuiText>, target: Entity) {
+    if let Ok(mut text) = labels.get_mut(target) {
+        text.set("Hello");
+    }
+}
+
+fn move_button(mut transforms: Query<&mut GuiTransform>, target: Entity) {
+    if let Ok(mut transform) = transforms.get_mut(target) {
+        transform.position = Vec2::new(20., 30.);
+    }
+}
 ```
 
-命令目标既可用根拥有者实体，也可用带 `GObjectRef` 的控件视图实体。
-对根拥有者的命令可以在 `spawn(FairyGuiRoot::new(...))` 后立即发送：资产等待期间
-按顺序保留，就绪后先应用命令再生成视图；根被移除、替换或销毁会取消其等待命令。
+这些属性保留上次模型值，只写入业务实际修改的字段，输入、关联、控制器和动画的结果
+会同步回组件。未变化时保留组件变更标记。修改控件的视图实体；根创建前的位置、尺寸
+用 `FairyGuiRoot` 的构造方法设置，其余初始属性可随拥有者一起挂载，资产就绪后应用。
+移除属性组件会恢复原生投影；移除拥有者会一起清理对应状态。
 
-`GuiRuntime` 和 `ObjectStore` 仍可用于高级控件 API；大多数界面的创建、常见属性修改与销毁由
-ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、文本、颜色、置灰、
-按钮选择、滑动条值、控制器切页、进度值、滚动位置、列表选择替换/清空/滚入视口和
-过渡播放。命令在 `GuiSystems::Sync` 应用，因此 observer 和业务系统只需写消息，
-不需要独占借用运行时。
+播放、补间、滚动和树展开等操作通过 `GuiMut` 直接调用，不经过对象消息队列：
 
-`GuiObjectAction::Tween { target, duration, ease }` 从命令执行时的当前值启动通用
+```rust,ignore
+fn play(mut gui: GuiMut, target: Entity) {
+    if let Some(mut object) = gui.get_mut(target) {
+        object.play_transition("t0", 1);
+        object.scroll_to(Vec2::new(0., 200.), true);
+    }
+}
+```
+
+`get_mut` 接受控件视图、根拥有者或窗口拥有者；对象尚未创建或已销毁时返回 `None`。
+操作立即修改模型，渲染及只读查询在插件同步后刷新。初始播放放在 `GuiSystems::Initialize`；
+该阶段已完成对象创建。独占系统和测试可用 `World::gui_mut`，使用方式相同。
+
+`object.tween(target, duration, ease)` 从调用时的当前值启动通用
 补间。`GuiTweenTarget` 支持位置、尺寸、缩放、透明度和旋转；`ease` 使用 FairyGUI
 缓动编号（5 为默认 QuadOut）。相同对象与属性的新补间会替换旧补间，不同属性可
-同时运行；`StopTween(GuiTweenProperty)` 停在当前值。零时长立即落到终值，非法
-尺寸、非有限值或负时长丢弃；根资产等待期间遵循普通对象命令规则。
+同时运行；`stop_tween(GuiTweenProperty)` 停在当前值。零时长立即落到终值，非法
+尺寸、非有限值或负时长丢弃；调用前须等待目标对象就绪。
 补间自然结束后在控件视图实体上触发 `GuiTweenComplete`，可通过
 `commands.entity(view).observe(...)` 接收；通知发生在 Sync 的最终几何快照刷新后。
 停止、替换与销毁会取消尚未发布的完成通知，零时长也只通知一次。
@@ -470,64 +479,61 @@ ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、�
 Joystick 示例把指针归属、摇杆位置和回位状态保存在页面组件中，仅在触摸区域
 绑定指针 observer。支持鼠标、独立触点、150 像素半径限制、区域外拖动和松手回位；
 回位中再次按下会取消旧补间，完成 observer 恢复按钮和中心标记。按钮通过
-`SetButtonChangeStateOnClick(false)` 交由业务逻辑控制选择状态，窗口缩放会结束
+`set_button_change_state_on_click(false)` 交由业务逻辑控制选择状态，窗口缩放会结束
 当前手势并恢复位置。`--smoke-joystick` 验证这些交互与页面销毁。
 
 Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐背包按钮，以
 0.5 秒补间移动反向遮罩窗口。点击高亮区域内的背包会撤下引导层；页面销毁会
 回收引导层和动画；窗口缩放时会重新对齐。`--smoke-guide` 验证实际开关、动画位置、
 遮罩穿透、复用、缩放和销毁。
-过渡命令还支持暂停/恢复、速度、反向播放和停止。临时界面也用 `FairyGuiRoot`
+过渡方法还支持暂停/恢复、速度、反向播放和停止。临时界面也用 `FairyGuiRoot`
 实体管理；销毁所有者实体会自动回收对应 FairyGUI 对象树。
 列表、进度条、滑动条和按钮实体分别带有 `GuiListSelection`、`GuiProgressValue`、
 `GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在事件发布前和同帧 Sync 后反映最新的控件状态；
-状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
+状态可直接通过可变 ECS 组件写入，可以直接用 ECS 查询驱动其他业务系统。
 
 进度条的 `GuiProgressValue` 使用 `f64`，`GuiProgressState` 或 `gui.progress(entity)`
 可读取范围、目标值、当前显示值、显示比例、标题类型、反向配置及补间是否运行。
 
 ```rust,ignore
-commands.write_message(GuiObjectCommand::new(progress,
-    GuiObjectAction::SetProgressRange { min: 0., max: 1. }));
-commands.write_message(GuiObjectCommand::new(progress,
-    GuiObjectAction::SetProgress(0.25)));
-commands.write_message(GuiObjectCommand::new(progress,
-    GuiObjectAction::TweenProgress { value: 0.75, duration: 1. }));
+gui_edit.edit(progress, |object: &mut GuiObjectMut| object.set_progress_range(0., 1.));
+gui_edit.edit(progress, |object: &mut GuiObjectMut| object.set_progress(0.25));
+gui_edit.edit(progress, |object: &mut GuiObjectMut| object.tween_progress(0.75, 1.));
 ```
 
-`TweenProgress` 对应原版 `tweenValue`：立即更新 `value()`，按线性补间推进
-`displayed_value()`；替换时从旧补间当前采样值续接。`StopProgressTween` 冻结显示，
-保留目标值。直接 `SetProgress` 设置不同值会取消补间，设置相同目标则保持运行。
+`tween_progress` 对应原版 `tweenValue`：立即更新 `value()`，按线性补间推进
+`displayed_value()`；替换时从旧补间当前采样值续接。`stop_progress_tween` 冻结显示，
+保留目标值。直接 `set_progress` 设置不同值会取消补间，设置相同目标则保持运行。
 原值允许小数和越界，条带比例夹在 0..1；数值标题按原版向下取整，图片填充模式
 保持条带尺寸。范围与尺寸变化会立即重绘目标，但不停止补间，下一采样继续动画。
-`SetProgressTitleType` 使用 0..3，含义与滑动条相同；沿用参考库 setter 的即时重绘行为，
+`set_progress_title_type` 使用 0..3，含义与滑动条相同；沿用参考库 setter 的即时重绘行为，
 将类型编号作为显示值，下一次数值、范围、尺寸或补间更新会恢复对应显示。
 
 自然结束会在控件视图实体上触发 `GuiProgressTweenComplete`，可用
 `commands.entity(view).observe(...)` 接收；observer 执行前已发布本帧状态与几何。
 停止、替换、不同值赋值和销毁会取消未发布的完成通知；程序赋值和补间均不触发
-`StateChanged`。零时长命令立即到达目标并通知一次，非有限值和负时长丢弃。
-资产等待期间可排队设置范围、值和补间，`--smoke-progress` 验证实际窗口中的条带
+`StateChanged`。零时长调用立即到达目标并通知一次，非有限值和负时长丢弃。
+资产等待期间可挂载初始范围和值，补间在对象就绪后调用；`--smoke-progress` 验证实际窗口中的条带
 伸缩、径向填充、冻结显示、完成 observer 和销毁。
 
 滑动条的 `GuiSliderValue` 使用 `f64`，完整状态可通过 `GuiSliderState` 或
-`gui.slider(entity)` 查询。范围、小数值和输入策略通过实体命令设置：
+`gui.slider(entity)` 查询。范围、小数值和输入策略通过 `Query<&mut GuiSliderState>` 设置：
 
 ```rust,ignore
-commands.write_message(GuiObjectCommand::new(slider,
-    GuiObjectAction::SetSliderRange { min: 0., max: 1. }));
-commands.write_message(GuiObjectCommand::new(slider,
-    GuiObjectAction::SetSliderValue(0.25)));
-commands.write_message(GuiObjectCommand::new(slider,
-    GuiObjectAction::SetSliderWholeNumbers(false)));
+if let Ok(mut state) = sliders.get_mut(slider) { // Query<&mut GuiSliderState>
+    state.min = 0.;
+    state.max = 1.;
+    state.value = 0.25;
+    state.whole_numbers = false;
+}
 ```
 
 程序赋值保留小数及范围外的原值，仅将显示比例限制在 0..1；整数模式只对指针输入
 取整。横向和纵向条带按比例伸缩，grip 跟随导出的关联，缩放后拖动仍按控件局部位移
-取值，按下不跳变。`SetSliderChangeOnClick(false)` 关闭轨道点击取值；
-`SetSliderCanDrag(false)` 暂停当前拖动，同原版，新一次 grip 按下会重新启用拖动。
-`SetSliderTitleType` 使用 0=百分比、1=值/最大值、2=值、3=最大值。
-范围必须有限且 min <= max；命令可在资产就绪前排队，首个视图即应用最终值和几何。
+取值，按下不跳变。`set_slider_change_on_click(false)` 关闭轨道点击取值；
+`set_slider_can_drag(false)` 暂停当前拖动，同原版，新一次 grip 按下会重新启用拖动。
+`set_slider_title_type` 使用 0=百分比、1=值/最大值、2=值、3=最大值。
+范围必须有限且 min <= max；初始属性组件可在资产就绪前挂载，首个视图即应用最终值和几何。
 输入导致值改变才触发 `StateChanged`，控件 observer 内可读取当前滑动条状态；
 程序赋值不触发该事件。`--smoke-slider` 验证实际布局与 picking 下的缩放拖动、
 小数、取整、输入开关和销毁。
@@ -540,22 +546,21 @@ grip 按钮作为稳定目标。轨道在按下时取值一次，之后拖动可
 
 下拉框实体带有 `GuiComboBoxState`，也可用 `gui.combo_box(entity)` 读取选项、value、
 选中索引、可见项数、展开方向、绑定控制器以及当前 dropdown/list 视图。
-通过实体命令设置数据和选择：
+通过 `Query<&mut GuiComboBoxState>` 修改数据和选择：
 
 ```rust,ignore
-commands.write_message(GuiObjectCommand::new(combo,
-    GuiObjectAction::SetComboItems(vec!["Apple".into(), "Banana".into()])));
-commands.write_message(GuiObjectCommand::new(combo,
-    GuiObjectAction::SetComboValues(vec!["apple".into(), "banana".into()])));
-commands.write_message(GuiObjectCommand::new(combo,
-    GuiObjectAction::SetComboValue(Some("banana".into()))));
+if let Ok(mut state) = combos.get_mut(combo) { // Query<&mut GuiComboBoxState>
+    state.items = vec!["Apple".into(), "Banana".into()];
+    state.values = vec!["apple".into(), "banana".into()];
+    state.selected_index = 1;
+}
 ```
 
-`SetComboSelection` 按索引选择；不存在的 value 会取消选择，`None` 选择第一个空 value。
+`set_combo_selection` 按索引选择；不存在的 value 会取消选择，`None` 选择第一个空 value。
 items、values 和 icons 独立，不要求等长。更新 items 会保留或收拢当前索引，空表取消
-选择；`SetComboIcons(None)` 移除图标数组并保留当前显示图标，短数组不覆盖其范围外
-的有效选项图标。`SetComboVisibleItemCount`、`SetComboPopupDirection` 调整下次展开，
-`SetComboSelectionController` 按名称绑定逻辑父组件上的控制器，`None` 解除绑定。
+选择；`set_combo_icons(None)` 移除图标数组并保留当前显示图标，短数组不覆盖其范围外
+的有效选项图标。`set_combo_visible_item_count`、`set_combo_popup_direction` 调整下次展开，
+`set_combo_selection_controller` 按名称绑定逻辑父组件上的控制器，`None` 解除绑定。
 选中索引与控制器双向联动，超出控制器页面数的索引不会改变控制器。
 
 同原版，programmatic setters 不发出 `StateChanged`；真实选择或重选都会触发控件的
@@ -589,7 +594,7 @@ Both/Height 自动尺寸文本默认在原生布局前同步测量，文字修�
 返回时会测量整行；回调内部需要立即读取尺寸时，仍可调用 `ensure_size_correct()`。
 普通字体支持富文本样式、内联图片及导出的最大宽度换行，并按目标窗口与
 `UiScale` 的实际倍率测量；位图字体复用原生测量器。
-普通 ECS 系统也可发送 `GuiObjectAction::EnsureTextSize` 立即测量。自动尺寸字段会随文字、
+普通 ECS 系统也可调用 `GuiObjectMut::ensure_text_size()` 立即测量。自动尺寸字段会随文字、
 字体或资源变化重新测量，字体未就绪时保留尺寸并重试；固定尺寸、缩小和省略模式
 保持原有策略。`--smoke-item-provider` 覆盖混合模板、长文本、内联图片、右对齐
 和行高关联，以及滚动复用、事件索引和回收。
@@ -603,7 +608,7 @@ Both/Height 自动尺寸文本默认在原生布局前同步测量，文字修�
 `GuiVirtualListState::error()` 会反映当前刷新结果，恢复成功后清除旧错误。
 
 ListEffect 使用 `GuiListContent` 创建十封邮件，配置已读/领取页和时间文字；在
-`GuiSystems::PostLayout` 查询初始可见行，通过 `PlayTransitionWithOptions` 每隔
+`GuiSystems::PostLayout` 查询初始可见行，通过 `play_transition_with_options` 每隔
 0.2 秒播放导出的 `t0`，等待期间隐藏对应行。效果只在创建后启动一次，滚动进入的
 其他行保留普通显示。`--smoke-list-effect` 验证错开播放、最终位置、点击选择和销毁。
 
@@ -640,7 +645,7 @@ fn register(app: &mut App) {
 
 使用 `#[gui(url = "...", on_construct = bind_mail)]` 可指定接收
 `&mut bevy::ecs::system::EntityCommands` 的构建钩子，用于附加 observer 或发送
-控件命令。也可手动实现 `GuiExtension`，自定义 `construct` 和 `on_construct`。
+属性组件。也可手动实现 `GuiExtension`，自定义 `construct` 和 `on_construct`。
 构建按子组件到父组件的顺序执行一次：根扩展在 `GuiSystems::Initialize` 前就绪，
 列表新增行在 `PostLayout` 前就绪；该阶段滚动产生的行也在同帧投影前构建。
 普通根、窗口、嵌套组件、跨包 Loader 和列表模板共用注册，归池或离台不重新构建，
@@ -664,15 +669,12 @@ fn register(app: &mut App) {
 索引在展开/收起间保持稳定，收起的行保留实体但隐藏并从布局中折叠。
 
 ```rust,ignore
-commands.write_message(GuiObjectCommand::new(tree, GuiObjectAction::CollapseTree));
-commands.write_message(GuiObjectCommand::new(tree, GuiObjectAction::SelectTreeNode {
-    index: 3,
-    scroll_to_view: true,
-}));
+gui_edit.edit(tree, |object: &mut GuiObjectMut| object.collapse_tree());
+gui_edit.edit(tree, |object: &mut GuiObjectMut| object.select_tree_node(3, true));
 ```
 
-`SelectTreeNode` 会展开祖先再加入选择；`SetTreeExpanded`、`ToggleTreeNode`、
-`ExpandTree` 和 `CollapseTree` 控制展开。全部收起包含顶层文件夹，顶层行仍显示。
+`select_tree_node` 会展开祖先再加入选择；`set_tree_expanded`、`toggle_tree_node`、
+`expand_tree` 和 `collapse_tree` 控制展开。全部收起包含顶层文件夹，顶层行仍显示。
 箭头的 `expanded` 控制器与节点状态双向同步；行点击遵循包的 `clickToExpand`
 配置。状态在 Publish 前、PostLayout 前和 Sync 末尾刷新，未变化时保留变更标记。
 `--smoke-tree` 验证导出树的真实点击、缩进、布局折叠、隐藏节点选择和回收。
@@ -701,8 +703,8 @@ observer 可直接查询本次选择和行文本。
 
 依赖本帧列表布局的装饰系统可放入 `GuiSystems::PostLayout`。这是 Sync 内部的
 阶段：原生列表刷新、行视图创建后，插件先更新逻辑层级、几何、文本、滚动及列表
-快照，再运行业务系统，最后应用其 `GuiObjectCommand` 并投影视图。循环列表示例
-在此查询实际行并发送缩放和序号文本命令，业务不借用 `GuiRuntime`。
+快照，再运行业务系统，最后同步其组件修改并投影视图。循环列表示例
+在此查询实际行并修改缩放和序号文本组件，业务不借用 `GuiRuntime`。
 该阶段早于 Bevy 的 PostUpdate 布局及文本测量；改变可见范围或行生成的配置应在
 `Respond` 或 `Initialize` 修改，使本帧原生列表布局能使用它们。
 
@@ -724,7 +726,7 @@ commands.entity(list_entity).insert(GuiListContent::new(6, |index, row| {
 `GuiControllers`（或 `gui.controller(entity, "c1")`）提供当前和上一个页面索引、
 页面 ID 及名称表；无控制器的控件不带该组件。快照在 Publish 前、PostLayout 前和
 Sync 末尾刷新，因此业务可读到本帧输入或其他控制器动作引起的页面变化，再通过
-`SetControllerPage` 发送修改。
+`set_controller_page` 发送修改。
 
 下拉刷新消息 `GuiPullRelease.entity` 直接提供滚动容器实体。
 `GuiScrollState::header()`、`footer()` 提供刷新控件实体、当前尺寸和导出尺寸，
@@ -759,8 +761,8 @@ commands.write_message(GuiWindowCommand::new(owner, GuiWindowAction::Show));
 
 `GuiWindowAction` 支持 `Show`、`Hide`、`BringToFront` 和 `Center`，目标接受窗口
 拥有者或根视图实体。资产等待期间的命令会保留；替换资产/条目、移除组件或销毁
-拥有者会取消旧请求。`Center` 使用当前窗口尺寸。窗口命令在 Sync 的对象命令之后
-执行，同类命令保持顺序；`GuiObjectCommand` 同样支持窗口拥有者及其等待中的资产。
+拥有者会取消旧请求。`Center` 使用当前窗口尺寸。窗口命令在 Sync 的对象属性同步之后
+执行，同类命令保持顺序；`GuiMut` 同样支持已就绪的窗口拥有者。
 
 `GuiWindowState` 在拥有者和根视图上提供显示、模态、拖动状态及窗框/内容/关闭按钮
 实体，也可通过 `gui.window(entity)` 查询。窗口拥有者支持 `GuiQuery` 的层级和属性
@@ -824,10 +826,7 @@ ModalWaiting 示例进入时显示三秒全局等待，随后可以打开窗口�
 commands.insert_resource(GuiTooltipSettings::new(
     assets.load("ui/Common.fui"), "Tooltip",
 ));
-commands.write_message(GuiObjectCommand::new(
-    button,
-    GuiObjectAction::SetTooltips(Some("Open settings".into())),
-));
+gui_edit.edit(button, |object: &mut GuiObjectMut| object.set_tooltips(Some("Open settings".into())));
 ```
 
 模板应有 text/title 属性，也支持已登记的 `ui://` 地址。编辑器导出的 `tooltips`
@@ -874,30 +873,28 @@ runtime.store_mut().play_transition_with_options(owner, "t0", TransitionPlayOpti
 起点之前的属性会直接还原，历史音效与起始标签会跳过；已完成补间的结束标签仍可触发。
 正向跳转同时补偿序列帧。`end_time: None` 表示不截断，`reversed: true` 使用反向时间轴。
 
-序列帧和 Loader 的动画通过 `GuiObjectCommand` 控制：
+序列帧和 Loader 的动画通过 `GuiMut` 控制：
 
 ```rust,ignore
-commands.write_message(GuiObjectCommand::new(movie, GuiObjectAction::SetAnimationPlaySettings(
-    GuiAnimationPlaySettings { start: 1, end: 3, times: 2, end_at: 2 },
-)));
+gui_edit.edit(movie, |object: &mut GuiObjectMut| object.set_animation_play_settings(GuiAnimationPlaySettings { start: 1, end: 3, times: 2, end_at: 2 }));
 commands.entity(movie).observe(|event: On<GuiAnimationComplete>, gui: GuiQuery| {
     let state = gui.animation(event.entity).unwrap();
     assert!(state.is_ended());
 });
 ```
 
-`SetAnimationPlaying`、`SetAnimationFrame`、`SetAnimationTimeScale`、
-`SetAnimationPlaySettings`、`AdvanceAnimation` 和 `RewindAnimation` 在 Sync 同帧
-更新播放器、纹理及 `GuiAnimationState`；可在 `PostLayout` 中继续发命令，不会重复
+`set_animation_playing`、`set_animation_frame`、`set_animation_time_scale`、
+`set_animation_play_settings`、`advance_animation` 和 `rewind_animation` 在 Sync 同帧
+更新播放器、纹理及 `GuiAnimationState`；可在 `PostLayout` 中继续调用方法，不会重复
 推进帧时间。`gui.animation(entity)` 同时接受根拥有者与控件视图，提供当前帧、帧数、
 播放开关、速度和结束标志，未变化时保留组件变更标记。静态或未就绪 Loader 的帧数为 0。
 
 `end/end_at` 为 `-1` 时使用末帧，`times <= 0` 无限循环。配置不改变 Playing 或速度；
 到达结束帧后，下一次满足帧计时条件的更新定位到 `end_at`，在 Sync 刷新最终快照后
 向控件视图实体发送一次 `GuiAnimationComplete { entity }`，也可用 `MessageReader`
-读取。完成保留 Playing 开关；`RewindAnimation` 只重置位置和计时，重新配置播放才会
+读取。完成保留 Playing 开关；`rewind_animation` 只重置位置和计时，重新配置播放才会
 清除已结束状态。新播放、资源替换或销毁会取消尚未发布的旧完成通知。
-`AdvanceAnimation(seconds)` 按原版 DeltaTime 补偿帧数，不受 Playing 和速度影响。
+`advance_animation(seconds)` 按原版 DeltaTime 补偿帧数，不受 Playing 和速度影响。
 负数或非有限时长/速度、非法播放区间会忽略，帧号按资源范围夹取。
 
 过渡支持运行中按标签编辑：`set_transition_value` 使用类型化的

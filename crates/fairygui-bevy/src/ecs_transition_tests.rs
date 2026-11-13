@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand,
-    GuiTransitionComplete,
-};
+use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiTransitionComplete, GuiWorldExt};
 use bevy::ecs::system::SystemState;
 use fairygui_core::{package::FuiPackage, transition::TransitionPlayOptions};
 
@@ -36,9 +33,13 @@ fn fixture(item: &str) -> (App, Entity, Entity) {
     (app, owner, view)
 }
 
-fn send(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 
 fn take(app: &mut App) -> Vec<GuiTransitionComplete> {
@@ -52,19 +53,23 @@ fn take(app: &mut App) -> Vec<GuiTransitionComplete> {
 fn ecs_post_layout_commands_share_one_cursor_and_do_not_replay_early_commands() {
     #[derive(Resource)]
     struct Target(Entity);
-    fn play(target: Res<Target>, mut once: Local<bool>, mut commands: Commands) {
+    fn play(
+        target: Res<Target>,
+        mut once: Local<bool>,
+        _commands: Commands,
+        mut gui_edit: crate::GuiMut,
+    ) {
         if !*once {
             *once = true;
-            commands.write_message(GuiObjectCommand::new(
-                target.0,
-                GuiObjectAction::PlayTransitionWithOptions {
-                    name: "t0".into(),
-                    options: TransitionPlayOptions {
+            gui_edit.edit(target.0, |object: &mut crate::GuiObjectMut| {
+                object.play_transition_with_options(
+                    "t0",
+                    TransitionPlayOptions {
                         end_time: Some(0.),
                         ..Default::default()
                     },
-                },
-            ));
+                )
+            });
         }
     }
     let (mut app, owner, view) = fixture("PowerUp");
@@ -77,17 +82,15 @@ fn ecs_post_layout_commands_share_one_cursor_and_do_not_replay_early_commands() 
         .play_generation();
     app.insert_resource(Target(owner))
         .add_systems(Update, play.in_set(crate::GuiSystems::PostLayout));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::PlayTransitionWithOptions {
-            name: "t0".into(),
-            options: TransitionPlayOptions {
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.play_transition_with_options(
+            "t0",
+            TransitionPlayOptions {
                 end_time: Some(0.),
                 ..Default::default()
             },
-        },
-    );
+        )
+    });
     app.update();
     let done = take(&mut app);
     assert_eq!(
@@ -130,12 +133,16 @@ fn ecs_transition_completion_captures_immediate_playbacks_and_preserves_each_gen
             .is_none()
     );
     assert!(take(&mut app).is_empty());
-    let instant = || GuiObjectAction::PlayTransitionWithOptions {
-        name: "t0".into(),
-        options: TransitionPlayOptions {
-            end_time: Some(0.),
-            ..Default::default()
-        },
+    let instant = || {
+        |object: &mut crate::GuiObjectMut| {
+            object.play_transition_with_options(
+                "t0",
+                TransitionPlayOptions {
+                    end_time: Some(0.),
+                    ..Default::default()
+                },
+            )
+        }
     };
     send(&mut app, owner, instant());
     app.update();
@@ -218,31 +225,16 @@ fn ecs_transition_completion_captures_immediate_playbacks_and_preserves_each_gen
 #[test]
 fn ecs_transition_state_tracks_pause_speed_reverse_and_stop_without_fake_completion() {
     let (mut app, owner, view) = fixture("PowerUp");
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::PlayTransition {
-            name: "t0".into(),
-            times: 1,
-        },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.play_transition("t0", 1)
+    });
     app.update();
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetTransitionPaused {
-            name: "t0".into(),
-            paused: true,
-        },
-    );
-    send(
-        &mut app,
-        view,
-        GuiObjectAction::SetTransitionTimeScale {
-            name: "t0".into(),
-            scale: 2.,
-        },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_transition_paused("t0", true)
+    });
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.set_transition_time_scale("t0", 2.)
+    });
     app.update();
     let frozen = app
         .world()
@@ -260,11 +252,9 @@ fn ecs_transition_state_tracks_pause_speed_reverse_and_stop_without_fake_complet
         Some(&frozen)
     );
     assert!(take(&mut app).is_empty());
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::StopTransition { name: "t0".into() },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.stop_transition("t0")
+    });
     app.update();
     assert!(
         !app.world()
@@ -275,14 +265,9 @@ fn ecs_transition_state_tracks_pause_speed_reverse_and_stop_without_fake_complet
             .is_playing()
     );
     assert!(take(&mut app).is_empty());
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::PlayTransitionReverse {
-            name: "t0".into(),
-            delay: 0.,
-        },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.play_transition_reverse("t0", 0.)
+    });
     app.update();
     let reverse = app
         .world()
@@ -325,14 +310,9 @@ fn ecs_transition_state_tracks_pause_speed_reverse_and_stop_without_fake_complet
 #[test]
 fn ecs_transition_infinite_nested_tasks_do_not_complete_on_stop() {
     let (mut app, owner, view) = fixture("PathDemo");
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::PlayTransition {
-            name: "t0".into(),
-            times: 1,
-        },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.play_transition("t0", 1)
+    });
     app.update();
     let transitions = app.world().get::<GuiTransitions>(view).unwrap();
     assert!(transitions.get("t0").unwrap().is_playing());
@@ -357,11 +337,9 @@ fn ecs_transition_infinite_nested_tasks_do_not_complete_on_stop() {
         0,
         "PathDemo's exported infinite tween keeps the parent playing"
     );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::StopTransition { name: "t0".into() },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.stop_transition("t0")
+    });
     app.update();
     assert!(take(&mut app).is_empty());
     assert!(

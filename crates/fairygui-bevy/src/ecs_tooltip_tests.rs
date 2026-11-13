@@ -101,10 +101,9 @@ fn control(app: &mut App, handle: Handle<FuiAsset>) -> (Entity, Entity) {
     (owner, runtime.entity_of(button).unwrap())
 }
 fn set_tip(app: &mut App, target: Entity, text: Option<&str>) {
-    app.world_mut().write_message(GuiObjectCommand::new(
-        target,
-        GuiObjectAction::SetTooltips(text.map(str::to_owned)),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(target) {
+        object.set_tooltips(text.map(str::to_owned))
+    }
     app.update();
 }
 
@@ -222,10 +221,9 @@ fn hover_delay_reads_current_text_and_cursor_then_hides_on_leave_click_and_visib
     frames(&mut app, 6);
     assert_eq!(view(&app), pane);
     assert!(app.world().resource::<GuiTooltipState>().is_showing());
-    app.world_mut().write_message(GuiObjectCommand::new(
-        owner,
-        GuiObjectAction::SetVisible(false),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(owner) {
+        object.set_visible(false)
+    }
     app.update();
     assert!(!app.world().resource::<GuiTooltipState>().is_showing());
 }

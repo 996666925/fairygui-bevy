@@ -1,5 +1,5 @@
 use super::*;
-use crate::{FairyGuiPlugin, GuiEvent, GuiObjectAction, GuiObjectCommand};
+use crate::{FairyGuiPlugin, GuiEvent, GuiWorldExt};
 use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::picking::{backend::HitData, hover::HoverMap, hover::Hovered, pointer::PointerId};
 use bevy::ui::{ComputedStackIndex, RelativeCursorPosition};
@@ -237,10 +237,9 @@ fn draggable_hidden_offstage_modal_and_reparented_sources_stop_without_resuming(
         );
         match policy {
             0 => {
-                app.world_mut().write_message(GuiObjectCommand::new(
-                    control,
-                    GuiObjectAction::SetVisible(false),
-                ));
+                if let Some(mut object) = app.world_mut().gui_mut(control) {
+                    object.set_visible(false)
+                }
             }
             1 => {
                 app.world_mut()

@@ -12,17 +12,12 @@ pub(crate) struct MailItem {
 }
 
 impl MailItem {
-    pub fn play_effect(&self, commands: &mut Commands, delay: f32) {
-        commands.write_message(GuiObjectCommand::new(
-            self.entity,
-            GuiObjectAction::SetVisible(false),
-        ));
-        commands.write_message(GuiObjectCommand::new(
-            self.entity,
-            GuiObjectAction::PlayTransitionWithOptions {
-                name: "t0".into(),
-                options: TransitionPlayOptions { delay, ..default() },
-            },
-        ));
+    pub fn play_effect(&self, gui_edit: &mut GuiMut, delay: f32) {
+        gui_edit.edit(self.entity, |object: &mut GuiObjectMut| {
+            object.set_visible(false)
+        });
+        gui_edit.edit(self.entity, |object: &mut GuiObjectMut| {
+            object.play_transition_with_options("t0", TransitionPlayOptions { delay, ..default() })
+        });
     }
 }

@@ -47,7 +47,7 @@ pub fn initialize(
 pub fn update(
     gui: GuiQuery,
     lists: Query<(&Carousel, &GuiListState, &GuiScrollState)>,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     for (carousel, list, scroll) in &lists {
         let mid = scroll.position().x + scroll.view_size().x / 2.;
@@ -63,10 +63,9 @@ pub fn update(
                 1. + (1. - distance / width) * 0.24
             };
             if transform.scale() != Vec2::splat(scale) {
-                commands.write(GuiObjectCommand::new(
-                    row,
-                    GuiObjectAction::SetScale(Vec2::splat(scale)),
-                ));
+                objects.edit(row, |object: &mut GuiObjectMut| {
+                    object.set_scale(Vec2::splat(scale))
+                });
             }
         }
         if list.item_count() > 0
@@ -74,10 +73,9 @@ pub fn update(
         {
             let text = ((first + 1) % list.item_count()).to_string();
             if gui.text(carousel.label) != Some(text.as_str()) {
-                commands.write(GuiObjectCommand::new(
-                    carousel.label,
-                    GuiObjectAction::SetText(text),
-                ));
+                objects.edit(carousel.label, |object: &mut GuiObjectMut| {
+                    object.set_text(text)
+                });
             }
         }
     }

@@ -1,8 +1,7 @@
 use super::*;
 use crate::core::package::FuiPackage;
 use crate::{
-    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand, GuiQuery,
-    GuiRootInstance, GuiText,
+    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiQuery, GuiRootInstance, GuiText, GuiWorldExt,
 };
 use bevy::ecs::system::SystemState;
 
@@ -57,9 +56,13 @@ fn view(app: &App, tree: Entity, key: &str) -> Entity {
         .view()
         .unwrap()
 }
-fn send(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 
 #[test]
@@ -85,14 +88,9 @@ fn keyed_tree_reconciles_hierarchy_preserves_rows_selection_expansion_and_reclai
             .visible_nodes(),
         [0, 2]
     );
-    send(
-        &mut app,
-        tree,
-        GuiObjectAction::SelectTreeNode {
-            index: 1,
-            scroll_to_view: false,
-        },
-    );
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.select_tree_node(1, false)
+    });
     app.update();
     assert!(
         app.world()
@@ -214,14 +212,9 @@ fn keyed_tree_component_removal_retains_keys_and_views_reinsertion_reuses_and_em
     app.update();
     assert!(app.world().get::<GuiTreeContentState>(tree).is_none());
     assert_eq!(view(&app, tree, "folder"), folder);
-    send(
-        &mut app,
-        tree,
-        GuiObjectAction::SetTreeExpanded {
-            index: 0,
-            expanded: true,
-        },
-    );
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.set_tree_expanded(0, true)
+    });
     app.update();
     app.world_mut().entity_mut(tree).insert(config());
     app.update();

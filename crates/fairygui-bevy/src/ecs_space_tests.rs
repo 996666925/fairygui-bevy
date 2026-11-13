@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::{Point, Rect, package::FuiPackage};
-use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand};
+use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiWorldExt};
 use bevy::ecs::system::SystemState;
 
 #[test]
@@ -88,10 +88,9 @@ fn ecs_space_tracks_native_anchor_skew_reflection_scroll_and_ancestor_edits_with
             .last_changed(),
         tick
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        owner,
-        GuiObjectAction::SetPosition(Vec2::new(60., 90.)),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(owner) {
+        object.set_position(Vec2::new(60., 90.))
+    }
     app.update();
     let shifted = query
         .get(app.world())
@@ -121,10 +120,9 @@ fn ecs_space_tracks_native_anchor_skew_reflection_scroll_and_ancestor_edits_with
         .local_to_global(row_id, Point::new(p.x, p.y))
         .unwrap();
     assert!((scrolled - Vec2::new(native.x, native.y)).length() < 0.001);
-    app.world_mut().write_message(GuiObjectCommand::new(
-        owner,
-        GuiObjectAction::SetScale(Vec2::new(0., 1.)),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(owner) {
+        object.set_scale(Vec2::new(0., 1.))
+    }
     app.update();
     assert!(
         query

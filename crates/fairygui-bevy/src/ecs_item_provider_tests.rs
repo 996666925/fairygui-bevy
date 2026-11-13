@@ -86,13 +86,9 @@ fn verify_chat_rows(app: &mut App, list: Entity, left: impl Fn(usize) -> bool) {
     }
 }
 fn select(app: &mut App, list: Entity, index: usize) {
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::SelectListIndex {
-            index,
-            scroll_to_view: true,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.select_list_index(index, true)
+    }
     app.update();
 }
 
@@ -168,13 +164,9 @@ fn ecs_provider_uses_native_templates_aliases_defaults_recycling_and_common_butt
     }));
     let mut all = first;
     all.extend(rows(&app, list));
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 6000.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::new(0., 6000.), false)
+    }
     app.update();
     verify_chat_rows(&mut app, list, |index| index % 2 != 0);
     assert!(
@@ -193,13 +185,9 @@ fn ecs_provider_uses_native_templates_aliases_defaults_recycling_and_common_butt
         .clear_item_provider();
     app.update();
     verify_chat_rows(&mut app, list, |_| false);
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::ZERO,
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::ZERO, false)
+    }
     app.update();
     verify_chat_rows(&mut app, list, |_| false);
     let state_tick = app
@@ -272,25 +260,17 @@ fn ecs_provider_preserves_selectable_row_indices_across_template_changes_and_rec
         .unwrap();
     assert_row(&app, selected, "c8s24", "qkteqwfp");
     assert!(app.world().get::<GuiButtonSelected>(selected).unwrap().0);
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 3000.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::new(0., 3000.), false)
+    }
     app.update();
     assert_eq!(
         app.world().get::<crate::GuiListSelection>(list).unwrap().0,
         [1]
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::ZERO,
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::ZERO, false)
+    }
     app.update();
     assert_eq!(
         app.world().get::<crate::GuiListSelection>(list).unwrap().0,
@@ -341,13 +321,9 @@ fn ecs_provider_retries_late_packages_and_clears_current_resource_errors() {
     }
     // A provider can succeed initially and only fail when scrolling reaches a
     // new template. The live refresh error must update the unchanged binding.
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::ZERO,
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::ZERO, false)
+    }
     app.world_mut()
         .get_mut::<GuiVirtualList>(list)
         .unwrap()
@@ -360,13 +336,9 @@ fn ecs_provider_retries_late_packages_and_clears_current_resource_errors() {
             .error()
             .is_none()
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 3000.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::new(0., 3000.), false)
+    }
     app.update();
     assert!(matches!(
         app.world()
@@ -375,13 +347,9 @@ fn ecs_provider_retries_late_packages_and_clears_current_resource_errors() {
             .error(),
         Some(VirtualListError::MissingResource(_))
     ));
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::ZERO,
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::ZERO, false)
+    }
     app.update();
     assert!(
         app.world()
@@ -444,13 +412,9 @@ fn ecs_provider_receives_logical_loop_indices_and_drops_with_its_component() {
     );
     app.update();
     for percentage in [0., 1., 0.4, 0.] {
-        app.world_mut().write_message(GuiObjectCommand::new(
-            list,
-            GuiObjectAction::SetScrollPercentage {
-                percentage: Vec2::splat(percentage),
-                animated: false,
-            },
-        ));
+        if let Some(mut object) = app.world_mut().gui_mut(list) {
+            object.set_scroll_percentage(Vec2::splat(percentage), false)
+        }
         app.update();
         let info = app
             .world()

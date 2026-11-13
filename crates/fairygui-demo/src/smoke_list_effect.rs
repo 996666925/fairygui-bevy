@@ -41,6 +41,7 @@ fn drive(
     mut exit: MessageWriter<AppExit>,
     mut completions: MessageReader<GuiTransitionComplete>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -73,17 +74,14 @@ fn drive(
             if frame - ready < 4 {
                 return;
             }
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let owner = commands
-                .spawn(FairyGuiRoot::new(assets.load("ui/ListEffect.fui"), "Main"))
+                .spawn(
+                    FairyGuiRoot::new(assets.load("ui/ListEffect.fui"), "Main")
+                        .with_position(Vec2::new(200., 30.)),
+                )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                owner,
-                GuiObjectAction::SetPosition(Vec2::new(200., 30.)),
-            ));
+
             state.owner = Some(owner);
             next = true;
         }
@@ -170,13 +168,9 @@ fn drive(
         }
         5 if elapsed >= 10 => {
             assert_eq!(selection.get(state.list.unwrap()).unwrap().0, [1]);
-            commands.write_message(GuiObjectCommand::new(
-                state.list.unwrap(),
-                GuiObjectAction::ScrollTo {
-                    position: Vec2::new(0., 500.),
-                    animated: false,
-                },
-            ));
+            gui_edit.edit(state.list.unwrap(), |object: &mut GuiObjectMut| {
+                object.scroll_to(Vec2::new(0., 500.), false)
+            });
             next = true;
         }
         6 if elapsed >= 12 => {

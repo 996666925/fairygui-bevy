@@ -43,6 +43,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -64,20 +65,14 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let page = commands
-                .spawn(FairyGuiRoot::new(
-                    assets.load("ui/Basics.fui"),
-                    "Demo_Drag&Drop",
-                ))
+                .spawn(
+                    FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Demo_Drag&Drop")
+                        .with_position(Vec2::new(120., 90.)),
+                )
                 .id();
-            commands.write_message(GuiObjectCommand::new(
-                page,
-                GuiObjectAction::SetPosition(Vec2::new(120., 90.)),
-            ));
+
             state.page = Some(page);
             next = true;
         }

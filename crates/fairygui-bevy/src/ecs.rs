@@ -4,7 +4,6 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use fairygui_core::object::GObject;
 use fairygui_core::package::ObjectType;
-use fairygui_core::widget::ControlData;
 
 use crate::GuiWindowState;
 use crate::list::GuiListState;
@@ -249,15 +248,21 @@ impl GuiControllers {
     }
 }
 
-/// Read-only native text property, before translation, markup and masking.
+/// Writable native text property, before translation, markup and masking.
 ///
 /// Buttons expose their base title; labels and combo boxes forward to the title
 /// child. Inputs expose committed text, excluding prompts and IME preedit.
-/// Absent on objects without a text property. Write via `GuiObjectCommand`.
+/// Absent on objects without a text property. Edit this component directly.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
-pub struct GuiText(String);
+pub struct GuiText(pub String);
 
 impl GuiText {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+    pub fn set(&mut self, value: impl Into<String>) {
+        self.0 = value.into();
+    }
     pub fn value(&self) -> &str {
         &self.0
     }
@@ -266,27 +271,33 @@ impl GuiText {
 /// Native icon URL of a Loader, button, label or combo box. Empty means no icon;
 /// buttons expose the base icon even while a selected icon is displayed.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
-pub struct GuiIcon(String);
+pub struct GuiIcon(pub String);
 impl GuiIcon {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+    pub fn set(&mut self, value: impl Into<String>) {
+        self.0 = value.into();
+    }
     pub fn value(&self) -> &str {
         &self.0
     }
 }
 
-/// Read-only local drawing and interaction state from the FairyGUI model.
+/// Writable local drawing and interaction state from the FairyGUI model.
 ///
 /// Explicit visibility, controller/group display visibility and stage attachment
 /// are independent. `display_visible` excludes ancestor visibility and clipping;
 /// it does not guarantee a painted pixel or an eligible input target.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct GuiDisplay {
-    visible: bool,
-    display_visible: bool,
-    on_stage: bool,
-    alpha: f32,
-    effective_alpha: f32,
-    grayed: bool,
-    touchable: bool,
+    pub visible: bool,
+    pub(crate) display_visible: bool,
+    pub(crate) on_stage: bool,
+    pub alpha: f32,
+    pub(crate) effective_alpha: f32,
+    pub grayed: bool,
+    pub touchable: bool,
 }
 
 impl GuiDisplay {
@@ -320,21 +331,21 @@ impl GuiDisplay {
     }
 }
 
-/// Read-only FairyGUI geometry, refreshed after `GuiSystems::Sync`.
+/// Writable FairyGUI geometry, refreshed after `GuiSystems::Sync`.
 ///
 /// Position is relative to the logical parent, in logical pixels, and size is
 /// unscaled. Rotation and skew use degrees. These are model values, before
 /// Bevy layout, scroll offsets, pivot compensation and inherited transforms.
-/// Change geometry through [`crate::GuiObjectCommand`].
+/// Edit the public fields; Sync applies changed fields to the native model.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct GuiTransform {
-    position: Vec2,
-    size: Vec2,
-    scale: Vec2,
-    skew: Vec2,
-    pivot: Vec2,
-    pivot_as_anchor: bool,
-    rotation: f32,
+    pub position: Vec2,
+    pub size: Vec2,
+    pub scale: Vec2,
+    pub skew: Vec2,
+    pub pivot: Vec2,
+    pub pivot_as_anchor: bool,
+    pub rotation: f32,
 }
 
 /// Native logical local/global conversion snapshot, including anchor pivots,
@@ -407,7 +418,7 @@ impl GuiTransform {
         self.rotation
     }
 
-    fn from_object(object: &GObject) -> Self {
+    pub(crate) fn from_object(object: &GObject) -> Self {
         let pivot = object.pivot();
         Self {
             position: Vec2::new(object.x(), object.y()),
@@ -739,149 +750,6 @@ pub(crate) fn sync_gui_scroll_state(
     }
 }
 
-pub(crate) fn sync_gui_icons(
-    mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
-    objects: Query<(Entity, &GObjectRef, Option<&GuiIcon>)>,
-) {
-    use fairygui_core::widget::ControlData;
-    for (entity, reference, current) in &objects {
-        if runtime.entity_of(reference.0) != Some(entity) {
-            continue;
-        }
-        let source =
-            runtime
-                .store()
-                .object(reference.0)
-                .and_then(|object| match object.control() {
-                    ControlData::Loader(data) => Some(data.url.as_deref().unwrap_or_default()),
-                    ControlData::Button(data) => Some(data.icon.as_deref().unwrap_or_default()),
-                    ControlData::Label(data) => Some(data.icon.as_deref().unwrap_or_default()),
-                    ControlData::ComboBox(data) => Some(data.icon.as_deref().unwrap_or_default()),
-                    _ => None,
-                });
-        match (current, source) {
-            (current, Some(source)) if current.is_none_or(|current| current.value() != source) => {
-                commands.entity(entity).insert(GuiIcon(source.to_owned()));
-            }
-            (Some(_), None) => {
-                commands.entity(entity).remove::<GuiIcon>();
-            }
-            _ => {}
-        }
-    }
-}
-
-#[allow(clippy::type_complexity)]
-pub(crate) fn sync_gui_properties(
-    mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
-    objects: Query<(
-        Entity,
-        &GObjectRef,
-        Option<&GuiText>,
-        Option<&GuiDisplay>,
-        Option<&crate::GuiComboBoxState>,
-        Option<&crate::GuiSliderState>,
-        Option<&crate::GuiProgressState>,
-    )>,
-) {
-    let store = runtime.store();
-    for (entity, reference, text, display, combo, slider, progress) in &objects {
-        if runtime.entity_of(reference.0) != Some(entity) {
-            continue;
-        }
-        let Some(object) = store.object(reference.0) else {
-            continue;
-        };
-        if let ControlData::ProgressBar(data) = object.control() {
-            let next = crate::GuiProgressState {
-                min: data.min,
-                max: data.max,
-                value: data.value,
-                displayed_value: store
-                    .progress_display_value(reference.0)
-                    .unwrap_or(data.value),
-                title_type: data.title_type,
-                reverse: data.reverse,
-                tweening: store.progress_is_tweening(reference.0),
-            };
-            if progress != Some(&next) {
-                commands.entity(entity).insert(next);
-            }
-        } else if progress.is_some() {
-            commands.entity(entity).remove::<crate::GuiProgressState>();
-        }
-        if let ControlData::Slider(data) = object.control() {
-            let next = crate::GuiSliderState {
-                min: data.min,
-                max: data.max,
-                value: data.value,
-                whole_numbers: data.whole_numbers,
-                reverse: data.reverse,
-                change_on_click: data.change_on_click,
-                can_drag: data.can_drag,
-                title_type: data.title_type,
-            };
-            if slider != Some(&next) {
-                commands.entity(entity).insert(next);
-            }
-        } else if slider.is_some() {
-            commands.entity(entity).remove::<crate::GuiSliderState>();
-        }
-        if let ControlData::ComboBox(data) = object.control() {
-            let popup = store.combo_popup(reference.0);
-            let next = crate::GuiComboBoxState {
-                items: data.items.clone(),
-                values: data.values.clone(),
-                icons: data.icons.clone(),
-                selected_index: data.selected_index,
-                visible_item_count: data.visible_item_count,
-                direction: match data.popup_direction {
-                    1 => crate::GuiPopupDirection::Up,
-                    2 => crate::GuiPopupDirection::Down,
-                    _ => crate::GuiPopupDirection::Auto,
-                },
-                selection_controller: store
-                    .combo_selection_controller(reference.0)
-                    .map(str::to_owned),
-                dropdown: popup
-                    .as_ref()
-                    .and_then(|popup| runtime.entity_of(popup.dropdown)),
-                list: popup
-                    .as_ref()
-                    .and_then(|popup| runtime.entity_of(popup.list)),
-            };
-            if combo != Some(&next) {
-                commands.entity(entity).insert(next);
-            }
-        } else if combo.is_some() {
-            commands.entity(entity).remove::<crate::GuiComboBoxState>();
-        }
-        match (text, store.object_text(reference.0)) {
-            (current, Some(value)) if current.is_none_or(|current| current.value() != value) => {
-                commands.entity(entity).insert(GuiText(value.to_owned()));
-            }
-            (Some(_), None) => {
-                commands.entity(entity).remove::<GuiText>();
-            }
-            _ => {}
-        }
-        let next = GuiDisplay {
-            visible: object.visible(),
-            display_visible: store.display_visible(reference.0),
-            on_stage: store.is_on_stage(reference.0),
-            alpha: object.alpha(),
-            effective_alpha: store.effective_alpha(reference.0),
-            grayed: object.grayed(),
-            touchable: object.touchable(),
-        };
-        if display != Some(&next) {
-            commands.entity(entity).insert(next);
-        }
-    }
-}
-
 #[allow(clippy::type_complexity)]
 pub(crate) fn sync_gui_objects(
     mut commands: Commands,
@@ -890,19 +758,17 @@ pub(crate) fn sync_gui_objects(
         Entity,
         &GObjectRef,
         Option<&mut GuiObjectInfo>,
-        Option<&GuiTransform>,
         Option<&GuiSpace>,
     )>,
     roots: Query<(Entity, &GuiRootInstance, Option<&GuiRootView>)>,
 ) {
-    for (entity, reference, current, transform, space) in &mut objects {
+    for (entity, reference, current, space) in &mut objects {
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
         let Some(object) = runtime.store().object(reference.0) else {
             continue;
         };
-        let next_transform = GuiTransform::from_object(object);
         if let Some(next) = runtime
             .store()
             .coordinate_transform(reference.0)
@@ -910,9 +776,6 @@ pub(crate) fn sync_gui_objects(
             && space != Some(&next)
         {
             commands.entity(entity).insert(next);
-        }
-        if transform != Some(&next_transform) {
-            commands.entity(entity).insert(next_transform);
         }
         let parent = object.parent().and_then(|id| runtime.entity_of(id));
         let children = object
@@ -1016,5 +879,45 @@ pub(crate) fn sync_gui_controllers(
                 })
                 .collect(),
         ));
+    }
+}
+
+impl Default for GuiDisplay {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            display_visible: true,
+            on_stage: false,
+            alpha: 1.,
+            effective_alpha: 1.,
+            grayed: false,
+            touchable: true,
+        }
+    }
+}
+impl Default for GuiTransform {
+    fn default() -> Self {
+        Self {
+            position: Vec2::ZERO,
+            size: Vec2::ZERO,
+            scale: Vec2::ONE,
+            skew: Vec2::ZERO,
+            pivot: Vec2::ZERO,
+            pivot_as_anchor: false,
+            rotation: 0.,
+        }
+    }
+}
+
+impl GuiDisplay {
+    pub fn hidden() -> Self {
+        Self {
+            visible: false,
+            ..Default::default()
+        }
+    }
+    pub fn with_alpha(mut self, alpha: f32) -> Self {
+        self.alpha = alpha;
+        self
     }
 }

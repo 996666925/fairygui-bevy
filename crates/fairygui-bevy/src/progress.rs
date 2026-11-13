@@ -7,11 +7,11 @@ mod tests;
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct GuiProgressState {
-    pub(crate) min: f64,
-    pub(crate) max: f64,
-    pub(crate) value: f64,
+    pub min: f64,
+    pub max: f64,
+    pub value: f64,
     pub(crate) displayed_value: f64,
-    pub(crate) title_type: i32,
+    pub title_type: i32,
     pub(crate) reverse: bool,
     pub(crate) tweening: bool,
 }
@@ -60,6 +60,20 @@ pub(crate) fn emit_completions(mut runtime: NonSendMut<crate::GuiRuntime>, mut c
     for (object, value) in runtime.store_mut().take_progress_tween_completions() {
         if let Some(entity) = runtime.entity_of(object) {
             commands.trigger(GuiProgressTweenComplete { entity, value });
+        }
+    }
+}
+
+impl GuiProgressState {
+    pub fn new(min: f64, max: f64, value: f64) -> Self {
+        Self {
+            min,
+            max,
+            value,
+            displayed_value: value,
+            title_type: 0,
+            reverse: false,
+            tweening: false,
         }
     }
 }

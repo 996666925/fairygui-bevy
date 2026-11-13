@@ -53,6 +53,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -74,10 +75,7 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let asset = assets.load("ui/Basics.fui");
             for (item, modal) in [("WindowA", false), ("WindowB", true)] {
                 let mut config = FairyGuiWindow::new(asset.clone(), item);
@@ -104,10 +102,9 @@ fn drive(
             );
             let first = first.unwrap();
             command(&mut commands, first, GuiWindowAction::Show);
-            commands.write_message(GuiObjectCommand::new(
-                first,
-                GuiObjectAction::SetPosition(Vec2::new(200., 130.)),
-            ));
+            gui_edit.edit(first, |object: &mut GuiObjectMut| {
+                object.set_position(Vec2::new(200., 130.))
+            });
             next = true;
         }
         2 if elapsed >= 15 => {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand};
+use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiWorldExt};
 use bevy::ecs::system::SystemState;
 use fairygui_core::{
     geom::Rect,
@@ -54,9 +54,13 @@ fn fixture() -> (App, Entity, GObjectId, Entity) {
     (app, owner, list, view)
 }
 
-fn send(app: &mut App, target: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(target, action));
+fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(target)
+            .expect("GUI object must be ready"),
+    );
 }
 
 #[test]
@@ -78,18 +82,13 @@ fn ecs_scroll_commands_keep_logical_targets_display_animation_and_virtual_rows_i
         (initial.content_size().y - initial.view_size().y).ceil()
     );
 
-    send(
-        &mut app,
-        view,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 1000.),
-            animated: true,
-        },
-    );
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.scroll_to(Vec2::new(0., 1000.), true)
+    });
     app.update();
     let started = *app.world().get::<GuiScrollState>(view).unwrap();
     assert_eq!(started.position().y, 1000.);
-    assert_eq!(started.display_position(), Vec2::ZERO);
+    assert!(started.display_position().y > 0. && started.display_position().y < 1000.);
     assert!(started.is_animating());
     app.update();
     let moving = *app.world().get::<GuiScrollState>(view).unwrap();
@@ -107,14 +106,9 @@ fn ecs_scroll_commands_keep_logical_targets_display_animation_and_virtual_rows_i
     assert_eq!(settled.position(), settled.display_position());
     assert!(!settled.is_animating());
 
-    send(
-        &mut app,
-        view,
-        GuiObjectAction::SetScrollPercentage {
-            percentage: Vec2::splat(2.),
-            animated: false,
-        },
-    );
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.set_scroll_percentage(Vec2::splat(2.), false)
+    });
     app.update();
     let bottom = *app.world().get::<GuiScrollState>(view).unwrap();
     assert_eq!(bottom.position(), bottom.max_position());
@@ -126,14 +120,9 @@ fn ecs_scroll_commands_keep_logical_targets_display_animation_and_virtual_rows_i
             .virtual_item_object(list, 999)
             .is_some()
     );
-    send(
-        &mut app,
-        view,
-        GuiObjectAction::SetScrollPercentage {
-            percentage: Vec2::splat(-1.),
-            animated: false,
-        },
-    );
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.set_scroll_percentage(Vec2::splat(-1.), false)
+    });
     app.update();
     assert_eq!(
         app.world().get::<GuiScrollState>(view).unwrap().position(),
@@ -147,15 +136,9 @@ fn ecs_scroll_commands_keep_logical_targets_display_animation_and_virtual_rows_i
             .is_some()
     );
 
-    send(
-        &mut app,
-        view,
-        GuiObjectAction::ScrollToView {
-            rect: Rect::new(0., 700., 10., 45.),
-            animated: false,
-            set_first: true,
-        },
-    );
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.scroll_to_view(Rect::new(0., 700., 10., 45.), false, true)
+    });
     app.update();
     assert_eq!(
         app.world()
@@ -172,23 +155,19 @@ fn ecs_scroll_commands_keep_logical_targets_display_animation_and_virtual_rows_i
         .get_ref::<GuiScrollState>()
         .unwrap()
         .last_changed();
-    for action in [
-        GuiObjectAction::SetScrollPercentage {
-            percentage: Vec2::splat(f32::NAN),
-            animated: true,
-        },
-        GuiObjectAction::ScrollTo {
-            position: Vec2::splat(f32::INFINITY),
-            animated: true,
-        },
-        GuiObjectAction::ScrollToView {
-            rect: Rect::new(0., f32::NAN, 10., 45.),
-            animated: true,
-            set_first: true,
-        },
-    ] {
-        send(&mut app, view, action);
-    }
+
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.set_scroll_percentage(Vec2::splat(f32::NAN), true)
+    });
+
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.scroll_to(Vec2::splat(f32::INFINITY), true)
+    });
+
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.scroll_to_view(Rect::new(0., f32::NAN, 10., 45.), true, true)
+    });
+
     app.update();
     assert_eq!(
         app.world()
@@ -199,11 +178,9 @@ fn ecs_scroll_commands_keep_logical_targets_display_animation_and_virtual_rows_i
         unchanged
     );
 
-    send(
-        &mut app,
-        view,
-        GuiObjectAction::SetSize(Vec2::new(400., 200.)),
-    );
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.set_size(Vec2::new(400., 200.))
+    });
     app.update();
     assert!(
         app.world()
@@ -235,7 +212,8 @@ fn ecs_scroll_observers_see_input_changes_before_publishing_and_commands_use_cur
         event: On<crate::GuiEvent>,
         gui: GuiQuery,
         watch: Query<&WatchScroll>,
-        mut commands: Commands,
+        _commands: Commands,
+        mut gui_edit: crate::GuiMut,
     ) {
         if event.event().event.kind != EventKind::Click {
             return;
@@ -244,13 +222,9 @@ fn ecs_scroll_observers_see_input_changes_before_publishing_and_commands_use_cur
         let state = gui.scroll(target).unwrap();
         assert_eq!(state.position().y, 123.);
         assert_eq!(state.display_position().y, 123.);
-        commands.write_message(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetScrollPercentage {
-                percentage: Vec2::Y,
-                animated: false,
-            },
-        ));
+        gui_edit.edit(target, |object: &mut crate::GuiObjectMut| {
+            object.set_scroll_percentage(Vec2::Y, false)
+        });
     }
     let (mut app, owner, list, view) = fixture();
     let (button, id) = {
@@ -270,11 +244,9 @@ fn ecs_scroll_observers_see_input_changes_before_publishing_and_commands_use_cur
     }
     // Resize before applying the observer's endpoint command. The command must
     // use the model's new range, not the range in the preceding ECS snapshot.
-    send(
-        &mut app,
-        view,
-        GuiObjectAction::SetSize(Vec2::new(400., 200.)),
-    );
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.set_size(Vec2::new(400., 200.))
+    });
     app.update();
     let state = app.world().get::<GuiScrollState>(view).unwrap();
     assert_eq!(state.position(), state.max_position());

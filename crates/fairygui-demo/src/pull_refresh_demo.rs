@@ -23,14 +23,10 @@ fn content(count: usize, reverse: bool) -> GuiListContent {
         row.set_text(&format!("Item {index}"));
     })
 }
-fn page(commands: &mut Commands, target: Entity, index: i32) {
-    commands.write_message(GuiObjectCommand::new(
-        target,
-        GuiObjectAction::SetControllerPage {
-            name: "c1".into(),
-            index,
-        },
-    ));
+fn page(gui_edit: &mut GuiMut, target: Entity, index: i32) {
+    gui_edit.edit(target, |object: &mut GuiObjectMut| {
+        object.set_controller_page("c1", index)
+    });
 }
 fn lock(commands: &mut Commands, target: Entity, size: f32, header: bool) {
     commands.write_message(if header {
@@ -46,6 +42,7 @@ pub(crate) fn update(
     gui: GuiQuery,
     mut releases: MessageReader<GuiPullRelease>,
     mut commands: Commands,
+    mut gui_edit: GuiMut,
     time: Res<Time>,
 ) {
     let events: Vec<_> = releases.read().cloned().collect();
@@ -76,8 +73,8 @@ pub(crate) fn update(
         for (list, reverse) in [(first, true), (second, false)] {
             commands.entity(list).insert(content(1, reverse));
         }
-        page(&mut commands, header.entity, 0);
-        page(&mut commands, footer.entity, 0);
+        page(&mut gui_edit, header.entity, 0);
+        page(&mut gui_edit, footer.entity, 0);
     }
     let [Some(first), Some(second)] = state.lists else {
         return;
@@ -94,7 +91,7 @@ pub(crate) fn update(
         .map_or(0, |controller| controller.selected_index());
     if status != 2 && status != 3 {
         status = i32::from(header.size.y > header.source_size.y);
-        page(&mut commands, header.entity, status);
+        page(&mut gui_edit, header.entity, status);
     }
     for release in events {
         let is_header = release.event.kind == EventKind::PullDownRelease && release.entity == first;
@@ -104,10 +101,10 @@ pub(crate) fn update(
                 continue;
             }
             status = 2;
-            page(&mut commands, header.entity, 2);
+            page(&mut gui_edit, header.entity, 2);
             lock(&mut commands, first, header.source_size.y, true);
         } else if is_footer {
-            page(&mut commands, footer.entity, 1);
+            page(&mut gui_edit, footer.entity, 1);
             lock(&mut commands, second, footer.source_size.y, false);
         } else {
             continue;
@@ -131,16 +128,16 @@ pub(crate) fn update(
                 .entity(job.list)
                 .insert(content(list.item_count() + 5, job.header));
             if job.header {
-                page(&mut commands, header.entity, 3);
+                page(&mut gui_edit, header.entity, 3);
                 lock(&mut commands, first, 35., true);
                 job.completion = true;
                 job.due = time.elapsed_secs_f64() + 2.;
                 return true;
             }
-            page(&mut commands, footer.entity, 0);
+            page(&mut gui_edit, footer.entity, 0);
             lock(&mut commands, second, 0., false);
         } else {
-            page(&mut commands, header.entity, 0);
+            page(&mut gui_edit, header.entity, 0);
             lock(&mut commands, first, 0., true);
         }
         false

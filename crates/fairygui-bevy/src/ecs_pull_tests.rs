@@ -281,6 +281,7 @@ fn respond(
     mut events: MessageReader<GuiPullRelease>,
     mut commands: Commands,
     mut responses: ResMut<Responses>,
+    mut gui_edit: crate::GuiMut,
 ) {
     for event in events.read() {
         assert!(event.event.is_at_target() && !event.event.bubbling);
@@ -295,13 +296,9 @@ fn respond(
             target: event.entity,
             size: header.source_size.y,
         });
-        commands.write_message(GuiObjectCommand::new(
-            header.entity,
-            GuiObjectAction::SetControllerPage {
-                name: "c1".into(),
-                index: 2,
-            },
-        ));
+        gui_edit.edit(header.entity, |object: &mut crate::GuiObjectMut| {
+            object.set_controller_page("c1", 2)
+        });
         responses.0 += 1;
     }
 }

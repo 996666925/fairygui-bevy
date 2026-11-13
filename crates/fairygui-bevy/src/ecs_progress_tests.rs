@@ -54,11 +54,18 @@ fn fixture(loaded: bool) -> (App, Entity, Handle<FuiAsset>) {
         .world_mut()
         .spawn(FairyGuiRoot::new(handle.clone(), "ProgressBar"))
         .id();
+    if loaded {
+        app.update();
+    }
     (app, owner, handle)
 }
-fn send(app: &mut App, owner: Entity, action: GuiObjectAction) {
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(owner, action));
+fn send(app: &mut App, owner: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+    action(
+        &mut app
+            .world_mut()
+            .gui_mut(owner)
+            .expect("GUI object must be ready"),
+    );
 }
 fn state(app: &mut App, owner: Entity) -> GuiProgressState {
     *SystemState::<GuiQuery>::new(app.world_mut())
@@ -77,7 +84,7 @@ fn bind(app: &mut App, owner: Entity) -> Entity {
 }
 
 #[test]
-fn queued_fractional_values_and_tweens_are_ready_for_the_first_initialize() {
+fn initial_fractional_properties_and_tweens_are_ready_for_the_first_layout() {
     #[derive(Resource, Default)]
     struct Initial(bool);
     fn inspect(
@@ -104,20 +111,18 @@ fn queued_fractional_values_and_tweens_are_ready_for_the_first_initialize() {
     }
     let (mut app, owner, handle) = fixture(false);
     app.init_resource::<Initial>()
-        .add_systems(Update, inspect.in_set(GuiSystems::Initialize));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::SetProgressRange { min: 0., max: 1. },
-    );
-    send(&mut app, owner, GuiObjectAction::SetProgress(0.25));
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 0.75,
-            duration: 0.2,
-        },
+        .add_systems(Update, inspect.in_set(GuiSystems::PostLayout));
+    app.world_mut()
+        .entity_mut(owner)
+        .insert(GuiProgressState::new(0., 1., 0.25));
+    app.add_systems(
+        Update,
+        (|roots: Query<Entity, Added<GuiRootView>>, mut gui: GuiMut| {
+            for owner in &roots {
+                gui.get_mut(owner).unwrap().tween_progress(0.75, 0.2);
+            }
+        })
+        .in_set(GuiSystems::Initialize),
     );
     for _ in 0..4 {
         app.update();
@@ -155,47 +160,36 @@ fn queued_fractional_values_and_tweens_are_ready_for_the_first_initialize() {
 #[test]
 fn replacement_stops_and_same_target_setters_keep_native_target_display_semantics() {
     let (mut app, owner, _) = fixture(true);
-    send(&mut app, owner, GuiObjectAction::SetProgress(0.));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_progress(0.)
+    });
     app.update();
     let view = bind(&mut app, owner);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 100.,
-            duration: 1.,
-        },
-    );
-    app.update(); // starts in Sync
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween_progress(100., 1.)
+    });
     assert_eq!(state(&mut app, owner).displayed_value(), 0.);
     app.update(); // sample=10
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 60.,
-            duration: 0.2,
-        },
-    );
-    app.update(); // sample=20, replacement starts there
-    app.update(); // new sample=40
-    near(state(&mut app, owner).displayed_value(), 40.);
-    send(&mut app, owner, GuiObjectAction::SetProgress(60.)); // same target doesn't stop
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween_progress(60., 0.2)
+    });
+    app.update(); // replacement samples halfway from 10 to 60
+    near(state(&mut app, owner).displayed_value(), 35.);
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_progress(60.)
+    }); // same target doesn't stop
     app.update(); // completes=60
     assert_eq!(
         app.world().resource::<Completions>().0,
         [(view, 60., 60., 84.)]
     );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 100.,
-            duration: 1.,
-        },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween_progress(100., 1.)
+    });
     app.update();
-    send(&mut app, owner, GuiObjectAction::StopProgressTween);
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.stop_progress_tween()
+    });
     app.update();
     let stopped = state(&mut app, owner);
     near(stopped.displayed_value(), 64.);
@@ -206,7 +200,9 @@ fn replacement_stops_and_same_target_setters_keep_native_target_display_semantic
     }
     assert_eq!(state(&mut app, owner), stopped);
     assert_eq!(app.world().resource::<Completions>().0.len(), 1);
-    send(&mut app, view, GuiObjectAction::SetProgress(-0.25));
+    send(&mut app, view, |object: &mut crate::GuiObjectMut| {
+        object.set_progress(-0.25)
+    });
     app.update();
     assert_eq!(state(&mut app, owner).displayed_value(), -0.25);
     assert_eq!(state(&mut app, owner).percent(), 0.);
@@ -217,51 +213,37 @@ fn immediate_completion_replacement_and_disposal_publish_only_valid_final_states
     let (mut app, owner, _) = fixture(true);
     app.update();
     let view = bind(&mut app, owner);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 75.,
-            duration: 0.,
-        },
-    );
-    send(&mut app, owner, GuiObjectAction::StopProgressTween);
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween_progress(75., 0.)
+    });
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.stop_progress_tween()
+    });
     app.update();
     assert!(app.world().resource::<Completions>().0.is_empty());
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 25.,
-            duration: 0.,
-        },
-    );
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween_progress(25., 0.)
+    });
     app.update();
     assert_eq!(
         app.world().resource::<Completions>().0,
         [(view, 25., 25., 35.)]
     );
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 75.,
-            duration: 0.1,
-        },
-    );
-    app.update();
-    send(&mut app, owner, GuiObjectAction::SetProgress(12.5));
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween_progress(75., 0.1)
+    });
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .advance_tweens(0.1);
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.set_progress(12.5)
+    });
     app.update(); // completes in Advance, overwritten in Sync: don't notify stale 75
     assert_eq!(app.world().resource::<Completions>().0.len(), 1);
-    send(
-        &mut app,
-        owner,
-        GuiObjectAction::TweenProgress {
-            value: 50.,
-            duration: 0.1,
-        },
-    );
-    app.update();
+    send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
+        object.tween_progress(50., 0.1)
+    });
     app.world_mut().despawn(owner);
     app.update();
     assert!(app.world().get_entity(view).is_err());

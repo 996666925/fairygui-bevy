@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand, GuiQuery,
-    GuiRootInstance, GuiSystems, GuiText, GuiTransform,
+    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiQuery, GuiRootInstance, GuiSystems, GuiText,
+    GuiTransform, GuiWorldExt,
 };
 use fairygui_core::package::{FuiPackage, ObjectType};
 
@@ -96,10 +96,9 @@ fn child_view_snapshots_track_native_geometry_hidden_rows_and_display_scroll_wit
             .last_changed(),
         tick
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        rows[0],
-        GuiObjectAction::SetVisible(false),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(rows[0]) {
+        object.set_visible(false)
+    }
     app.update();
     assert_eq!(
         query
@@ -108,13 +107,9 @@ fn child_view_snapshots_track_native_geometry_hidden_rows_and_display_scroll_wit
             .is_child_in_view(list, rows[0]),
         Some(true)
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 500.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::new(0., 500.), false)
+    }
     app.update();
     let gui = query.get(app.world()).unwrap();
     assert_eq!(gui.is_child_in_view(list, rows[0]), Some(false));
@@ -138,16 +133,16 @@ fn observe_item(
     rows: Query<&GuiListRow>,
     selection: Query<&crate::GuiListSelection>,
     mut log: ResMut<ItemEvents>,
-    mut commands: Commands,
+    _commands: Commands,
+    mut gui_edit: crate::GuiMut,
 ) {
     let row = rows.get(event.item).unwrap();
     assert_eq!((row.list(), row.index()), (event.entity, event.index));
     assert!(selection.get(event.entity).unwrap().0.is_empty());
     log.0.push(event.event().clone());
-    commands.write_message(GuiObjectCommand::new(
-        event.item,
-        GuiObjectAction::SetAlpha(0.42),
-    ));
+    gui_edit.edit(event.item, |object: &mut crate::GuiObjectMut| {
+        object.set_alpha(0.42)
+    });
 }
 
 #[test]
@@ -168,13 +163,9 @@ fn virtual_item_entity_observer_gets_the_clicked_row_without_selection_and_appli
         .store_mut()
         .set_list_selection_mode(list, fairygui_core::widget::ListSelectionMode::None);
     app.update();
-    app.world_mut().write_message(GuiObjectCommand::new(
-        view,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 3000.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(view) {
+        object.scroll_to(Vec2::new(0., 3000.), false)
+    }
     app.update();
     let row = app.world().get::<GuiListState>(view).unwrap().items()[1];
     let index = app.world().get::<GuiListRow>(row).unwrap().index();
@@ -321,13 +312,9 @@ fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measureme
             .last_changed(),
         unchanged
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        view,
-        GuiObjectAction::SelectListIndex {
-            index: 500,
-            scroll_to_view: true,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(view) {
+        object.select_list_index(500, true)
+    }
     app.update();
     assert_list_snapshot(&app, list, view);
     assert_eq!(
@@ -408,22 +395,14 @@ fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measureme
 fn post_layout_scroll_materializes_and_projects_the_destination_rows_in_the_same_update() {
     #[derive(Resource)]
     struct Scroll(Entity);
-    fn scroll(
-        target: Res<Scroll>,
-        mut commands: MessageWriter<GuiObjectCommand>,
-        mut once: Local<bool>,
-    ) {
+    fn scroll(target: Res<Scroll>, mut commands: crate::GuiMut, mut once: Local<bool>) {
         if *once {
             return;
         }
         *once = true;
-        commands.write(GuiObjectCommand::new(
-            target.0,
-            GuiObjectAction::SetScrollPercentage {
-                percentage: Vec2::new(0., 1.),
-                animated: false,
-            },
-        ));
+        commands.edit(target.0, |object: &mut crate::GuiObjectMut| {
+            object.set_scroll_percentage(Vec2::new(0., 1.), false)
+        });
     }
     let (mut app, _, list, view) = fixture(
         "VirtualList",
@@ -688,7 +667,8 @@ fn ecs_post_layout_sees_rebound_rows_and_projects_commands_in_the_same_frame() {
         lists: Query<(Entity, &GuiListState), With<Carousel>>,
         rows: Query<&GuiListRow>,
         mut seen: ResMut<Seen>,
-        mut commands: Commands,
+        _commands: Commands,
+        mut gui_edit: crate::GuiMut,
     ) {
         seen.0.clear();
         for (entity, list) in &lists {
@@ -698,14 +678,12 @@ fn ecs_post_layout_sees_rebound_rows_and_projects_commands_in_the_same_frame() {
                 assert_eq!(binding.list(), entity);
                 assert!(gui.transform(row).is_some());
                 seen.0.push((row, binding.index()));
-                commands.write_message(GuiObjectCommand::new(
-                    row,
-                    GuiObjectAction::SetScale(Vec2::splat(1.2)),
-                ));
-                commands.write_message(GuiObjectCommand::new(
-                    row,
-                    GuiObjectAction::SetText(format!("index {}", binding.index())),
-                ));
+                gui_edit.edit(row, |object: &mut crate::GuiObjectMut| {
+                    object.set_scale(Vec2::splat(1.2))
+                });
+                gui_edit.edit(row, |object: &mut crate::GuiObjectMut| {
+                    object.set_text(format!("index {}", binding.index()))
+                });
             }
         }
     }
@@ -722,13 +700,9 @@ fn ecs_post_layout_sees_rebound_rows_and_projects_commands_in_the_same_frame() {
     app.update();
     let before = app.world().resource::<Seen>().0.clone();
     assert!(!before.is_empty());
-    app.world_mut().write_message(GuiObjectCommand::new(
-        view,
-        GuiObjectAction::SelectListIndex {
-            index: 500,
-            scroll_to_view: true,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(view) {
+        object.select_list_index(500, true)
+    }
     app.update();
     assert_list_snapshot(&app, list, view);
     let after = &app.world().resource::<Seen>().0;

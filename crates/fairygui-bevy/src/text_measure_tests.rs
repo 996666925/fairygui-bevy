@@ -169,15 +169,13 @@ fn pending_font_retries_and_ecs_text_edits_do_not_use_stale_physical_node_sizes(
         .unwrap()
         .child_by_name(standalone, "msg")
         .unwrap();
-    app.world_mut().write_message(GuiObjectCommand::new(
-        msg,
-        GuiObjectAction::SetText("Hello".into()),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(msg) {
+        object.set_text("Hello")
+    }
     app.update();
-    app.world_mut().write_message(GuiObjectCommand::new(
-        msg,
-        GuiObjectAction::SetText("A much longer replacement".into()),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(msg) {
+        object.set_text("A much longer replacement")
+    }
     // A stale/HiDPI node must never overwrite the synchronous logical size.
     app.world_mut().entity_mut(msg).insert(ComputedNode {
         size: Vec2::splat(4000.),
@@ -194,10 +192,9 @@ fn pending_font_retries_and_ecs_text_edits_do_not_use_stale_physical_node_sizes(
         .size();
     assert!(after.x > before.x && after.x < 663.);
     assert_eq!(after.y, before.y);
-    app.world_mut().write_message(GuiObjectCommand::new(
-        msg,
-        GuiObjectAction::SetText(String::new()),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(msg) {
+        object.set_text(String::new())
+    }
     app.update();
     let mut state = SystemState::<GuiQuery>::new(app.world_mut());
     assert_eq!(
@@ -255,27 +252,31 @@ fn initialize_and_post_layout_text_edits_measure_in_the_same_frame_without_an_en
     struct Target(Entity);
     #[derive(Resource, Default)]
     struct Observed(bool);
-    fn initialize(target: Res<Target>, gui: GuiQuery, mut commands: Commands) {
+    fn initialize(
+        target: Res<Target>,
+        gui: GuiQuery,
+        _commands: Commands,
+        mut gui_edit: crate::GuiMut,
+    ) {
         if let Some(text) = gui.child_by_name(target.0, "msg") {
-            commands.write_message(GuiObjectCommand::new(
-                text,
-                GuiObjectAction::SetText("Long message 中文 ".repeat(40)),
-            ));
+            gui_edit.edit(text, |object: &mut crate::GuiObjectMut| {
+                object.set_text("Long message 中文 ".repeat(40))
+            });
         }
     }
     fn post_layout(
         target: Res<Target>,
         gui: GuiQuery,
         mut observed: ResMut<Observed>,
-        mut commands: Commands,
+        _commands: Commands,
+        mut gui_edit: crate::GuiMut,
     ) {
         if let Some(text) = gui.child_by_name(target.0, "msg") {
             assert!(gui.transform(text).unwrap().size().y > 100.);
             observed.0 = true;
-            commands.write_message(GuiObjectCommand::new(
-                text,
-                GuiObjectAction::SetText("Short".into()),
-            ));
+            gui_edit.edit(text, |object: &mut crate::GuiObjectMut| {
+                object.set_text("Short")
+            });
         }
     }
     let (mut app, owner, _, font) = fixture();
@@ -341,14 +342,12 @@ fn automatic_height_keeps_width_and_fixed_text_keeps_exported_bounds() {
         (height, gui.child_by_name(owner, "n2").unwrap())
     };
     for text in ["Repeated text 中文 ".repeat(30), String::new()] {
-        app.world_mut().write_message(GuiObjectCommand::new(
-            height,
-            GuiObjectAction::SetText(text.clone()),
-        ));
-        app.world_mut().write_message(GuiObjectCommand::new(
-            fixed,
-            GuiObjectAction::SetText(text.clone()),
-        ));
+        if let Some(mut object) = app.world_mut().gui_mut(height) {
+            object.set_text(text.clone())
+        }
+        if let Some(mut object) = app.world_mut().gui_mut(fixed) {
+            object.set_text(text.clone())
+        }
         app.update();
         let size = app.world().get::<GuiTransform>(height).unwrap().size();
         assert_eq!(size.x, 299.);

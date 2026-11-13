@@ -1,9 +1,23 @@
 # Runtime architecture
 
 Applications own interfaces through `FairyGuiRoot` components, find controls with
-`GuiQuery`, attach entity observers and send `GuiObjectCommand` messages from
-ordinary Bevy systems. The core object tree executes FairyGUI package semantics
-internally; the plugin projects its state into Bevy UI and read-only ECS components.
+`GuiQuery`, attach entity observers and edit mutable ECS properties from ordinary
+Bevy systems. `GuiText`, `GuiIcon`, `GuiTransform`, `GuiDisplay` and control values
+are writable; computed metadata remains read-only. Playback, scrolling and tree
+operations use `GuiMut::get_mut` / `GuiObjectMut` directly, with no object action
+messages, pending object queue or replay. Missing or not-yet-loaded objects return
+`None`. Initial properties can live on an owner while its asset loads, and initial
+imperative behavior runs after materialization in `GuiSystems::Initialize`.
+The core object tree executes FairyGUI package semantics internally; the plugin
+synchronizes edits and native input/animation results with ECS and Bevy UI.
+
+Each writable component has a per-object baseline of the last native value.
+Synchronization writes only fields changed relative to that baseline, then reads
+back normalized native state. Unedited fields never overwrite native input,
+controller, relation or animation changes. Scalar and full control state follow
+the same rule. Equal values preserve component change ticks. Owner components
+retain their declarative values while waiting for an asset; view components share
+native updates after materialization.
 
 GuiVirtualList owns an optional Send + Sync item provider alongside its renderer.
 The provider receives a logical index (also for loop records) and selects a local
@@ -18,8 +32,8 @@ errors when a late package becomes available while keeping rejected configuratio
 errors (such as LoopModeMismatch) until the configuration is corrected.
 
 Demo root positioning and dynamic-page initialization run in GuiSystems::Initialize
-on the same frame that Materialize creates their views. Prepare consumes these
-commands before Bevy UI layout, avoiding an origin-position flash. New Guide and
+on the same frame that Materialize creates their views. Prepare synchronizes these
+properties before Bevy UI layout, avoiding an origin-position flash. New Guide and
 Joystick pages override generic centering with viewport-sized initial geometry.
 Raster text alignment also runs after Bevy's current-frame text/editor measurement:
 it updates Node padding and ComputedNode's physical inset together, before inline
@@ -29,10 +43,10 @@ layout pass to apply measured text alignment while preserving the hit rectangle.
 Sync orders Materialize -> Initialize -> Prepare -> PostLayout -> Project.
 Materialize creates root views and publishes logical hierarchy/geometry/text
 snapshots. Initialize application systems attach observers and list/tree data
-components, and may issue initial geometry commands. Prepare applies those
-commands before reconciling content/virtual lists/trees, spawns their generated
+components, and may edit initial geometry components. Prepare applies those
+properties before reconciling content/virtual lists/trees, spawns their generated
 row views and refreshes snapshots. PostLayout then sees the configured rows on
-their first ready frame; Project consumes final row commands before Bevy layout.
+their first ready frame; Project synchronizes final row edits before Bevy layout.
 This also handles delayed assets and replacement on an existing owner without
 requiring a second frame or hiding the page while it initializes.
 
@@ -44,18 +58,18 @@ Rectangle conversion uses two corners, retaining signed dimensions. Inverse or
 nonfinite point failures return None. Geometry synchronization updates descendant
 spaces after ancestor edits while preserving equal snapshots' change ticks.
 
-GuiObjectAction::Tween resolves typed GuiTweenTarget endpoints against current
-model values when its command executes. Native Tween handles easing and frame
+GuiObjectMut::tween() resolves typed GuiTweenTarget endpoints against current
+model values at the point of the call. Native Tween handles easing and frame
 advance; replacing/cancelling affects only the chosen property. Duration zero
 applies immediately, invalid requests leave existing tweens untouched, and removed
 targets are reclaimed by the next tween advance. Different properties coexist.
-Ordinary setters retain their normal native semantics; StopTween is explicit.
+Ordinary setters retain their normal native semantics; stop_tween is explicit.
 The native manager queues natural property completions. Stop, replacement and
 disposal discard unconsumed notifications for the affected property/target.
 Zero-duration tweens apply immediately and enter the same completion queue.
 After Sync refreshes geometry, GuiTweenComplete targets the materialized view
-entity, even when its command addressed a root owner. Observer commands follow
-normal deferred command processing; completion observers read final snapshots.
+entity, including calls addressed to a root owner. Completion observers read
+final snapshots and can edit components or invoke direct methods.
 
 Joystick stores pointer ownership and incremental movement on its page component.
 Its touch area receives captured pointer events outside the original hit region;
@@ -63,7 +77,7 @@ unrelated fingers cannot move or release the active gesture. Page observers
 consume typed Moving/Released events, while the button's GuiTweenComplete observer
 restores selection/rotation/center after CircOut return. A new press stops the old
 return before positioning the new center. Viewport changes cancel interaction and
-restore the bottom-relative home. All application mutations use entity commands.
+restore the bottom-relative home. Application properties and behavior use ECS components and direct methods.
 
 Guide owns a retained, initially inactive GuideLayer root as ChildOf its page.
 The example normalizes both roots to the viewport, converts bag bounds through
@@ -146,7 +160,7 @@ cancels drag state and pending pull notifications without release inertia/snap;
 programmatic scroll animations remain active. GuiScrollState projects is_dragging.
 Cancelling nested panes and their outer list prevents a closing-row press from
 starting a new scroll during the same held pointer.
-Cancellation runs after Respond before Advance, and before both object-command
+Cancellation runs after Respond before Advance, and before both property synchronization
 passes (including PostLayout responses). A shared message cursor prevents replay,
 so active-drag cancellation precedes animation setup and release advancement.
 
@@ -238,7 +252,7 @@ GuiDragSource takes precedence on the same control. Unlike the native singleton,
 different retained controls support concurrent independent touch movement.
 
 `GuiPopupCommand` accepts root owners or view entities for existing popups and
-menu template sources. Commands run after root reconciliation and object commands
+menu template sources. Commands run after root reconciliation and object property synchronization
 in Sync. Requests for roots awaiting assets retain the source component identity;
 replacement, removal and disposal cancel them. Hide cancels that target's pending
 shows, HideAll clears all pending shows, and DisposeMenu clears pending menu shows.
@@ -300,7 +314,7 @@ collapse lose selection, matching native visible membership and reinsert reset.
 visible nodes, selection, indent and click policy; `GuiTreeNode` identifies a
 row's tree and logical index even while collapsed. Snapshots refresh before
 Publish, before PostLayout and at Sync end without changing unchanged ticks.
-Entity-addressed object commands set/toggle one folder, expand/collapse all, or
+Direct methods set/toggle one folder, expand/collapse all, or
 select a logical node by first expanding its ancestors and optionally scrolling.
 Invalid nodes and leaf expansion are no-ops. Normal root-owner pending-command
 rules apply, and non-tree controls ignore tree-specific actions.
@@ -342,7 +356,7 @@ may have a different virtual binding in later frames. Notifications without view
 identities are resolved from GObjectRef views before publication or discarded.
 Each path publishes once after native selection, including selection-disabled
 and deselection clicks. Observers can query the actual clicked item without
-deriving it from selection and send object commands for the same Sync phase.
+deriving it from selection and edit properties for the same Sync phase.
 Observers read freshly synchronized selection/hierarchy.
 The TreeView demo builds the second tree from ECS data with nested folders, file
 icons and the native movie icon, and observes each tree entity for item clicks.
@@ -367,7 +381,7 @@ Ready through this ECS snapshot before taking its screenshot.
 spawning and final property projection. Fresh hierarchy, geometry, text, display,
 scroll and list snapshots are available there. Application decorators can query
 the actual retained rows and send scale/text commands for the current frame; the
-carousel demo uses this path without borrowing the runtime. Both object-command
+carousel demo uses this path without borrowing the runtime. Both property synchronization
 passes share one cursor and pending-root queue, so early commands are not replayed
 and playback generations/one-shot effects remain unique. Changes that influence
 the virtual range or row creation belong in Respond, before native layout.
@@ -409,7 +423,7 @@ at view creation so application initialization can replace authored list content
 Pending asset requests retain template identity, and replacement, component removal
 or despawn cancels them. Object commands also resolve window owners and preserve
 pending requests. Window reconciliation runs after root reconciliation; its command
-stream follows object commands and precedes popup commands. Center refreshes the
+stream follows object property synchronization and precedes popup commands. Center refreshes the
 viewport from GuiInputSettings. There is no business-visible window slot index.
 
 `GuiWindowState` is projected on owner and view before Publish and at Sync end,
@@ -482,10 +496,10 @@ Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these
 
 1. `GuiSystems::Input`: choose a target, update capture, apply built-in behavior.
 2. `GuiSystems::Publish`: refresh text/display/scroll snapshots, trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
-3. `GuiSystems::Respond`: application systems consume messages and send UI commands.
+3. `GuiSystems::Respond`: application systems consume events and edit UI properties or call direct methods.
    Pull lock commands are applied immediately after this set, before Advance.
 4. `GuiSystems::Advance`: advance builds, scrolling, transitions and animations.
-5. `GuiSystems::Sync`: reconcile ECS root ownership, apply commands, spawn pending views, refresh logical snapshots, run the nested `PostLayout` application set, apply its object commands, synchronize final state components and play sounds.
+5. `GuiSystems::Sync`: reconcile ECS root ownership, synchronize properties, spawn pending views, refresh logical snapshots, run the nested `PostLayout` application set, synchronize its property changes, update final state components and play sounds.
 
 Application changes in `Respond` reach view synchronization in the same frame.
 Bevy layout still runs later; hit geometry and text measurements reflect the last
@@ -503,7 +517,7 @@ degrees. It excludes scroll offsets, pivot compensation and ancestor transforms;
 use Bevy layout components when actual rendered geometry is needed. Snapshots
 include indirect updates from relations, groups, controllers and animation.
 `GuiQuery::transform` resolves either a root owner or a control view, so layout
-systems can read geometry and send commands without borrowing `GuiRuntime`.
+systems can read geometry and edit `GuiTransform` through mutable ECS queries.
 `GuiFont` is captured before ECS root construction and view spawning, including
 the first update and resource changes before later roots are created.
 
@@ -517,7 +531,7 @@ visibility excludes ancestor visibility, clipping and occlusion.
 
 Text and display refresh before input events are published as well as at the
 end of Sync. Observers can therefore copy the text committed by this frame's
-Input into another entity using `GuiObjectCommand`, without runtime borrowing
+Input into another entity using mutable `GuiText` components
 or an extra frame of delay. Unchanged snapshots preserve change ticks.
 `GuiLink.entity` identifies the original control entity; its core payload is
 retained alongside the entity reference.
@@ -528,19 +542,16 @@ percentages, current pages and animation activity. It refreshes before Publish
 events and after Sync, and is absent on controls without a scroll pane.
 `ScrollTo`, `SetScrollPercentage` and `ScrollToView` invoke the native model's
 programmatic scroll policies. Percentages clamp to 0..=1 and resolve against the
-current range when commands execute; callers do not need a potentially stale
+current range when methods execute; callers do not need a potentially stale
 maximum from the preceding snapshot. All coordinates are logical pixels.
 
 ```rust
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 
-fn react(event: On<GuiEvent>, mut commands: Commands) {
+fn react(event: On<GuiEvent>, mut texts: Query<&mut GuiText>) {
     if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
-        commands.write_message(GuiObjectCommand::new(
-            event.entity,
-            GuiObjectAction::SetText("Clicked".into()),
-        ));
+        if let Ok(mut text) = texts.get_mut(event.entity) { text.set("Clicked"); }
     }
 }
 
@@ -672,7 +683,7 @@ most one step and cap retained elapsed time to the base interval. They honor the
 reference's active/next-loop/ending/ended state machine; a loop restart clears
 elapsed time and overrides the underlying swing step. DeltaTime bypasses these
 range states, matching the reference's separate advance method.
-`AnimationPlaySettings` reaches the player through ordered commands. Finite ranges
+`GuiObjectMut::set_animation_play_settings` immediately updates the native playback settings. Finite ranges
 hold their end until the next frame-timing threshold, then position at end_at and publish one
 `GuiAnimationComplete { entity }` after Sync. Completion leaves Playing unchanged; frame,
 Playing and rewind do not rearm an ended range. New settings rearm it without
@@ -680,10 +691,10 @@ changing speed/direction/repetition history. Endpoints are clamped to valid clip
 indices. `rewind_animation` resets frame/timing/direction/repetition, while the
 adapter's `sync_status` copies only timing state from another player.
 
-Applications control movies through entity-addressed GuiObjectAction animation
-variants. Source reconciliation and control consumption run at both Sync command
+Applications control movies through direct GuiObjectMut animation
+methods. Source reconciliation and native player controls run at both Sync
 boundaries, after view spawning and before content projection, without advancing
-elapsed time. This preserves pending root commands and applies PostLayout edits
+elapsed time. This supports Initialize and PostLayout edits
 to native state, the player and the rendered sprite in the same frame. Advance
 remains the only phase that advances ordinary playback time.
 GuiAnimationState snapshots native Playing/Frame/timeScale plus resolved frame

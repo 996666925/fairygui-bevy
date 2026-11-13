@@ -88,7 +88,7 @@ pub fn update(
     mut roots: Query<&mut FairyGuiRoot>,
     windows: Query<&Window, With<PrimaryWindow>>,
     gui: GuiQuery,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut objects: GuiMut,
 ) {
     let Ok(window) = windows.single() else { return };
     let size = Vec2::new(window.width(), window.height());
@@ -100,17 +100,13 @@ pub fn update(
                 continue;
             };
             if transform.size() != size {
-                commands.write(GuiObjectCommand::new(
-                    target,
-                    GuiObjectAction::SetSize(size),
-                ));
+                objects.edit(target, |object: &mut GuiObjectMut| object.set_size(size));
                 resizing = true;
             }
             if transform.position() != Vec2::ZERO {
-                commands.write(GuiObjectCommand::new(
-                    target,
-                    GuiObjectAction::SetPosition(Vec2::ZERO),
-                ));
+                objects.edit(target, |object: &mut GuiObjectMut| {
+                    object.set_position(Vec2::ZERO)
+                });
                 resizing = true;
             }
         }
@@ -135,18 +131,12 @@ pub fn update(
         if let Ok(mut layer) = roots.get_mut(guide.layer) {
             layer.active = true;
         }
-        commands.write(GuiObjectCommand::new(
-            hole,
-            GuiObjectAction::SetSize(Vec2::new(rect.width, rect.height)),
-        ));
-        commands.write(GuiObjectCommand::new(
-            hole,
-            GuiObjectAction::Tween {
-                target: GuiTweenTarget::Position(Vec2::new(rect.x, rect.y)),
-                duration: 0.5,
-                ease: 5,
-            },
-        ));
+        objects.edit(hole, |object: &mut GuiObjectMut| {
+            object.set_size(Vec2::new(rect.width, rect.height))
+        });
+        objects.edit(hole, |object: &mut GuiObjectMut| {
+            object.tween(GuiTweenTarget::Position(Vec2::new(rect.x, rect.y)), 0.5, 5)
+        });
         guide.pending = false;
     }
 }

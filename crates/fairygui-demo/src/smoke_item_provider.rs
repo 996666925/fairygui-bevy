@@ -161,6 +161,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -179,10 +180,7 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            commands.write_message(GuiObjectCommand::new(
-                menu,
-                GuiObjectAction::SetVisible(false),
-            ));
+            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             state.owner = Some(
                 commands
                     .spawn((
@@ -262,13 +260,9 @@ fn drive(
             state
                 .rows
                 .extend_from_slice(gui.list(list).unwrap().items());
-            commands.write_message(GuiObjectCommand::new(
-                state.list.unwrap(),
-                GuiObjectAction::ScrollTo {
-                    position: Vec2::new(0., 6000.),
-                    animated: false,
-                },
-            ));
+            gui_edit.edit(state.list.unwrap(), |object: &mut GuiObjectMut| {
+                object.scroll_to(Vec2::new(0., 6000.), false)
+            });
             next = true;
         }
         9 if elapsed >= 8 => {
@@ -282,13 +276,9 @@ fn drive(
             );
             assert!(current.iter().any(|row| state.rows.contains(row)));
             state.rows.extend_from_slice(current);
-            commands.write_message(GuiObjectCommand::new(
-                list,
-                GuiObjectAction::ScrollTo {
-                    position: Vec2::ZERO,
-                    animated: false,
-                },
-            ));
+            gui_edit.edit(list, |object: &mut GuiObjectMut| {
+                object.scroll_to(Vec2::ZERO, false)
+            });
             next = true;
         }
         10 if elapsed >= 8 => {

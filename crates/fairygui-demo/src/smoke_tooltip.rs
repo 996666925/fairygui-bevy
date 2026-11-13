@@ -44,6 +44,7 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
+    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -66,10 +67,9 @@ fn drive(
                 && nodes.get(button).is_ok_and(|(node, _)| node.size().x > 0.)
             {
                 state.button = Some(button);
-                commands.write_message(GuiObjectCommand::new(
-                    button,
-                    GuiObjectAction::SetTooltips(Some("Hover for details".into())),
-                ));
+                gui_edit.edit(button, |object: &mut GuiObjectMut| {
+                    object.set_tooltips(Some("Hover for details".into()))
+                });
                 state.cursor = Some(center(button));
                 next = true;
             }

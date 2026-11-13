@@ -9,6 +9,7 @@ pub fn bind(
     mut commands: Commands,
     pages: Query<(Entity, &FairyGuiRoot), Without<Bound>>,
     gui: GuiQuery,
+    mut gui_edit: GuiMut,
 ) {
     for (page, root) in &pages {
         if root.item_name != "Demo_Drag&Drop" {
@@ -44,19 +45,17 @@ pub fn bind(
             .entity(receiver)
             .insert(GuiDropTarget)
             .observe(receive);
-        commands.write_message(GuiObjectCommand::new(
-            receiver,
-            GuiObjectAction::SetIcon(String::new()),
-        ));
+        gui_edit.edit(receiver, |object: &mut GuiObjectMut| {
+            object.set_icon(String::new())
+        });
         commands.entity(page).insert(Bound);
     }
 }
 
-fn receive(event: On<GuiDrop>, mut commands: Commands) {
-    if let Some(icon) = &event.data {
-        commands.write_message(GuiObjectCommand::new(
-            event.entity,
-            GuiObjectAction::SetIcon(icon.clone()),
-        ));
+fn receive(event: On<GuiDrop>, mut icons: Query<&mut GuiIcon>) {
+    if let Some(icon) = &event.data
+        && let Ok(mut target) = icons.get_mut(event.entity)
+    {
+        target.set(icon.clone());
     }
 }

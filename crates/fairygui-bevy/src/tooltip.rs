@@ -95,7 +95,7 @@ enum Request {
     View {
         entity: Entity,
         position: Option<Vec2>,
-        source: Option<ObjectCommandSource>,
+        source: Option<GuiOwnerTemplate>,
     },
 }
 struct Hover {
@@ -295,13 +295,13 @@ pub(crate) fn sync_tooltips(
             .get(entity)
             .ok()
             .cloned()
-            .map(ObjectCommandSource::Root)
+            .map(GuiOwnerTemplate::Root)
             .or_else(|| {
                 window_sources
                     .get(entity)
                     .ok()
                     .cloned()
-                    .map(ObjectCommandSource::Window)
+                    .map(GuiOwnerTemplate::Window)
             })
     };
     let incoming: Vec<_> = runtime.tooltip.cursor.read(&messages).cloned().collect();

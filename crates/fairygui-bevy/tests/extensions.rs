@@ -13,15 +13,12 @@ struct Mail {
     clicks: usize,
 }
 fn attach(entity: &mut EntityCommands) {
-    let id = entity.id();
     entity.observe(|event: On<GuiEvent>, mut items: Query<&mut Mail>| {
         if event.event.kind == fairygui_bevy::core::object::EventKind::Click {
             items.get_mut(event.entity).unwrap().clicks += 1;
         }
     });
-    entity
-        .commands()
-        .write_message(GuiObjectCommand::new(id, GuiObjectAction::SetAlpha(0.75)));
+    entity.insert(GuiDisplay::default().with_alpha(0.75));
 }
 
 #[derive(Component, GuiExtension)]
@@ -149,13 +146,9 @@ fn extensions_are_ready_for_initialize_and_post_layout_keep_bound_children_on_po
             .last_changed(),
         tick
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        list,
-        GuiObjectAction::ScrollTo {
-            position: Vec2::new(0., 15000.),
-            animated: false,
-        },
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(list) {
+        object.scroll_to(Vec2::new(0., 15000.), false)
+    }
     app.update();
     assert!(rows(&app, list).iter().any(|row| first.contains(row)));
     for (row, time) in &bound {
@@ -371,10 +364,9 @@ fn extension_waits_for_pending_assets_and_binds_nested_cross_package_loader_cont
             .resource_url(),
         "ui://qkteqwfpc8s24"
     );
-    app.world_mut().write_message(GuiObjectCommand::new(
-        loader_view,
-        GuiObjectAction::SetIcon(String::new()),
-    ));
+    if let Some(mut object) = app.world_mut().gui_mut(loader_view) {
+        object.set_icon(String::new())
+    }
     app.update();
     assert!(app.world().get_entity(child).is_err());
     assert!(app.world().get_entity(time).is_err());

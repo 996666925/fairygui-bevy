@@ -24,6 +24,7 @@ fn initialize(
     roots: Query<(Entity, &GuiRootView, &Fixture), Changed<GuiRootView>>,
     gui: GuiQuery,
     mut visits: ResMut<Visits>,
+    mut gui_edit: crate::GuiMut,
 ) {
     for (owner, view, fixture) in &roots {
         // Fresh native hierarchy/geometry/text are available before content
@@ -66,10 +67,9 @@ fn initialize(
         commands
             .entity(owner)
             .insert(Configured { view: view.0, list });
-        commands.write_message(GuiObjectCommand::new(
-            owner,
-            GuiObjectAction::SetPosition(Vec2::new(33., 47.)),
-        ));
+        gui_edit.edit(owner, |object: &mut crate::GuiObjectMut| {
+            object.set_position(Vec2::new(33., 47.))
+        });
         visits.initialize += 1;
     }
 }
@@ -78,7 +78,7 @@ fn post_layout(
     roots: Query<(&Configured, &Fixture), Changed<Configured>>,
     gui: GuiQuery,
     mut visits: ResMut<Visits>,
-    mut commands: MessageWriter<GuiObjectCommand>,
+    mut commands: crate::GuiMut,
 ) {
     for (configured, fixture) in &roots {
         let list = gui.list(configured.list).unwrap();
@@ -95,7 +95,9 @@ fn post_layout(
         for &row in list.items() {
             assert!(gui.transform(row).is_some());
             assert!(!gui.text(row).unwrap().is_empty());
-            commands.write(GuiObjectCommand::new(row, GuiObjectAction::SetAlpha(0.5)));
+            commands.edit(row, |object: &mut crate::GuiObjectMut| {
+                object.set_alpha(0.5)
+            });
         }
         assert_eq!(
             gui.transform(configured.view).unwrap().position(),
