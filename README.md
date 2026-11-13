@@ -338,6 +338,25 @@ if let Some(list) = gui.child_by_name(root_entity, "mailList") {
 记录索引。滚动条、刷新头尾和池中行不属于当前实体行；同一行实体复用时索引自动
 更新，归池时移除 `GuiListRow`。也可通过 `gui.list(root_or_view)` 查询列表状态。
 
+导出的树节点会自动创建行视图，并应用标题、图标、名称、选中标题/图标和控制器
+页面。`GuiTreeState`（或 `gui.tree(entity)`）提供逻辑节点、父索引、层级、文件夹
+状态、展开状态、可见节点和选中节点；行上的 `GuiTreeNode` 提供所属树与逻辑索引。
+索引在展开/收起间保持稳定，收起的行保留实体但隐藏并从布局中折叠。
+
+```rust,ignore
+commands.write_message(GuiObjectCommand::new(tree, GuiObjectAction::CollapseTree));
+commands.write_message(GuiObjectCommand::new(tree, GuiObjectAction::SelectTreeNode {
+    index: 3,
+    scroll_to_view: true,
+}));
+```
+
+`SelectTreeNode` 会展开祖先再加入选择；`SetTreeExpanded`、`ToggleTreeNode`、
+`ExpandTree` 和 `CollapseTree` 控制展开。全部收起包含顶层文件夹，顶层行仍显示。
+箭头的 `expanded` 控制器与节点状态双向同步；行点击遵循包的 `clickToExpand`
+配置。状态在 Publish 前、PostLayout 前和 Sync 末尾刷新，未变化时保留变更标记。
+`--smoke-tree` 验证导出树的真实点击、缩进、布局折叠、隐藏节点选择和回收。
+
 依赖本帧列表布局的装饰系统可放入 `GuiSystems::PostLayout`。这是 Sync 内部的
 阶段：原生列表刷新、行视图创建后，插件先更新逻辑层级、几何、文本、滚动及列表
 快照，再运行业务系统，最后应用其 `GuiObjectCommand` 并投影视图。循环列表示例

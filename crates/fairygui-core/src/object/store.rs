@@ -41,6 +41,8 @@ mod buttons;
 mod list_items;
 #[path = "list_selection.rs"]
 mod list_selection;
+#[path = "tree_items.rs"]
+mod tree_items;
 #[path = "virtual_list.rs"]
 mod virtual_list;
 pub use virtual_list::{
@@ -1551,6 +1553,38 @@ impl ObjectStore {
             return 0;
         };
 
+        // Native GTree inherits GList's auto-sized single-column cells. Resize
+        // the cell itself so its authored width relations stretch selection and
+        // text, while the indent part continues to offset only the content.
+        let tree_width = match self.objects.get(list).map(|object| object.control()) {
+            Some(crate::widget::ControlData::Tree(data))
+                if data.list.auto_resize_item
+                    && data.list.layout == crate::widget::ListLayoutType::SingleColumn =>
+            {
+                Some(
+                    data.list
+                        .component
+                        .scroll_pane
+                        .as_ref()
+                        .filter(|pane| pane.view_size().width > 0.)
+                        .map_or(
+                            view_size.width - data.list.item_margin.horizontal(),
+                            |pane| pane.view_size().width,
+                        )
+                        .max(0.),
+                )
+            }
+            _ => None,
+        };
+        if let Some(width) = tree_width {
+            for &child in &children {
+                let height = self.objects[child].height();
+                if self.objects[child].width() != width {
+                    self.set_size(child, width, height);
+                }
+            }
+        }
+
         // 各项尺寸可能不同（例如条目自带的宽高），逐项取用。
         let item_sizes: Vec<crate::geom::Size> = children
             .iter()
@@ -1622,7 +1656,15 @@ impl ObjectStore {
                 resized = self.objects[*child].size() != size;
                 self.set_size(*child, size.width, size.height);
             }
-            let target_x = position.x + indents.get(index).copied().unwrap_or(0.0);
+            let indent = indents.get(index).copied().unwrap_or(0.0);
+            let indent_part = (!indents.is_empty())
+                .then(|| self.child_by_name(*child, "indent"))
+                .flatten();
+            if let Some(part) = indent_part {
+                let height = self.objects[part].height();
+                self.set_size(part, indent, height);
+            }
+            let target_x = position.x + if indent_part.is_some() { 0. } else { indent };
             let moved = self
                 .objects
                 .get(*child)
@@ -2001,6 +2043,10 @@ impl ObjectStore {
 
             self.set_visible(*child, should_show);
             if !should_show {
+                // Native removes collapsed cells from list membership and
+                // resets button selection when readding them. Retained hidden
+                // cells must not remain selected through a collapsed branch.
+                self.set_button_selected(*child, false);
                 hidden += 1;
             }
         }
@@ -2010,20 +2056,11 @@ impl ObjectStore {
 
     /// 切换树节点的展开状态，并同步各项可见性。返回状态是否变化。
     pub fn toggle_tree_node(&mut self, tree: GObjectId, index: usize) -> bool {
-        let changed = match self.objects.get_mut(tree).map(|object| &mut object.control) {
-            Some(crate::widget::ControlData::Tree(data)) => data.toggle_expanded(index),
+        let expanded = match self.object(tree).map(|object| object.control()) {
+            Some(crate::widget::ControlData::Tree(data)) => data.is_expanded(index),
             _ => return false,
         };
-
-        if changed {
-            let visible = match self.objects.get(tree).map(|object| &object.control) {
-                Some(crate::widget::ControlData::Tree(data)) => data.visible_nodes(),
-                _ => return changed,
-            };
-            self.apply_tree_visibility(tree, &visible);
-        }
-
-        changed
+        self.set_tree_node_expanded(tree, index, !expanded)
     }
 
     /// 展开到指定节点，使它变为可见。
@@ -2051,7 +2088,7 @@ impl ObjectStore {
         self.refresh_tree_visibility(tree);
     }
 
-    /// 收起树里的全部文件夹（根节点保持展开，否则整棵树会空掉）。
+    /// 收起树里的全部导出文件夹，保留顶层项。
     pub fn collapse_tree(&mut self, tree: GObjectId) {
         if let Some(crate::widget::ControlData::Tree(data)) =
             self.objects.get_mut(tree).map(|object| &mut object.control)
@@ -2067,6 +2104,8 @@ impl ObjectStore {
             _ => return,
         };
         self.apply_tree_visibility(tree, &visible);
+        self.sync_tree_cells(tree);
+        self.layout_list(tree);
     }
 
     /// 把一个对象的整棵子树归还到对象池，返回归还的数量。
@@ -3227,6 +3266,7 @@ impl ObjectStore {
             self.sync_related_buttons(component, controller_name);
             self.sync_related_lists(component, controller_name);
             self.sync_related_scroll_panes(component, controller_name);
+            self.sync_tree_controller(component, controller_name);
             self.run_controller_actions(component, controller_name);
             self.changing_controllers.remove(&key);
         }
@@ -3260,6 +3300,7 @@ impl ObjectStore {
             self.sync_related_buttons(component, controller_name);
             self.sync_related_lists(component, controller_name);
             self.sync_related_scroll_panes(component, controller_name);
+            self.sync_tree_controller(component, controller_name);
             self.run_controller_actions(component, controller_name);
             self.changing_controllers.remove(&key);
         }

@@ -14,6 +14,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `ecs` | Root-to-view references and read-only identity, hierarchy, geometry, text, display and scroll queries |
 | `popup` | Entity-addressed popup/menu commands, pending asset requests and popup stack snapshots |
 | `list` | ECS virtual-list configuration, restricted synchronous row renderers and layout diagnostics |
+| `tree` | Exported tree hierarchy, logical node membership, visibility/selection snapshots and entity queries |
 | `pull` | Entity-addressed refresh locks applied between Respond and Advance |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `runtime::windows` | Asset-backed ECS window ownership, entity commands and native window snapshots |
@@ -150,6 +151,36 @@ first item in view. Pane overlays and pooled rows are excluded. `GuiListRow` giv
 each active row its list entity, logical index and optional virtual record index.
 Recycling changes the binding on the same entity; pooling removes membership.
 Unchanged list and row snapshots preserve their change ticks.
+
+Tree block 8 adds folder/level fields before the regular List setupItem payload.
+The parser retains those item overrides instead of skipping to the next record;
+view preparation materializes Tree rows as well as List rows. Per-node resource
+URLs follow normal source-package and registered cross-package resolution.
+Native title/icon/name, selected title/icon and controller-page overrides apply
+to compound cells and their visible parts. Both metadata vectors keep matching
+logical indices; exported nodes initialize expanded as in native readItems.
+
+Tree cells synchronize `leaf` and `expanded` controllers with native node state.
+Controller changes (including the checkbox expander) update the corresponding
+folder and descendants. Standard rows use the `indent` part's width to drive
+authored relations, avoiding a second indentation on the whole cell. Skins with
+no indent part retain whole-cell indentation. Collapsed descendants retain their
+model and entity for reuse and are hidden/folded during list layout; this differs
+from the native detached-cell representation while preserving expanded layout.
+CollapseAll includes exported level-zero folders; the native implicit root is
+not part of the serialized node vector. Root rows remain visible when collapsed.
+Single-column tree cells honor autoResizeItem by stretching to the pane width,
+so authored selection/text width relations cover the row. Descendants hidden by
+collapse lose selection, matching native visible membership and reinsert reset.
+
+`GuiTreeState` exposes logical nodes, parent indices, row entities, expansion,
+visible nodes, selection, indent and click policy; `GuiTreeNode` identifies a
+row's tree and logical index even while collapsed. Snapshots refresh before
+Publish, before PostLayout and at Sync end without changing unchanged ticks.
+Entity-addressed object commands set/toggle one folder, expand/collapse all, or
+select a logical node by first expanding its ancestors and optionally scrolling.
+Invalid nodes and leaf expansion are no-ops. Normal root-owner pending-command
+rules apply, and non-tree controls ignore tree-specific actions.
 
 `GuiSystems::PostLayout` is nested inside Sync, between native list refresh/view
 spawning and final property projection. Fresh hierarchy, geometry, text, display,

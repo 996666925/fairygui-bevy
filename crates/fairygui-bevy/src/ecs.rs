@@ -418,6 +418,7 @@ pub struct GuiQuery<'w, 's> {
     lists: Query<'w, 's, &'static GuiListState>,
     controllers: Query<'w, 's, &'static GuiControllers>,
     windows: Query<'w, 's, &'static GuiWindowState>,
+    trees: Query<'w, 's, &'static crate::GuiTreeState>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -464,6 +465,9 @@ impl GuiQuery<'_, '_> {
 
     pub fn list(&self, entity: Entity) -> Option<&GuiListState> {
         self.lists.get(self.view(entity)?).ok()
+    }
+    pub fn tree(&self, entity: Entity) -> Option<&crate::GuiTreeState> {
+        self.trees.get(self.view(entity)?).ok()
     }
     pub fn controllers(&self, entity: Entity) -> Option<&GuiControllers> {
         self.controllers.get(self.view(entity)?).ok()

@@ -173,7 +173,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-drag-drop") {
+    if std::env::args().any(|arg| arg == "--smoke-tree") {
+        smoke::install_tree(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-drag-drop") {
         smoke::install_drag_drop(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-window-wait") {
         smoke::install_window_wait(&mut app);

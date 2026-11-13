@@ -450,7 +450,7 @@ fn read_items(data: &mut ListData, buffer: &mut ByteBuffer<'_>, table: &StringTa
 }
 
 /// 读取单个数据项的覆盖值。
-fn setup_item(
+pub(super) fn setup_item(
     item: &mut ListItemData,
     buffer: &mut ByteBuffer<'_>,
     table: &StringTable,

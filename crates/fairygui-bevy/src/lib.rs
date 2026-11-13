@@ -62,6 +62,7 @@ pub mod pull;
 pub mod runtime;
 pub mod text;
 mod text_stroke;
+pub mod tree;
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use ecs::{
@@ -90,6 +91,7 @@ pub use runtime::{
     GuiRootInstance, GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback,
     GuiTransitionComplete, GuiTransitionHook, PopupMenuTemplates,
 };
+pub use tree::{GuiTreeNode, GuiTreeNodeState, GuiTreeState};
 
 pub use fairygui_core as core;
 
@@ -131,8 +133,9 @@ pub mod prelude {
         GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
         GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput,
         GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState, GuiWindowAction,
-        GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
+        GuiTransitionState, GuiTransitions, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
+        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
+        PopupMenuTemplates,
     };
 }
 
@@ -238,6 +241,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::global_wait::sync_global_wait_state,
                 runtime::ecs_drag_drop::sync_drag_state,
                 runtime::object_drag::sync_object_drag_state,
+                tree::sync_tree_state,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -270,7 +274,7 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_icons,
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
-                list::sync_list_state,
+                (tree::sync_tree_state, list::sync_list_state).chain(),
                 list::sync_virtual_list_state,
             )
                 .chain()
@@ -347,7 +351,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::ecs_drag_drop::sync_drag_state,
                 runtime::object_drag::prepare_object_drags,
                 runtime::object_drag::sync_object_drag_state,
-                list::sync_list_state,
+                (tree::sync_tree_state, list::sync_list_state).chain(),
                 list::sync_virtual_list_state,
             )
                 .chain()

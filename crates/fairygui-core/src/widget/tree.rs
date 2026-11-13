@@ -1,7 +1,6 @@
 //! 树。
 //!
-//! 树沿用列表的布局与滚动部分，但项表结构不同：每个节点额外记录
-//! 「是否为文件夹」与「层级」，没有列表那样的标题、图标覆盖值。
+//! 树沿用列表的布局与滚动部分；项覆盖值之前额外记录文件夹与层级信息。
 //! 另外缩进与点击展开策略位于块 9。
 
 use crate::binary::{ByteBuffer, StringTable};
@@ -37,8 +36,7 @@ pub struct TreeData {
     pub nodes: Vec<TreeNodeData>,
     /// 每个文件夹节点的展开状态，与 `nodes` 一一对应。
     ///
-    /// 默认全部展开——与官方的初始表现一致（编辑器里折叠的节点会被记录在
-    /// 展开状态里，这里简化为默认展开）。
+    /// 导出的节点初始全部展开，对应 GTree.readItems 的 node.expanded = true。
     ///
     /// 字段对 crate 内可见：结构体更新语法要求所有字段可访问。
     pub(crate) expanded: Vec<bool>,
@@ -140,13 +138,9 @@ impl TreeData {
 
     /// 全部收起。
     ///
-    /// 根节点（层级 0）的文件夹保持展开，否则整棵树会空掉。
+    /// 隐式根不在 nodes 中；所有导出的文件夹（含顶层）都会收起。
     pub fn collapse_all(&mut self) {
-        self.expanded = self
-            .nodes
-            .iter()
-            .map(|node| !node.is_folder || node.level == 0)
-            .collect();
+        self.expanded = self.nodes.iter().map(|node| !node.is_folder).collect();
     }
 
     /// 当前可见的节点序号。
@@ -220,18 +214,34 @@ pub(crate) fn read_tree(
             let is_folder = buffer.read_bool()?;
             let level = buffer.read_u8()?;
 
+            let url = url.or_else(|| data.list.default_item.clone());
+            if url.is_none() {
+                buffer.set_position(end);
+                continue;
+            }
             data.nodes.push(TreeNodeData {
-                url: url.or_else(|| data.list.default_item.clone()),
+                url: url.clone(),
                 is_folder,
                 level,
             });
+            let mut item = super::list::ListItemData {
+                url,
+                ..Default::default()
+            };
+            super::list::setup_item(&mut item, buffer, table)?;
+            if buffer.position() > end {
+                return Err(crate::error::Error::invalid_data(
+                    end,
+                    "tree item exceeds its record",
+                ));
+            }
+            data.list.items.push(item);
 
             buffer.set_position(end);
         }
     }
 
     // 列表侧的项数与树的节点数保持一致，便于复用列表的布局计算。
-    data.list.items = vec![Default::default(); data.nodes.len()];
     data.reset_expansion();
 
     Ok(())
@@ -316,15 +326,16 @@ mod tests {
 
     #[test]
     fn collapse_all_keeps_roots_visible() {
-        // 层级 0 的文件夹保持展开，否则整棵树会空掉。
+        // 顶层项不同于隐式根；收起后它本身保留，其全部后代隐藏。
         let mut tree = tree_with(&[(true, 0), (false, 1), (true, 2), (false, 3)]);
         tree.collapse_all();
 
-        assert!(tree.is_expanded(0), "根节点应当保持展开");
+        assert!(!tree.is_expanded(0), "顶层文件夹也要收起");
         assert!(!tree.is_expanded(2), "深层文件夹应当收起");
 
         let visible = tree.visible_nodes();
         assert!(visible.contains(&0));
+        assert_eq!(visible, vec![0]);
         assert!(!visible.contains(&3), "被收起节点的子节点应当隐藏");
     }
 

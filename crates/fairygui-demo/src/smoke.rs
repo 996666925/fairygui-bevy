@@ -60,6 +60,8 @@ mod text_fonts;
 mod text_image_colors;
 #[path = "smoke_text_stroke.rs"]
 mod text_stroke;
+#[path = "smoke_tree.rs"]
+mod tree;
 #[path = "smoke_virtual_list.rs"]
 mod virtual_list;
 #[path = "smoke_window_wait.rs"]
@@ -73,6 +75,9 @@ pub(super) fn install_window_wait(app: &mut App) {
 
 pub(super) fn install_drag_drop(app: &mut App) {
     drag_drop::install(app);
+}
+pub(super) fn install_tree(app: &mut App) {
+    tree::install(app);
 }
 
 pub(super) fn install_windows(app: &mut App) {

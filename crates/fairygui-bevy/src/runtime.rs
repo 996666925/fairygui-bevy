@@ -139,6 +139,18 @@ pub enum GuiObjectAction {
         index: usize,
         scroll_to_view: bool,
     },
+    SetTreeExpanded {
+        index: usize,
+        expanded: bool,
+    },
+    ToggleTreeNode(usize),
+    ExpandTree,
+    CollapseTree,
+    /// Expand ancestors and add this logical node to the native selection.
+    SelectTreeNode {
+        index: usize,
+        scroll_to_view: bool,
+    },
     PlayTransition {
         name: String,
         times: i32,
@@ -611,6 +623,7 @@ impl GuiRuntime {
                 };
                 let data = match object.control() {
                     ControlData::List(data) => data,
+                    ControlData::Tree(data) => &data.list,
                     _ => continue,
                 };
                 (
@@ -684,6 +697,15 @@ impl GuiRuntime {
             }
         }
         for id in objects {
+            if matches!(
+                self.store.object(id).map(|o| o.control()),
+                Some(ControlData::Tree(_))
+            ) {
+                for index in 0..self.store.list_item_count(id) {
+                    self.store.apply_tree_item(id, index);
+                }
+                self.store.initialize_tree_cells(id);
+            }
             self.store.layout_list(id);
         }
     }
@@ -877,7 +899,7 @@ impl GuiRuntime {
         self.store.recycle_items_outside(list, keep, pool, url)
     }
 
-    /// 收起树里的全部文件夹（根节点保持展开）。
+    /// 收起树里的全部导出文件夹，保留顶层项。
     pub fn collapse_tree(&mut self, tree: GObjectId) {
         self.store.collapse_tree(tree);
     }
@@ -2106,6 +2128,34 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetListSelection(index) => {
                 runtime.store_mut().set_list_selection(object, *index);
+            }
+            GuiObjectAction::SetTreeExpanded { index, expanded } => {
+                runtime
+                    .store_mut()
+                    .set_tree_node_expanded(object, *index, *expanded);
+            }
+            GuiObjectAction::ToggleTreeNode(index) => {
+                runtime.toggle_tree_node(object, *index);
+            }
+            GuiObjectAction::ExpandTree => {
+                runtime.expand_tree(object);
+            }
+            GuiObjectAction::CollapseTree => {
+                runtime.collapse_tree(object);
+            }
+            GuiObjectAction::SelectTreeNode {
+                index,
+                scroll_to_view,
+            } => {
+                let valid = matches!(runtime.store().object(object).map(|o|o.control()),Some(ControlData::Tree(data)) if *index<data.node_count());
+                if valid {
+                    runtime.expand_tree_to(object, *index);
+                    runtime.store_mut().add_list_selection_with_scroll(
+                        object,
+                        *index,
+                        *scroll_to_view,
+                    );
+                }
             }
             GuiObjectAction::SetScrollPosition {
                 position,
