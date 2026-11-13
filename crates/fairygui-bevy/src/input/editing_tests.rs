@@ -82,6 +82,9 @@ fn fixture() -> (App, GObjectId, Entity, Entity) {
                 runtime::sync_stage_hierarchy,
                 apply_input_commands,
                 reconcile_focus,
+                // This fixture installs the focus bridge without FairyGuiPlugin;
+                // mirror its end-of-Sync entity snapshot publication too.
+                crate::input::sync_input_state,
             )
                 .chain()
                 .in_set(crate::GuiSystems::Sync),
