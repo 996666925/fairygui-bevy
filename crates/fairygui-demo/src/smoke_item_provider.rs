@@ -53,7 +53,6 @@ fn content() -> GuiVirtualList {
     GuiVirtualList::new(80, |index, row| {
         if let Some(mut text) = row.child_by_path("msg") {
             text.set_text(&message(index));
-            text.ensure_size_correct();
         }
         if let Some(mut name) = row.child_by_path("name") {
             name.set_text("FairyGUI");

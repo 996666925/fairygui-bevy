@@ -805,9 +805,6 @@ impl GuiRuntime {
             self.store.apply_title_of(id);
         }
         for &id in &objects {
-            self.store.layout_group(id);
-        }
-        for &id in &objects {
             if self.store.is_virtual_list(id) {
                 continue;
             }
@@ -815,7 +812,7 @@ impl GuiRuntime {
                 self.store.apply_list_item(id, index);
             }
         }
-        for id in objects {
+        for &id in &objects {
             if matches!(
                 self.store.object(id).map(|o| o.control()),
                 Some(ControlData::Tree(_))
@@ -825,6 +822,14 @@ impl GuiRuntime {
                 }
                 self.store.initialize_tree_cells(id);
             }
+        }
+        self.text_measurer
+            .borrow_mut()
+            .ensure_subtree(&mut self.store, object);
+        for &id in objects.iter().rev() {
+            self.store.layout_group(id);
+        }
+        for id in objects {
             self.store.layout_list(id);
             self.store.layout_component_scroll_content(id);
         }
@@ -4171,7 +4176,8 @@ pub(crate) fn sync_component_scroll_content(mut runtime: NonSendMut<GuiRuntime>)
 }
 
 /// 把引擎算出的文本尺寸回填到核心层，驱动自动尺寸策略。
-/// Bevy 布局与实体生成之间存在一帧延迟，依赖文本自动尺寸的布局会晚一帧到位。
+/// Low-level projection fallback. FairyGuiPlugin measures text synchronously
+/// before layout; manually installed projection systems can still use this.
 pub fn sync_text_sizes(
     mut runtime: NonSendMut<GuiRuntime>,
     query: Query<(&GObjectRef, &ComputedNode, Option<&BitmapTextMetrics>)>,

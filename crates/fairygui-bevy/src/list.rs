@@ -189,6 +189,7 @@ pub(crate) fn sync_list_content(
                             measurer: &measurer,
                         },
                     );
+                    measurer.borrow_mut().ensure_subtree(store, object);
                 },
             )
         };
@@ -393,6 +394,7 @@ pub(crate) fn sync_virtual_list_bindings(
                         measurer: &measurer,
                     },
                 );
+                measurer.borrow_mut().ensure_subtree(store, object);
             },
         );
         applied.insert(entity, reference.0);

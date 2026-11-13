@@ -83,7 +83,6 @@ fn content(messages: Arc<Vec<Message>>) -> GuiVirtualList {
         });
         if let Some(mut text) = row.child_by_path("msg") {
             text.set_text(&markup(&message.text));
-            text.ensure_size_correct();
         }
     })
     .with_item_provider(move |index| {

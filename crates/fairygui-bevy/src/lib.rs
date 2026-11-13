@@ -364,6 +364,7 @@ impl Plugin for FairyGuiPlugin {
                 )
                     .chain(),
                 (
+                    runtime::text_measure::sync_sizes,
                     runtime::sync_virtual_lists,
                     runtime::tooltip::sync_tooltips,
                     runtime::spawn_pending_objects,

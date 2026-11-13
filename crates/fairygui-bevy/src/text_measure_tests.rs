@@ -54,7 +54,6 @@ fn config() -> GuiVirtualList {
                 "Long message with CJK 中文 and wrapping. ".repeat(9)
             };
             msg.set_text(&text);
-            msg.ensure_size_correct();
         }
     })
     .with_item_provider(|index| {
@@ -174,15 +173,11 @@ fn pending_font_retries_and_ecs_text_edits_do_not_use_stale_physical_node_sizes(
         msg,
         GuiObjectAction::SetText("Hello".into()),
     ));
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(msg, GuiObjectAction::EnsureTextSize));
     app.update();
     app.world_mut().write_message(GuiObjectCommand::new(
         msg,
         GuiObjectAction::SetText("A much longer replacement".into()),
     ));
-    app.world_mut()
-        .write_message(GuiObjectCommand::new(msg, GuiObjectAction::EnsureTextSize));
     // A stale/HiDPI node must never overwrite the synchronous logical size.
     app.world_mut().entity_mut(msg).insert(ComputedNode {
         size: Vec2::splat(4000.),
@@ -214,4 +209,157 @@ fn pending_font_retries_and_ecs_text_edits_do_not_use_stale_physical_node_sizes(
             .size(),
         Vec2::ZERO
     );
+}
+
+#[test]
+fn automatic_text_size_and_relations_are_current_before_the_first_initialize() {
+    #[derive(Resource, Default)]
+    struct Initial(usize);
+    fn inspect(
+        roots: Query<(Entity, &FairyGuiRoot), Added<GuiRootView>>,
+        gui: GuiQuery,
+        nodes: Query<&Node>,
+        mut initial: ResMut<Initial>,
+    ) {
+        for (owner, source) in &roots {
+            if source.item_name != "chatLeft" {
+                continue;
+            }
+            let text = gui.child_by_name(owner, "msg").unwrap();
+            let bubble = gui.child_by_name(owner, "n0").unwrap();
+            assert_eq!(gui.transform(text).unwrap().size(), Vec2::ZERO);
+            assert_eq!(gui.transform(bubble).unwrap().size(), Vec2::new(37., 27.));
+            let node = nodes.get(text).unwrap();
+            assert_eq!((node.width, node.height), (Val::Px(0.), Val::Px(0.)));
+            initial.0 += 1;
+        }
+    }
+    let (mut app, owner, _, font) = fixture();
+    load_font(&mut app, &font);
+    app.init_resource::<Initial>()
+        .add_systems(Update, inspect.in_set(GuiSystems::Initialize));
+    let asset = app
+        .world()
+        .get::<FairyGuiRoot>(owner)
+        .unwrap()
+        .asset
+        .clone();
+    app.world_mut().spawn(FairyGuiRoot::new(asset, "chatLeft"));
+    app.update();
+    assert_eq!(app.world().resource::<Initial>().0, 1);
+}
+
+#[test]
+fn initialize_and_post_layout_text_edits_measure_in_the_same_frame_without_an_ensure_command() {
+    #[derive(Resource)]
+    struct Target(Entity);
+    #[derive(Resource, Default)]
+    struct Observed(bool);
+    fn initialize(target: Res<Target>, gui: GuiQuery, mut commands: Commands) {
+        if let Some(text) = gui.child_by_name(target.0, "msg") {
+            commands.write_message(GuiObjectCommand::new(
+                text,
+                GuiObjectAction::SetText("Long message 中文 ".repeat(40)),
+            ));
+        }
+    }
+    fn post_layout(
+        target: Res<Target>,
+        gui: GuiQuery,
+        mut observed: ResMut<Observed>,
+        mut commands: Commands,
+    ) {
+        if let Some(text) = gui.child_by_name(target.0, "msg") {
+            assert!(gui.transform(text).unwrap().size().y > 100.);
+            observed.0 = true;
+            commands.write_message(GuiObjectCommand::new(
+                text,
+                GuiObjectAction::SetText("Short".into()),
+            ));
+        }
+    }
+    let (mut app, owner, _, font) = fixture();
+    load_font(&mut app, &font);
+    let asset = app
+        .world()
+        .get::<FairyGuiRoot>(owner)
+        .unwrap()
+        .asset
+        .clone();
+    let root = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "chatLeft"))
+        .id();
+    app.insert_resource(Target(root))
+        .init_resource::<Observed>()
+        .add_systems(Update, initialize.in_set(GuiSystems::Initialize))
+        .add_systems(Update, post_layout.in_set(GuiSystems::PostLayout));
+    app.update();
+    assert!(app.world().resource::<Observed>().0);
+    let mut queries = SystemState::<GuiQuery>::new(app.world_mut());
+    let gui = queries.get(app.world()).unwrap();
+    let text = gui.child_by_name(root, "msg").unwrap();
+    let bubble = gui.child_by_name(root, "n0").unwrap();
+    let size = gui.transform(text).unwrap().size();
+    assert!(size.x > 10. && size.x < 150. && size.y < 50.);
+    assert_eq!(
+        gui.transform(bubble).unwrap().size(),
+        size + Vec2::new(37., 27.)
+    );
+    let node = app.world().get::<Node>(text).unwrap();
+    assert_eq!(
+        (node.width, node.height),
+        (Val::Px(size.x), Val::Px(size.y))
+    );
+}
+
+#[test]
+fn automatic_height_keeps_width_and_fixed_text_keeps_exported_bounds() {
+    let (mut app, _, _, font) = fixture();
+    load_font(&mut app, &font);
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: FuiPackage::parse(
+                "Basics",
+                include_bytes!("../../fairygui-demo/assets/ui/Basics.fui"),
+            )
+            .unwrap(),
+            res_key: "ui/Basics".into(),
+        });
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "Demo_Text"))
+        .id();
+    app.update();
+    let (height, fixed) = {
+        let mut queries = SystemState::<GuiQuery>::new(app.world_mut());
+        let gui = queries.get(app.world()).unwrap();
+        let height = gui.child_by_name(owner, "n24").unwrap();
+        assert_eq!(gui.transform(height).unwrap().size(), Vec2::new(299., 0.));
+        (height, gui.child_by_name(owner, "n2").unwrap())
+    };
+    for text in ["Repeated text 中文 ".repeat(30), String::new()] {
+        app.world_mut().write_message(GuiObjectCommand::new(
+            height,
+            GuiObjectAction::SetText(text.clone()),
+        ));
+        app.world_mut().write_message(GuiObjectCommand::new(
+            fixed,
+            GuiObjectAction::SetText(text.clone()),
+        ));
+        app.update();
+        let size = app.world().get::<GuiTransform>(height).unwrap().size();
+        assert_eq!(size.x, 299.);
+        if text.is_empty() {
+            assert_eq!(size.y, 0.);
+        } else {
+            assert!(size.y > 100.);
+        }
+        assert_eq!(
+            app.world().get::<GuiTransform>(fixed).unwrap().size(),
+            Vec2::new(337., 50.)
+        );
+    }
 }

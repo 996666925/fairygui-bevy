@@ -1,4 +1,4 @@
-//! Synchronous text sizing for data-driven rows, before native list layout.
+//! Synchronous text sizing before native layout and view materialization.
 use super::*;
 use bevy::text::{FontCx, LayoutCx, TextBounds, TextElement, TextPipeline};
 use std::collections::HashSet;
@@ -40,6 +40,20 @@ struct Cached {
 }
 
 impl TextMeasurer {
+    /// Prepare native text geometry before its parent reads row/group bounds.
+    pub(crate) fn ensure_subtree(&mut self, store: &mut ObjectStore, root: GObjectId) {
+        // Low-level runtime users may materialize views without installing the
+        // plugin's asset service. Their bitmap projection still measures itself.
+        if self.server.is_none() {
+            return;
+        }
+        let mut objects = vec![root];
+        store.for_each_descendant(root, &mut |id| objects.push(id));
+        for object in objects.into_iter().rev() {
+            self.ensure(store, object);
+        }
+    }
+
     pub(crate) fn contains(&self, id: GObjectId) -> bool {
         self.requested.contains(&id)
     }
@@ -369,7 +383,18 @@ pub(crate) fn sync_assets(
 pub(crate) fn sync_sizes(mut runtime: NonSendMut<GuiRuntime>) {
     let service = runtime.text_measurer.clone();
     let mut measure = service.borrow_mut();
-    let ids: Vec<_> = measure.requested.iter().copied().collect();
+    let ids: Vec<_> = runtime
+        .store
+        .iter()
+        .filter_map(|(id, object)| {
+            (measure.contains(id)
+                || object
+                    .control()
+                    .as_text_field()
+                    .is_some_and(|data| matches!(data.auto_size, 1 | 2)))
+            .then_some(id)
+        })
+        .collect();
     let mut lists = HashSet::new();
     for id in ids {
         let before = runtime.store.object(id).map(|object| object.size());
