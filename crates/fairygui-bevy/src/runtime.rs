@@ -2548,7 +2548,7 @@ pub fn sync_ecs_roots(
     mut removed: RemovedComponents<FairyGuiRoot>,
     assets: Res<Assets<FuiAsset>>,
     windows: Query<(Entity, &Window, Has<bevy::window::PrimaryWindow>)>,
-    settings: Res<crate::GuiInputSettings>,
+    settings: Option<Res<crate::GuiInputSettings>>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     for owner in removed.read() {
@@ -2687,10 +2687,12 @@ pub fn sync_ecs_roots(
     // Resolve the current window even when the root component has not changed.
     // Apply before materialization so initial layout and child relations see the
     // window size on the first frame, including after asynchronous asset loading.
-    if let Some((_, window, _)) = windows
-        .iter()
-        .find(|(entity, _, primary)| settings.window.map_or(*primary, |chosen| chosen == *entity))
-    {
+    if let Some((_, window, _)) = windows.iter().find(|(entity, _, primary)| {
+        settings
+            .as_ref()
+            .and_then(|settings| settings.window)
+            .map_or(*primary, |chosen| chosen == *entity)
+    }) {
         let size = Vec2::new(window.width(), window.height());
         let following: Vec<_> = runtime
             .ecs_roots
