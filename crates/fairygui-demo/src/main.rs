@@ -125,6 +125,7 @@ fn main() -> AppExit {
     .init_resource::<Demo>()
     .init_resource::<demos::DemoController>()
     .init_resource::<pull_refresh_demo::PullDemo>()
+    .init_resource::<modal_wait_demo::GlobalDemo>()
     .add_systems(
         Update,
         pull_refresh_demo::update

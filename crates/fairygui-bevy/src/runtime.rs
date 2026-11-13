@@ -19,6 +19,8 @@ use crate::ecs::GuiRootView;
 #[cfg(test)]
 #[path = "ecs_root_tests.rs"]
 mod ecs_root_tests;
+#[path = "global_wait.rs"]
+pub(crate) mod global_wait;
 #[path = "windows.rs"]
 pub(crate) mod windows;
 
@@ -483,6 +485,7 @@ pub struct GuiRuntime {
     object_command_cursor: bevy::ecs::message::MessageCursor<GuiObjectCommand>,
     pending_object_commands: Vec<(ObjectCommandSource, GuiObjectCommand)>,
     ecs_windows: HashMap<Entity, windows::Binding>,
+    global_wait: global_wait::GlobalWait,
     /// 已派发但尚未被取走的事件。
     events: fairygui_core::object::EventQueue,
     links: Vec<fairygui_core::object::UiEvent>,
@@ -1310,6 +1313,9 @@ impl GuiRuntime {
     /// 最上层模态窗口及其上方弹层中的对象可以响应输入。
     /// 没有模态窗口时恒为真，存在时阻挡其下方的层。
     pub fn is_in_top_modal(&self, object: GObjectId) -> bool {
+        if let Some(pane) = self.global_wait_pane() {
+            return self.is_descendant_of_or_self(object, pane);
+        }
         let Some(modal) = self.root.as_ref().and_then(|root| root.top_modal()) else {
             return true;
         };

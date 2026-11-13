@@ -234,7 +234,7 @@ fn drive(
         rich_layouts,
         text_spans,
         time,
-        input_state,
+        (input_state, global_wait),
         mut fire_smoke,
         mut image_assets,
         fonts,
@@ -251,7 +251,7 @@ fn drive(
         Query<(&bevy::text::ComputedTextBlock, &bevy::text::TextLayoutInfo)>,
         Query<&TextSpan>,
         Res<Time>,
-        Res<GuiInputState>,
+        (Res<GuiInputState>, Res<GuiGlobalWaitState>),
         ResMut<button_fire::State>,
         ResMut<Assets<Image>>,
         Query<&TextFont>,
@@ -2206,7 +2206,8 @@ fn drive(
             .open
             .as_ref()
             .is_some_and(|(_, _, name)| name == package)
-            && smoke.frames - smoke.since > 60 =>
+            && smoke.frames - smoke.since > 60
+            && !global_wait.is_requested() =>
         {
             let id = demo.close_button.unwrap();
             let Some(entity) = runtime.entity_of(id) else {

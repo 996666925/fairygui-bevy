@@ -362,6 +362,32 @@ ModalWaiting 示例中的 Open Window / Refresh 按钮通过 ECS 驱动三秒等
 回归可运行 `--smoke-window-wait`。普通文字按原版不作为鼠标命中目标，父控件仍可
 接收点击；富文本链接与输入框继续使用各自的交互路径。
 
+全局等待使用独立资源和命令，覆盖整个舞台：
+
+```rust,ignore
+commands.insert_resource(GuiGlobalWaitSettings::new(
+    assets.load("ui/ModalWaiting.fui"), "GlobalModalWaiting",
+));
+commands.write_message(GuiGlobalWaitCommand::Show { message: None });
+```
+
+任务结束后发送 `GuiGlobalWaitCommand::Hide` 撤下遮罩，保留对象和视图供下次复用。
+
+`Show.message` 写入模板自身的原生文本属性；无文本属性的组件会忽略它。
+模板可用本包名称或已登记包的 `ui://` 地址。请求会等待资产，解析失败可从
+`GuiGlobalWaitState::error()` 查询；未创建成功的请求不会拦截输入。状态资源还提供
+`is_requested()`、`is_waiting()` 和 `view()`，隐藏后仍可查询保留的实体。
+
+遮罩按输入设置选择的窗口持续调整尺寸，位于原生窗口、菜单和普通界面上方，
+鼠标、触摸、滚轮和文本焦点沿统一输入规则拒绝下层目标。全局等待独立于窗口的
+模态状态及弹出栈。`Hide` 取消等待中的请求并保留已创建面板；`Dispose` 同时回收
+隐藏的面板。更改或清空配置会回收旧模板，仍在请求时会尝试新的配置。命令按
+发送顺序在窗口、弹层命令后执行。无 Bevy 窗口时沿用舞台尺寸，首次默认 1280×720。
+
+ModalWaiting 示例进入时显示三秒全局等待，随后可以打开窗口并执行局部等待；页面
+提前销毁会取消示例计时并撤下全局遮罩。`--smoke-window-wait` 同时验证全局遮挡、
+真实点击拦截、窗口缩放及三秒后恢复，再验证单个窗口的等待行为。
+
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
 会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长和分页阈值。
 导出包显式设置的显示方式及触摸/回弹开关优先。配置在创建时捕获，修改资源影响

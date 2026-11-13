@@ -12,10 +12,20 @@ struct State {
     cursor: Option<Vec2>,
     clicks: usize,
     initial: Vec2,
+    global_view: Option<Entity>,
+    global_phase: u8,
+    global_since: u32,
+    global_clicks: usize,
+    global_done: bool,
 }
 fn count(event: On<GuiEvent>, mut state: ResMut<State>) {
     if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
         state.clicks += 1;
+    }
+}
+fn count_global(event: On<GuiEvent>, mut state: ResMut<State>) {
+    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
+        state.global_clicks += 1;
     }
 }
 pub(super) fn install(app: &mut App) {
@@ -35,6 +45,7 @@ fn drive(
     mut state: ResMut<State>,
     demo: Res<Demo>,
     gui: GuiQuery,
+    global: Res<GuiGlobalWaitState>,
     owners: Query<(Entity, &GuiWindowState), With<crate::modal_wait_demo::DemoWindow>>,
     existing: Query<()>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
@@ -58,6 +69,62 @@ fn drive(
     window.focused = true;
     let elapsed = state.frame - state.since;
     let factor = window.scale_factor();
+    if state.step == 1 && !state.global_done {
+        let global_elapsed = state.frame - state.global_since;
+        let mut advance_global = false;
+        match state.global_phase {
+            0 if elapsed >= 20 && global.is_waiting() && !owners.is_empty() => {
+                let button = gui.child_by_name(state.page.unwrap(), "n0").unwrap();
+                commands.entity(button).observe(count_global);
+                state.global_view = global.view();
+                state.cursor = Some(point(button, &nodes, factor));
+                assert_eq!(
+                    gui.transform(global.view().unwrap()).unwrap().size(),
+                    Vec2::new(window.width(), window.height())
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk("target/fairygui-demo-global-modal-wait.png"));
+                advance_global = true;
+            }
+            1 if global_elapsed >= 4 => {
+                mouse.press(MouseButton::Left);
+                advance_global = true;
+            }
+            2 if global_elapsed >= 4 => {
+                mouse.release(MouseButton::Left);
+                advance_global = true;
+            }
+            3 if global_elapsed >= 8 => {
+                assert_eq!(state.global_clicks, 0);
+                assert!(owners.iter().all(|(_, state)| !state.is_showing()));
+                window.resolution.set(1100., 650.);
+                advance_global = true;
+            }
+            4 if global_elapsed >= 8 => {
+                assert!(global.is_waiting());
+                assert_eq!(
+                    gui.transform(global.view().unwrap()).unwrap().size(),
+                    Vec2::new(window.width(), window.height())
+                );
+                advance_global = true;
+            }
+            5 if !global.is_requested() && !global.is_waiting() => {
+                assert_eq!(global.view(), state.global_view);
+                assert!(!gui.display(state.global_view.unwrap()).unwrap().on_stage());
+                state.global_done = true;
+                state.since = state.frame;
+            }
+            _ => {}
+        }
+        if advance_global {
+            state.global_phase += 1;
+            state.global_since = state.frame;
+        }
+        window.set_cursor_position(state.cursor);
+        move_pointer(window_entity, state.cursor, &mut pointers);
+        return;
+    }
     let mut next = false;
     match state.step {
         0 => {
@@ -94,6 +161,7 @@ fn drive(
             next = true;
         }
         4 if elapsed >= 8 => {
+            assert_eq!(state.global_clicks, 1);
             assert!(owners.get(state.owner.unwrap()).unwrap().1.is_showing());
             let button = gui.child_by_name(state.owner.unwrap(), "n1").unwrap();
             commands.entity(button).observe(count);

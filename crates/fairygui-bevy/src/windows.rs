@@ -214,7 +214,7 @@ impl GuiRuntime {
         self.show_window_modal_wait(index, request);
     }
 }
-fn viewport(
+pub(super) fn viewport(
     runtime: &mut GuiRuntime,
     windows: &Query<(Entity, &Window, Has<PrimaryWindow>)>,
     settings: &GuiInputSettings,

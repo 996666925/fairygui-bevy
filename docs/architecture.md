@@ -17,6 +17,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `pull` | Entity-addressed refresh locks applied between Respond and Advance |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `runtime::windows` | Asset-backed ECS window ownership, entity commands and native window snapshots |
+| `runtime::global_wait` | Resource-configured stage-wide wait ownership, native stack ordering and input gating |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
 | `core::fill`, `image_fill`, `image_fill.wesl` | Native fill polygons, image/movie UI material masks, atlas/slice mapping and retained material ownership |
@@ -161,6 +162,30 @@ Plain GTextField nodes are excluded from pointer hit candidates, matching native
 mouseEnabled=false even if their logical touchable flag is true. Ancestor controls
 remain candidates; rich text links and input fields keep separate hit/edit paths.
 This prevents title text above a sibling dragArea from stealing the window drag.
+
+`GuiGlobalWaitSettings` selects one asset-backed template for the stage-wide native
+wait pane. Show records the optional native text and retries when assets or
+registered dependencies arrive; failure is projected through GuiGlobalWaitState,
+and never blocks input before a real pane is attached. Hide cancels a pending
+request and detaches the retained tree. Dispose reclaims it even when hidden.
+Template replacement/clearing disposes the old tree; an outstanding Show attempts
+the new configuration. The state resource separates requested from actually
+waiting, retains the hidden view identity, and preserves unchanged change ticks.
+
+The global wait reconciler runs after window/popup commands and before view
+spawning. It sizes to the selected input window, appends the pane above native
+windows/popups, and projects GlobalZIndex(i32::MAX) for independent UI roots.
+The common modal input gate then accepts only descendants of an attached visible
+wait pane. Pointer/touch capture, wheel routing, drop receivers and text focus
+use this same policy. Window modality and GuiPopupState remain independent.
+The native references are GRoot.showModalWait (size, relation and native text),
+closeModalWait (retained removal), and adjustModalLayer (keep the wait pane last).
+Renderer-free apps preserve stage dimensions, with a 1280x720 initial fallback.
+
+ModalWaiting's page owns a three-second demo timer through an ECS resource; the
+page's removal cancels the timer and hides the global pane. Its real-window smoke
+clicks the covered Open Window button, checks the pane after resizing, waits for
+restored interaction, then continues the existing window-local wait scenario.
 
 ## Frame contract
 
