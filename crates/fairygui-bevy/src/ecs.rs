@@ -557,6 +557,7 @@ pub struct GuiQuery<'w, 's> {
     icons: Query<'w, 's, &'static GuiIcon>,
     colors: Query<'w, 's, &'static crate::GuiColor>,
     image_fills: Query<'w, 's, &'static crate::GuiImageFill>,
+    image_flips: Query<'w, 's, &'static crate::GuiImageFlip>,
     loader_settings: Query<'w, 's, &'static crate::GuiLoaderSettings>,
     sorting_orders: Query<'w, 's, &'static GuiSortingOrder>,
     render_orders: Query<'w, 's, &'static GuiRenderOrder>,
@@ -575,6 +576,9 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn image_flip(&self, entity: Entity) -> Option<crate::FlipType> {
+        Some(self.image_flips.get(self.view(entity)?).ok()?.0)
+    }
     pub fn blend_mode(&self, entity: Entity) -> Option<&crate::GuiBlendMode> {
         self.blend_modes.get(self.view(entity)?).ok()
     }

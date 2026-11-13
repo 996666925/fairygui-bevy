@@ -657,6 +657,29 @@ Loader 的颜色和图片遮罩作用于其图片/影片通道。
 属性，`GuiObjectMut` 也提供对应即时 setter。无对应属性的对象不会挂载该组件。
 `--smoke-visual-properties` 验证 Loader 布局、颜色、遮罩、资源切换及实体保留。
 
+图片翻转通过 `GuiImageFlip` 设置，仅用于 GImage：
+
+```rust,ignore
+if let Ok(mut flip) = flips.get_mut(image) { // Query<&mut GuiImageFlip>
+    flip.0 = FlipType::Horizontal;
+}
+```
+
+支持 None、Horizontal、Vertical、Both。它按原版修改对象缩放，而非翻转纹理 UV；
+填充遮罩及挂在图片上的子节点也参与反射。改变翻转值会把缩放重置为对应的 ±1，
+并捕获 Size 齿轮；重复设置同一值保留自定义缩放。同帧显式修改 `GuiTransform.scale`
+时以该缩放为准。`GuiTransform` 仍保存逻辑位置/尺寸，`GuiSpace` 使用实际显示变换。
+按原版，无轴心图片改尺寸或缩放后可能保留旧显示补偿，下一次位置变化才刷新；
+重新赋同一翻转值不会刷新补偿。设置为 None 会取消翻转并重置缩放。
+
+导出的图片翻转同样遵循这条链路，非零翻转会覆盖之前读取的缩放；MovieClip 的
+导出翻转字节仍按原版忽略，Loader 没有该属性。
+可用 `GuiQuery::image_flip` 查询，或调用 `GuiObjectMut::set_image_flip` 即时设置。
+核心回归数据执行未修改的 GImage/GObject 方法，覆盖 87 个状态及 261 个坐标点，
+使用标量 Sprite 矩阵宿主，不代表原版 GPU 像素一致性。
+`--smoke-image-flip` 检查四种翻转、重复赋值、尺寸/位置补偿、轴心/旋转、填充、
+置灰与透明度，保留视图/子节点，并捕获 48 个 GPU 采样点。
+
 混合模式和颜色滤镜也可直接修改组件：
 
 ```rust,ignore

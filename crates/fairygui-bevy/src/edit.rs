@@ -46,6 +46,9 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_image_flip(&mut self, flip: crate::FlipType) {
+        self.runtime.store_mut().set_image_flip(self.object, flip);
+    }
     pub fn set_blend_mode(&mut self, mode: Option<crate::BlendMode>) {
         use crate::properties::Property;
         let value = crate::GuiBlendMode(mode);

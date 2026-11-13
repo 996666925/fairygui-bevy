@@ -63,6 +63,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiLoaderSettings>(world);
     sync_property::<GuiImageFill>(world);
     sync_property::<GuiRenderOrder>(world);
+    sync_property::<GuiImageFlip>(world);
     sync_property::<GuiSortingOrder>(world);
     sync_property::<GuiTransform>(world);
     sync_property::<GuiDisplay>(world);

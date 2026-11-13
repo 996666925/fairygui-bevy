@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_image_flip.rs"]
+mod image_flip;
+pub(super) fn install_image_flip(app: &mut App) {
+    image_flip::install(app);
+}
 #[path = "smoke_graph_properties.rs"]
 mod graph_properties;
 pub(super) fn install_graph_properties(app: &mut App) {

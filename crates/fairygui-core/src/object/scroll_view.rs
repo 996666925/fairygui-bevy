@@ -287,8 +287,16 @@ impl CoordinateTransform {
             b,
             c,
             d,
-            tx: f64::from(o.x()) + offset_x - a * px - c * py,
-            ty: f64::from(o.y()) + offset_y - b * px - d * py,
+            tx: o
+                .image_display_position()
+                .map_or(f64::from(o.x()) + offset_x - a * px - c * py, |p| {
+                    f64::from(p.x)
+                }),
+            ty: o
+                .image_display_position()
+                .map_or(f64::from(o.y()) + offset_y - b * px - d * py, |p| {
+                    f64::from(p.y)
+                }),
         }
     }
 

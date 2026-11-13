@@ -28,7 +28,7 @@ pub use controller::{Controller, PackageEnv};
 pub use extend::{ButtonData, ButtonMode, ButtonState, LabelData, ProgressData, SliderData};
 pub use gear::{Gear, GearKind, GearTweenConfig, GearValue};
 pub use leaf::{
-    FillMethod, GraphData, GraphType, GroupData, ImageData, LoaderData, MovieClipData,
+    FillMethod, FlipType, GraphData, GraphType, GroupData, ImageData, LoaderData, MovieClipData,
     TextFieldData, TextInputData,
 };
 pub use list::{ListData, ListItemData, ListLayoutType, ListSelectionMode};

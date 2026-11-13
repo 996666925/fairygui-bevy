@@ -12,6 +12,12 @@ slotmap::new_key_type! {
     pub struct GObjectId;
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ImageTransformState {
+    pub pivot_offset: Point,
+    pub position: Point,
+}
+
 /// 混合模式。
 ///
 /// 保留编辑器编号；FairyGUI-Laya 的导出表仅将字节 2 映射为 Add，
@@ -82,6 +88,7 @@ pub struct GObject {
     pub(crate) source_width: f32,
     pub(crate) source_height: f32,
     pub(crate) scale_x: f32,
+    pub(crate) image_transform: Option<ImageTransformState>,
     pub(crate) scale_y: f32,
     pub(crate) skew_x: f32,
     pub(crate) skew_y: f32,
@@ -152,6 +159,7 @@ impl GObject {
             source_width: 0.0,
             source_height: 0.0,
             scale_x: 1.0,
+            image_transform: None,
             scale_y: 1.0,
             skew_x: 0.0,
             skew_y: 0.0,

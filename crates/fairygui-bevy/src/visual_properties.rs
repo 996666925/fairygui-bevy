@@ -6,6 +6,19 @@ use crate::{
     FillMethod, backend, properties::Property, runtime::GuiRuntime, text_format::native_color,
 };
 
+/// Native GImage flip. A changed value resets its scale to +/-1; repeating the
+/// same value leaves custom scale unchanged. Layout x/y/size remain logical.
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct GuiImageFlip(pub crate::FlipType);
+impl Property for GuiImageFlip {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        runtime.store().image_flip(object).map(Self)
+    }
+    fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.store_mut().set_image_flip(object, self.0);
+    }
+}
+
 /// Native Color/TitleColor. Images, movies and loaders tint their own pixels;
 /// text and compound titles expose the same color as GuiTextFormat.color;
 /// graphs expose fill color. Graying, filters and inherited alpha stay separate.
@@ -158,3 +171,7 @@ impl Property for GuiLoaderSettings {
 #[cfg(test)]
 #[path = "ecs_visual_properties_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "ecs_image_flip_tests.rs"]
+mod flip_tests;

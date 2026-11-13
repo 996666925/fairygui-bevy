@@ -51,13 +51,48 @@ impl FillMethod {
     }
 }
 
+/// GImage 翻转方式，编号与导出格式一致。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum FlipType {
+    #[default]
+    None,
+    Horizontal,
+    Vertical,
+    Both,
+}
+impl FlipType {
+    pub const fn from_code(value: u8) -> Self {
+        match value {
+            1 => Self::Horizontal,
+            2 => Self::Vertical,
+            3 => Self::Both,
+            _ => Self::None,
+        }
+    }
+    pub const fn scale(self) -> (f32, f32) {
+        (
+            if matches!(self, Self::Horizontal | Self::Both) {
+                -1.
+            } else {
+                1.
+            },
+            if matches!(self, Self::Vertical | Self::Both) {
+                -1.
+            } else {
+                1.
+            },
+        )
+    }
+}
+
 /// 图片控件的数据。
 #[derive(Debug, Clone, Default)]
 pub struct ImageData {
     /// 着色，为空表示不着色。
     pub color: Option<Color>,
     /// 翻转标志，按位组合。
-    pub flip: u8,
+    pub flip: FlipType,
     /// 填充方式，0 表示不填充。
     pub fill_method: u8,
     /// 填充起点。
@@ -714,6 +749,12 @@ pub(crate) fn setup_before_add(
     };
 
     object.control = control;
+    if let ControlData::Image(data) = &object.control
+        && data.flip != FlipType::None
+    {
+        (object.scale_x, object.scale_y) = data.flip.scale();
+        object.initialize_image_transform();
+    }
     Ok(())
 }
 
@@ -751,7 +792,7 @@ fn read_image(buffer: &mut ByteBuffer<'_>, begin_pos: usize) -> Result<ImageData
     if buffer.read_bool()? {
         data.color = Some(read_color(buffer)?);
     }
-    data.flip = buffer.read_u8()?;
+    data.flip = FlipType::from_code(buffer.read_u8()?);
     data.fill_method = buffer.read_u8()?;
     if data.fill_method != 0 {
         data.fill_origin = buffer.read_u8()?;
@@ -760,6 +801,50 @@ fn read_image(buffer: &mut ByteBuffer<'_>, begin_pos: usize) -> Result<ImageData
     }
 
     Ok(data)
+}
+
+#[cfg(test)]
+mod image_setup_tests {
+    use super::*;
+    #[test]
+    fn exported_flip_overrides_serialized_scale_but_none_preserves_it() {
+        for code in 0..4 {
+            // Six short-offset blocks; only block 5 has content at byte 14.
+            let mut bytes = vec![6, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14];
+            bytes.extend([0, code, 0]);
+            let mut object = GObject::new(ObjectType::Image);
+            object.width = 100.;
+            object.height = 60.;
+            object.x = 30.;
+            object.y = 40.;
+            object.scale_x = 2.;
+            object.scale_y = 0.5;
+            setup_before_add(
+                &mut object,
+                &mut ByteBuffer::new(&bytes),
+                &StringTable::new(),
+                0,
+            )
+            .unwrap();
+            let expected = FlipType::from_code(code);
+            assert_eq!(object.control().as_image().unwrap().flip, expected);
+            let scale = if code == 0 {
+                (2., 0.5)
+            } else {
+                expected.scale()
+            };
+            assert_eq!((object.scale_x(), object.scale_y()), scale);
+            if code != 0 {
+                assert_eq!(
+                    object.image_display_position(),
+                    Some(crate::Point::new(
+                        30. + if scale.0 == -1. { 100. } else { 0. },
+                        40. + if scale.1 == -1. { 60. } else { 0. }
+                    ))
+                );
+            }
+        }
+    }
 }
 
 fn read_movie_clip(buffer: &mut ByteBuffer<'_>, begin_pos: usize) -> Result<MovieClipData> {

@@ -2589,12 +2589,6 @@ fn spawn_object(
             entity.insert(grid);
         }
 
-        // 翻转标志按位组合：最低位是水平翻转，次低位是垂直翻转。
-        if let Some(data) = gobject.control().as_image() {
-            image_node.flip_x = data.flip & 1 != 0;
-            image_node.flip_y = data.flip & 2 != 0;
-        }
-
         // 同步阶段的图片材质在采样后执行颜色矩阵；此处只提供初始外观。
         let tint = tint(gobject, None);
 
@@ -3471,8 +3465,15 @@ pub(crate) fn sync_dirty(
             ));
         }
 
+        // Center-origin compensation depends on size. GImage's cached Sprite
+        // position also makes the offset depend on logical XY changes.
+        if flags & (dirty::LOOK | dirty::SIZE | dirty::XY) != 0 {
+            let next = backend::transform_for(gobject);
+            if *transform != next {
+                *transform = next;
+            }
+        }
         if flags & dirty::LOOK != 0 {
-            *transform = backend::transform_for(gobject);
             *visibility = if runtime.store().display_visible(object) {
                 Visibility::Inherited
             } else {
