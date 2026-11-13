@@ -25,6 +25,7 @@ mod modal_wait_demo;
 mod pull_refresh_demo;
 mod scroll_pane_demo;
 mod smoke;
+mod startup;
 mod tree_demo;
 mod window_demo;
 
@@ -125,6 +126,7 @@ fn main() -> AppExit {
                 primary_window: Some(Window {
                     title: "fairygui-bevy demo".to_string(),
                     resolution: (1280u32, 720u32).into(),
+                    visible: false,
                     ..default()
                 }),
                 ..default()
@@ -211,6 +213,7 @@ fn main() -> AppExit {
         .resource::<AssetServer>()
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
+    startup::install(&mut app);
 
     if std::env::args().any(|arg| arg == "--smoke-chat") {
         smoke::install_chat(&mut app);
