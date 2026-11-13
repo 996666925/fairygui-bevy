@@ -158,6 +158,25 @@ IME 预编辑或翻译/UBB 渲染结果。无文本属性的控件没有 `GuiTex
 `SetTouchable(bool)` 通过命令修改输入开关。富文本链接消息 `GuiLink.entity`
 直接提供原始目标的控件实体，可据此查询、发命令或匹配业务组件。
 
+滚动容器上的只读 `GuiScrollState`（或 `gui.scroll(entity)`）提供逻辑目标位置、
+动画当前显示位置、视口/内容尺寸、最大位置、两种位置对应的进度比例及当前页。
+它在输入事件发布前和 Sync 结束时更新，没有滚动容器的对象不带该组件。
+`ScrollTo { position, animated }` 按原生分页/条目对齐规则滚动；
+`SetScrollPercentage { percentage, animated }` 将比例限制在 0～1，并在执行时读取
+实际范围，因此到顶部/底部无需业务代码提前计算尺寸：
+
+```rust,ignore
+commands.write_message(GuiObjectCommand::new(
+    list_entity,
+    GuiObjectAction::SetScrollPercentage { percentage: Vec2::Y, animated: false },
+));
+```
+
+`ScrollToView { rect, animated, set_first }` 把内容坐标中的矩形滚入视口；
+`set_first` 为真时优先对齐矩形起点，最终位置仍受分页、条目吸附和边界约束。
+原有 `SetScrollPosition` 直接设置
+位置，允许选择是否越界；动画是否进行中可通过 `is_animating()` 查询。
+
 业务系统可在 `GuiSystems::Respond` 用实体发送 `GuiObjectCommand`，本帧 Sync 会把
 修改应用到对象模型并投影到 Bevy UI 视图：
 

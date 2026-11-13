@@ -90,23 +90,64 @@ pub enum GuiObjectAction {
     SetTouchable(bool),
     SetAlpha(f32),
     SetScale(Vec2),
-    SetPivot { pivot: Vec2, as_anchor: bool },
+    SetPivot {
+        pivot: Vec2,
+        as_anchor: bool,
+    },
     SetRotation(f32),
     SetText(String),
     SetColor(fairygui_core::color::Color),
     SetGrayed(bool),
     SetButtonSelected(bool),
     SetSliderValue(i32),
-    SetControllerPage { name: String, index: i32 },
+    SetControllerPage {
+        name: String,
+        index: i32,
+    },
     SetProgress(i32),
-    SetScrollPosition { position: Vec2, allow_bounce: bool },
+    SetScrollPosition {
+        position: Vec2,
+        allow_bounce: bool,
+    },
+    /// Native programmatic scroll with page/item alignment and optional animation.
+    ScrollTo {
+        position: Vec2,
+        animated: bool,
+    },
+    SetScrollPercentage {
+        percentage: Vec2,
+        animated: bool,
+    },
+    /// Reveal a rectangle in the scroll pane's content coordinates.
+    ScrollToView {
+        rect: fairygui_core::geom::Rect,
+        animated: bool,
+        set_first: bool,
+    },
     SetListSelection(i32),
-    SelectListIndex { index: usize, scroll_to_view: bool },
-    PlayTransition { name: String, times: i32 },
-    SetTransitionPaused { name: String, paused: bool },
-    SetTransitionTimeScale { name: String, scale: f32 },
-    PlayTransitionReverse { name: String, delay: f32 },
-    StopTransition { name: String },
+    SelectListIndex {
+        index: usize,
+        scroll_to_view: bool,
+    },
+    PlayTransition {
+        name: String,
+        times: i32,
+    },
+    SetTransitionPaused {
+        name: String,
+        paused: bool,
+    },
+    SetTransitionTimeScale {
+        name: String,
+        scale: f32,
+    },
+    PlayTransitionReverse {
+        name: String,
+        delay: f32,
+    },
+    StopTransition {
+        name: String,
+    },
 }
 
 /// Entity-addressed FairyGUI mutation. Send this from application ECS systems
@@ -1906,6 +1947,35 @@ pub fn apply_object_commands(
                     .store_mut()
                     .add_list_selection_with_scroll(object, *index, *scroll_to_view);
             }
+            GuiObjectAction::ScrollTo { position, animated } if position.is_finite() => {
+                runtime.store_mut().layout_scroll_bars(object);
+                runtime
+                    .store_mut()
+                    .set_scroll_pos_animated(object, position.x, position.y, *animated);
+            }
+            GuiObjectAction::SetScrollPercentage {
+                percentage,
+                animated,
+            } if percentage.is_finite() => {
+                runtime.store_mut().layout_scroll_bars(object);
+                if let Some(pane) = runtime.store().scroll_pane(object) {
+                    let max = pane.max_scroll_pos();
+                    let position =
+                        percentage.clamp(Vec2::ZERO, Vec2::ONE) * Vec2::new(max.x, max.y);
+                    runtime
+                        .store_mut()
+                        .set_scroll_pos_animated(object, position.x, position.y, *animated);
+                }
+            }
+            GuiObjectAction::ScrollToView {
+                rect,
+                animated,
+                set_first,
+            } => {
+                runtime
+                    .store_mut()
+                    .scroll_rect_to_view(object, *rect, *animated, *set_first);
+            }
             GuiObjectAction::PlayTransition { name, times } => {
                 runtime.store_mut().play_transition(object, name, *times);
             }
@@ -1934,6 +2004,8 @@ pub fn apply_object_commands(
             | GuiObjectAction::SetPivot { .. }
             | GuiObjectAction::SetRotation(_)
             | GuiObjectAction::SetScrollPosition { .. }
+            | GuiObjectAction::ScrollTo { .. }
+            | GuiObjectAction::SetScrollPercentage { .. }
             | GuiObjectAction::SetTransitionTimeScale { .. }
             | GuiObjectAction::PlayTransitionReverse { .. } => {}
         }

@@ -7,10 +7,70 @@ use fairygui_core::package::ObjectType;
 
 use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
 
+#[cfg(test)]
+#[path = "ecs_scroll_tests.rs"]
+mod scroll_tests;
+
 /// Rendered root entity belonging to a [`crate::FairyGuiRoot`] owner.
 /// Available after `GuiSystems::Sync`; removed when the root is replaced.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GuiRootView(pub Entity);
+
+/// Read-only scroll-pane state in logical pixels, refreshed before input events
+/// publish and after Sync. Absent on controls without a scroll pane.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct GuiScrollState {
+    position: Vec2,
+    display_position: Vec2,
+    view_size: Vec2,
+    content_size: Vec2,
+    max_position: Vec2,
+    percentage: Vec2,
+    display_percentage: Vec2,
+    current_page: IVec2,
+    animating: bool,
+}
+
+impl GuiScrollState {
+    /// Logical endpoint requested by an animated scroll.
+    pub fn position(&self) -> Vec2 {
+        self.position
+    }
+
+    /// Current offset used for rendering and hit testing during animation.
+    pub fn display_position(&self) -> Vec2 {
+        self.display_position
+    }
+
+    pub fn view_size(&self) -> Vec2 {
+        self.view_size
+    }
+
+    pub fn content_size(&self) -> Vec2 {
+        self.content_size
+    }
+
+    pub fn max_position(&self) -> Vec2 {
+        self.max_position
+    }
+
+    /// Clamped 0..=1 logical progress; zero on an axis without overflow.
+    pub fn percentage(&self) -> Vec2 {
+        self.percentage
+    }
+
+    pub fn display_percentage(&self) -> Vec2 {
+        self.display_percentage
+    }
+
+    pub fn current_page(&self) -> IVec2 {
+        self.current_page
+    }
+
+    pub fn is_animating(&self) -> bool {
+        self.animating
+    }
+}
 
 /// Read-only native text property, before translation, markup and masking.
 ///
@@ -166,7 +226,7 @@ impl GuiObjectInfo {
 ///
 /// Every method accepts either a root owner or a control view entity. Hierarchy
 /// and geometry in `GuiSystems::Respond` read the preceding Sync snapshot.
-/// Text and display properties are also refreshed before input events publish.
+/// Text, display and scroll properties also refresh before input events publish.
 /// Systems after `GuiSystems::Sync` can bind controls created this frame.
 #[derive(SystemParam, Debug)]
 pub struct GuiQuery<'w, 's> {
@@ -175,6 +235,7 @@ pub struct GuiQuery<'w, 's> {
     transforms: Query<'w, 's, &'static GuiTransform>,
     texts: Query<'w, 's, &'static GuiText>,
     displays: Query<'w, 's, &'static GuiDisplay>,
+    scrolls: Query<'w, 's, &'static GuiScrollState>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -203,6 +264,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn display(&self, entity: Entity) -> Option<&GuiDisplay> {
         self.displays.get(self.view(entity)?).ok()
+    }
+
+    pub fn scroll(&self, entity: Entity) -> Option<&GuiScrollState> {
+        self.scrolls.get(self.view(entity)?).ok()
     }
 
     /// First direct child with the exact FairyGUI object name.
@@ -241,6 +306,40 @@ impl GuiQuery<'_, '_> {
 }
 
 /// Refresh before publishing input events and after all model/view updates.
+pub(crate) fn sync_gui_scroll_state(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    objects: Query<(Entity, &GObjectRef, Option<&GuiScrollState>)>,
+) {
+    for (entity, reference, current) in &objects {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let Some(pane) = runtime.store().scroll_pane(reference.0) else {
+            if current.is_some() {
+                commands.entity(entity).remove::<GuiScrollState>();
+            }
+            continue;
+        };
+        let point = |p: fairygui_core::geom::Point| Vec2::new(p.x, p.y);
+        let size = |s: fairygui_core::geom::Size| Vec2::new(s.width, s.height);
+        let next = GuiScrollState {
+            position: point(pane.pos()),
+            display_position: point(pane.display_pos()),
+            view_size: size(pane.view_size()),
+            content_size: size(pane.content_size()),
+            max_position: point(pane.max_scroll_pos()),
+            percentage: Vec2::new(pane.perc_x(), pane.perc_y()),
+            display_percentage: Vec2::new(pane.display_perc_x(), pane.display_perc_y()),
+            current_page: IVec2::new(pane.current_page_x(), pane.current_page_y()),
+            animating: pane.is_animating(),
+        };
+        if current != Some(&next) {
+            commands.entity(entity).insert(next);
+        }
+    }
+}
+
 pub(crate) fn sync_gui_properties(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,

@@ -61,7 +61,9 @@ pub mod text;
 mod text_stroke;
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
-pub use ecs::{GuiDisplay, GuiObjectInfo, GuiQuery, GuiRootView, GuiText, GuiTransform};
+pub use ecs::{
+    GuiDisplay, GuiObjectInfo, GuiQuery, GuiRootView, GuiScrollState, GuiText, GuiTransform,
+};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -94,8 +96,8 @@ pub mod prelude {
         GuiInputState, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure,
         GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiObjectInfo,
         GuiProgressValue, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime,
-        GuiSliderValue, GuiSystems, GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback,
-        GuiTransitionHook, PopupMenuTemplates,
+        GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput, GuiTransform,
+        GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
     };
 }
 
@@ -168,6 +170,7 @@ impl Plugin for FairyGuiPlugin {
             Update,
             (
                 ecs::sync_gui_properties,
+                ecs::sync_gui_scroll_state,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -235,6 +238,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_control_state_components,
                 ecs::sync_gui_objects,
                 ecs::sync_gui_properties,
+                ecs::sync_gui_scroll_state,
             )
                 .chain()
                 .in_set(GuiSystems::Sync)

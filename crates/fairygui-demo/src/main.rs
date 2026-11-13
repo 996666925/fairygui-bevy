@@ -394,9 +394,8 @@ fn bind_demo_observers(
             }
         }
     }
-    if let (Some(package), Some((root, _, _))) = (controller.package.as_deref(), demo.open.as_ref())
-    {
-        for (entity, action) in demos::demo_action_bindings(&gui, package, *root) {
+    if let (Some(package), Some(root)) = (controller.package.as_deref(), controller.root_owner) {
+        for (entity, action) in demos::demo_action_bindings(&gui, package, root) {
             if bound.get(entity).is_err() {
                 let mut target = commands.entity(entity);
                 target.insert((DemoObserverBound, DemoAction(action)));
@@ -549,7 +548,7 @@ fn virtual_list_action(
     event: On<GuiEvent>,
     actions: Query<&DemoAction>,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     controller: Res<demos::DemoController>,
 ) {
     if event.event().event.kind != fairygui_core::object::EventKind::Click {
@@ -558,7 +557,7 @@ fn virtual_list_action(
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
-    demos::handle_virtual_list_action(&runtime, &controller, action.0, &mut gui_commands);
+    demos::handle_virtual_list_action(&gui, &controller, action.0, &mut gui_commands);
 }
 
 fn basics_text_get_input(

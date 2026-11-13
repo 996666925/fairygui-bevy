@@ -11,7 +11,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | --- | --- |
 | `fairygui-core` | Package parsing, object ownership, widget state, scrolling and animation; no Bevy dependency |
 | `asset` | Bevy asset loading and package resource paths |
-| `ecs` | Root-to-view references and read-only identity, logical hierarchy, geometry, text and display queries |
+| `ecs` | Root-to-view references and read-only identity, hierarchy, geometry, text, display and scroll queries |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
@@ -38,7 +38,7 @@ Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these
 `Update` sets:
 
 1. `GuiSystems::Input`: choose a target, update capture, apply built-in behavior.
-2. `GuiSystems::Publish`: refresh text/display snapshots, trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
+2. `GuiSystems::Publish`: refresh text/display/scroll snapshots, trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
 3. `GuiSystems::Respond`: application systems consume messages and send UI commands.
 4. `GuiSystems::Advance`: advance builds, scrolling, transitions and animations.
 5. `GuiSystems::Sync`: reconcile ECS root ownership, apply commands, spawn pending views, synchronize state components and play sounds.
@@ -77,6 +77,15 @@ Input into another entity using `GuiObjectCommand`, without runtime borrowing
 or an extra frame of delay. Unchanged snapshots preserve change ticks.
 `GuiLink.entity` identifies the original control entity; its core payload is
 retained alongside the entity reference.
+
+`GuiScrollState` keeps logical target and current display offsets separate during
+programmatic animation, with view/content sizes, maximum offsets, logical/display
+percentages, current pages and animation activity. It refreshes before Publish
+events and after Sync, and is absent on controls without a scroll pane.
+`ScrollTo`, `SetScrollPercentage` and `ScrollToView` invoke the native model's
+programmatic scroll policies. Percentages clamp to 0..=1 and resolve against the
+current range when commands execute; callers do not need a potentially stale
+maximum from the preceding snapshot. All coordinates are logical pixels.
 
 ```rust
 use bevy::prelude::*;

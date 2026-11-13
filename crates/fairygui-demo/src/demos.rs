@@ -594,54 +594,38 @@ pub fn copy_basics_input(
 }
 
 pub fn handle_virtual_list_action(
-    runtime: &GuiRuntime,
+    gui: &GuiQuery,
     controller: &DemoController,
     listener: u64,
     commands: &mut MessageWriter<GuiObjectCommand>,
 ) {
-    let Some(root) = controller.root else {
+    let Some(root) = controller.root_owner else {
         return;
     };
     if controller.package.as_deref() != Some("VirtualList") {
         return;
     }
-    match listener - DEMO_ACTION_BASE {
-        0 => {
-            if let Some(list) = runtime.store().find_by_name(root, "mailList")
-                && let Some(target) = runtime.entity_of(list)
-            {
-                commands.write(GuiObjectCommand::new(
-                    target,
-                    GuiObjectAction::SelectListIndex {
-                        index: 500,
-                        scroll_to_view: true,
-                    },
-                ));
-            }
+    let Some(target) = gui.find_by_name(root, "mailList") else {
+        return;
+    };
+    match listener.checked_sub(DEMO_ACTION_BASE) {
+        Some(0) => {
+            commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SelectListIndex {
+                    index: 500,
+                    scroll_to_view: true,
+                },
+            ));
         }
-        1 | 2 => {
-            let Some(list) = runtime.store().find_by_name(root, "mailList") else {
-                return;
-            };
-            let max = runtime
-                .store()
-                .scroll_pane(list)
-                .map(|pane| pane.max_scroll_pos())
-                .unwrap_or_default();
-            let y = if listener - DEMO_ACTION_BASE == 1 {
-                0.0
-            } else {
-                max.y
-            };
-            if let Some(target) = runtime.entity_of(list) {
-                commands.write(GuiObjectCommand::new(
-                    target,
-                    GuiObjectAction::SetScrollPosition {
-                        position: Vec2::new(max.x, y),
-                        allow_bounce: false,
-                    },
-                ));
-            }
+        Some(index @ (1 | 2)) => {
+            commands.write(GuiObjectCommand::new(
+                target,
+                GuiObjectAction::SetScrollPercentage {
+                    percentage: Vec2::new(0.0, if index == 1 { 0.0 } else { 1.0 }),
+                    animated: false,
+                },
+            ));
         }
         _ => {}
     }

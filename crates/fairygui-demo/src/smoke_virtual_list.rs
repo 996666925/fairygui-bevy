@@ -179,6 +179,7 @@ fn drive(
     let elapsed = state.frame - state.since;
     let scale = window.scale_factor();
     let root = state.root.and_then(|i| runtime.root_object(i));
+    controller.root_owner = root.and_then(|root| runtime.entity_of(root));
     match state.step {
         0 => {
             let index = runtime.create_root(handle, &asset.package, "Main").unwrap();
@@ -296,6 +297,7 @@ fn drive(
         }
         18 if elapsed >= 8 => {
             controller.root = None;
+            controller.root_owner = None;
             controller.package = None;
             runtime.remove_root(&mut commands, state.root.unwrap());
             state.step = 19;
