@@ -23,6 +23,19 @@ pub fn bind(
         let Some(icon) = gui.icon(source) else {
             continue;
         };
+        let Some(free) = gui.child_by_name(page, "a") else {
+            continue;
+        };
+        let Some(bounded) = gui.child_by_name(page, "d") else {
+            continue;
+        };
+        let Some(bounds) = gui.child_by_name(page, "bounds") else {
+            continue;
+        };
+        commands.entity(free).insert(GuiDraggable::default());
+        commands.entity(bounded).insert(GuiDraggable {
+            bounds: Some(GuiDragBounds::Control(bounds)),
+        });
         commands.entity(source).insert(GuiDragSource {
             icon: Some(icon.to_owned()),
             data: Some(icon.to_owned()),

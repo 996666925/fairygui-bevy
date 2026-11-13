@@ -12,6 +12,10 @@ struct State {
     agent: Option<Entity>,
     icon: String,
     cursor: Option<Vec2>,
+    free: Option<Entity>,
+    bounded: Option<Entity>,
+    bounds: Option<Entity>,
+    initial: Vec2,
 }
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>().add_systems(
@@ -29,6 +33,7 @@ fn drive(
     gui: GuiQuery,
     drag: Res<GuiDragState>,
     sources: Query<&GuiDragSource>,
+    motions: Query<&GuiObjectDragState>,
     existing: Query<()>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     assets: Res<AssetServer>,
@@ -55,6 +60,7 @@ fn drive(
     let mut next = false;
     match state.step {
         0 => {
+            window.resolution.set(1600., 1000.);
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
@@ -70,7 +76,7 @@ fn drive(
                 .id();
             commands.write_message(GuiObjectCommand::new(
                 page,
-                GuiObjectAction::SetPosition(Vec2::new(220., 140.)),
+                GuiObjectAction::SetPosition(Vec2::new(120., 90.)),
             ));
             state.page = Some(page);
             next = true;
@@ -87,6 +93,9 @@ fn drive(
             }
             state.source = Some(source);
             state.receiver = Some(receiver);
+            state.free = gui.child_by_name(state.page.unwrap(), "a");
+            state.bounded = gui.child_by_name(state.page.unwrap(), "d");
+            state.bounds = gui.child_by_name(state.page.unwrap(), "bounds");
             state.icon = gui.icon(source).unwrap().to_owned();
             assert!(!state.icon.is_empty());
             assert_eq!(gui.icon(receiver), Some(""));
@@ -135,7 +144,9 @@ fn drive(
             assert!(!drag.is_dragging());
             assert!(!existing.contains(state.agent.unwrap()));
             assert_eq!(gui.icon(state.receiver.unwrap()), Some(state.icon.as_str()));
-            state.cursor = Some(center(state.source.unwrap()));
+            let free = state.free.unwrap();
+            state.initial = gui.transform(free).unwrap().position();
+            state.cursor = Some(center(free));
             next = true;
         }
         9 if elapsed >= 4 => {
@@ -147,18 +158,75 @@ fn drive(
             next = true;
         }
         11 if elapsed >= 8 => {
+            let free = state.free.unwrap();
+            assert!(motions.get(free).unwrap().is_dragging());
+            assert_eq!(gui.transform(free).unwrap().position(), state.initial);
+            *state.cursor.as_mut().unwrap() += Vec2::new(80., 50.);
+            next = true;
+        }
+        12 if elapsed >= 8 => {
+            let moved = gui.transform(state.free.unwrap()).unwrap().position();
+            assert!((moved - state.initial).abs_diff_eq(Vec2::new(80., 50.), 1.));
+            mouse.release(MouseButton::Left);
+            next = true;
+        }
+        13 if elapsed >= 8 => {
+            assert!(!motions.get(state.free.unwrap()).unwrap().is_dragging());
+            state.cursor = Some(center(state.bounded.unwrap()));
+            next = true;
+        }
+        14 if elapsed >= 4 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        15 if elapsed >= 4 => {
+            *state.cursor.as_mut().unwrap() += Vec2::new(20., 20.);
+            next = true;
+        }
+        16 if elapsed >= 8 => {
+            assert!(motions.get(state.bounded.unwrap()).unwrap().is_dragging());
+            state.cursor = Some(Vec2::new(20., 20.));
+            next = true;
+        }
+        17 if elapsed >= 8 => {
+            let bounds = gui.transform(state.bounds.unwrap()).unwrap();
+            let moved = gui.transform(state.bounded.unwrap()).unwrap();
+            assert!(moved.position().abs_diff_eq(bounds.position(), 1.));
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-ecs-bounded-drag.png"));
+            next = true;
+        }
+        18 if elapsed >= 8 => {
+            mouse.release(MouseButton::Left);
+            next = true;
+        }
+        19 if elapsed >= 8 => {
+            assert!(!motions.get(state.bounded.unwrap()).unwrap().is_dragging());
+            state.cursor = Some(center(state.source.unwrap()));
+            next = true;
+        }
+        20 if elapsed >= 4 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        21 if elapsed >= 4 => {
+            *state.cursor.as_mut().unwrap() += Vec2::new(40., 15.);
+            next = true;
+        }
+        22 if elapsed >= 8 => {
             assert!(drag.is_dragging());
             state.agent = drag.agent();
             commands.entity(state.page.unwrap()).despawn();
             next = true;
         }
-        12 if elapsed >= 8 => {
+        23 if elapsed >= 8 => {
             assert!(!drag.is_dragging());
             assert!(!existing.contains(state.agent.unwrap()));
             assert!(!existing.contains(state.source.unwrap()));
             mouse.release(MouseButton::Left);
             println!(
-                "demo smoke PASSED: ECS drag source threshold, centered Loader proxy, native target picking, entity drop observer icon response, proxy cleanup and source disposal"
+                "demo smoke PASSED: ECS free and bounded control movement, native threshold origin, Loader proxy, entity drop icon response, pointer release, proxy cleanup and source disposal"
             );
             exit.write(AppExit::Success);
             next = true;

@@ -311,6 +311,7 @@ pub(super) fn route_touches(
             } else {
                 Gesture::begin_excluding(&mut runtime, target, &transforms, &occupied)
             };
+            gesture.set_touch_id(event.id);
             gesture.update(
                 &mut runtime,
                 position,

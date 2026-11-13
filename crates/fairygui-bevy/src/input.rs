@@ -350,6 +350,7 @@ pub fn register(app: &mut App) {
         .add_systems(
             Update,
             (
+                crate::runtime::object_drag::prepare_object_drags,
                 crate::runtime::ecs_drag_drop::prepare_drag_targets,
                 crate::runtime::sync_text_inputs,
                 crate::runtime::sync_input_policy,

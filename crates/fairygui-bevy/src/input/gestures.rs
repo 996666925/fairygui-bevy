@@ -63,6 +63,12 @@ impl PointerTransform {
 pub(super) enum Gesture {
     None,
     Slider(GObjectId),
+    Object {
+        owner: GObjectId,
+        parent: GObjectId,
+        motion: Option<fairygui_core::drag_drop::ObjectDrag>,
+        touch_id: Option<u64>,
+    },
     Grip {
         bar: GObjectId,
         container: GObjectId,
@@ -89,6 +95,7 @@ impl Gesture {
         match self {
             Self::None => None,
             Self::Slider(id) => Some(*id),
+            Self::Object { owner, .. } => Some(*owner),
             Self::Grip { container, .. } | Self::Scroll { container, .. } => Some(*container),
             Self::Window { owner, .. } => runtime.window_index(*owner).map(|_| *owner),
         }
@@ -163,6 +170,36 @@ impl Gesture {
         if runtime.store().scroll_bar_of_part(target).is_some() {
             return Self::None;
         }
+        let mut current = Some(target);
+        while let Some(owner) = current {
+            // A configured proxy drag reserves the pointer before scrolling can
+            // consume the threshold displacement on the same input frame.
+            if runtime.drag_source_bindings.contains(&owner) {
+                return Self::None;
+            }
+            if runtime.object_drag_eligible(owner) {
+                if occupied.contains(&owner) {
+                    return Self::None;
+                }
+                if let Some(parent) = runtime
+                    .store()
+                    .object(owner)
+                    .and_then(|object| object.parent())
+                {
+                    return Self::Object {
+                        owner,
+                        parent,
+                        motion: None,
+                        touch_id: None,
+                    };
+                }
+                return Self::None;
+            }
+            current = runtime
+                .store()
+                .object(owner)
+                .and_then(|object| object.parent());
+        }
         if let Some(index) = (0..runtime.window_count()).find(|i| {
             runtime.window(*i).is_some_and(|w| {
                 w.is_showing() && w.is_draggable() && w.is_in_drag_area(runtime.store(), target)
@@ -212,6 +249,53 @@ impl Gesture {
         positions: &[(GObjectId, Vec2)],
     ) {
         match self {
+            Self::Object {
+                owner,
+                parent: _,
+                motion,
+                touch_id,
+            } if moved => {
+                if !runtime.object_drag_eligible(*owner) {
+                    return;
+                }
+                let newly_started = motion.is_none();
+                if newly_started {
+                    *motion = fairygui_core::drag_drop::ObjectDrag::begin(
+                        runtime.store(),
+                        *owner,
+                        Point::new(cursor.x, cursor.y),
+                    );
+                    if motion.is_none() {
+                        return;
+                    }
+                    let active = crate::runtime::object_drag::Active {
+                        touch_id: *touch_id,
+                        position: cursor,
+                    };
+                    runtime.active_object_drags.insert(*owner, active);
+                    runtime.object_drag_event(*owner, EventKind::DragStart, active);
+                }
+                if newly_started || cursor != last {
+                    let bounds = runtime
+                        .object_drag_bindings
+                        .get(owner)
+                        .and_then(|binding| binding.bounds);
+                    let stage = runtime.root_container();
+                    if motion.as_ref().unwrap().update(
+                        runtime.store_mut(),
+                        Point::new(cursor.x, cursor.y),
+                        bounds,
+                        stage,
+                    ) {
+                        let active = crate::runtime::object_drag::Active {
+                            touch_id: *touch_id,
+                            position: cursor,
+                        };
+                        runtime.active_object_drags.insert(*owner, active);
+                        runtime.object_drag_event(*owner, EventKind::DragMove, active);
+                    }
+                }
+            }
             Self::Slider(id) => {
                 if let Some((_, n)) = positions.iter().find(|(object, _)| object == id)
                     && let Some(object) = runtime.store().object(*id)
@@ -284,6 +368,7 @@ impl Gesture {
 
     pub(super) fn finish(&self, runtime: &mut GuiRuntime, dt: f32) {
         match self {
+            Self::Object { owner, .. } => runtime.end_object_drag(*owner),
             Self::Grip { bar, .. } => {
                 runtime
                     .store_mut()
@@ -309,6 +394,19 @@ impl Gesture {
 
     pub(super) fn valid(&self, runtime: &GuiRuntime) -> bool {
         match self {
+            Self::Object {
+                owner,
+                parent,
+                motion,
+                ..
+            } => {
+                runtime.object_drag_eligible(*owner)
+                    && runtime
+                        .store()
+                        .object(*owner)
+                        .is_some_and(|object| object.parent() == Some(*parent))
+                    && (motion.is_none() || runtime.active_object_drags.contains_key(owner))
+            }
             Self::Window { owner, .. } => runtime
                 .window_index(*owner)
                 .and_then(|index| runtime.window(index))
@@ -323,6 +421,12 @@ impl Gesture {
                     && runtime.store().scroll_bar_axis(*bar) == Some(*vertical)
             }
             _ => true,
+        }
+    }
+
+    pub(super) fn set_touch_id(&mut self, id: u64) {
+        if let Self::Object { touch_id, .. } = self {
+            *touch_id = Some(id);
         }
     }
 }

@@ -5,7 +5,91 @@
 //! 界面布局。
 
 use crate::geom::Point;
+use crate::geom::Rect;
 use crate::object::{GObjectId, ObjectStore};
+
+/// Native GObject movement session, distinct from a drag-and-drop proxy. Begins
+/// at threshold crossing so the initial sensitivity displacement is discarded.
+#[derive(Debug, Clone)]
+pub struct ObjectDrag {
+    owner: GObjectId,
+    parent: GObjectId,
+    pointer_start: Point,
+    global_rect: Rect,
+}
+impl ObjectDrag {
+    pub fn begin(store: &ObjectStore, owner: GObjectId, pointer: Point) -> Option<Self> {
+        if !pointer.x.is_finite() || !pointer.y.is_finite() {
+            return None;
+        }
+        let object = store.object(owner)?;
+        let parent = object.parent()?;
+        store.global_to_local(parent, pointer)?;
+        Some(Self {
+            owner,
+            parent,
+            pointer_start: pointer,
+            global_rect: store
+                .local_to_global_rect(owner, Rect::new(0., 0., object.width(), object.height()))?,
+        })
+    }
+    pub fn parent(&self) -> GObjectId {
+        self.parent
+    }
+
+    /// Bounds are stage-local, as in GObject.dragBounds. Oversized controls pin
+    /// to the bounds origin. Live parent transforms are used before JS rounding.
+    pub fn update(
+        &self,
+        store: &mut ObjectStore,
+        pointer: Point,
+        bounds: Option<Rect>,
+        stage: Option<GObjectId>,
+    ) -> bool {
+        if !pointer.x.is_finite()
+            || !pointer.y.is_finite()
+            || store
+                .object(self.owner)
+                .is_none_or(|object| object.parent() != Some(self.parent))
+        {
+            return false;
+        }
+        let mut x = pointer.x - self.pointer_start.x + self.global_rect.x;
+        let mut y = pointer.y - self.pointer_start.y + self.global_rect.y;
+        if let Some(bounds) = bounds {
+            let bounds = if let Some(stage) = stage {
+                let Some(bounds) = store.local_to_global_rect(stage, bounds) else {
+                    return false;
+                };
+                bounds
+            } else {
+                bounds
+            };
+            if ![bounds.x, bounds.y, bounds.width, bounds.height]
+                .iter()
+                .all(|v| v.is_finite())
+            {
+                return false;
+            }
+            if x < bounds.x {
+                x = bounds.x;
+            } else if x + self.global_rect.width > bounds.right() {
+                x = (bounds.right() - self.global_rect.width).max(bounds.x);
+            }
+            if y < bounds.y {
+                y = bounds.y;
+            } else if y + self.global_rect.height > bounds.bottom() {
+                y = (bounds.bottom() - self.global_rect.height).max(bounds.y);
+            }
+        }
+        let Some(local) = store.global_to_local(self.parent, Point::new(x, y)) else {
+            return false;
+        };
+        // Math.round(-0.5) is zero, unlike Rust's round-away-from-zero.
+        store.set_xy(self.owner, (local.x + 0.5).floor(), (local.y + 0.5).floor());
+        true
+    }
+}
 
 /// 一次拖拽的结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +228,84 @@ impl DragDrop {
 mod tests {
     use super::*;
     use crate::package::ObjectType;
+
+    #[test]
+    fn object_drag_discards_sensitivity_motion_rounds_like_js_and_clamps_oversized_bounds() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        store.set_xy(parent, 50., 70.);
+        let owner = store.create(ObjectType::Component);
+        store.set_parent(owner, Some(parent));
+        store.set_size(owner, 20., 30.);
+        store.set_xy(owner, 10., 20.);
+        let drag = ObjectDrag::begin(&store, owner, Point::new(120., 130.)).unwrap();
+        assert!(drag.update(&mut store, Point::new(120., 130.), None, None));
+        assert_eq!(
+            store.object(owner).unwrap().position(),
+            Point::new(10., 20.)
+        );
+        assert!(drag.update(&mut store, Point::new(109.5, 109.5), None, None));
+        assert_eq!(store.object(owner).unwrap().position(), Point::new(0., 0.));
+        let bounds = Rect::new(80., 100., 10., 10.);
+        assert!(drag.update(&mut store, Point::new(1000., 1000.), Some(bounds), None));
+        assert_eq!(
+            store.object(owner).unwrap().position(),
+            Point::new(30., 30.)
+        );
+        assert!(drag.update(&mut store, Point::new(-1000., -1000.), Some(bounds), None));
+        assert_eq!(
+            store.object(owner).unwrap().position(),
+            Point::new(30., 30.)
+        );
+    }
+
+    #[test]
+    fn native_coordinate_conversion_preserves_anchor_skew_reflection_and_two_corner_rectangles() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        let owner = store.create(ObjectType::Component);
+        store.set_parent(owner, Some(parent));
+        store.set_xy(parent, 40., 70.);
+        store.set_size(parent, 200., 100.);
+        store.set_pivot(parent, 0.5, 0.5, true);
+        store.set_scale(parent, -2., 1.5);
+        store.set_rotation(parent, 35.);
+        store.set_skew(parent, 8., -11.);
+        store.set_xy(owner, 15., 20.);
+        store.set_size(owner, 40., 30.);
+        store.set_pivot(owner, 0.5, 0.5, true);
+        let point = Point::new(9., -12.);
+        let global = store.local_to_global(owner, point).unwrap();
+        let local = store.global_to_local(owner, global).unwrap();
+        assert!((local.x - point.x).abs() < 0.0001 && (local.y - point.y).abs() < 0.0001);
+        let rect = store
+            .local_to_global_rect(owner, Rect::new(0., 0., 40., 30.))
+            .unwrap();
+        assert!(
+            rect.width < 0.,
+            "native conversion retains reflected dimensions"
+        );
+        let origin = store.local_to_global(owner, Point::ZERO).unwrap();
+        assert_eq!(rect.position(), origin);
+        let drag = ObjectDrag::begin(&store, owner, global).unwrap();
+        let desired = store.local_to_global(parent, Point::new(30., 45.)).unwrap();
+        assert!(drag.update(
+            &mut store,
+            Point::new(
+                global.x + desired.x - origin.x,
+                global.y + desired.y - origin.y
+            ),
+            None,
+            None
+        ));
+        assert_eq!(
+            store.object(owner).unwrap().position(),
+            Point::new(30., 45.)
+        );
+        store.set_scale(parent, 0., 1.);
+        assert!(store.global_to_local(parent, global).is_none());
+        assert!(!drag.update(&mut store, global, None, None));
+    }
 
     fn setup() -> (ObjectStore, GObjectId, DragDrop) {
         let mut store = ObjectStore::new();

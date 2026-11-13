@@ -19,6 +19,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `runtime::windows` | Asset-backed ECS window ownership, entity commands and native window snapshots |
 | `runtime::global_wait` | Resource-configured stage-wide wait ownership, native stack ordering and input gating |
 | `runtime::ecs_drag_drop` | ECS drag sources, marked receivers, proxy ownership, pointer arbitration and entity drop events |
+| `runtime::object_drag` | Direct object movement configuration, live stage bounds, pointer ownership and ECS motion snapshots |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
 | `core::fill`, `image_fill`, `image_fill.wesl` | Native fill polygons, image/movie UI material masks, atlas/slice mapping and retained material ownership |
@@ -83,6 +84,34 @@ changing unchanged resource ticks. `GuiIcon` snapshots the native base icon/URL
 for buttons, labels, combo boxes and Loaders before Publish, PostLayout and at
 Sync end; `SetIcon` uses the core forwarding/gear setter. The Basics b-to-c demo
 binds source/receiver components and responds directly to the receiver event.
+
+`GuiDraggable` moves the retained control itself with no proxy. `GuiDragBounds`
+selects a fixed stage rectangle or another view's native rectangle, converted to
+stage coordinates each frame. Invalid/missing bounds disable movement. Gesture
+arbitration keeps sliders/scrollbars first, then the nearest draggable/proxy
+source, then window title movement and scrolling. Reserving proxy-source presses
+also prevents their threshold displacement from first scrolling an ancestor.
+Each movable control has one pointer owner; independent controls can move under
+different fingers.
+
+Native GObject semantics record the pointer and two-corner global rectangle at
+threshold crossing, ignoring the sensitivity displacement. DragMove converts the
+requested global origin through the current parent's inverse transform and uses
+JavaScript Math.round (including negative half values). Stage bounds clamp the
+whole recorded rectangle; oversized dimensions pin to the bounds origin. Core
+local/global APIs share the existing native transform path, including content
+offsets, skew/reflection and anchor-coordinate conversion; rectangles deliberately
+preserve two-corner signed dimensions instead of using a four-corner AABB.
+
+GuiEvent DragStart/DragMove/DragEnd retain native object identity, pointer and
+touch ID, with normal logical bubbling. DragStart and the first DragMove happen
+at threshold crossing; stationary sampling does not synthesize more DragMove.
+GuiObjectDragState refreshes before Publish and at Sync end, preserving unchanged
+component ticks. Removing the configuration, hiding/detaching/blocking the source,
+reparenting, pointer cancellation and focus loss end the active gesture once.
+Disposal removes its state without inventing an event for a nonexistent object.
+GuiDragSource takes precedence on the same control. Unlike the native singleton,
+different retained controls support concurrent independent touch movement.
 
 `GuiPopupCommand` accepts root owners or view entities for existing popups and
 menu template sources. Commands run after root reconciliation and object commands

@@ -23,6 +23,8 @@ pub(crate) mod ecs_drag_drop;
 mod ecs_root_tests;
 #[path = "global_wait.rs"]
 pub(crate) mod global_wait;
+#[path = "object_drag.rs"]
+pub(crate) mod object_drag;
 #[path = "windows.rs"]
 pub(crate) mod windows;
 
@@ -532,6 +534,9 @@ pub struct GuiRuntime {
     just_closed_popups: Vec<GObjectId>,
     /// 拖拽状态：被拖对象、跟手图标与当前命中的放置目标。
     drag_drop: fairygui_core::drag_drop::DragDrop,
+    pub(crate) object_drag_bindings: HashMap<GObjectId, object_drag::Binding>,
+    pub(crate) active_object_drags: HashMap<GObjectId, object_drag::Active>,
+    pub(crate) drag_source_bindings: std::collections::HashSet<GObjectId>,
     ecs_drag: Option<ecs_drag_drop::Session>,
     drop_targets: HashMap<GObjectId, Entity>,
     drop_events: Vec<ecs_drag_drop::GuiDrop>,

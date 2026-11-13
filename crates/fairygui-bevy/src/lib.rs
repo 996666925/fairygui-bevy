@@ -81,6 +81,7 @@ pub use runtime::ecs_drag_drop::{
 pub use runtime::global_wait::{
     GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
 };
+pub use runtime::object_drag::{GuiDragBounds, GuiDraggable, GuiObjectDragState};
 pub use runtime::windows::{FairyGuiWindow, GuiWindowAction, GuiWindowCommand, GuiWindowState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -120,17 +121,18 @@ pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiAnimationComplete,
         GuiButtonSelected, GuiConfig, GuiControllerState, GuiControllers, GuiDisplay,
-        GuiDragCommand, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
-        GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
-        GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,
-        GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
-        GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
-        GuiObjectAction, GuiObjectCommand, GuiObjectInfo, GuiPopupCommand, GuiPopupMenu,
-        GuiPopupState, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery,
-        GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems,
-        GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
+        GuiDragBounds, GuiDragCommand, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop,
+        GuiDropTarget, GuiEvent, GuiFont, GuiGlobalWaitCommand, GuiGlobalWaitError,
+        GuiGlobalWaitSettings, GuiGlobalWaitState, GuiIcon, GuiInputCommand, GuiInputSettings,
+        GuiInputState, GuiLink, GuiListContent, GuiListContentError, GuiListContentState,
+        GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection, GuiListState,
+        GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand,
+        GuiObjectDragState, GuiObjectInfo, GuiPopupCommand, GuiPopupMenu, GuiPopupState,
+        GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
+        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState, GuiWindowAction,
+        GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
     };
 }
 
@@ -235,6 +237,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::windows::sync_window_state,
                 runtime::global_wait::sync_global_wait_state,
                 runtime::ecs_drag_drop::sync_drag_state,
+                runtime::object_drag::sync_object_drag_state,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -342,6 +345,8 @@ impl Plugin for FairyGuiPlugin {
                 runtime::global_wait::sync_global_wait_state,
                 runtime::ecs_drag_drop::prepare_drag_targets,
                 runtime::ecs_drag_drop::sync_drag_state,
+                runtime::object_drag::prepare_object_drags,
+                runtime::object_drag::sync_object_drag_state,
                 list::sync_list_state,
                 list::sync_virtual_list_state,
             )

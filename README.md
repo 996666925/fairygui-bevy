@@ -233,6 +233,23 @@ fn on_drop(event: On<GuiDrop>) {
 `GuiIcon` / `gui.icon(entity)` 读取原生图标地址，`SetIcon` 修改图标，空字符串清除。
 Basics 的 b→c 拖放使用这套接口，`--smoke-drag-drop` 可运行真实窗口专项回归。
 
+移动控件本身使用 `GuiDraggable`；自由拖动不创建代理，边界可指定舞台矩形或另一个
+控件实体的区域：
+
+```rust,ignore
+commands.entity(free).insert(GuiDraggable::default());
+commands.entity(bounded).insert(GuiDraggable {
+    bounds: Some(GuiDragBounds::Control(bounds_entity)),
+});
+```
+
+`GuiDragBounds::Stage(rect)` 使用固定舞台逻辑坐标；`Control(entity)` 随边界控件的
+位置和尺寸更新。`GuiObjectDragState` 提供拖动中和所属触摸 ID；在控件上观察
+`GuiEvent` 的 `DragStart`、`DragMove`、`DragEnd` 响应生命周期。超过阈值时记录
+起点，从后续位移开始移动，位置遵循原版整数取整，超大控件固定到边界起点。
+移除组件或失去输入资格会结束拖动；同一控件只允许一个指针操作。Basics 的 A
+自由拖动、D 边界拖动也通过这些组件绑定。
+
 滚动容器上的只读 `GuiScrollState`（或 `gui.scroll(entity)`）提供逻辑目标位置、
 动画当前显示位置、视口/内容尺寸、最大位置、两种位置对应的进度比例及当前页。
 它在输入事件发布前和 Sync 结束时更新，没有滚动容器的对象不带该组件。

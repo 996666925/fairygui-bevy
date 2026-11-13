@@ -10,6 +10,44 @@ use crate::{
 mod tests;
 
 impl ObjectStore {
+    /// Native GObject.localToGlobal, including pivot-anchor API coordinates,
+    /// ancestor transforms and component content offsets. Coordinates are logical
+    /// stage pixels, independent of renderer layout and window DPI.
+    pub fn local_to_global(&self, id: GObjectId, mut point: Point) -> Option<Point> {
+        let object = self.object(id)?;
+        if object.pivot_as_anchor() {
+            point.x += object.pivot().x * object.width();
+            point.y += object.pivot().y * object.height();
+        }
+        let point = self.scroll_global_transform(id)?.point(point);
+        (point.x.is_finite() && point.y.is_finite()).then_some(point)
+    }
+
+    /// Inverse of local_to_global. Singular/nonfinite transforms return None.
+    pub fn global_to_local(&self, id: GObjectId, point: Point) -> Option<Point> {
+        let object = self.object(id)?;
+        let mut point = self.scroll_global_transform(id)?.inverse()?.point(point);
+        if object.pivot_as_anchor() {
+            point.x -= object.pivot().x * object.width();
+            point.y -= object.pivot().y * object.height();
+        }
+        (point.x.is_finite() && point.y.is_finite()).then_some(point)
+    }
+
+    /// Native two-corner rectangle conversion; intentionally preserves negative
+    /// dimensions under rotation/reflection instead of constructing an AABB.
+    pub fn local_to_global_rect(&self, id: GObjectId, rect: Rect) -> Option<Rect> {
+        let low = self.local_to_global(id, rect.position())?;
+        let high = self.local_to_global(id, Point::new(rect.right(), rect.bottom()))?;
+        Some(Rect::new(low.x, low.y, high.x - low.x, high.y - low.y))
+    }
+
+    pub fn global_to_local_rect(&self, id: GObjectId, rect: Rect) -> Option<Rect> {
+        let low = self.global_to_local(id, rect.position())?;
+        let high = self.global_to_local(id, Point::new(rect.right(), rect.bottom()))?;
+        Some(Rect::new(low.x, low.y, high.x - low.x, high.y - low.y))
+    }
+
     /// Reveal a content-coordinate rectangle using FairyGUI's item/page policy.
     /// Animated calls set the logical endpoint now and advance display_pos later.
     pub fn scroll_rect_to_view(
