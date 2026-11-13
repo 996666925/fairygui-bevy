@@ -76,6 +76,9 @@ mod grayed;
 #[path = "gear_updates.rs"]
 mod gear_updates;
 
+#[path = "text_format.rs"]
+mod text_format;
+
 #[path = "stage.rs"]
 mod stage;
 #[path = "transitions.rs"]

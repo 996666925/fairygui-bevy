@@ -3428,9 +3428,10 @@ pub(crate) fn sync_dirty(
             && let Some(data) = gobject.control().as_text_field()
         {
             if text.is_some() {
-                commands
-                    .entity(entity)
-                    .insert(backend::text_layout_for_object(gobject, data));
+                commands.entity(entity).insert((
+                    backend::text_layout_for_object(gobject, data),
+                    backend::text_letter_spacing_for(data),
+                ));
                 if data.underline {
                     commands.entity(entity).insert(Underline);
                 } else {

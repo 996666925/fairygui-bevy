@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_text_format.rs"]
+mod text_format;
+pub(super) fn install_text_format(app: &mut App) {
+    text_format::install(app);
+}
 #[path = "smoke_render_order.rs"]
 mod render_order;
 pub(super) fn install_render_order(app: &mut App) {

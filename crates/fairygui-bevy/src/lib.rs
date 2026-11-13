@@ -2,7 +2,8 @@
 //!
 //! 面向应用的界面生命周期、事件响应与控件修改都通过 Bevy ECS 完成：用
 //! [`FairyGuiRoot`] 拥有界面，用 [`GuiQuery`] 查找控件实体，用 [`GuiEvent`]
-//! observer 响应交互，直接修改可变属性组件；播放、滚动等使用 [`GuiMut`]。
+//! observer 响应交互，直接修改可变属性组件（如 [`GuiText`]、[`GuiTextFormat`]）；
+//! 播放、滚动等使用 [`GuiMut`]。
 //!
 //! [`fairygui_core`] 在内部执行 FairyGUI 包语义，运行时把结果同步到对应的 ECS
 //! 实体与 Bevy UI 组件。应用代码通常不需要直接访问 [`GuiRuntime`] 或
@@ -73,6 +74,8 @@ pub use runtime::{GuiMut, GuiObjectMut, GuiWorldExt};
 pub mod slider;
 pub use slider::GuiSliderState;
 pub mod text;
+mod text_format;
+pub use text_format::GuiTextFormat;
 mod text_stroke;
 pub mod tree;
 pub mod tween;
@@ -165,12 +168,13 @@ pub mod prelude {
         GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
         GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
         GuiRuntime, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace,
-        GuiSystems, GuiText, GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
-        GuiTooltipState, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
-        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
-        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, GuiWorldExt, PopupMenuTemplates,
+        GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTooltipCommand, GuiTooltipError,
+        GuiTooltipSettings, GuiTooltipState, GuiTransform, GuiTransitionCallback,
+        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
+        GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
+        GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,
+        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
+        GuiWorldExt, PopupMenuTemplates,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }

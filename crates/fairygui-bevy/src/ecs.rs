@@ -548,6 +548,7 @@ pub struct GuiQuery<'w, 's> {
     transforms: Query<'w, 's, &'static GuiTransform>,
     spaces: Query<'w, 's, &'static GuiSpace>,
     texts: Query<'w, 's, &'static GuiText>,
+    text_formats: Query<'w, 's, &'static crate::GuiTextFormat>,
     icons: Query<'w, 's, &'static GuiIcon>,
     sorting_orders: Query<'w, 's, &'static GuiSortingOrder>,
     render_orders: Query<'w, 's, &'static GuiRenderOrder>,
@@ -628,6 +629,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn render_order(&self, entity: Entity) -> Option<&GuiRenderOrder> {
         self.render_orders.get(self.view(entity)?).ok()
+    }
+
+    pub fn text_format(&self, entity: Entity) -> Option<&crate::GuiTextFormat> {
+        self.text_formats.get(self.view(entity)?).ok()
     }
 
     /// Logical index among all siblings, independent of list paint order.

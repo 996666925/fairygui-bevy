@@ -480,7 +480,7 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 `entity` 与 `callback` 字段，也在 Sync 后发布。demo 通过完成消息回收临时界面。
 
 普通属性直接修改 ECS 组件：`GuiText`、`GuiIcon`、`GuiTransform`、`GuiDisplay`、
-`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
+`GuiTextFormat`、`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
 将业务系统放在 `GuiSystems::Respond`，插件会在本帧 Sync 应用修改并更新 Bevy UI。
 
 ```rust,ignore
@@ -501,6 +501,32 @@ fn move_button(mut transforms: Query<&mut GuiTransform>, target: Entity) {
 会同步回组件。未变化时保留组件变更标记。修改控件的视图实体；根创建前的位置、尺寸
 用 `FairyGuiRoot` 的构造方法设置，其余初始属性可随拥有者一起挂载，资产就绪后应用。
 移除属性组件会恢复原生投影；移除拥有者会一起清理对应状态。
+
+文字样式直接修改 `GuiTextFormat`，按钮、标签和下拉框会转发到其标题文字：
+
+```rust,ignore
+fn style_text(mut formats: Query<&mut GuiTextFormat>, target: Entity) {
+    if let Ok(mut format) = formats.get_mut(target) {
+        format.font_size = 32;
+        format.color = Color::srgb(0.2, 0.6, 1.0);
+        format.bold = true;
+        format.stroke = 2.0;
+        format.stroke_color = Color::BLACK;
+    }
+}
+```
+
+组件同时提供字体、水平/垂直对齐、行距、字距、粗体/斜体/下划线、单行、自动尺寸、
+UBB 和 HTML 开关。`font = None` 使用默认字体，也支持系统字体族、外部字体资产和
+`ui://` 位图字体；颜色接受 Bevy `Color`，转换到 sRGB 后写入模型。灰态等显示效果
+不改变这里的原始颜色，文本内容仍通过 `GuiText` 修改。未编辑的样式字段跟随原生
+控制器和过渡变化；颜色按原版回写当前页的颜色齿轮，字号修改不回写字号齿轮。
+格式变化在同帧文本测量之前生效，自动尺寸继续参与关联与列表布局。
+
+`GuiQuery::text_format` 可读取根拥有者或控件的格式。初始格式可随根拥有者挂载，
+其所有字段都会作为初始配置；仅修改导出格式的少数字段时，在 Initialize 查询并编辑。
+即时操作可用 `GuiObjectMut::text_format` / `set_text_format`。无文字标题的控件不带
+该组件。`--smoke-text-format` 验证格式修改、普通/富文本/位图输入切换和真实按钮点击。
 
 播放、补间、滚动和树展开等操作通过 `GuiMut` 直接调用，不经过对象消息队列：
 

@@ -46,6 +46,16 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn text_format(&self) -> Option<crate::GuiTextFormat> {
+        <crate::GuiTextFormat as crate::properties::Property>::read(self.runtime, self.object)
+    }
+
+    pub fn set_text_format(&mut self, format: crate::GuiTextFormat) {
+        use crate::properties::Property;
+        if let Some(native) = self.text_format() {
+            format.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn set_children_render_order(&mut self, order: crate::ChildrenRenderOrder) {
         self.runtime
             .store_mut()

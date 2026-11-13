@@ -22,6 +22,7 @@ pub(crate) fn sync(world: &mut World) {
     // Controller gears can change every property below. Consume application
     // page edits before publishing geometry, values, text and display state.
     sync_property::<GuiControllers>(world);
+    sync_property::<GuiTextFormat>(world);
     sync_property::<GuiRenderOrder>(world);
     sync_property::<GuiSortingOrder>(world);
     sync_property::<GuiTransform>(world);
