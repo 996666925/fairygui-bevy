@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_chat.rs"]
+mod chat;
+pub(super) fn install_chat(app: &mut App) {
+    chat::install(app);
+}
 #[path = "smoke_item_provider.rs"]
 mod item_provider;
 pub(super) fn install_item_provider(app: &mut App) {

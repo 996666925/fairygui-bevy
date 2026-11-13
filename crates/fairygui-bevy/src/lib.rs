@@ -81,7 +81,7 @@ pub use list::{
     GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListRow,
     GuiListState, GuiVirtualList, GuiVirtualListState,
 };
-pub use popup::{GuiPopupCommand, GuiPopupMenu, GuiPopupState};
+pub use popup::{GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState};
 pub use pull::GuiPullCommand;
 pub use runtime::ecs_drag_drop::{
     GuiDragCommand, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget,
@@ -145,11 +145,11 @@ pub mod prelude {
         GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
         GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
         GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPointerCapture,
-        GuiPointerId, GuiPopupCommand, GuiPopupMenu, GuiPopupState, GuiProgressValue,
-        GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView,
-        GuiRuntime, GuiScrollState, GuiSliderValue, GuiSpace, GuiSystems, GuiText, GuiTextInput,
-        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
+        GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
+        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSpace, GuiSystems, GuiText,
+        GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
         GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
         GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
@@ -346,6 +346,7 @@ impl Plugin for FairyGuiPlugin {
                     movie::discard_unused_animation_commands,
                 )
                     .chain(),
+                (runtime::sync_virtual_lists, runtime::spawn_pending_objects).chain(),
                 runtime::sync_text_inputs,
                 runtime::text_measure::sync_sizes,
                 runtime::content::sync_content_layout,
@@ -364,8 +365,7 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 runtime::sync_bitmap_rich_text,
                 graph::sync_graphs,
-                runtime::sync_rich_text,
-                runtime::text_measure::sync_padding,
+                (runtime::sync_rich_text, runtime::text_measure::sync_padding).chain(),
                 runtime::sync_appearance,
                 image_fill::sync_image_fills,
                 (

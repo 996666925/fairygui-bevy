@@ -186,7 +186,10 @@ fn drive(
             ));
             state.owner = Some(
                 commands
-                    .spawn(FairyGuiRoot::new(assets.load("ui/Chat.fui"), "Main"))
+                    .spawn((
+                        FairyGuiRoot::new(assets.load("ui/Chat.fui"), "Main"),
+                        chat_demo::ChatFixture,
+                    ))
                     .id(),
             );
             next = true;

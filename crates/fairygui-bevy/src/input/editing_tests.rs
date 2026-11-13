@@ -410,6 +410,58 @@ fn prevent_submit(
 }
 
 #[test]
+fn input_entity_observers_receive_committed_password_value_and_can_cancel_enter_before_sync() {
+    #[derive(Resource, Default)]
+    struct Seen(Vec<(Entity, EventKind, String)>);
+    fn observe(event: On<crate::GuiTextInput>, mut seen: ResMut<Seen>, mut commands: Commands) {
+        seen.0
+            .push((event.entity, event.event.kind.clone(), event.value.clone()));
+        if event.event.kind == EventKind::Enter {
+            commands.write_message(GuiInputCommand::PreventSubmit(event.entity));
+        }
+    }
+    let (mut app, owner, view, window) = fixture();
+    app.init_resource::<Seen>();
+    app.world_mut().entity_mut(view).observe(observe);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_input_password(owner, true);
+    app.world_mut().write_message(GuiInputCommand::Focus(view));
+    app.update();
+    key(
+        &mut app,
+        window,
+        Key::Character("secret".into()),
+        KeyCode::KeyS,
+        Some("secret"),
+    );
+    app.update();
+    key(&mut app, window, Key::Enter, KeyCode::Enter, None);
+    app.update();
+    assert!(
+        app.world()
+            .resource::<Seen>()
+            .0
+            .iter()
+            .any(|(entity, kind, value)| *entity == view
+                && *kind == EventKind::Enter
+                && value == "secret")
+    );
+    assert_eq!(
+        app.world().non_send::<GuiRuntime>().focused_input(),
+        Some(owner)
+    );
+    assert!(
+        !app.world()
+            .resource::<Seen>()
+            .0
+            .iter()
+            .any(|(_, kind, _)| *kind == EventKind::FocusOut)
+    );
+}
+
+#[test]
 fn entity_input_commands_resolve_compound_owners_and_preserve_other_bevy_focus() {
     let (mut app, input, view, _) = fixture();
     let (root, wrapper) = {

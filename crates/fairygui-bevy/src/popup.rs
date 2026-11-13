@@ -47,6 +47,14 @@ pub enum GuiPopupCommand {
         popup: Entity,
         position: Vec2,
     },
+    /// Native GRoot placement relative to a control's logical origin, adjusting
+    /// horizontal overflow and optionally flipping above the anchor.
+    /// The anchor must be materialized when the popup request executes.
+    ShowAnchored {
+        popup: Entity,
+        anchor: Entity,
+        direction: GuiPopupDirection,
+    },
     Hide {
         popup: Entity,
     },
@@ -64,10 +72,20 @@ pub enum GuiPopupCommand {
     DisposeMenu,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GuiPopupDirection {
+    #[default]
+    Auto,
+    Up,
+    Down,
+}
+
 impl GuiPopupCommand {
     fn target(&self) -> Option<Entity> {
         match self {
-            Self::Show { popup, .. } | Self::Hide { popup } => Some(*popup),
+            Self::Show { popup, .. } | Self::ShowAnchored { popup, .. } | Self::Hide { popup } => {
+                Some(*popup)
+            }
             Self::ShowMenu { source, .. } => Some(*source),
             _ => None,
         }
@@ -183,7 +201,7 @@ pub(crate) fn apply_popup_commands(
         } else {
             None
         };
-        if position.is_some() {
+        if position.is_some() || matches!(command, GuiPopupCommand::ShowAnchored { .. }) {
             if let Some((_, window, _)) = windows.iter().find(|(entity, _, primary)| {
                 settings.window.map_or(*primary, |chosen| chosen == *entity)
             }) {
@@ -193,6 +211,49 @@ pub(crate) fn apply_popup_commands(
             }
         }
         match command {
+            GuiPopupCommand::ShowAnchored {
+                anchor, direction, ..
+            } => {
+                let popup = object.unwrap();
+                if runtime.window_index(popup).is_some() {
+                    continue;
+                }
+                let target = objects
+                    .get(anchor)
+                    .map(|reference| reference.0)
+                    .or_else(|_| roots.get(anchor).map(|root| root.object))
+                    .ok()
+                    .or_else(|| runtime.ecs_window_object(anchor));
+                let Some(target) = target else {
+                    continue;
+                };
+                let Some(origin) = runtime.store().local_to_global(target, Point::ZERO) else {
+                    continue;
+                };
+                let target_size = runtime.store().object(target).unwrap().size();
+                let popup_size = runtime.store().object(popup).unwrap().size();
+                let viewport = runtime
+                    .store()
+                    .object(runtime.root_container().unwrap())
+                    .unwrap()
+                    .size();
+                let mut x = origin.x;
+                if x + popup_size.width > viewport.width {
+                    x += target_size.width - popup_size.width;
+                }
+                let mut y = origin.y + target_size.height;
+                if direction == GuiPopupDirection::Up
+                    || direction == GuiPopupDirection::Auto
+                        && origin.y + popup_size.height > viewport.height
+                {
+                    y = origin.y - popup_size.height - 1.;
+                    if y < 0. {
+                        y = 0.;
+                        x += target_size.width * 0.5;
+                    }
+                }
+                runtime.show_popup(popup, Point::new(x, y));
+            }
             GuiPopupCommand::Show { position, .. } => {
                 if runtime.window_index(object.unwrap()).is_some() {
                     tracing::warn!("use GuiWindowCommand to show a native window");

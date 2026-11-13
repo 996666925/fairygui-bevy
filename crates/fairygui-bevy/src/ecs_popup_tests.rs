@@ -61,6 +61,82 @@ fn menu(source: Entity) -> GuiPopupCommand {
 }
 
 #[test]
+fn anchored_popup_uses_live_anchor_geometry_directions_and_retained_owner_views() {
+    let (mut app, asset) = fixture();
+    load(&mut app, &asset, false);
+    let anchor = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset.clone(), "CloseButton"))
+        .id();
+    let mut source = FairyGuiRoot::new(asset, "CloseButton");
+    source.active = false;
+    let popup = app.world_mut().spawn(source).id();
+    app.update();
+    app.world_mut().write_message(crate::GuiObjectCommand::new(
+        anchor,
+        crate::GuiObjectAction::SetSize(Vec2::new(40., 20.)),
+    ));
+    app.world_mut().write_message(crate::GuiObjectCommand::new(
+        popup,
+        crate::GuiObjectAction::SetSize(Vec2::new(150., 70.)),
+    ));
+    let view = app.world().get::<GuiRootView>(popup).unwrap().0;
+    // Native GRoot.showPopup branches: overflow shifts by anchor width minus
+    // popup width; Up adds -1; an above-screen popup shifts x by half the anchor.
+    for (direction, position, expected) in [
+        (
+            GuiPopupDirection::Down,
+            Vec2::new(1200., 660.),
+            Vec2::new(1090., 680.),
+        ),
+        (
+            GuiPopupDirection::Up,
+            Vec2::new(1200., 660.),
+            Vec2::new(1090., 589.),
+        ),
+        (
+            GuiPopupDirection::Auto,
+            Vec2::new(1200., 700.),
+            Vec2::new(1090., 629.),
+        ),
+        (
+            GuiPopupDirection::Up,
+            Vec2::new(20., 10.),
+            Vec2::new(40., 0.),
+        ),
+        (
+            GuiPopupDirection::Auto,
+            Vec2::new(20., 10.),
+            Vec2::new(20., 30.),
+        ),
+    ] {
+        app.world_mut().write_message(crate::GuiObjectCommand::new(
+            anchor,
+            crate::GuiObjectAction::SetPosition(position),
+        ));
+        send(
+            &mut app,
+            GuiPopupCommand::ShowAnchored {
+                popup,
+                anchor,
+                direction,
+            },
+        );
+        app.update();
+        let mut query = SystemState::<GuiQuery>::new(app.world_mut());
+        let gui = query.get(app.world()).unwrap();
+        let actual = gui.transform(popup).unwrap().position();
+        assert_eq!(actual, expected);
+        assert_eq!(gui.view(popup), Some(view));
+        assert!(
+            app.world()
+                .resource::<GuiPopupState>()
+                .is_open(gui.view(popup).unwrap())
+        );
+    }
+}
+
+#[test]
 fn ecs_popup_roots_wait_for_assets_retain_views_and_close_the_stack_above_a_target() {
     let (mut app, asset) = fixture();
     let first = app

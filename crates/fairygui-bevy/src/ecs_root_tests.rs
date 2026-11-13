@@ -539,12 +539,8 @@ fn ecs_roots_capture_global_font_before_their_first_views_are_spawned() {
     }
     let (mut app, asset) = app();
     load(&mut app, &asset);
-    app.init_resource::<InitialFonts>().add_systems(
-        Update,
-        capture
-            .after(spawn_pending_roots)
-            .before(spawn_pending_objects),
-    );
+    app.init_resource::<InitialFonts>()
+        .add_systems(Update, capture.in_set(crate::GuiSystems::Initialize));
     let first = app.world().resource::<Assets<Font>>().reserve_handle();
     let second = app.world().resource::<Assets<Font>>().reserve_handle();
     for font in [Some(first), Some(second), None] {

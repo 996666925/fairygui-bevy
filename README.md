@@ -57,6 +57,11 @@ commands.write_message(GuiPopupCommand::ShowMenu {
 两类命令在 Sync 中按 `GuiObjectCommand`、`GuiPopupCommand` 的顺序执行；
 同一类消息保持顺序。
 
+`ShowAnchored { popup, anchor, direction }` 根据锚点控件当帧的逻辑坐标放置已有
+弹出层。`GuiPopupDirection::Auto` 在下方空间不足时翻到上方，`Up` / `Down`
+指定方向；保留原版的横向溢出调整和向上放置时的 1 像素间隔。
+锚点在显示请求执行时必须已创建；弹出根本身等待资产的规则与 `Show` 一致。
+
 下拉框及菜单的组件、列表项和分隔项模板可使用其他已登记包的 `ui://` 地址，
 嵌套子组件也按声明的源包构造并使用各自图集；依赖通过 `register_package` 登记。
 
@@ -258,17 +263,15 @@ Stick/Delete 按钮。虚拟行重新绑定数据时通过 `GuiListItem::set_scr
 
 输入框通过 `GuiInputCommand::Focus(entity)` 获取焦点，`Blur` 释放 GUI 输入焦点；
 `GuiInputState::focused_entity()` 返回实际输入框视图实体。`GuiTextInput.entity`
-也指向该输入框，可在 Respond 中响应 Enter 并保留编辑会话：
+也指向该输入框。可直接在输入实体上 `.observe(keep_editing)`，响应 Enter 并保留编辑会话：
 
 ```rust,ignore
 fn keep_editing(
-    mut inputs: MessageReader<GuiTextInput>,
-    mut commands: MessageWriter<GuiInputCommand>,
+    input: On<GuiTextInput>,
+    mut commands: Commands,
 ) {
-    for input in inputs.read() {
-        if input.event.kind == fairygui_bevy::core::object::EventKind::Enter {
-            commands.write(GuiInputCommand::PreventSubmit(input.entity));
-        }
+    if input.event.kind == fairygui_bevy::core::object::EventKind::Enter {
+        commands.write_message(GuiInputCommand::PreventSubmit(input.entity));
     }
 }
 ```
@@ -277,6 +280,15 @@ fn keep_editing(
 PostLayout 均可发送。Focus/PreventSubmit 接受已就绪的根/窗口拥有者和控件视图，
 复合控件转发到输入标题；资产未就绪或目标不存在时丢弃请求。隐藏、离台、模态
 遮挡等仍遵循统一输入策略。Blur 保留其他 Bevy 控件的焦点，同帧焦点请求以最后一个为准。
+
+`GuiTextInput` 的目标 observer 在 Publish 阶段触发，不冒泡；`value` 为已提交的
+原始文本，密码框也不会用遮罩字符替代。需要集中记录时仍可通过消息读取。
+
+Chat 示例通过页面组件拥有消息和表情面板，Send 按钮、输入框与表情列表各自
+绑定 observer。支持按钮/回车发送、首条回复与后续随机回复、100 条历史上限、
+左右行模板和富文本表情；发送前处于底部才继续跟随滚动。表情面板在按钮上方
+显示，选中表情追加标签并保留面板，点击外部关闭；页面销毁时一并回收。
+`--smoke-chat` 验证实际菜单、键盘、按钮、表情选择、历史滚动及关闭重开。
 
 拖放也由实体驱动。在源控件上添加 `GuiDragSource`，目标上添加 `GuiDropTarget`
 并绑定 observer，即可在鼠标或触摸超过拖动阈值后搬运数据：

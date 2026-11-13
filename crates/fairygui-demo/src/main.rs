@@ -13,6 +13,7 @@ use fairygui_core::object::GObjectId;
 
 mod bag_demo;
 mod catalog;
+mod chat_demo;
 mod demos;
 mod drag_drop_demo;
 mod guide_demo;
@@ -142,6 +143,11 @@ fn main() -> AppExit {
     .add_systems(Startup, setup_camera)
     .add_systems(Update, guide_demo::update.in_set(GuiSystems::Respond))
     .add_systems(Update, joystick_demo::fit.in_set(GuiSystems::Respond))
+    .add_systems(Update, chat_demo::fit.in_set(GuiSystems::Respond))
+    .add_systems(
+        Update,
+        chat_demo::follow_bottom.in_set(GuiSystems::PostLayout),
+    )
     .add_systems(Update, modal_wait_demo::advance.in_set(GuiSystems::Respond))
     .add_systems(
         Update,
@@ -189,6 +195,7 @@ fn main() -> AppExit {
             list_effect_demo::bind,
             guide_demo::bind,
             joystick_demo::bind,
+            chat_demo::bind,
         )
             .chain()
             .in_set(GuiSystems::Initialize)
@@ -202,7 +209,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-item-provider") {
+    if std::env::args().any(|arg| arg == "--smoke-chat") {
+        smoke::install_chat(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-item-provider") {
         smoke::install_item_provider(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-first-frame") {
         smoke::install_first_frame(&mut app);
@@ -275,7 +284,9 @@ fn fit_fullscreen_demo_roots(
     for (owner, source) in &roots {
         if source.item_name != "Main"
             || !source.asset.path().is_some_and(|path| {
-                path.path().ends_with("Guide.fui") || path.path().ends_with("Joystick.fui")
+                path.path().ends_with("Guide.fui")
+                    || path.path().ends_with("Joystick.fui")
+                    || path.path().ends_with("Chat.fui")
             })
         {
             continue;

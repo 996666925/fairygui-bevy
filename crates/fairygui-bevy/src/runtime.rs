@@ -372,7 +372,7 @@ pub struct GuiLink {
 
 /// Native input notification. FocusIn/FocusOut correspond to FOCUS/BLUR;
 /// Input/Change/Enter retain their native timing and do not bubble.
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Message, Debug, Clone)]
 pub struct GuiTextInput {
     /// Input view that emitted this notification, including for compound labels.
     pub entity: Entity,
@@ -2038,6 +2038,7 @@ impl GuiRuntime {
 }
 
 pub(crate) fn emit_text_input_messages(
+    mut commands: Commands,
     mut runtime: NonSendMut<GuiRuntime>,
     mut messages: MessageWriter<GuiTextInput>,
 ) {
@@ -2048,6 +2049,7 @@ pub(crate) fn emit_text_input_messages(
         {
             *ready = true;
         }
+        commands.trigger(event.clone());
         messages.write(event);
     }
 }

@@ -405,6 +405,50 @@ fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measureme
 }
 
 #[test]
+fn post_layout_scroll_materializes_and_projects_the_destination_rows_in_the_same_update() {
+    #[derive(Resource)]
+    struct Scroll(Entity);
+    fn scroll(
+        target: Res<Scroll>,
+        mut commands: MessageWriter<GuiObjectCommand>,
+        mut once: Local<bool>,
+    ) {
+        if *once {
+            return;
+        }
+        *once = true;
+        commands.write(GuiObjectCommand::new(
+            target.0,
+            GuiObjectAction::SetScrollPercentage {
+                percentage: Vec2::new(0., 1.),
+                animated: false,
+            },
+        ));
+    }
+    let (mut app, _, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.world_mut().entity_mut(view).insert(config(1000));
+    app.insert_resource(Scroll(view))
+        .add_systems(Update, scroll.in_set(GuiSystems::PostLayout));
+    app.update();
+    let scroll = app.world().get::<crate::GuiScrollState>(view).unwrap();
+    assert_eq!(scroll.position().y, scroll.max_position().y);
+    let rows = app.world().get::<GuiListState>(view).unwrap().items();
+    assert!(
+        rows.iter()
+            .any(|&row| app.world().get::<GuiListRow>(row).unwrap().index() == 999)
+    );
+    assert!(
+        rows.iter()
+            .all(|&row| app.world().get::<GuiListRow>(row).unwrap().index() > 950)
+    );
+    assert_list_snapshot(&app, list, view);
+}
+
+#[test]
 fn ecs_list_removal_drops_callback_clears_rows_and_reinsertion_reuses_the_pool() {
     let (mut app, _owner, list, view) = fixture(
         "VirtualList",
