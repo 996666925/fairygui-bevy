@@ -32,6 +32,8 @@ struct State {
     extras: Vec<GObjectId>,
     texts: Vec<GObjectId>,
     viewport_offset: Vec2,
+    blends: Vec<(GObjectId, BlendMode)>,
+    filters: Vec<(GObjectId, ColorFilterParams)>,
 }
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>().add_systems(PreUpdate, drive);
@@ -122,7 +124,7 @@ fn expected(i: usize, probe: usize, updated: bool) -> [u8; 3] {
                 ),
                 ColorFilterParams {
                     saturation: -1.,
-                    brightness: 0.1,
+                    brightness: if updated { 0.2 } else { 0.1 },
                     ..default()
                 },
             );
@@ -228,6 +230,8 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
+    mut blends: Query<&mut GuiBlendMode>,
+    mut filters: Query<&mut GuiColorFilter>,
 ) {
     state.frames += 1;
     assert!(
@@ -276,7 +280,7 @@ fn drive(
                     gui.store_mut().set_object_text(text, "HH");
                     if i != 6 {
                         for id in [polygon, text] {
-                            gui.store_mut().set_blend_mode(id, MODES[i]);
+                            state.blends.push((id, MODES[i]));
                         }
                     }
                     state.extras.extend([polygon, text]);
@@ -288,16 +292,15 @@ fn drive(
                     graph(&mut gui, holder, [60., 45., 100., 60.], SRC)
                 };
                 if i == 6 || i == 7 {
-                    gui.store_mut().set_blend_mode(holder, BlendMode::Add);
+                    state.blends.push((holder, BlendMode::Add));
                     if i == 7 {
-                        gui.store_mut().set_blend_mode(source, BlendMode::Normal);
+                        state.blends.push((source, BlendMode::Normal));
                     }
                 } else if i < 8 {
-                    gui.store_mut().set_blend_mode(source, MODES[i]);
+                    state.blends.push((source, MODES[i]));
                 } else {
                     gui.store_mut().set_alpha(holder, 0.5);
-                    gui.store_mut()
-                        .set_color_filter(holder, Some(ColorFilterParams::default()));
+                    state.filters.push((holder, ColorFilterParams::default()));
                     let nested = component(&mut gui, holder, [0., 0., 240., 140.]);
                     let second = graph(
                         &mut gui,
@@ -306,33 +309,33 @@ fn drive(
                         GuiColor::new(0.15, 0.7, 0.85, 0.65),
                     );
                     if i == 9 {
-                        gui.store_mut().set_color_filter(
+                        state.filters.push((
                             holder,
-                            Some(ColorFilterParams {
+                            ColorFilterParams {
                                 saturation: -1.,
                                 brightness: 0.1,
                                 ..default()
-                            }),
-                        );
-                        gui.store_mut().set_color_filter(
+                            },
+                        ));
+                        state.filters.push((
                             nested,
-                            Some(ColorFilterParams {
+                            ColorFilterParams {
                                 hue: 0.5,
                                 ..default()
-                            }),
-                        );
+                            },
+                        ));
                     } else if i == 10 {
-                        gui.store_mut().set_color_filter(
+                        state.filters.push((
                             holder,
-                            Some(ColorFilterParams {
+                            ColorFilterParams {
                                 brightness: 0.2,
                                 ..default()
-                            }),
-                        );
-                        gui.store_mut().set_blend_mode(holder, BlendMode::Multiply);
+                            },
+                        ));
+                        state.blends.push((holder, BlendMode::Multiply));
                     } else if i == 11 {
                         gui.store_mut().set_alpha(holder, 1.);
-                        gui.store_mut().set_blend_mode(holder, BlendMode::Mask);
+                        state.blends.push((holder, BlendMode::Mask));
                         gui.store_mut().set_size(source, 25., 60.);
                         gui.store_mut().set_xy(nested, 135., 45.);
                         gui.store_mut().set_size(nested, 25., 60.);
@@ -376,6 +379,18 @@ fn drive(
         1 if elapsed >= 15 => {
             let root = gui.entity_of(state.root.unwrap()).unwrap();
             commands.entity(root).insert(GlobalZIndex(600));
+            // Apply all blend/filter configuration through public ECS properties
+            // once the fixture objects have their logical views.
+            for &(id, mode) in &state.blends {
+                commands
+                    .entity(gui.entity_of(id).unwrap())
+                    .insert(GuiBlendMode(Some(mode)));
+            }
+            for &(id, filter) in &state.filters {
+                commands
+                    .entity(gui.entity_of(id).unwrap())
+                    .insert(GuiColorFilter(Some(filter)));
+            }
             // A transparent half tests destination-in coverage inside a quad.
             let rgba: Vec<u8> = (0..2)
                 .flat_map(|_| [[204, 89, 38, 255], [204, 89, 38, 0]].into_iter().flatten())
@@ -417,17 +432,34 @@ fn drive(
         }
         3 if elapsed >= 12 => {
             for i in 0..8 {
-                gui.store_mut()
-                    .set_blend_mode(state.holders[i], BlendMode::Normal);
-                gui.store_mut()
-                    .set_blend_mode(state.sources[i], BlendMode::Normal);
+                blends
+                    .get_mut(gui.entity_of(state.holders[i]).unwrap())
+                    .unwrap()
+                    .0 = Some(BlendMode::Normal);
+                blends
+                    .get_mut(gui.entity_of(state.sources[i]).unwrap())
+                    .unwrap()
+                    .0 = Some(BlendMode::Normal);
             }
             for i in 8..11 {
                 gui.store_mut().set_alpha(state.holders[i], 0.8);
             }
             for &id in &state.extras {
-                gui.store_mut().set_blend_mode(id, BlendMode::Normal);
+                blends.get_mut(gui.entity_of(id).unwrap()).unwrap().0 = Some(BlendMode::Normal);
             }
+            filters
+                .get_mut(gui.entity_of(state.holders[9]).unwrap())
+                .unwrap()
+                .0
+                .as_mut()
+                .unwrap()
+                .brightness = 0.2;
+            // Reset an explicit Normal back to inheritance under the now-Normal
+            // parent. The expected output stays Normal while the raw state differs.
+            blends
+                .get_mut(gui.entity_of(state.sources[7]).unwrap())
+                .unwrap()
+                .0 = None;
             state.step = 4;
             state.since = state.frames;
         }
@@ -477,7 +509,7 @@ fn drive(
         10 if elapsed >= 15 => {
             assert!(state.panels.iter().all(|&id| gui.entity_of(id).is_none()));
             eprintln!(
-                "compositor smoke PASSED: 12 overlap panels, native blends/inheritance, transparent mask coverage, text/polygon draws, nested filters, isolated alpha, resize, offset viewport, retained views and disposal; 176 GPU probes and 32 text regions captured"
+                "compositor smoke PASSED: 12 overlap panels, writable ECS blends/inheritance/reset and live filters, transparent mask coverage, text/polygon draws, nested filters, isolated alpha, resize, offset viewport, retained views and disposal; 176 GPU probes and 32 text regions captured"
             );
             exit.write(AppExit::Success);
             state.step = 11;

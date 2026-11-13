@@ -16,6 +16,77 @@ fn tree() -> (GuiRuntime, [GObjectId; 3]) {
 }
 
 #[test]
+fn writable_effects_update_isolation_and_blend_policies_without_replacing_views() {
+    use crate::{FairyGuiPlugin, GuiBlendMode, GuiColorFilter};
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        bevy::asset::AssetPlugin::default(),
+        FairyGuiPlugin,
+    ))
+    .init_resource::<ButtonInput<MouseButton>>()
+    .add_message::<bevy::input::mouse::MouseWheel>()
+    .add_systems(PostUpdate, sync_policies);
+    let (gui, [a, b, c]) = tree();
+    app.insert_non_send(gui);
+    let parent = app.world_mut().spawn((Node::default(), GObjectRef(a))).id();
+    let group = app.world_mut().spawn((Node::default(), GObjectRef(b))).id();
+    let child = app.world_mut().spawn((Node::default(), GObjectRef(c))).id();
+    app.update();
+    app.world_mut().get_mut::<GuiBlendMode>(parent).unwrap().0 = Some(BlendMode::Add);
+    app.world_mut().get_mut::<GuiColorFilter>(group).unwrap().0 = Some(default());
+    app.update();
+    let policy = app.world().get::<PaintPolicy>(child).unwrap();
+    assert_eq!(policy.groups.len(), 1);
+    assert_eq!(policy.groups[0].matrix, ColorMatrix::IDENTITY);
+    assert_eq!(policy.groups[0].blend, BlendMode::Add);
+    assert_eq!(policy.groups[0].opacity, 0.2);
+    assert_eq!(policy.blend, BlendMode::Normal);
+    assert_eq!(app.world().non_send::<GuiRuntime>().paint_alpha(c), 0.6);
+    let tick = app
+        .world()
+        .entity(child)
+        .get_ref::<PaintPolicy>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(child)
+            .get_ref::<PaintPolicy>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    app.world_mut()
+        .get_mut::<GuiColorFilter>(group)
+        .unwrap()
+        .0
+        .as_mut()
+        .unwrap()
+        .hue = 0.5;
+    app.world_mut().get_mut::<GuiBlendMode>(group).unwrap().0 = Some(BlendMode::Normal);
+    app.update();
+    let policy = app.world().get::<PaintPolicy>(child).unwrap();
+    assert_eq!(policy.groups[0].blend, BlendMode::Normal);
+    assert_eq!(
+        policy.groups[0].matrix,
+        ColorFilterParams {
+            hue: 0.5,
+            ..default()
+        }
+        .to_matrix()
+    );
+    app.world_mut().get_mut::<GuiColorFilter>(group).unwrap().0 = None;
+    app.world_mut().get_mut::<GuiBlendMode>(group).unwrap().0 = None;
+    app.update();
+    let policy = app.world().get::<PaintPolicy>(child).unwrap();
+    assert!(policy.groups.is_empty());
+    assert_eq!(policy.blend, BlendMode::Add);
+    assert!((app.world().non_send::<GuiRuntime>().paint_alpha(c) - 0.12).abs() < 1e-6);
+}
+
+#[test]
 fn component_gray_does_not_add_an_unrequested_filter_to_its_bitmap_cache() {
     let (mut gui, [owner, _, child]) = tree();
     gui.store_mut().set_cache_as_bitmap(owner, true);

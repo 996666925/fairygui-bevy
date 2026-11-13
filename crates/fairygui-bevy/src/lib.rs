@@ -57,6 +57,8 @@ pub mod combo;
 pub use combo::GuiComboBoxState;
 mod compositor;
 pub mod ecs;
+mod effect_properties;
+pub use effect_properties::{GuiBlendMode, GuiColorFilter};
 pub mod extension;
 mod graph;
 mod graph_properties;
@@ -131,6 +133,7 @@ pub use tree::{
 
 pub use fairygui_core as core;
 pub use fairygui_core::widget::{ButtonMode, ChildrenRenderOrder, FillMethod, GraphType};
+pub use fairygui_core::{color_matrix::ColorFilterParams, object::BlendMode};
 
 use bevy::prelude::*;
 
@@ -163,9 +166,10 @@ enum SyncPhase {
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
     pub use crate::{
-        ButtonMode, ChildrenRenderOrder, FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FillMethod,
-        FuiAsset, GObjectRef, GraphType, GuiAnimationComplete, GuiAnimationPlaySettings,
-        GuiAnimationState, GuiButtonSelected, GuiButtonSettings, GuiColor, GuiComboBoxState,
+        BlendMode, ButtonMode, ChildrenRenderOrder, ColorFilterParams, FairyGuiPlugin,
+        FairyGuiRoot, FairyGuiWindow, FillMethod, FuiAsset, GObjectRef, GraphType,
+        GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState, GuiBlendMode,
+        GuiButtonSelected, GuiButtonSettings, GuiColor, GuiColorFilter, GuiComboBoxState,
         GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
         GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
         GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,

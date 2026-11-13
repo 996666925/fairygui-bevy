@@ -552,6 +552,8 @@ pub struct GuiQuery<'w, 's> {
     input_settings: Query<'w, 's, &'static crate::GuiTextInputSettings>,
     button_settings: Query<'w, 's, &'static crate::GuiButtonSettings>,
     graphs: Query<'w, 's, &'static crate::GuiGraph>,
+    blend_modes: Query<'w, 's, &'static crate::GuiBlendMode>,
+    color_filters: Query<'w, 's, &'static crate::GuiColorFilter>,
     icons: Query<'w, 's, &'static GuiIcon>,
     colors: Query<'w, 's, &'static crate::GuiColor>,
     image_fills: Query<'w, 's, &'static crate::GuiImageFill>,
@@ -573,6 +575,12 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn blend_mode(&self, entity: Entity) -> Option<&crate::GuiBlendMode> {
+        self.blend_modes.get(self.view(entity)?).ok()
+    }
+    pub fn color_filter(&self, entity: Entity) -> Option<&crate::GuiColorFilter> {
+        self.color_filters.get(self.view(entity)?).ok()
+    }
     pub fn graph(&self, entity: Entity) -> Option<&crate::GuiGraph> {
         self.graphs.get(self.view(entity)?).ok()
     }

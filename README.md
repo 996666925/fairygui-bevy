@@ -657,6 +657,34 @@ Loader 的颜色和图片遮罩作用于其图片/影片通道。
 属性，`GuiObjectMut` 也提供对应即时 setter。无对应属性的对象不会挂载该组件。
 `--smoke-visual-properties` 验证 Loader 布局、颜色、遮罩、资源切换及实体保留。
 
+混合模式和颜色滤镜也可直接修改组件：
+
+```rust,ignore
+fn configure_effects(
+    mut blends: Query<&mut GuiBlendMode>,
+    mut filters: Query<&mut GuiColorFilter>,
+    target: Entity,
+) {
+    blends.get_mut(target).unwrap().0 = Some(BlendMode::Multiply);
+    filters.get_mut(target).unwrap().0 = Some(ColorFilterParams {
+        saturation: -0.5,
+        hue: 0.25,
+        ..default()
+    });
+}
+```
+
+`GuiBlendMode(None)` 恢复父级继承，`Some(BlendMode::Normal)` 显式使用普通混合；
+这和枚举值 `BlendMode::None` 不同，后者仍是一个显式模式。
+`GuiColorFilter(None)` 移除本地滤镜，`Some(default())` 保留单位滤镜及其离屏隔离。
+修改已有滤镜的单个通道会保留原生动画对其他通道的修改。参数使用原版 -1..1 单位，
+矩阵计算会夹紧超出范围的值，将 NaN 按 0 处理；组件保留原值且不会因 NaN 逐帧改写。
+置灰期间保留本地滤镜，恢复后显示最新配置；组件容器沿用原生置灰控制器/子控件行为。
+
+可用 `GuiQuery::blend_mode` / `color_filter` 查询，或用 `GuiObjectMut::set_blend_mode`
+/ `set_color_filter` 即时修改。`--smoke-compositor` 使用这些组件验证实际混合、滤镜、
+嵌套隔离与动态更新。具体模式和渲染限制见[离屏合成](docs/compositing.md)。
+
 播放、补间、滚动和树展开等操作通过 `GuiMut` 直接调用，不经过对象消息队列：
 
 ```rust,ignore

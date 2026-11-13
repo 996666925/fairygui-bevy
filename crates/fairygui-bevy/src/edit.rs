@@ -46,6 +46,20 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_blend_mode(&mut self, mode: Option<crate::BlendMode>) {
+        use crate::properties::Property;
+        let value = crate::GuiBlendMode(mode);
+        if let Some(native) = crate::GuiBlendMode::read(self.runtime, self.object) {
+            value.apply(&native, &native, self.runtime, self.object);
+        }
+    }
+    pub fn set_color_filter(&mut self, filter: Option<crate::ColorFilterParams>) {
+        use crate::properties::Property;
+        let value = crate::GuiColorFilter(filter);
+        if let Some(native) = crate::GuiColorFilter::read(self.runtime, self.object) {
+            value.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn set_graph(&mut self, graph: crate::GuiGraph) {
         use crate::properties::Property;
         if let Some(native) = crate::GuiGraph::read(self.runtime, self.object) {

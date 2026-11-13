@@ -54,6 +54,8 @@ pub(crate) fn sync(world: &mut World) {
     // page edits before publishing geometry, values, text and display state.
     sync_property::<GuiControllers>(world);
     sync_property::<GuiButtonSettings>(world);
+    sync_property::<GuiBlendMode>(world);
+    sync_property::<GuiColorFilter>(world);
     sync_property::<GuiColor>(world);
     sync_property::<GuiGraph>(world);
     sync_property::<GuiTextFormat>(world);
