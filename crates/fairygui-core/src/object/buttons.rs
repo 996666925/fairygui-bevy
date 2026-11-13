@@ -1,4 +1,4 @@
-use super::{ObjectStore, dirty};
+use super::ObjectStore;
 use crate::object::GObjectId;
 use crate::widget::{ButtonMode, ButtonState, ControlData};
 
@@ -449,12 +449,8 @@ impl ObjectStore {
                 Some(ControlData::Button(button)) if button.related_controller == related)
         });
         if let Some(last) = last.filter(|last| *last > from) {
-            self.objects
-                .get_mut(parent)
-                .unwrap()
-                .children
-                .swap(from, last);
-            self.touch(parent, dirty::CHILDREN);
+            let other = self.objects[parent].children[last];
+            self.swap_children(id, other);
         }
     }
 }

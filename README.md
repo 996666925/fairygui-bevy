@@ -236,6 +236,33 @@ fn center_root(transforms: &mut Query<&mut GuiTransform>, view: Entity, viewport
 可同时配置比例轴心与锚点定位。`GuiFont` 资源也在根构建前同步，首帧和后续动态
 界面会直接使用配置的字体，无需业务系统手工调用 `GuiRuntime::set_font`。
 
+控件层级通过可变组件 `GuiSortingOrder(i32)` 设置。`0` 表示普通子节点，
+非零优先级按升序排在普通节点之后；负值归零，相同优先级的新增或变更节点
+排在已有同优先级节点之后。它只影响同一逻辑父节点下的顺序。
+
+```rust,ignore
+fn prioritize(mut priorities: Query<&mut GuiSortingOrder>, button: Entity) {
+    if let Ok(mut priority) = priorities.get_mut(button) {
+        priority.0 = 10;
+    }
+}
+
+fn reorder(mut gui: GuiMut, button: Entity, sibling: Entity) {
+    if let Some(mut object) = gui.get_mut(button) {
+        object.set_child_index(0);
+        object.swap_with(sibling);
+    }
+}
+```
+
+`set_child_index` 将普通控件移动到指定索引，超出普通节点区域会收拢到该区域末尾；
+有非零优先级的控件忽略此操作。`set_child_index_before` 的索引以移动前的子节点序列为准，
+向后移动时先减一。`swap_with` 按原版的两次索引设置执行，并遵守双方的排序限制。
+`gui.child_index(entity)`、`gui.sorting_order(entity)` 和 `GuiObjectInfo::children()`
+提供同步后的逻辑层级。绘制顺序和鼠标命中同时更新，保留已有实体及 observer；
+列表选中项随对象保留，并更新其索引。`GuiSortingOrder` 可随等待资源的根拥有者一起挂载。
+`--smoke-child-order` 使用重叠按钮验证优先级、重排、交换和真实点击目标。
+
 新建视图的绑定和初始配置放入 `GuiSystems::Initialize`：此时根视图、逻辑子控件和
 几何/文本快照已就绪，列表与树的数据尚未准备。此阶段挂载的 `GuiListContent`、
 `GuiVirtualList`、`GuiTreeContent` 会在同帧生成行，随后 `GuiSystems::PostLayout`

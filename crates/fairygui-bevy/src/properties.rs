@@ -19,6 +19,7 @@ pub(crate) struct NativeValue<T: Property> {
 /// Apply only fields changed by application code, then publish the current
 /// model value. Input, animation and relation changes never replay old writes.
 pub(crate) fn sync(world: &mut World) {
+    sync_property::<GuiSortingOrder>(world);
     sync_property::<GuiTransform>(world);
     sync_property::<GuiDisplay>(world);
     sync_property::<GuiText>(world);
@@ -92,6 +93,18 @@ impl Property for GuiText {
     }
     fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
         runtime.store_mut().set_object_text(object, &self.0);
+    }
+}
+
+impl Property for GuiSortingOrder {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        runtime
+            .store()
+            .object(object)
+            .map(|o| Self(o.sorting_order()))
+    }
+    fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.store_mut().set_sorting_order(object, self.0);
     }
 }
 impl Property for GuiIcon {
@@ -366,3 +379,7 @@ impl Property for GuiComboBoxState {
 #[cfg(test)]
 #[path = "ecs_properties_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "ecs_child_order_tests.rs"]
+mod child_order_tests;

@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_child_order.rs"]
+mod child_order;
+pub(super) fn install_child_order(app: &mut App) {
+    child_order::install(app);
+}
 #[path = "smoke_root_mount.rs"]
 mod root_mount;
 pub(super) fn install_root_mount(app: &mut App) {

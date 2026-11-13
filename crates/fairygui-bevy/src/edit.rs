@@ -46,6 +46,43 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn sorting_order(&self) -> i32 {
+        self.runtime
+            .store()
+            .object(self.object)
+            .unwrap()
+            .sorting_order()
+    }
+    pub fn set_sorting_order(&mut self, order: i32) {
+        self.runtime
+            .store_mut()
+            .set_sorting_order(self.object, order);
+    }
+    pub fn child_index(&self) -> Option<usize> {
+        self.runtime.store().child_index(self.object)
+    }
+    /// Move this ordinary child, clamping before siblings with nonzero priority.
+    pub fn set_child_index(&mut self, index: usize) -> Option<usize> {
+        self.runtime.store_mut().set_child_index(self.object, index)
+    }
+    /// The index is measured before removing this child from its current slot.
+    pub fn set_child_index_before(&mut self, index: usize) -> Option<usize> {
+        self.runtime
+            .store_mut()
+            .set_child_index_before(self.object, index)
+    }
+    /// Swap two materialized siblings using native sorting restrictions.
+    /// Returns false for unrelated, missing or unchanged objects.
+    pub fn swap_with(&mut self, other: Entity) -> bool {
+        let other = self
+            .runtime
+            .entities
+            .iter()
+            .find_map(|(&object, &entity)| (entity == other).then_some(object))
+            .or_else(|| self.runtime.ecs_root_object(other))
+            .or_else(|| self.runtime.ecs_window_object(other));
+        other.is_some_and(|other| self.runtime.store_mut().swap_children(self.object, other))
+    }
     pub fn text(&self) -> Option<&str> {
         self.runtime.store().object_text(self.object)
     }

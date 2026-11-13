@@ -18,6 +18,8 @@ use crate::package::ObjectType;
 #[path = "display.rs"]
 mod display;
 pub use display::DisplayLockToken;
+#[path = "child_order.rs"]
+mod child_order;
 #[path = "progress.rs"]
 mod progress;
 #[path = "slider.rs"]
@@ -411,11 +413,10 @@ impl ObjectStore {
             object.parent = parent;
         }
 
-        if let Some(parent) = parent
-            && let Some(parent_object) = self.objects.get_mut(parent)
-        {
-            parent_object.children.push(child);
-            parent_object.dirty |= dirty::CHILDREN;
+        if let Some(parent) = parent {
+            let index = self.child_insertion_index(parent, child);
+            self.objects[parent].children.insert(index, child);
+            self.objects[parent].dirty |= dirty::CHILDREN;
         }
 
         if let Some(parent) = parent {
@@ -432,19 +433,7 @@ impl ObjectStore {
         if !self.set_parent(child, Some(parent)) {
             return false;
         }
-        if let Some(parent_object) = self.objects.get_mut(parent) {
-            let Some(current) = parent_object.children.iter().position(|id| *id == child) else {
-                return false;
-            };
-            let index = index.min(parent_object.children.len().saturating_sub(1));
-            if index != current {
-                let moved = parent_object.children.remove(current);
-                parent_object.children.insert(index, moved);
-                parent_object.dirty |= dirty::CHILDREN;
-            }
-        }
-        self.dirty_ids.insert(parent);
-        self.refresh_list_selection_snapshot(parent);
+        self.set_child_index(child, index);
         true
     }
 

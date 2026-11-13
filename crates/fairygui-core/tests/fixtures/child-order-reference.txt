@@ -1,0 +1,514 @@
+# FairyGUI-layabox GObject/GComponent native child-order traces. op|p|q|r|orders
+init|abcdefg|||0,0,0,0,0,0,0
+order c -1|abcdefg|||0,0,0,0,0,0,0
+before f 3|abcfdeg|||0,0,0,0,0,0,0
+index g 1|agbcfde|||0,0,0,0,0,0,0
+swap a e|egbcfda|||0,0,0,0,0,0,0
+swap c a|egbafdc|||0,0,0,0,0,0,0
+swap d a|egbdfac|||0,0,0,0,0,0,0
+add c r 0|egbdfa||c|0,0,0,0,0,0,0
+add b q 0|egdfa|b|c|0,0,0,0,0,0,0
+before d 9|egfad|b|c|0,0,0,0,0,0,0
+index f 2|egfad|b|c|0,0,0,0,0,0,0
+order c 4|egfad|b|c|0,0,4,0,0,0,0
+swap b b|egfad|b|c|0,0,4,0,0,0,0
+add d q 1|egfa|bd|c|0,0,4,0,0,0,0
+swap b d|egfa|db|c|0,0,4,0,0,0,0
+swap g a|eafg|db|c|0,0,4,0,0,0,0
+index g 2|eagf|db|c|0,0,4,0,0,0,0
+order d 0|eagf|db|c|0,0,4,0,0,0,0
+swap e e|eagf|db|c|0,0,4,0,0,0,0
+before f 1|efag|db|c|0,0,4,0,0,0,0
+swap f e|feag|db|c|0,0,4,0,0,0,0
+swap c c|feag|db|c|0,0,4,0,0,0,0
+index f 2|eafg|db|c|0,0,4,0,0,0,0
+order f 1|eagf|db|c|0,0,4,0,0,1,0
+detach g|eaf|db|c|0,0,4,0,0,1,0
+swap c c|eaf|db|c|0,0,4,0,0,1,0
+order f 1|eaf|db|c|0,0,4,0,0,1,0
+index f 2|eaf|db|c|0,0,4,0,0,1,0
+index a 4|eaf|db|c|0,0,4,0,0,1,0
+index d 0|eaf|db|c|0,0,4,0,0,1,0
+index d 1|eaf|bd|c|0,0,4,0,0,1,0
+swap f e|aef|bd|c|0,0,4,0,0,1,0
+order d -2|aef|bd|c|0,0,4,0,0,1,0
+add e r 0|af|bd|ec|0,0,4,0,0,1,0
+index b 1|af|db|ec|0,0,4,0,0,1,0
+add c r 1|af|db|ec|0,0,4,0,0,1,0
+order c 3|af|db|ec|0,0,3,0,0,1,0
+detach a|f|db|ec|0,0,3,0,0,1,0
+before d 6|f|bd|ec|0,0,3,0,0,1,0
+detach a|f|bd|ec|0,0,3,0,0,1,0
+detach g|f|bd|ec|0,0,3,0,0,1,0
+order a -2|f|bd|ec|0,0,3,0,0,1,0
+swap c c|f|bd|ec|0,0,3,0,0,1,0
+detach a|f|bd|ec|0,0,3,0,0,1,0
+add d q 0|f|db|ec|0,0,3,0,0,1,0
+index d 5|f|bd|ec|0,0,3,0,0,1,0
+order f 1|f|bd|ec|0,0,3,0,0,1,0
+index b 1|f|db|ec|0,0,3,0,0,1,0
+swap f f|f|db|ec|0,0,3,0,0,1,0
+order g 2|f|db|ec|0,0,3,0,0,1,2
+add g p 0|fg|db|ec|0,0,3,0,0,1,2
+detach d|fg|b|ec|0,0,3,0,0,1,2
+order c 4|fg|b|ec|0,0,4,0,0,1,2
+add f p 1|fg|b|ec|0,0,4,0,0,1,2
+index c 0|fg|b|ec|0,0,4,0,0,1,2
+order a 2|fg|b|ec|2,0,4,0,0,1,2
+swap f g|fg|b|ec|2,0,4,0,0,1,2
+index b 1|fg|b|ec|2,0,4,0,0,1,2
+swap g g|fg|b|ec|2,0,4,0,0,1,2
+add b p 2|bfg||ec|2,0,4,0,0,1,2
+order a 2|bfg||ec|2,0,4,0,0,1,2
+swap g f|bfg||ec|2,0,4,0,0,1,2
+add c q 0|bfg|c|e|2,0,4,0,0,1,2
+add e q 0|bfg|ec||2,0,4,0,0,1,2
+order d 2|bfg|ec||2,0,4,2,0,1,2
+add d p 0|bfgd|ec||2,0,4,2,0,1,2
+add d p 4|bfgd|ec||2,0,4,2,0,1,2
+swap g d|bfgd|ec||2,0,4,2,0,1,2
+detach a|bfgd|ec||2,0,4,2,0,1,2
+add a p 0|bfgda|ec||2,0,4,2,0,1,2
+swap b b|bfgda|ec||2,0,4,2,0,1,2
+swap f d|bfgda|ec||2,0,4,2,0,1,2
+before c 6|bfgda|ec||2,0,4,2,0,1,2
+before f 5|bfgda|ec||2,0,4,2,0,1,2
+add f q 0|bgda|efc||2,0,4,2,0,1,2
+order e 0|bgda|efc||2,0,4,2,0,1,2
+index e 6|bgda|efc||2,0,4,2,0,1,2
+order g -2|bgda|efc||2,0,4,2,0,1,0
+index f 7|bgda|efc||2,0,4,2,0,1,0
+order e 1|bgda|fec||2,0,4,2,1,1,0
+before d 0|bgda|fec||2,0,4,2,1,1,0
+before f 1|bgda|fec||2,0,4,2,1,1,0
+before d 8|bgda|fec||2,0,4,2,1,1,0
+swap c f|bgda|fec||2,0,4,2,1,1,0
+add f q 0|bgda|fec||2,0,4,2,1,1,0
+before b 7|bgda|fec||2,0,4,2,1,1,0
+before b 6|bgda|fec||2,0,4,2,1,1,0
+before b 3|bgda|fec||2,0,4,2,1,1,0
+detach f|bgda|ec||2,0,4,2,1,1,0
+before g 7|bgda|ec||2,0,4,2,1,1,0
+detach d|bga|ec||2,0,4,2,1,1,0
+before a 4|bga|ec||2,0,4,2,1,1,0
+order d -1|bga|ec||2,0,4,0,1,1,0
+index b 1|gba|ec||2,0,4,0,1,1,0
+swap b b|gba|ec||2,0,4,0,1,1,0
+order c 1|gba|ec||2,0,1,0,1,1,0
+order e -1|gba|ec||2,0,1,0,0,1,0
+index e 2|gba|ec||2,0,1,0,0,1,0
+order f 2|gba|ec||2,0,1,0,0,2,0
+add a q 2|gb|eca||2,0,1,0,0,2,0
+order a 0|gb|eac||0,0,1,0,0,2,0
+detach g|b|eac||0,0,1,0,0,2,0
+detach a|b|ec||0,0,1,0,0,2,0
+detach b||ec||0,0,1,0,0,2,0
+order f 1||ec||0,0,1,0,0,1,0
+order a 1||ec||1,0,1,0,0,1,0
+detach b||ec||1,0,1,0,0,1,0
+before e 1||ec||1,0,1,0,0,1,0
+add f p 0|f|ec||1,0,1,0,0,1,0
+add d p 0|df|ec||1,0,1,0,0,1,0
+detach d|f|ec||1,0,1,0,0,1,0
+order d 2|f|ec||1,0,1,2,0,1,0
+order g 2|f|ec||1,0,1,2,0,1,2
+before e 5|f|ec||1,0,1,2,0,1,2
+order d 2|f|ec||1,0,1,2,0,1,2
+order d 3|f|ec||1,0,1,3,0,1,2
+order a 2|f|ec||2,0,1,3,0,1,2
+detach f||ec||2,0,1,3,0,1,2
+order g 2||ec||2,0,1,3,0,1,2
+order b 2||ec||2,2,1,3,0,1,2
+index e 5||ec||2,2,1,3,0,1,2
+before c 3||ec||2,2,1,3,0,1,2
+add g p 0|g|ec||2,2,1,3,0,1,2
+order a 2|g|ec||2,2,1,3,0,1,2
+order g 1|g|ec||2,2,1,3,0,1,1
+order f 2|g|ec||2,2,1,3,0,2,1
+order b 2|g|ec||2,2,1,3,0,2,1
+swap c c|g|ec||2,2,1,3,0,2,1
+add e r 0|g|c|e|2,2,1,3,0,2,1
+add a q 1|g|ca|e|2,2,1,3,0,2,1
+add b p 0|gb|ca|e|2,2,1,3,0,2,1
+index a 4|gb|ca|e|2,2,1,3,0,2,1
+index g 5|gb|ca|e|2,2,1,3,0,2,1
+index a 3|gb|ca|e|2,2,1,3,0,2,1
+order f 2|gb|ca|e|2,2,1,3,0,2,1
+detach e|gb|ca||2,2,1,3,0,2,1
+detach c|gb|a||2,2,1,3,0,2,1
+swap a a|gb|a||2,2,1,3,0,2,1
+add e p 0|egb|a||2,2,1,3,0,2,1
+add a q 0|egb|a||2,2,1,3,0,2,1
+order d 4|egb|a||2,2,1,4,0,2,1
+add a r 0|egb||a|2,2,1,4,0,2,1
+order d 2|egb||a|2,2,1,2,0,2,1
+add c p 0|egcb||a|2,2,1,2,0,2,1
+order b 3|egcb||a|2,3,1,2,0,2,1
+index b 2|egcb||a|2,3,1,2,0,2,1
+detach f|egcb||a|2,3,1,2,0,2,1
+detach d|egcb||a|2,3,1,2,0,2,1
+order f 3|egcb||a|2,3,1,2,0,3,1
+order f 2|egcb||a|2,3,1,2,0,2,1
+before c 3|egcb||a|2,3,1,2,0,2,1
+add d p 1|egcdb||a|2,3,1,2,0,2,1
+detach d|egcb||a|2,3,1,2,0,2,1
+detach c|egb||a|2,3,1,2,0,2,1
+order c 2|egb||a|2,3,2,2,0,2,1
+order e -2|egb||a|2,3,2,2,0,2,1
+index g 3|egb||a|2,3,2,2,0,2,1
+order f 4|egb||a|2,3,2,2,0,4,1
+before e 1|egb||a|2,3,2,2,0,4,1
+swap e e|egb||a|2,3,2,2,0,4,1
+add g p 1|egb||a|2,3,2,2,0,4,1
+add g q 0|eb|g|a|2,3,2,2,0,4,1
+before a 0|eb|g|a|2,3,2,2,0,4,1
+before b 5|eb|g|a|2,3,2,2,0,4,1
+order f 2|eb|g|a|2,3,2,2,0,2,1
+before a 0|eb|g|a|2,3,2,2,0,2,1
+order c 2|eb|g|a|2,3,2,2,0,2,1
+index g 3|eb|g|a|2,3,2,2,0,2,1
+order f 2|eb|g|a|2,3,2,2,0,2,1
+add f p 1|efb|g|a|2,3,2,2,0,2,1
+add f p 1|efb|g|a|2,3,2,2,0,2,1
+order c 2|efb|g|a|2,3,2,2,0,2,1
+before f 6|efb|g|a|2,3,2,2,0,2,1
+swap e b|efb|g|a|2,3,2,2,0,2,1
+add c p 0|efcb|g|a|2,3,2,2,0,2,1
+add d p 0|efcdb|g|a|2,3,2,2,0,2,1
+before e 9|efcdb|g|a|2,3,2,2,0,2,1
+before a 2|efcdb|g|a|2,3,2,2,0,2,1
+order a -2|efcdb|g|a|0,3,2,2,0,2,1
+index d 1|efcdb|g|a|0,3,2,2,0,2,1
+before e 5|efcdb|g|a|0,3,2,2,0,2,1
+before d 8|efcdb|g|a|0,3,2,2,0,2,1
+detach b|efcd|g|a|0,3,2,2,0,2,1
+index c 2|efcd|g|a|0,3,2,2,0,2,1
+index d 1|efcd|g|a|0,3,2,2,0,2,1
+swap e d|efcd|g|a|0,3,2,2,0,2,1
+swap a a|efcd|g|a|0,3,2,2,0,2,1
+swap e d|efcd|g|a|0,3,2,2,0,2,1
+index d 1|efcd|g|a|0,3,2,2,0,2,1
+detach b|efcd|g|a|0,3,2,2,0,2,1
+index g 2|efcd|g|a|0,3,2,2,0,2,1
+order g 3|efcd|g|a|0,3,2,2,0,2,3
+index a 4|efcd|g|a|0,3,2,2,0,2,3
+detach e|fcd|g|a|0,3,2,2,0,2,3
+order d 1|dfc|g|a|0,3,2,1,0,2,3
+swap f f|dfc|g|a|0,3,2,1,0,2,3
+add f p 2|dfc|g|a|0,3,2,1,0,2,3
+swap d d|dfc|g|a|0,3,2,1,0,2,3
+detach d|fc|g|a|0,3,2,1,0,2,3
+before f 4|fc|g|a|0,3,2,1,0,2,3
+order c 3|fc|g|a|0,3,3,1,0,2,3
+add d p 0|dfc|g|a|0,3,3,1,0,2,3
+add b p 0|dfcb|g|a|0,3,3,1,0,2,3
+add e p 0|edfcb|g|a|0,3,3,1,0,2,3
+swap e b|edfcb|g|a|0,3,3,1,0,2,3
+index a 2|edfcb|g|a|0,3,3,1,0,2,3
+add a q 1|edfcb|ag||0,3,3,1,0,2,3
+swap b d|edfcb|ag||0,3,3,1,0,2,3
+index g 2|edfcb|ag||0,3,3,1,0,2,3
+detach g|edfcb|a||0,3,3,1,0,2,3
+order a -2|edfcb|a||0,3,3,1,0,2,3
+swap c d|edfcb|a||0,3,3,1,0,2,3
+order c 2|edfcb|a||0,3,2,1,0,2,3
+add d r 0|efcb|a|d|0,3,2,1,0,2,3
+add c p 4|efcb|a|d|0,3,2,1,0,2,3
+swap d d|efcb|a|d|0,3,2,1,0,2,3
+swap c f|efcb|a|d|0,3,2,1,0,2,3
+before a 5|efcb|a|d|0,3,2,1,0,2,3
+before f 2|efcb|a|d|0,3,2,1,0,2,3
+add e q 0|fcb|ea|d|0,3,2,1,0,2,3
+add f p 0|fcb|ea|d|0,3,2,1,0,2,3
+detach c|fb|ea|d|0,3,2,1,0,2,3
+before b 1|fb|ea|d|0,3,2,1,0,2,3
+add c p 1|fcb|ea|d|0,3,2,1,0,2,3
+detach e|fcb|a|d|0,3,2,1,0,2,3
+swap c f|fcb|a|d|0,3,2,1,0,2,3
+order f 4|cbf|a|d|0,3,2,1,0,4,3
+add e q 1|cbf|ae|d|0,3,2,1,0,4,3
+before b 6|cbf|ae|d|0,3,2,1,0,4,3
+index e 6|cbf|ae|d|0,3,2,1,0,4,3
+before f 5|cbf|ae|d|0,3,2,1,0,4,3
+add a p 2|acbf|e|d|0,3,2,1,0,4,3
+before f 8|acbf|e|d|0,3,2,1,0,4,3
+index f 5|acbf|e|d|0,3,2,1,0,4,3
+order g 2|acbf|e|d|0,3,2,1,0,4,2
+index c 8|acbf|e|d|0,3,2,1,0,4,2
+before a 0|acbf|e|d|0,3,2,1,0,4,2
+index f 2|acbf|e|d|0,3,2,1,0,4,2
+add f q 1|acb|ef|d|0,3,2,1,0,4,2
+swap a c|acb|ef|d|0,3,2,1,0,4,2
+before d 0|acb|ef|d|0,3,2,1,0,4,2
+add g p 0|acgb|ef|d|0,3,2,1,0,4,2
+swap b b|acgb|ef|d|0,3,2,1,0,4,2
+detach c|agb|ef|d|0,3,2,1,0,4,2
+detach f|agb|e|d|0,3,2,1,0,4,2
+add d r 1|agb|e|d|0,3,2,1,0,4,2
+detach d|agb|e||0,3,2,1,0,4,2
+order e 2|agb|e||0,3,2,1,2,4,2
+index g 0|agb|e||0,3,2,1,2,4,2
+order c -1|agb|e||0,3,0,1,2,4,2
+order d 0|agb|e||0,3,0,0,2,4,2
+order c 2|agb|e||0,3,2,0,2,4,2
+swap b b|agb|e||0,3,2,0,2,4,2
+order c 2|agb|e||0,3,2,0,2,4,2
+order b 0|abg|e||0,0,2,0,2,4,2
+add b r 0|ag|e|b|0,0,2,0,2,4,2
+order c 3|ag|e|b|0,0,3,0,2,4,2
+add e r 0|ag||be|0,0,3,0,2,4,2
+before b 1|ag||be|0,0,3,0,2,4,2
+add g p 2|ag||be|0,0,3,0,2,4,2
+order a 1|ag||be|1,0,3,0,2,4,2
+detach c|ag||be|1,0,3,0,2,4,2
+add c p 0|agc||be|1,0,3,0,2,4,2
+detach d|agc||be|1,0,3,0,2,4,2
+order f 3|agc||be|1,0,3,0,2,3,2
+detach b|agc||e|1,0,3,0,2,3,2
+add d r 1|agc||de|1,0,3,0,2,3,2
+swap c c|agc||de|1,0,3,0,2,3,2
+detach c|ag||de|1,0,3,0,2,3,2
+detach c|ag||de|1,0,3,0,2,3,2
+before d 4|ag||de|1,0,3,0,2,3,2
+add b q 0|ag|b|de|1,0,3,0,2,3,2
+before b 0|ag|b|de|1,0,3,0,2,3,2
+add f p 0|agf|b|de|1,0,3,0,2,3,2
+detach d|agf|b|e|1,0,3,0,2,3,2
+add c p 0|agfc|b|e|1,0,3,0,2,3,2
+detach b|agfc||e|1,0,3,0,2,3,2
+index g 7|agfc||e|1,0,3,0,2,3,2
+order b 2|agfc||e|1,2,3,0,2,3,2
+index g 3|agfc||e|1,2,3,0,2,3,2
+swap a f|agfc||e|1,2,3,0,2,3,2
+swap f f|agfc||e|1,2,3,0,2,3,2
+add g r 1|afc||eg|1,2,3,0,2,3,2
+index e 5|afc||eg|1,2,3,0,2,3,2
+add e q 0|afc|e|g|1,2,3,0,2,3,2
+swap f a|afc|e|g|1,2,3,0,2,3,2
+index f 3|afc|e|g|1,2,3,0,2,3,2
+index c 2|afc|e|g|1,2,3,0,2,3,2
+detach e|afc||g|1,2,3,0,2,3,2
+swap f a|afc||g|1,2,3,0,2,3,2
+order e 2|afc||g|1,2,3,0,2,3,2
+order e 2|afc||g|1,2,3,0,2,3,2
+detach b|afc||g|1,2,3,0,2,3,2
+order e 2|afc||g|1,2,3,0,2,3,2
+swap f f|afc||g|1,2,3,0,2,3,2
+add d q 0|afc|d|g|1,2,3,0,2,3,2
+index a 2|afc|d|g|1,2,3,0,2,3,2
+detach e|afc|d|g|1,2,3,0,2,3,2
+order b 2|afc|d|g|1,2,3,0,2,3,2
+order b 2|afc|d|g|1,2,3,0,2,3,2
+swap f c|afc|d|g|1,2,3,0,2,3,2
+before f 7|afc|d|g|1,2,3,0,2,3,2
+order b -2|afc|d|g|1,0,3,0,2,3,2
+order g -2|afc|d|g|1,0,3,0,2,3,0
+swap f a|afc|d|g|1,0,3,0,2,3,0
+swap g g|afc|d|g|1,0,3,0,2,3,0
+before c 6|afc|d|g|1,0,3,0,2,3,0
+add b p 0|bafc|d|g|1,0,3,0,2,3,0
+detach a|bfc|d|g|1,0,3,0,2,3,0
+detach g|bfc|d||1,0,3,0,2,3,0
+before d 5|bfc|d||1,0,3,0,2,3,0
+order g 2|bfc|d||1,0,3,0,2,3,2
+detach g|bfc|d||1,0,3,0,2,3,2
+order a 2|bfc|d||2,0,3,0,2,3,2
+add a r 0|bfc|d|a|2,0,3,0,2,3,2
+index d 1|bfc|d|a|2,0,3,0,2,3,2
+swap f b|bfc|d|a|2,0,3,0,2,3,2
+order e 2|bfc|d|a|2,0,3,0,2,3,2
+order d 4|bfc|d|a|2,0,3,4,2,3,2
+add d r 1|bfc||ad|2,0,3,4,2,3,2
+order e 2|bfc||ad|2,0,3,4,2,3,2
+order e 0|bfc||ad|2,0,3,4,0,3,2
+swap a d|bfc||ad|2,0,3,4,0,3,2
+add f r 2|bc||afd|2,0,3,4,0,3,2
+swap f a|bc||afd|2,0,3,4,0,3,2
+detach c|b||afd|2,0,3,4,0,3,2
+order g 1|b||afd|2,0,3,4,0,3,1
+before d 5|b||afd|2,0,3,4,0,3,1
+detach f|b||ad|2,0,3,4,0,3,1
+order d -2|b||da|2,0,3,0,0,3,1
+order e 2|b||da|2,0,3,0,2,3,1
+order f -1|b||da|2,0,3,0,2,0,1
+index a 1|b||da|2,0,3,0,2,0,1
+add d q 0|b|d|a|2,0,3,0,2,0,1
+index b 2|b|d|a|2,0,3,0,2,0,1
+order f 2|b|d|a|2,0,3,0,2,2,1
+order g 2|b|d|a|2,0,3,0,2,2,2
+swap b b|b|d|a|2,0,3,0,2,2,2
+order e 2|b|d|a|2,0,3,0,2,2,2
+order b 0|b|d|a|2,0,3,0,2,2,2
+swap d d|b|d|a|2,0,3,0,2,2,2
+detach e|b|d|a|2,0,3,0,2,2,2
+swap d d|b|d|a|2,0,3,0,2,2,2
+add f r 1|b|d|af|2,0,3,0,2,2,2
+order a 0|b|d|af|0,0,3,0,2,2,2
+add f r 1|b|d|af|0,0,3,0,2,2,2
+detach b||d|af|0,0,3,0,2,2,2
+swap d d||d|af|0,0,3,0,2,2,2
+add g p 0|g|d|af|0,0,3,0,2,2,2
+add c p 0|gc|d|af|0,0,3,0,2,2,2
+order e 2|gc|d|af|0,0,3,0,2,2,2
+order f 1|gc|d|af|0,0,3,0,2,1,2
+before g 4|gc|d|af|0,0,3,0,2,1,2
+index g 4|gc|d|af|0,0,3,0,2,1,2
+detach a|gc|d|f|0,0,3,0,2,1,2
+order a -2|gc|d|f|0,0,3,0,2,1,2
+detach e|gc|d|f|0,0,3,0,2,1,2
+add c q 1|g|dc|f|0,0,3,0,2,1,2
+detach f|g|dc||0,0,3,0,2,1,2
+before d 3|g|dc||0,0,3,0,2,1,2
+index c 6|g|dc||0,0,3,0,2,1,2
+order d 0|g|dc||0,0,3,0,2,1,2
+order b 2|g|dc||0,2,3,0,2,1,2
+add c p 0|gc|d||0,2,3,0,2,1,2
+detach a|gc|d||0,2,3,0,2,1,2
+detach b|gc|d||0,2,3,0,2,1,2
+detach c|g|d||0,2,3,0,2,1,2
+index d 4|g|d||0,2,3,0,2,1,2
+add e p 0|ge|d||0,2,3,0,2,1,2
+order a 2|ge|d||2,2,3,0,2,1,2
+swap e e|ge|d||2,2,3,0,2,1,2
+add a p 2|gea|d||2,2,3,0,2,1,2
+order f 2|gea|d||2,2,3,0,2,2,2
+order b 2|gea|d||2,2,3,0,2,2,2
+order f 0|gea|d||2,2,3,0,2,0,2
+order c 2|gea|d||2,2,2,0,2,0,2
+detach d|gea|||2,2,2,0,2,0,2
+add d p 0|dgea|||2,2,2,0,2,0,2
+index a 7|dgea|||2,2,2,0,2,0,2
+detach a|dge|||2,2,2,0,2,0,2
+detach e|dg|||2,2,2,0,2,0,2
+order e 2|dg|||2,2,2,0,2,0,2
+index d 4|dg|||2,2,2,0,2,0,2
+order c 2|dg|||2,2,2,0,2,0,2
+before g 3|dg|||2,2,2,0,2,0,2
+order f 2|dg|||2,2,2,0,2,2,2
+order e 2|dg|||2,2,2,0,2,2,2
+detach f|dg|||2,2,2,0,2,2,2
+add e p 0|dge|||2,2,2,0,2,2,2
+add f r 0|dge||f|2,2,2,0,2,2,2
+before f 2|dge||f|2,2,2,0,2,2,2
+order b 2|dge||f|2,2,2,0,2,2,2
+detach b|dge||f|2,2,2,0,2,2,2
+add e q 0|dg|e|f|2,2,2,0,2,2,2
+before g 2|dg|e|f|2,2,2,0,2,2,2
+order g 1|dg|e|f|2,2,2,0,2,2,1
+swap g d|dg|e|f|2,2,2,0,2,2,1
+order c 2|dg|e|f|2,2,2,0,2,2,1
+add d q 1|g|de|f|2,2,2,0,2,2,1
+index g 3|g|de|f|2,2,2,0,2,2,1
+swap g g|g|de|f|2,2,2,0,2,2,1
+index e 6|g|de|f|2,2,2,0,2,2,1
+order a 2|g|de|f|2,2,2,0,2,2,1
+add b q 1|g|deb|f|2,2,2,0,2,2,1
+detach e|g|db|f|2,2,2,0,2,2,1
+add e p 0|ge|db|f|2,2,2,0,2,2,1
+order a 2|ge|db|f|2,2,2,0,2,2,1
+index g 3|ge|db|f|2,2,2,0,2,2,1
+detach f|ge|db||2,2,2,0,2,2,1
+add a r 0|ge|db|a|2,2,2,0,2,2,1
+detach f|ge|db|a|2,2,2,0,2,2,1
+detach c|ge|db|a|2,2,2,0,2,2,1
+add g r 0|e|db|ga|2,2,2,0,2,2,1
+swap b b|e|db|ga|2,2,2,0,2,2,1
+add f p 0|ef|db|ga|2,2,2,0,2,2,1
+swap f e|ef|db|ga|2,2,2,0,2,2,1
+index g 6|ef|db|ga|2,2,2,0,2,2,1
+before e 1|ef|db|ga|2,2,2,0,2,2,1
+before e 3|ef|db|ga|2,2,2,0,2,2,1
+add g q 1|ef|dgb|a|2,2,2,0,2,2,1
+order c 0|ef|dgb|a|2,2,0,0,2,2,1
+swap f f|ef|dgb|a|2,2,0,0,2,2,1
+order c 2|ef|dgb|a|2,2,2,0,2,2,1
+swap f f|ef|dgb|a|2,2,2,0,2,2,1
+add g r 1|ef|db|ga|2,2,2,0,2,2,1
+detach b|ef|d|ga|2,2,2,0,2,2,1
+order f 4|ef|d|ga|2,2,2,0,2,4,1
+add c p 0|ecf|d|ga|2,2,2,0,2,4,1
+add d p 2|decf||ga|2,2,2,0,2,4,1
+order f 4|decf||ga|2,2,2,0,2,4,1
+order f 3|decf||ga|2,2,2,0,2,3,1
+order g 2|decf||ag|2,2,2,0,2,3,2
+order b 2|decf||ag|2,2,2,0,2,3,2
+detach a|decf||g|2,2,2,0,2,3,2
+add g p 2|decgf|||2,2,2,0,2,3,2
+index f 4|decgf|||2,2,2,0,2,3,2
+detach e|dcgf|||2,2,2,0,2,3,2
+order a 2|dcgf|||2,2,2,0,2,3,2
+order b 2|dcgf|||2,2,2,0,2,3,2
+detach d|cgf|||2,2,2,0,2,3,2
+index c 4|cgf|||2,2,2,0,2,3,2
+detach f|cg|||2,2,2,0,2,3,2
+order f 2|cg|||2,2,2,0,2,2,2
+add e p 0|cge|||2,2,2,0,2,2,2
+order e -2|ecg|||2,2,2,0,0,2,2
+detach f|ecg|||2,2,2,0,0,2,2
+swap g c|ecg|||2,2,2,0,0,2,2
+order f 2|ecg|||2,2,2,0,0,2,2
+order d 0|ecg|||2,2,2,0,0,2,2
+add e p 3|ecg|||2,2,2,0,0,2,2
+before c 2|ecg|||2,2,2,0,0,2,2
+detach b|ecg|||2,2,2,0,0,2,2
+add f r 0|ecg||f|2,2,2,0,0,2,2
+swap g e|ecg||f|2,2,2,0,0,2,2
+order d 2|ecg||f|2,2,2,2,0,2,2
+add f p 2|ecgf|||2,2,2,2,0,2,2
+add a r 0|ecgf||a|2,2,2,2,0,2,2
+order b 2|ecgf||a|2,2,2,2,0,2,2
+order b 3|ecgf||a|2,3,2,2,0,2,2
+add c q 0|egf|c|a|2,3,2,2,0,2,2
+add d q 0|egf|cd|a|2,3,2,2,0,2,2
+detach g|ef|cd|a|2,3,2,2,0,2,2
+detach a|ef|cd||2,3,2,2,0,2,2
+add a p 0|efa|cd||2,3,2,2,0,2,2
+before a 3|efa|cd||2,3,2,2,0,2,2
+before c 1|efa|cd||2,3,2,2,0,2,2
+index e 0|efa|cd||2,3,2,2,0,2,2
+swap c d|efa|cd||2,3,2,2,0,2,2
+swap c d|efa|cd||2,3,2,2,0,2,2
+swap e f|efa|cd||2,3,2,2,0,2,2
+add g p 0|efag|cd||2,3,2,2,0,2,2
+swap g a|efag|cd||2,3,2,2,0,2,2
+detach e|fag|cd||2,3,2,2,0,2,2
+add b p 0|fagb|cd||2,3,2,2,0,2,2
+add c r 0|fagb|d|c|2,3,2,2,0,2,2
+swap g g|fagb|d|c|2,3,2,2,0,2,2
+detach f|agb|d|c|2,3,2,2,0,2,2
+index g 7|agb|d|c|2,3,2,2,0,2,2
+add e p 0|eagb|d|c|2,3,2,2,0,2,2
+swap d d|eagb|d|c|2,3,2,2,0,2,2
+detach a|egb|d|c|2,3,2,2,0,2,2
+order f 2|egb|d|c|2,3,2,2,0,2,2
+index g 1|egb|d|c|2,3,2,2,0,2,2
+detach a|egb|d|c|2,3,2,2,0,2,2
+order f 2|egb|d|c|2,3,2,2,0,2,2
+detach a|egb|d|c|2,3,2,2,0,2,2
+before b 1|egb|d|c|2,3,2,2,0,2,2
+swap g g|egb|d|c|2,3,2,2,0,2,2
+swap d d|egb|d|c|2,3,2,2,0,2,2
+swap c c|egb|d|c|2,3,2,2,0,2,2
+add b p 3|egb|d|c|2,3,2,2,0,2,2
+detach e|gb|d|c|2,3,2,2,0,2,2
+order c 0|gb|d|c|2,3,0,2,0,2,2
+order e 2|gb|d|c|2,3,0,2,2,2,2
+add b r 1|g|d|cb|2,3,0,2,2,2,2
+order e 2|g|d|cb|2,3,0,2,2,2,2
+before g 3|g|d|cb|2,3,0,2,2,2,2
+detach c|g|d|b|2,3,0,2,2,2,2
+detach b|g|d||2,3,0,2,2,2,2
+order a 2|g|d||2,3,0,2,2,2,2
+detach g||d||2,3,0,2,2,2,2
+order g 2||d||2,3,0,2,2,2,2
+swap d d||d||2,3,0,2,2,2,2
+order a 2||d||2,3,0,2,2,2,2
+order g 2||d||2,3,0,2,2,2,2
+index d 3||d||2,3,0,2,2,2,2
+order g 2||d||2,3,0,2,2,2,2
+add e p 0|e|d||2,3,0,2,2,2,2
+add b p 0|eb|d||2,3,0,2,2,2,2
+order a 3|eb|d||3,3,0,2,2,2,2
+order c -1|eb|d||3,3,0,2,2,2,2
+order d 3|eb|d||3,3,0,3,2,2,2
+swap d d|eb|d||3,3,0,3,2,2,2

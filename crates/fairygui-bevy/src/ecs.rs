@@ -284,6 +284,12 @@ impl GuiIcon {
     }
 }
 
+/// Native sibling priority. Ordinary children (0) precede the ascending sorted
+/// suffix. Equal nonzero priorities preserve insertion order; negatives clamp
+/// to zero. Edit this component directly, including on an unloaded root owner.
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct GuiSortingOrder(pub i32);
+
 /// Writable local drawing and interaction state from the FairyGUI model.
 ///
 /// Explicit visibility, controller/group display visibility and stage attachment
@@ -488,6 +494,7 @@ pub struct GuiQuery<'w, 's> {
     spaces: Query<'w, 's, &'static GuiSpace>,
     texts: Query<'w, 's, &'static GuiText>,
     icons: Query<'w, 's, &'static GuiIcon>,
+    sorting_orders: Query<'w, 's, &'static GuiSortingOrder>,
     loaders: Query<'w, 's, &'static crate::GuiLoaderState>,
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
@@ -557,6 +564,20 @@ impl GuiQuery<'_, '_> {
     /// Native text of a root owner or control view, before presentation.
     pub fn text(&self, entity: Entity) -> Option<&str> {
         Some(self.texts.get(self.view(entity)?).ok()?.value())
+    }
+
+    pub fn sorting_order(&self, entity: Entity) -> Option<i32> {
+        Some(self.sorting_orders.get(self.view(entity)?).ok()?.0)
+    }
+
+    /// Logical index among all siblings, independent of list paint order.
+    pub fn child_index(&self, entity: Entity) -> Option<usize> {
+        let view = self.view(entity)?;
+        let parent = self.get(view)?.parent()?;
+        self.get(parent)?
+            .children()
+            .iter()
+            .position(|&child| child == view)
     }
 
     pub fn combo_box(&self, entity: Entity) -> Option<&crate::GuiComboBoxState> {

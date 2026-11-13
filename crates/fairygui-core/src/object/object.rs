@@ -94,6 +94,7 @@ pub struct GObject {
     pub(crate) display_gear: Option<DisplayGearState>,
     pub(crate) display_gear2: Option<(bool, i32)>,
     pub(crate) touchable: bool,
+    pub(crate) sorting_order: i32,
     pub(crate) grayed: bool,
     /// Native JS leaves _grayed undefined until its first assignment. Public
     /// reads still return false, but that first false assignment runs handlers.
@@ -163,6 +164,7 @@ impl GObject {
             display_gear: None,
             display_gear2: None,
             touchable: true,
+            sorting_order: 0,
             grayed: false,
             grayed_initialized: false,
             gear_locked: false,
@@ -229,6 +231,11 @@ impl GObject {
     /// 相对父对象的位置。
     pub fn position(&self) -> Point {
         Point::new(self.x, self.y)
+    }
+
+    /// Nonzero orders form an ascending suffix after ordinary siblings.
+    pub fn sorting_order(&self) -> i32 {
+        self.sorting_order
     }
 
     /// 宽度。

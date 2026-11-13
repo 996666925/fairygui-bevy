@@ -81,8 +81,8 @@ pub use tween::{GuiTweenComplete, GuiTweenProperty, GuiTweenTarget};
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use ecs::{
     GuiControllerState, GuiControllers, GuiDisplay, GuiIcon, GuiObjectInfo, GuiPullPart, GuiQuery,
-    GuiRootView, GuiScrollState, GuiSpace, GuiText, GuiTransform, GuiTransitionState,
-    GuiTransitions,
+    GuiRootView, GuiScrollState, GuiSortingOrder, GuiSpace, GuiText, GuiTransform,
+    GuiTransitionState, GuiTransitions,
 };
 pub use extension::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 pub use fairygui_bevy_macros::GuiExtension;
@@ -164,13 +164,13 @@ pub mod prelude {
         GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
         GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease,
         GuiQuery, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollState,
-        GuiSliderState, GuiSliderValue, GuiSpace, GuiSystems, GuiText, GuiTextInput,
-        GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTransform,
-        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
-        GuiTransitions, GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem,
-        GuiTreeNode, GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
-        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand,
-        GuiWindowState, GuiWorldExt, PopupMenuTemplates,
+        GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText,
+        GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
+        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
+        GuiWindowAction, GuiWindowCommand, GuiWindowState, GuiWorldExt, PopupMenuTemplates,
     };
 }
 

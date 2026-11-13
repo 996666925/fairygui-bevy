@@ -206,7 +206,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-root-mount") {
+    if std::env::args().any(|arg| arg == "--smoke-child-order") {
+        smoke::install_child_order(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-root-mount") {
         smoke::install_root_mount(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-observer-events") {
         smoke::install_observer_events(&mut app);
