@@ -266,8 +266,8 @@ fn drive(
         smoke.link_messages += 1;
     }
     for callback in edited_hooks.read() {
-        if callback.0.listener == 9001 {
-            assert!(callback.0.hook.at_end);
+        if callback.callback.listener == 9001 {
+            assert!(callback.callback.hook.at_end);
             smoke.edit_callbacks += 1;
         }
     }

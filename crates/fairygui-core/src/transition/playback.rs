@@ -14,6 +14,15 @@ pub struct TransitionHook {
     pub at_end: bool,
 }
 
+/// One naturally completed playback, after all repetitions and nested tasks.
+/// Stopping, replacement, detachment and disposal do not synthesize completion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransitionComplete {
+    pub owner: GObjectId,
+    pub transition: String,
+    pub play_generation: u64,
+}
+
 #[derive(Debug, Clone, Default)]
 pub(super) struct PlaybackState {
     reset: bool,
@@ -179,7 +188,8 @@ impl Transition {
                 .iter()
                 .any(|handle| handle.completed.load(std::sync::atomic::Ordering::Relaxed))
     }
-    pub(crate) fn play_generation(&self) -> u64 {
+    /// Increments on each new playback; identifies queued completion records.
+    pub fn play_generation(&self) -> u64 {
         self.generation
     }
     pub(crate) fn set_completion_token(
@@ -545,6 +555,11 @@ impl Transition {
                 }
                 if self.play_times >= 0 && self.remaining_times == 0 {
                     self.playing = false;
+                    store.queue_transition_completion(TransitionComplete {
+                        owner,
+                        transition: self.name.clone(),
+                        play_generation: self.generation,
+                    });
                     if let Some(callback) = self.on_complete.take() {
                         callback.store(true, std::sync::atomic::Ordering::Relaxed);
                     }

@@ -21,7 +21,7 @@ pub use edit::{
 };
 pub use item::{ActionType, TransitionItem, TransitionValue, TweenConfig};
 pub use path::{CurveType, GPath, PathPoint, bounding_box};
-pub use playback::TransitionHook;
+pub use playback::{TransitionComplete, TransitionHook};
 pub use tween::{Tween, TweenManager, TweenProperty, TweenValue};
 
 use crate::binary::{ByteBuffer, StringTable};
@@ -288,6 +288,46 @@ mod tests {
         assert!(transition.advance(&mut store, owner, 0.3));
         assert!(!transition.advance(&mut store, owner, 0.3));
         assert!(!transition.is_playing());
+    }
+
+    #[test]
+    fn natural_completion_is_once_per_playback_after_repeats_and_excludes_stops() {
+        let mut store = ObjectStore::new();
+        let owner = store.create(ObjectType::Component);
+        let mut transition = fade_in_transition(0.5);
+        transition.play(2, 0.0);
+        let first = transition.play_generation();
+        transition.advance(&mut store, owner, 0.75);
+        assert!(store.take_transition_completions().is_empty());
+        transition.advance(&mut store, owner, 0.25);
+        let complete = store.take_transition_completions();
+        assert_eq!(complete.len(), 1);
+        assert_eq!(complete[0].owner, owner);
+        assert_eq!(complete[0].play_generation, first);
+        transition.advance(&mut store, owner, 1.0);
+        assert!(store.take_transition_completions().is_empty());
+
+        transition.play(1, 0.0);
+        transition.advance(&mut store, owner, 0.1);
+        transition.stop_with_callback(&mut store, owner, true, true);
+        assert!(store.take_transition_completions().is_empty());
+        transition.play(-1, 0.0);
+        transition.advance(&mut store, owner, 10.0);
+        assert!(store.take_transition_completions().is_empty());
+        transition.play(1, 0.0);
+        transition.advance(&mut store, owner, 0.5);
+        let complete = store.take_transition_completions();
+        assert_eq!(complete.len(), 1);
+        assert!(complete[0].play_generation > first);
+
+        let mut instant = Transition::default();
+        instant.play(1, 0.0);
+        instant.advance(&mut store, owner, 0.0);
+        assert_eq!(store.take_transition_completions().len(), 1);
+        instant.play(1, 0.0);
+        instant.advance(&mut store, owner, 0.0);
+        store.remove(owner);
+        assert!(store.take_transition_completions().is_empty());
     }
 
     #[test]

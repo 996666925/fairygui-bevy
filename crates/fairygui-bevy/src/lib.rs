@@ -63,6 +63,7 @@ mod text_stroke;
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use ecs::{
     GuiDisplay, GuiObjectInfo, GuiQuery, GuiRootView, GuiScrollState, GuiText, GuiTransform,
+    GuiTransitionState, GuiTransitions,
 };
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
@@ -70,7 +71,7 @@ pub use runtime::{
     GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
     GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease,
     GuiRootInstance, GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback,
-    GuiTransitionHook, PopupMenuTemplates,
+    GuiTransitionComplete, GuiTransitionHook, PopupMenuTemplates,
 };
 
 pub use fairygui_core as core;
@@ -97,7 +98,8 @@ pub mod prelude {
         GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiObjectInfo,
         GuiProgressValue, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime,
         GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput, GuiTransform,
-        GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
+        GuiTransitions, PopupMenuTemplates,
     };
 }
 
@@ -136,6 +138,7 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiMenuAction>()
         .add_message::<GuiTransitionHook>()
         .add_message::<GuiTransitionCallback>()
+        .add_message::<GuiTransitionComplete>()
         .add_message::<GuiAnimationComplete>()
         .add_message::<GuiTextInput>()
         .add_message::<GuiListItemClick>()
@@ -153,8 +156,6 @@ impl Plugin for FairyGuiPlugin {
                 runtime::advance_async_builds,
                 runtime::advance_scrolls,
                 runtime::advance_transitions,
-                runtime::emit_transition_hooks,
-                runtime::emit_transition_callbacks,
                 runtime::advance_gear_tweens,
                 runtime::advance_tweens,
                 runtime::sync_movie_sources,
@@ -171,6 +172,7 @@ impl Plugin for FairyGuiPlugin {
             (
                 ecs::sync_gui_properties,
                 ecs::sync_gui_scroll_state,
+                ecs::sync_gui_transitions,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -239,6 +241,10 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_objects,
                 ecs::sync_gui_properties,
                 ecs::sync_gui_scroll_state,
+                ecs::sync_gui_transitions,
+                runtime::emit_transition_hooks,
+                runtime::emit_transition_callbacks,
+                runtime::emit_transition_completions,
             )
                 .chain()
                 .in_set(GuiSystems::Sync)

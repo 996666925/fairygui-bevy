@@ -11,6 +11,89 @@ use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
 #[path = "ecs_scroll_tests.rs"]
 mod scroll_tests;
 
+#[cfg(test)]
+#[path = "ecs_transition_tests.rs"]
+mod transition_tests;
+
+/// Read-only state of one exported transition, with time and duration in seconds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GuiTransitionState {
+    name: String,
+    playing: bool,
+    paused: bool,
+    reversed: bool,
+    time: f32,
+    duration: f32,
+    time_scale: f32,
+    play_generation: u64,
+}
+
+impl GuiTransitionState {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn is_playing(&self) -> bool {
+        self.playing
+    }
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+    pub fn is_reversed(&self) -> bool {
+        self.reversed
+    }
+    pub fn time(&self) -> f32 {
+        self.time
+    }
+    /// Exported nominal duration; repeated and nested tasks can finish later.
+    pub fn duration(&self) -> f32 {
+        self.duration
+    }
+    pub fn time_scale(&self) -> f32 {
+        self.time_scale
+    }
+    pub fn play_generation(&self) -> u64 {
+        self.play_generation
+    }
+
+    fn matches(&self, source: &fairygui_core::transition::Transition) -> bool {
+        self.name == source.name
+            && self.playing == source.is_playing()
+            && self.paused == source.is_paused()
+            && self.reversed == source.is_reversed()
+            && self.time == source.time()
+            && self.duration == source.total_duration
+            && self.time_scale == source.time_scale()
+            && self.play_generation == source.play_generation()
+    }
+
+    fn from_transition(source: &fairygui_core::transition::Transition) -> Self {
+        Self {
+            name: source.name.clone(),
+            playing: source.is_playing(),
+            paused: source.is_paused(),
+            reversed: source.is_reversed(),
+            time: source.time(),
+            duration: source.total_duration,
+            time_scale: source.time_scale(),
+            play_generation: source.play_generation(),
+        }
+    }
+}
+
+/// Exported transitions in package order. Refreshed before Publish and after
+/// Sync; absent on objects without transitions. Mutate through GUI commands.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct GuiTransitions(Vec<GuiTransitionState>);
+
+impl GuiTransitions {
+    pub fn states(&self) -> &[GuiTransitionState] {
+        &self.0
+    }
+    pub fn get(&self, name: &str) -> Option<&GuiTransitionState> {
+        self.0.iter().find(|state| state.name == name)
+    }
+}
+
 /// Rendered root entity belonging to a [`crate::FairyGuiRoot`] owner.
 /// Available after `GuiSystems::Sync`; removed when the root is replaced.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,7 +309,8 @@ impl GuiObjectInfo {
 ///
 /// Every method accepts either a root owner or a control view entity. Hierarchy
 /// and geometry in `GuiSystems::Respond` read the preceding Sync snapshot.
-/// Text, display and scroll properties also refresh before input events publish.
+/// Text, display, scroll and transition state also refresh before input events
+/// publish.
 /// Systems after `GuiSystems::Sync` can bind controls created this frame.
 #[derive(SystemParam, Debug)]
 pub struct GuiQuery<'w, 's> {
@@ -236,6 +320,7 @@ pub struct GuiQuery<'w, 's> {
     texts: Query<'w, 's, &'static GuiText>,
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
+    transitions: Query<'w, 's, &'static GuiTransitions>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -268,6 +353,14 @@ impl GuiQuery<'_, '_> {
 
     pub fn scroll(&self, entity: Entity) -> Option<&GuiScrollState> {
         self.scrolls.get(self.view(entity)?).ok()
+    }
+
+    pub fn transitions(&self, entity: Entity) -> Option<&GuiTransitions> {
+        self.transitions.get(self.view(entity)?).ok()
+    }
+
+    pub fn transition(&self, entity: Entity, name: &str) -> Option<&GuiTransitionState> {
+        self.transitions(entity)?.get(name)
     }
 
     /// First direct child with the exact FairyGUI object name.
@@ -306,6 +399,44 @@ impl GuiQuery<'_, '_> {
 }
 
 /// Refresh before publishing input events and after all model/view updates.
+pub(crate) fn sync_gui_transitions(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    objects: Query<(Entity, &GObjectRef, Option<&GuiTransitions>)>,
+) {
+    for (entity, reference, current) in &objects {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let transitions = runtime
+            .store()
+            .object(reference.0)
+            .and_then(|object| object.control().component())
+            .map_or(&[][..], |component| component.transitions.as_slice());
+        if transitions.is_empty() {
+            if current.is_some() {
+                commands.entity(entity).remove::<GuiTransitions>();
+            }
+            continue;
+        }
+        if current.is_none_or(|current| {
+            current.0.len() != transitions.len()
+                || !current
+                    .0
+                    .iter()
+                    .zip(transitions)
+                    .all(|(state, transition)| state.matches(transition))
+        }) {
+            commands.entity(entity).insert(GuiTransitions(
+                transitions
+                    .iter()
+                    .map(GuiTransitionState::from_transition)
+                    .collect(),
+            ));
+        }
+    }
+}
+
 pub(crate) fn sync_gui_scroll_state(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,

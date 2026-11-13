@@ -240,10 +240,28 @@ or completion. `ObjectStore::stop_transition` completes pending property work;
 `stop_transition_with_completion(..., false)` retains current property values.
 
 `endLabel` names an ending hook. It never redirects playback. The core queues
-`TransitionHook` records; Bevy publishes them as `GuiTransitionHook` messages in
-Advance. Consumers that need them before entity synchronization can run after
-`GuiSystems::Advance` and before `GuiSystems::Sync`; handlers in Respond see them
-on the next frame. The demo uses these notifications for PowerUp's counter.
+`TransitionHook` records; Bevy publishes `GuiTransitionHook { entity, hook }` and
+`GuiTransitionCallback { entity, callback }` at the end of Sync, once pending
+views and state snapshots are available. Systems after Sync can read them in the
+same frame; Respond sees them next frame. The demo uses these notifications for
+PowerUp's counter without runtime borrowing.
+
+`GuiTransitions` projects each exported transition in package order, including
+playing/paused/reversed, time, nominal duration, speed and playback generation.
+`GuiQuery::transition` accepts root owners and view entities. Snapshots refresh
+before Publish and at the end of Sync and preserve change ticks when unchanged.
+`PlayTransitionWithOptions` exposes the native interval/delay/repeat API through
+entity commands.
+
+Natural completion is queued at the actual core completion branch after repeats
+and nested tasks finish, and published as `GuiTransitionComplete` after Sync.
+This captures instantaneous playback and multiple playbacks within one frame.
+Each record carries the owner's entity, transition name and playback generation,
+so consumers can reject completion from an earlier replay. Stop, replacement,
+stage detachment and disposal do not synthesize natural completion. Disposing
+an owner reclaims its queued completion records. The demo restores its button
+group and despawns its sample owner by consuming these messages; explicit stops
+are handled separately through the ECS playback state.
 
 Transition edits use `TransitionEditValue` instead of dynamically coerced JS
 arguments. Value edits affect every matching start/end label (start wins within

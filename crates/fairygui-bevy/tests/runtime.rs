@@ -11,36 +11,51 @@ use fairygui_core::package::FuiPackage;
 const MAIN_MENU: &[u8] = include_bytes!("../../fairygui-core/tests/fixtures/MainMenu.fui");
 const BAG: &[u8] = include_bytes!("../../fairygui-core/tests/fixtures/Bag.fui");
 
-#[test]
-fn edited_transition_hook_listeners_publish_once_without_consuming_label_notifications() {
-    use fairygui_bevy::{GuiTransitionCallback, GuiTransitionHook};
+fn transition_fixture(item: &str) -> (App, fairygui_core::object::GObjectId, Entity) {
+    use fairygui_bevy::{FairyGuiPlugin, FairyGuiRoot, GuiRootInstance};
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        bevy::asset::AssetPlugin::default(),
+        FairyGuiPlugin,
+    ))
+    .init_resource::<ButtonInput<MouseButton>>()
+    .add_message::<bevy::input::mouse::MouseWheel>();
     let package = FuiPackage::parse(
         "Transition",
         include_bytes!("../../fairygui-core/tests/fixtures/Transition.fui"),
     )
     .unwrap();
-    let mut gui = GuiRuntime::default();
-    let index = gui
-        .create_root(Handle::default(), &package, "PowerUp")
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package,
+            res_key: "ui/Transition".into(),
+        });
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, item)).id();
+    app.update();
+    let root = app.world().get::<GuiRootInstance>(owner).unwrap().object;
+    let view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(root)
         .unwrap();
-    let root = gui.root_object(index).unwrap();
-    gui.store_mut()
-        .set_transition_hook(root, "t0", "play_num_now", Some(42))
-        .unwrap();
-    gui.store_mut().play_transition(root, "t0", 1);
-    gui.store_mut().advance_transitions(0.8);
-    let mut app = App::new();
-    app.insert_non_send(gui)
-        .add_message::<GuiTransitionHook>()
-        .add_message::<GuiTransitionCallback>()
-        .add_systems(
-            Update,
-            (
-                fairygui_bevy::runtime::emit_transition_hooks,
-                fairygui_bevy::runtime::emit_transition_callbacks,
-            )
-                .chain(),
-        );
+    (app, root, view)
+}
+
+#[test]
+fn edited_transition_hook_listeners_publish_once_without_consuming_label_notifications() {
+    use fairygui_bevy::{GuiTransitionCallback, GuiTransitionHook};
+    let (mut app, root, entity) = transition_fixture("PowerUp");
+    {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        gui.store_mut()
+            .set_transition_hook(root, "t0", "play_num_now", Some(42))
+            .unwrap();
+        gui.store_mut().play_transition(root, "t0", 1);
+        gui.store_mut().advance_transitions(0.8);
+    }
     app.update();
     let callbacks: Vec<_> = app
         .world_mut()
@@ -48,16 +63,19 @@ fn edited_transition_hook_listeners_publish_once_without_consuming_label_notific
         .drain()
         .collect();
     assert_eq!(callbacks.len(), 1);
-    assert_eq!(callbacks[0].0.listener, 42);
+    assert_eq!(callbacks[0].entity, entity);
+    assert_eq!(callbacks[0].callback.listener, 42);
     assert!(
-        callbacks[0].0.hook.at_end,
+        callbacks[0].callback.hook.at_end,
         "first match is an end label before a later start label"
     );
     assert!(
         app.world_mut()
             .resource_mut::<Messages<GuiTransitionHook>>()
             .drain()
-            .any(|hook| hook.0.label == "play_num_now" && !hook.0.at_end)
+            .any(|hook| hook.entity == entity
+                && hook.hook.label == "play_num_now"
+                && !hook.hook.at_end)
     );
     app.update();
     assert_eq!(
@@ -140,33 +158,22 @@ fn root_packages_register_automatically_and_sound_uses_its_own_asset_directory()
 #[test]
 fn transition_labels_are_published_as_bevy_messages_once() {
     use fairygui_bevy::GuiTransitionHook;
-    let package = FuiPackage::parse(
-        "Transition",
-        include_bytes!("../../fairygui-core/tests/fixtures/Transition.fui"),
-    )
-    .unwrap();
-    let mut gui = GuiRuntime::default();
-    let index = gui
-        .create_root(Handle::default(), &package, "PowerUp")
-        .unwrap();
-    let root = gui.root_object(index).unwrap();
-    gui.store_mut().play_transition(root, "t0", 1);
-    gui.store_mut().advance_transitions(10.0);
-    let mut app = App::new();
-    app.insert_non_send(gui)
-        .add_message::<GuiTransitionHook>()
-        .add_systems(Update, fairygui_bevy::runtime::emit_transition_hooks);
+    let (mut app, root, entity) = transition_fixture("PowerUp");
+    {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        gui.store_mut().play_transition(root, "t0", 1);
+        gui.store_mut().advance_transitions(10.0);
+    }
     app.update();
     let hooks: Vec<_> = app
         .world_mut()
         .resource_mut::<Messages<GuiTransitionHook>>()
         .drain()
         .collect();
-    assert!(
-        hooks
-            .iter()
-            .any(|hook| hook.0.owner == root && hook.0.label == "end" && hook.0.at_end)
-    );
+    assert!(hooks.iter().any(|hook| hook.entity == entity
+        && hook.hook.owner == root
+        && hook.hook.label == "end"
+        && hook.hook.at_end));
     app.update();
     assert_eq!(
         app.world_mut()

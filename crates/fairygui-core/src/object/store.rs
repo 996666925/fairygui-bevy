@@ -187,6 +187,7 @@ pub struct ObjectStore {
     /// 待播放的音效：(触发对象, 音效地址, 音量)。
     queued_sounds: Vec<(GObjectId, String, f32)>,
     queued_transition_hooks: Vec<crate::transition::TransitionHook>,
+    queued_transition_completions: Vec<crate::transition::TransitionComplete>,
     queued_transition_callbacks: Vec<crate::transition::TransitionCallback>,
     animation_commands: std::collections::HashMap<GObjectId, Vec<AnimationCommand>>,
     completed_animations: Vec<GObjectId>,
@@ -329,6 +330,8 @@ impl ObjectStore {
         }
         self.completed_animations
             .retain(|id| !removed_set.contains(id));
+        self.queued_transition_completions
+            .retain(|completed| !removed_set.contains(&completed.owner));
         self.stage_order.retain(|id| !removed_set.contains(id));
         for member in detached_group_members {
             self.touch_display(member);
@@ -3129,6 +3132,18 @@ impl ObjectStore {
     /// 取走本帧经过的过渡标签通知；结束标签不改变播放位置。
     pub fn take_transition_hooks(&mut self) -> Vec<crate::transition::TransitionHook> {
         std::mem::take(&mut self.queued_transition_hooks)
+    }
+
+    pub(crate) fn queue_transition_completion(
+        &mut self,
+        completed: crate::transition::TransitionComplete,
+    ) {
+        self.queued_transition_completions.push(completed);
+    }
+
+    /// Drain natural completions, including playbacks that finished immediately.
+    pub fn take_transition_completions(&mut self) -> Vec<crate::transition::TransitionComplete> {
+        std::mem::take(&mut self.queued_transition_completions)
     }
 
     // ---- 控制器与齿轮联动 ----

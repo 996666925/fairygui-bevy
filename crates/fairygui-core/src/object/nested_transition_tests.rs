@@ -77,12 +77,26 @@ fn same_owner_call_works_with_callee_before_caller_and_is_advanced_once() {
     store.play_transition(owner, "parent", 1);
     store.advance_transitions(0.5);
     close(alpha(&store, owner), 0.3);
+    assert!(store.take_transition_completions().is_empty());
     close(store.transition_state(owner, "child").unwrap().1, 0.3);
     assert!(store.transition_state(owner, "parent").unwrap().0);
     store.advance_transitions(0.7);
     assert!(!store.transition_state(owner, "parent").unwrap().0);
     assert!(!store.transition_state(owner, "child").unwrap().0);
     close(store.transition_state(owner, "parent").unwrap().1, 1.2);
+    let completed = store.take_transition_completions();
+    assert_eq!(
+        completed
+            .iter()
+            .map(|event| event.transition.as_str())
+            .collect::<Vec<_>>(),
+        vec!["child", "parent"]
+    );
+    assert!(
+        completed
+            .iter()
+            .all(|event| event.owner == owner && event.play_generation > 0)
+    );
     assert_eq!(
         store
             .take_transition_hooks()

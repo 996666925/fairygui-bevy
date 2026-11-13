@@ -133,6 +133,10 @@ pub enum GuiObjectAction {
         name: String,
         times: i32,
     },
+    PlayTransitionWithOptions {
+        name: String,
+        options: fairygui_core::transition::TransitionPlayOptions,
+    },
     SetTransitionPaused {
         name: String,
         paused: bool,
@@ -387,13 +391,43 @@ pub fn emit_link_messages(
     }
 }
 
-/// 过渡的起点/终点标签通知，在 Advance 阶段发布。
+/// Transition label notification, published with the owner view after Sync.
 #[derive(Message, Debug, Clone)]
-pub struct GuiTransitionHook(pub fairygui_core::transition::TransitionHook);
+pub struct GuiTransitionHook {
+    pub entity: Entity,
+    pub hook: fairygui_core::transition::TransitionHook,
+}
 
 /// 通过 set_transition_hook 绑定的用户编号；原有标签消息仍独立发布。
 #[derive(Message, Debug, Clone)]
-pub struct GuiTransitionCallback(pub fairygui_core::transition::TransitionCallback);
+pub struct GuiTransitionCallback {
+    pub entity: Entity,
+    pub callback: fairygui_core::transition::TransitionCallback,
+}
+
+/// One naturally completed playback, after all repetitions and nested tasks.
+/// Published after Sync, including playbacks started and finished in that Sync.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+pub struct GuiTransitionComplete {
+    pub entity: Entity,
+    pub transition: String,
+    pub play_generation: u64,
+}
+
+pub fn emit_transition_completions(
+    mut runtime: NonSendMut<GuiRuntime>,
+    mut completed: MessageWriter<GuiTransitionComplete>,
+) {
+    for completion in runtime.store_mut().take_transition_completions() {
+        if let Some(entity) = runtime.entity_of(completion.owner) {
+            completed.write(GuiTransitionComplete {
+                entity,
+                transition: completion.transition,
+                play_generation: completion.play_generation,
+            });
+        }
+    }
+}
 
 /// 有限次数序列帧播放到达结束帧后的完成通知，在 Advance 阶段发布一次。
 #[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
@@ -413,7 +447,9 @@ pub fn emit_transition_hooks(
     mut hooks: MessageWriter<GuiTransitionHook>,
 ) {
     for hook in runtime.store_mut().take_transition_hooks() {
-        hooks.write(GuiTransitionHook(hook));
+        if let Some(entity) = runtime.entity_of(hook.owner) {
+            hooks.write(GuiTransitionHook { entity, hook });
+        }
     }
 }
 
@@ -422,7 +458,9 @@ pub fn emit_transition_callbacks(
     mut callbacks: MessageWriter<GuiTransitionCallback>,
 ) {
     for callback in runtime.store_mut().take_transition_callbacks() {
-        callbacks.write(GuiTransitionCallback(callback));
+        if let Some(entity) = runtime.entity_of(callback.hook.owner) {
+            callbacks.write(GuiTransitionCallback { entity, callback });
+        }
     }
 }
 
@@ -1978,6 +2016,11 @@ pub fn apply_object_commands(
             }
             GuiObjectAction::PlayTransition { name, times } => {
                 runtime.store_mut().play_transition(object, name, *times);
+            }
+            GuiObjectAction::PlayTransitionWithOptions { name, options } => {
+                runtime
+                    .store_mut()
+                    .play_transition_with_options(object, name, *options);
             }
             GuiObjectAction::SetTransitionPaused { name, paused } => {
                 runtime

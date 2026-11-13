@@ -177,6 +177,19 @@ commands.write_message(GuiObjectCommand::new(
 原有 `SetScrollPosition` 直接设置
 位置，允许选择是否越界；动画是否进行中可通过 `is_animating()` 查询。
 
+`GuiTransitions` 提供控件上全部过渡的 ECS 快照；`gui.transition(entity, "t0")`
+可读取播放中、暂停、反向、时间、导出时长、速度及播放编号。状态在 Publish 前和
+Sync 末尾更新。`PlayTransitionWithOptions { name, options }` 支持延迟、区间、
+重复次数和反向播放，与核心 `TransitionPlayOptions` 使用同一规则。
+
+自然播放结束通过 `GuiTransitionComplete { entity, transition, play_generation }`
+通知，包含所有重复及等待中的嵌套任务；同帧开始并结束的短过渡也会通知。
+停止、重播替换、离开舞台和销毁不会伪造自然完成。业务可比较当前状态的
+`play_generation()`，避免把旧一次播放的完成消息用于新一次播放。
+消息在 Sync 后发布，Respond 系统下一帧读取；放在 Sync 后的业务系统可同帧读取。
+`GuiTransitionHook` 使用 `entity` 与 `hook` 字段，`GuiTransitionCallback` 使用
+`entity` 与 `callback` 字段，也在 Sync 后发布。demo 通过完成消息回收临时界面。
+
 业务系统可在 `GuiSystems::Respond` 用实体发送 `GuiObjectCommand`，本帧 Sync 会把
 修改应用到对象模型并投影到 Bevy UI 视图：
 

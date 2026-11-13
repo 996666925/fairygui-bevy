@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 use fairygui_bevy::{
     FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiQuery, GuiRootInstance,
-    GuiRuntime, GuiTransitionHook,
+    GuiRuntime, GuiTransitionComplete, GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -275,37 +275,70 @@ pub fn navigate_transition(
 /// 处理 PowerUp 的数字钩子，并在有限过渡结束后恢复按钮组。
 pub fn advance_transition_demo(
     mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     mut controller: ResMut<DemoController>,
     time: Res<Time>,
-    mut hooks: MessageReader<GuiTransitionHook>,
+    notifications: (
+        MessageReader<GuiTransitionHook>,
+        MessageReader<GuiTransitionComplete>,
+    ),
     mut gui_commands: MessageWriter<GuiObjectCommand>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
-    let sample = controller
-        .transition_sample
-        .and_then(|handle| runtime.root_object(handle));
-    for GuiTransitionHook(hook) in hooks.read() {
-        if Some(hook.owner) == sample && hook.label == "play_num_now" && !hook.at_end {
+    let (mut hooks, mut completions) = notifications;
+    let sample = controller.transition_sample_owner;
+    let view = sample.and_then(|owner| gui.view(owner));
+    for notification in hooks.read() {
+        let hook = &notification.hook;
+        if Some(notification.entity) == view && hook.label == "play_num_now" && !hook.at_end {
             controller.numeric_elapsed = Some(0.0);
         }
     }
-    let Some(object) = sample else { return };
+    let completed = completions.read().any(|completion| {
+        Some(completion.entity) == view
+            && completion.transition == "t0"
+            && gui
+                .transition(completion.entity, "t0")
+                .is_some_and(|state| {
+                    !state.is_playing() && state.play_generation() == completion.play_generation
+                })
+    });
+    let Some(target) = sample.filter(|_| view.is_some()) else {
+        return;
+    };
+    let stopped = !controller.transition_start_pending
+        && gui
+            .transition(target, "t0")
+            .is_some_and(|state| state.play_generation() > 0 && !state.is_playing());
+    if completed || stopped {
+        controller.transition_sample = None;
+        controller.transition_sample_owner = None;
+        commands.entity(target).despawn();
+        controller.numeric_elapsed = None;
+        if let Some(group) = controller
+            .root_owner
+            .and_then(|root| gui.child_by_name(root, "g0"))
+        {
+            gui_commands.write(GuiObjectCommand::new(
+                group,
+                GuiObjectAction::SetVisible(true),
+            ));
+        }
+        return;
+    }
     if controller.transition_start_pending {
         controller.transition_start_pending = false;
         return;
     }
     if keys.just_pressed(KeyCode::Space) {
         controller.transition_paused = !controller.transition_paused;
-        if let Some(target) = runtime.entity_of(object) {
-            gui_commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetTransitionPaused {
-                    name: "t0".into(),
-                    paused: controller.transition_paused,
-                },
-            ));
-        }
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetTransitionPaused {
+                name: "t0".into(),
+                paused: controller.transition_paused,
+            },
+        ));
     }
     if keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::ArrowDown) {
         controller.transition_time_scale = if keys.just_pressed(KeyCode::ArrowUp) {
@@ -314,19 +347,15 @@ pub fn advance_transition_demo(
             controller.transition_time_scale * 0.5
         };
         controller.transition_time_scale = controller.transition_time_scale.clamp(0.25, 4.0);
-        if let Some(target) = runtime.entity_of(object) {
-            gui_commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetTransitionTimeScale {
-                    name: "t0".into(),
-                    scale: controller.transition_time_scale,
-                },
-            ));
-        }
+        gui_commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetTransitionTimeScale {
+                name: "t0".into(),
+                scale: controller.transition_time_scale,
+            },
+        ));
     }
-    if keys.just_pressed(KeyCode::KeyR)
-        && let Some(target) = runtime.entity_of(object)
-    {
+    if keys.just_pressed(KeyCode::KeyR) {
         gui_commands.write(GuiObjectCommand::new(
             target,
             GuiObjectAction::PlayTransitionReverse {
@@ -338,33 +367,10 @@ pub fn advance_transition_demo(
     if let Some(elapsed) = &mut controller.numeric_elapsed {
         *elapsed = (*elapsed + time.delta_secs()).min(0.3);
         let value = (10000.0 + 2000.0 * *elapsed / 0.3).floor() as i32;
-        if let Some(id) = runtime.store().child_by_name(object, "value")
-            && let Some(target) = runtime.entity_of(id)
-        {
+        if let Some(target) = gui.child_by_name(target, "value") {
             gui_commands.write(GuiObjectCommand::new(
                 target,
                 GuiObjectAction::SetText(value.to_string()),
-            ));
-        }
-    }
-    if runtime
-        .store()
-        .transition_state(object, "t0")
-        .is_some_and(|(playing, _)| !playing)
-    {
-        controller.transition_sample = None;
-        if let Some(owner) = controller.transition_sample_owner.take() {
-            commands.entity(owner).despawn();
-        }
-        controller.numeric_elapsed = None;
-        if let Some(group) = controller
-            .root
-            .and_then(|id| runtime.store().child_by_name(id, "g0"))
-            .and_then(|id| runtime.entity_of(id))
-        {
-            gui_commands.write(GuiObjectCommand::new(
-                group,
-                GuiObjectAction::SetVisible(true),
             ));
         }
     }
