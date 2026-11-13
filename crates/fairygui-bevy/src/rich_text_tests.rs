@@ -955,6 +955,7 @@ fn links_reject_different_same_href_tags_drag_hidden_offstage_occlusion_and_stal
                     let overlay = gui
                         .store_mut()
                         .create(fairygui_core::package::ObjectType::Component);
+                    gui.store_mut().set_component_opaque(overlay, true);
                     gui.store_mut().attach_to_stage(overlay);
                     overlay
                 };

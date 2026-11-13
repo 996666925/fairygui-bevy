@@ -46,6 +46,11 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_opaque(&mut self, opaque: bool) {
+        self.runtime
+            .store_mut()
+            .set_component_opaque(self.object, opaque);
+    }
     pub fn set_image_flip(&mut self, flip: crate::FlipType) {
         self.runtime.store_mut().set_image_flip(self.object, flip);
     }

@@ -113,6 +113,9 @@ pub struct GObject {
     pub(crate) cache_as_bitmap: bool,
     pub(crate) mask_parent: Option<GObjectId>,
     pub(crate) mask: Option<GObjectId>,
+    /// Sprite.mouseThrough can differ from !opaque after a mask assignment.
+    pub(crate) component_mouse_through: Option<bool>,
+    pub(crate) component_hit_test_prior: bool,
 
     pub(crate) parent: Option<GObjectId>,
     pub(crate) children: Vec<GObjectId>,
@@ -182,6 +185,8 @@ impl GObject {
             cache_as_bitmap: false,
             mask_parent: None,
             mask: None,
+            component_mouse_through: None,
+            component_hit_test_prior: false,
             parent: None,
             children: Vec::new(),
             group: None,

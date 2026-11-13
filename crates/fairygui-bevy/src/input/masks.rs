@@ -35,6 +35,9 @@ fn allowed_geometry<'a>(
             .control()
             .component()
             .and_then(|c| c.hit_test.as_ref())
+            // mouseThrough disables hitTestPrior on ancestors, but the owner's
+            // custom area still applies to its own Sprite hit test.
+            && (id == target || object.component_mouse_through() == Some(false))
         {
             let inside = (|| {
                 let mask_object = runtime.store().object(*mask)?;
@@ -57,6 +60,27 @@ fn allowed_geometry<'a>(
             })()
             .unwrap_or(false);
             if inside == *reversed {
+                return false;
+            }
+        }
+        // Clearing a ChildHitArea leaves Sprite.hitTestPrior/mouseThrough set.
+        // The native gate then falls back to the owner's current rectangle.
+        if object.component_hit_test_prior()
+            && object.component_mouse_through() == Some(false)
+            && object
+                .control()
+                .component()
+                .is_some_and(|c| c.hit_test.is_none())
+        {
+            let Some((transform, node)) = geometry(id) else {
+                return false;
+            };
+            let Some(inverse) = transform.try_inverse() else {
+                return false;
+            };
+            let p =
+                (inverse.transform_point2(point) + node.size() * 0.5) * node.inverse_scale_factor();
+            if p.x < 0. || p.y < 0. || p.x >= object.width() || p.y >= object.height() {
                 return false;
             }
         }

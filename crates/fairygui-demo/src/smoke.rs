@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_opaque.rs"]
+mod opaque;
+pub(super) fn install_opaque(app: &mut App) {
+    opaque::install(app);
+}
 #[path = "smoke_image_flip.rs"]
 mod image_flip;
 pub(super) fn install_image_flip(app: &mut App) {

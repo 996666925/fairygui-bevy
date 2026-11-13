@@ -7,6 +7,8 @@ mod button_effects;
 mod button_fire;
 #[path = "input/list_selection.rs"]
 mod list_selection;
+#[path = "input/opaque.rs"]
+mod opaque;
 #[path = "input/polygons.rs"]
 mod polygons;
 #[path = "input/popup_stack.rs"]
@@ -77,6 +79,11 @@ fn target(app: &mut App, stack: u32) -> (Entity, GObjectId) {
         .non_send_mut::<GuiRuntime>()
         .store_mut()
         .create(ObjectType::Component);
+    // These test targets deliberately represent solid hit rectangles.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_component_opaque(id, true);
     let entity = app
         .world_mut()
         .spawn((
@@ -742,6 +749,8 @@ fn scroll_container(app: &mut App) -> GObjectId {
             .into_iter()
             .find(|id| gui.store().scroll_pane(*id).is_some())
         {
+            // No child render nodes are instantiated by this headless fixture.
+            gui.store_mut().set_component_opaque(id, true);
             gui.store_mut()
                 .update_scroll_content_size(id, fairygui_core::geom::Size::new(2000.0, 2000.0));
             return id;

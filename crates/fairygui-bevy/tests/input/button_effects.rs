@@ -6,6 +6,7 @@ fn button(app: &mut App) -> (Entity, GObjectId) {
     let id = {
         let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
         let id = gui.store_mut().create(ObjectType::Button);
+        gui.store_mut().set_component_opaque(id, true);
         gui.store_mut().set_xy(id, 60.0, 40.0);
         gui.store_mut().set_size(id, 100.0, 30.0);
         gui.store_mut().attach_to_stage(id);

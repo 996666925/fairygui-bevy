@@ -206,7 +206,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-image-flip") {
+    if std::env::args().any(|arg| arg == "--smoke-opaque") {
+        smoke::install_opaque(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-image-flip") {
         smoke::install_image_flip(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-graph-properties") {
         smoke::install_graph_properties(&mut app);

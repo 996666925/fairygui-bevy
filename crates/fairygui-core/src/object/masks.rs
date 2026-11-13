@@ -33,6 +33,17 @@ impl ObjectStore {
         }
         let old = self.object(owner).unwrap().mask;
         let old_normal = old.filter(|_| !data.mask_reversed);
+        // Preserve flags loaded with an exported custom hit area before a
+        // clear/replacement removes that area from ComponentData.
+        let through = self
+            .object(owner)
+            .unwrap()
+            .component_mouse_through()
+            .unwrap();
+        let prior = self.object(owner).unwrap().component_hit_test_prior();
+        let object = self.objects.get_mut(owner).unwrap();
+        object.component_mouse_through = Some(through);
+        object.component_hit_test_prior = prior;
         if old != mask
             && let Some(old) = old
             && self
@@ -66,6 +77,13 @@ impl ObjectStore {
                     .is_some_and(|c| c.hit_test.is_some())
         });
         self.objects.get_mut(owner).unwrap().mask = mask;
+        if has_hit {
+            self.objects.get_mut(owner).unwrap().component_mouse_through = Some(false);
+            self.objects
+                .get_mut(owner)
+                .unwrap()
+                .component_hit_test_prior = true;
+        }
         let data = self
             .objects
             .get_mut(owner)

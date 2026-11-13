@@ -17,6 +17,8 @@ fn exported_item_snap_is_used_by_line_input_while_pixel_input_and_flag_changes_r
         let root = gui.root_object(index).unwrap();
         gui.store_mut().attach_to_stage(root);
         let list = gui.store().child_by_name(root, "mailList").unwrap();
+        // This fixture picks the list rectangle without materialized row graphics.
+        gui.store_mut().set_component_opaque(list, true);
         gui.store_mut().set_size(list, 200., 100.);
         for height in [30., 60., 80., 100., 120.] {
             let row = gui.store_mut().create(ObjectType::Component);

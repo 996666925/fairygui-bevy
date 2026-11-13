@@ -256,6 +256,7 @@ fn release_closing_window_rejects_same_frame_wheel_on_disposed_hit() {
         let owner = gui.window(index).unwrap().owner();
         gui.store_mut().set_parent(pane, Some(owner));
         let close = gui.store_mut().create(ObjectType::Button);
+        gui.store_mut().set_component_opaque(close, true);
         gui.store_mut().set_parent(close, Some(pane));
         gui.window_mut(index).unwrap().set_close_button(close);
         (index, close)
@@ -318,6 +319,7 @@ fn release_hiding_combo_popup_rejects_same_frame_wheel_on_retained_off_stage_pan
         let item = gui.store().child_at(list, 0).unwrap();
         gui.store_mut().set_parent(pane, Some(item));
         let leaf = gui.store_mut().create(ObjectType::Button);
+        gui.store_mut().set_component_opaque(leaf, true);
         gui.store_mut().set_parent(leaf, Some(pane));
         gui.store_mut().set_size(leaf, 100., 1000.);
         leaf

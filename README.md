@@ -708,6 +708,27 @@ fn configure_effects(
 / `set_color_filter` 即时修改。`--smoke-compositor` 使用这些组件验证实际混合、滤镜、
 嵌套隔离与动态更新。具体模式和渲染限制见[离屏合成](docs/compositing.md)。
 
+组件空白区域是否参与命中，通过 `GuiOpaque` 修改：
+
+```rust,ignore
+if let Ok(mut opaque) = components.get_mut(panel) { // Query<&mut GuiOpaque>
+    opaque.0 = false;
+}
+```
+
+`true` 让组件矩形参与命中，`false` 让没有子控件的空白位置穿透；子控件仍可接收事件
+并向该组件冒泡。它独立于 `GuiDisplay.alpha` 和 `touchable`，不会改变绘制不透明度，
+也不会禁用整棵子树。透明父容器仍可作为拖动/滚动的祖先。可在等待资源的根拥有者上
+挂载初始值，使用 `GuiQuery::opaque` 查询，或调用 `GuiObjectMut::set_opaque` 即时修改。
+
+像素、子控件和遮罩命中区域遵循原生优先级，修改 opaque 不会替换自定义区域。
+遮罩设置会改变内部 mouseThrough/hitTestPrior；清除遮罩保留这些副作用，重复赋相同
+opaque 不会重置它们。显式切换 opaque 可重新打开穿透，届时遮罩区域仍限制组件自身
+的命中，但不再作为子控件的提前命中门。普通组件的鼠标/触摸均使用这条策略。
+核心对照执行原版 GComponent 和 InputManager 方法，覆盖 24 个状态与 120 个命中点。
+`--smoke-opaque` 验证真实窗口中的空白穿透、组件切换、子事件冒泡、alpha 为零时的
+命中、touchable/visible、旋转/改尺寸、按下期间切换及实体回收。
+
 播放、补间、滚动和树展开等操作通过 `GuiMut` 直接调用，不经过对象消息队列：
 
 ```rust,ignore

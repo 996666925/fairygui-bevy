@@ -207,6 +207,11 @@ fn registered_bar_track_and_arrows_scroll_without_row_events_or_selection() {
         fairygui_bevy::runtime::emit_list_item_messages.after(GuiSystems::Input),
     );
     for &part in &parts {
+        // Each synthetic part represents an explicit rectangular hit surface.
+        app.world_mut()
+            .non_send_mut::<GuiRuntime>()
+            .store_mut()
+            .set_component_opaque(part, true);
         let (entity, _) = target(&mut app, 99);
         app.world_mut()
             .entity_mut(entity)

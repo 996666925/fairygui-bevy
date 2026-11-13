@@ -1,0 +1,173 @@
+# Original GComponent opaque/setMask and InputManager.hitTest bodies; scalar empty-graphics Sprite host.
+# .refs/FairyGUI-layabox/source/src/fairygui/GComponent.ts SHA256 5601fd9c39957727e2dc70fd2bfd28cfd56ce104b2d9e4676382009a85bc5e59
+# .refs/LayaAir-3.3/InputManager.ts SHA256 1bbd306c559de1bd981d7047ec0ff5b459d000f71d1272be2999d9ef343625bd
+new
+opaque 0
+state 0 1 0
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+opaque 1
+state 1 0 0
+hit -1 5 0
+hit 0 0 1
+hit 20 25 1
+hit 70 60 1
+hit 100 80 0
+opaque 1
+state 1 0 0
+hit -1 5 0
+hit 0 0 1
+hit 20 25 1
+hit 70 60 1
+hit 100 80 0
+opaque 0
+state 0 1 0
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+mask 0
+state 0 0 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 1
+hit 70 60 0
+hit 100 80 0
+opaque 0
+state 0 0 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 1
+hit 70 60 0
+hit 100 80 0
+opaque 1
+state 1 0 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 1
+hit 70 60 0
+hit 100 80 0
+opaque 0
+state 0 1 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 1
+hit 70 60 0
+hit 100 80 0
+clear
+state 0 1 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+opaque 0
+state 0 1 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+opaque 1
+state 1 0 1
+hit -1 5 0
+hit 0 0 1
+hit 20 25 1
+hit 70 60 1
+hit 100 80 0
+opaque 0
+state 0 1 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+new
+opaque 0
+state 0 1 0
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+opaque 1
+state 1 0 0
+hit -1 5 0
+hit 0 0 1
+hit 20 25 1
+hit 70 60 1
+hit 100 80 0
+opaque 1
+state 1 0 0
+hit -1 5 0
+hit 0 0 1
+hit 20 25 1
+hit 70 60 1
+hit 100 80 0
+opaque 0
+state 0 1 0
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+mask 1
+state 0 0 1
+hit -1 5 1
+hit 0 0 1
+hit 20 25 0
+hit 70 60 1
+hit 100 80 1
+opaque 0
+state 0 0 1
+hit -1 5 1
+hit 0 0 1
+hit 20 25 0
+hit 70 60 1
+hit 100 80 1
+opaque 1
+state 1 0 1
+hit -1 5 1
+hit 0 0 1
+hit 20 25 0
+hit 70 60 1
+hit 100 80 1
+opaque 0
+state 0 1 1
+hit -1 5 1
+hit 0 0 1
+hit 20 25 0
+hit 70 60 1
+hit 100 80 1
+clear
+state 0 1 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+opaque 0
+state 0 1 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0
+opaque 1
+state 1 0 1
+hit -1 5 0
+hit 0 0 1
+hit 20 25 1
+hit 70 60 1
+hit 100 80 0
+opaque 0
+state 0 1 1
+hit -1 5 0
+hit 0 0 0
+hit 20 25 0
+hit 70 60 0
+hit 100 80 0

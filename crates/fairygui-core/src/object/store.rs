@@ -30,6 +30,8 @@ mod slider;
 #[cfg(test)]
 #[path = "animation_tests.rs"]
 mod animation_tests;
+#[path = "component_input.rs"]
+mod component_input;
 #[path = "image.rs"]
 mod image;
 #[cfg(test)]

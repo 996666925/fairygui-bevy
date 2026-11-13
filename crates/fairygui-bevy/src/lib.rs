@@ -55,7 +55,9 @@ pub use animation::{GuiAnimationPlaySettings, GuiAnimationState};
 pub mod backend;
 pub mod combo;
 pub use combo::GuiComboBoxState;
+mod component_properties;
 mod compositor;
+pub use component_properties::GuiOpaque;
 pub mod ecs;
 mod effect_properties;
 pub use effect_properties::{GuiBlendMode, GuiColorFilter};
@@ -177,12 +179,12 @@ pub mod prelude {
         GuiInputState, GuiLink, GuiListContent, GuiListContentError, GuiListContentState,
         GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection, GuiListState,
         GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
-        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiPointerCapture, GuiPointerId,
-        GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
-        GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease,
-        GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
-        GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems,
-        GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTooltipCommand,
+        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
+        GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
+        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
+        GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
+        GuiRuntime, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace,
+        GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTooltipCommand,
         GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTransform, GuiTransitionCallback,
         GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
         GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,

@@ -127,5 +127,18 @@ fn mask_prior_gate_uses_parent_coordinates_and_retains_graph_hit_when_replaced_b
             owner_origin + owner_matrix * (Vec2::new(10., 10.) * dpi),
             geometry
         ));
+        // Clear retains hitTestPrior and mouseThrough=false, now testing the
+        // owner's rectangle before descendants, including children outside it.
+        let outside = owner_origin + owner_matrix * (Vec2::new(200., 50.) * dpi);
+        assert!(!allowed_geometry(&gui, content, outside, geometry));
+        gui.store_mut().set_component_opaque(owner, true);
+        gui.store_mut().set_component_opaque(owner, false);
+        assert!(allowed_geometry(&gui, content, outside, geometry));
+        gui.store_mut().set_component_mask(owner, Some(mask), false);
+        gui.store_mut().set_component_opaque(owner, true);
+        gui.store_mut().set_component_opaque(owner, false);
+        let cutout = owner_origin + owner_matrix * (Vec2::new(10., 10.) * dpi);
+        assert!(allowed_geometry(&gui, content, cutout, geometry));
+        assert!(!allowed_geometry(&gui, owner, cutout, geometry));
     }
 }

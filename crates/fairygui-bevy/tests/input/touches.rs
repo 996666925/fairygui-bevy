@@ -288,6 +288,7 @@ fn releasing_one_finger_keeps_a_shared_button_pressed_until_the_last_release() {
     let button = {
         let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
         let button = gui.store_mut().create(ObjectType::Button);
+        gui.store_mut().set_component_opaque(button, true);
         gui.store_mut().attach_to_stage(button);
         button
     };
@@ -321,6 +322,7 @@ fn mouse_release_does_not_clear_a_button_still_held_by_touch() {
     let button = {
         let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
         let button = gui.store_mut().create(ObjectType::Button);
+        gui.store_mut().set_component_opaque(button, true);
         gui.store_mut().attach_to_stage(button);
         button
     };

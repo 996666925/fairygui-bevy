@@ -154,7 +154,7 @@ fn top_left_position(cursor: &RelativeCursorPosition) -> Option<Vec2> {
         .map(|position| position + Vec2::splat(0.5))
 }
 
-fn graph_hit(
+fn self_hit(
     runtime: &GuiRuntime,
     id: GObjectId,
     normalized: Option<Vec2>,
@@ -165,7 +165,7 @@ fn graph_hit(
         return false;
     };
     let ControlData::Graph(data) = object.control() else {
-        return true;
+        return object.component_has_self_hit().unwrap_or(true);
     };
     match data.graph_kind() {
         // Exported scrollbar skins may use an invisible graph for the track.
@@ -600,7 +600,7 @@ fn route_pointer(
                             &geometry,
                         )
                         && relative.is_none_or(|r| r.cursor_over())
-                        && graph_hit(
+                        && self_hit(
                             &runtime,
                             object.0,
                             relative.and_then(top_left_position),

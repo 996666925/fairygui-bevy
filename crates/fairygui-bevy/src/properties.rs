@@ -56,6 +56,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiButtonSettings>(world);
     sync_property::<GuiBlendMode>(world);
     sync_property::<GuiColorFilter>(world);
+    sync_property::<GuiOpaque>(world);
     sync_property::<GuiColor>(world);
     sync_property::<GuiGraph>(world);
     sync_property::<GuiTextFormat>(world);

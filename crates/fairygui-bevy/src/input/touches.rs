@@ -182,7 +182,7 @@ pub(super) fn route_touches(
                             views.physical_position(*entity, position, scale),
                             &geometry,
                         )
-                        && graph_hit(&runtime, object.0, normalized(*entity), *surface)
+                        && self_hit(&runtime, object.0, normalized(*entity), *surface)
                         && pixel.is_none_or(|p| {
                             normalized(*entity).is_some_and(|n| {
                                 runtime.store().object(object.0).is_some_and(|o| {
