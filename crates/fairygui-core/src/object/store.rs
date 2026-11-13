@@ -20,6 +20,8 @@ mod display;
 pub use display::DisplayLockToken;
 #[path = "progress.rs"]
 mod progress;
+#[path = "slider.rs"]
+mod slider;
 
 #[cfg(test)]
 #[path = "animation_tests.rs"]
@@ -206,6 +208,7 @@ pub struct ObjectStore {
     button_feedback_time: f64,
     button_feedback: Vec<buttons::ButtonFeedback>,
     progress_bars: std::collections::HashMap<GObjectId, progress::ProgressBars>,
+    slider_bars: std::collections::HashMap<GObjectId, slider::SliderBars>,
     virtual_states: std::collections::HashMap<GObjectId, virtual_list::VirtualState>,
 }
 
@@ -324,6 +327,7 @@ impl ObjectStore {
 
         for &child in &removed {
             self.progress_bars.remove(&child);
+            self.slider_bars.remove(&child);
             self.animation_commands.remove(&child);
             self.objects.remove(child);
             self.stage_roots.retain(|root| *root != child);
@@ -801,6 +805,7 @@ impl ObjectStore {
         self.apply_child_relations(id, d_width, d_height);
         self.apply_sibling_relations(id, d_width, d_height);
         self.refresh_progress_object(id);
+        self.refresh_slider_object(id);
         self.update_gear_state(id, crate::widget::GearKind::Size);
     }
 
@@ -2340,87 +2345,9 @@ impl ObjectStore {
         }
     }
 
-    /// 设置滑动条的值，并移动它的滑块。返回是否发生了变化。
-    pub fn set_slider_value(&mut self, object: GObjectId, value: i32) -> bool {
-        let Some((min, max, old)) = self.slider_state(object) else {
-            return false;
-        };
-
-        let value = value.clamp(min, max);
-        if value == old {
-            return false;
-        }
-
-        if let Some(crate::widget::ControlData::Slider(data)) = self
-            .objects
-            .get_mut(object)
-            .map(|target| &mut target.control)
-        {
-            data.value = value;
-        }
-
-        self.refresh_slider(object, value, min, max);
-        true
-    }
-
-    /// 读取滑动条的值。
-    pub fn slider_value(&self, object: GObjectId) -> Option<i32> {
-        match self.objects.get(object).map(|target| &target.control) {
-            Some(crate::widget::ControlData::Slider(data)) => Some(data.value),
-            _ => None,
-        }
-    }
-
-    /// 按坐标反推滑动条的值，用于拖动滑块。
-    ///
-    /// 坐标为相对滑动条容器的位置。横向滑动条取横坐标、纵向取纵坐标，
-    /// 越界会被夹在取值范围内。
-    pub fn slider_value_at(&self, object: GObjectId, position: crate::geom::Point) -> Option<i32> {
-        let (min, max, _) = self.slider_state(object)?;
-        let (width, height) = self
-            .objects
-            .get(object)
-            .map(|target| (target.width(), target.height()))?;
-
-        let ratio = if width >= height {
-            if width <= 0.0 {
-                0.0
-            } else {
-                position.x / width
-            }
-        } else if height <= 0.0 {
-            0.0
-        } else {
-            position.y / height
-        };
-
-        let ratio = ratio.clamp(0.0, 1.0);
-        Some(min + ((max - min) as f32 * ratio).round() as i32)
-    }
-
-    /// 按控件内的像素坐标设置滑动条的取值。
-    ///
-    /// 这是「点哪儿跳到哪儿」的语义：坐标先折成取值，再按取值挪动滑块。
-    /// 坐标应当是相对控件左上角的像素值。返回取值是否变化。
-    pub fn set_slider_value_at(&mut self, object: GObjectId, position: crate::geom::Point) -> bool {
-        let Some(value) = self.slider_value_at(object, position) else {
-            return false;
-        };
-        self.set_slider_value(object, value)
-    }
-
     fn progress_state(&self, object: GObjectId) -> Option<(i32, i32, i32)> {
         match self.objects.get(object).map(|target| &target.control) {
             Some(crate::widget::ControlData::ProgressBar(data)) => {
-                Some((data.min, data.max, data.value))
-            }
-            _ => None,
-        }
-    }
-
-    fn slider_state(&self, object: GObjectId) -> Option<(i32, i32, i32)> {
-        match self.objects.get(object).map(|target| &target.control) {
-            Some(crate::widget::ControlData::Slider(data)) => {
                 Some((data.min, data.max, data.value))
             }
             _ => None,
@@ -2456,47 +2383,6 @@ impl ObjectStore {
             _ => return,
         };
         self.apply_text(title, &text);
-    }
-
-    /// 按当前值移动滑动条的滑块。
-    fn refresh_slider(&mut self, object: GObjectId, value: i32, min: i32, max: i32) {
-        let span = max - min;
-        let percent = if span == 0 {
-            0.0
-        } else {
-            (value - min) as f32 / span as f32
-        };
-
-        let Some(bar) = self.child_by_name(object, "bar") else {
-            return;
-        };
-
-        let Some((container_width, container_height)) = self
-            .objects
-            .get(object)
-            .map(|target| (target.width(), target.height()))
-        else {
-            return;
-        };
-        let Some(child) = self.objects.get(bar) else {
-            return;
-        };
-        let (bar_width, bar_height) = (child.width(), child.height());
-
-        // 横向滑动条移动滑块，纵向则改纵坐标。
-        if container_width >= container_height {
-            self.set_xy(
-                bar,
-                ((container_width - bar_width) * percent).round(),
-                child.y(),
-            );
-        } else {
-            self.set_xy(
-                bar,
-                child.x(),
-                ((container_height - bar_height) * percent).round(),
-            );
-        }
     }
 
     /// 设置对象显示的文本，覆盖到各类带文本的控件上。
@@ -4388,26 +4274,26 @@ mod tests {
         if let Some(crate::widget::ControlData::Slider(data)) =
             store.object_mut(slider).map(|object| &mut object.control)
         {
-            data.min = 0;
-            data.max = 100;
-            data.value = 0;
+            data.min = 0.;
+            data.max = 100.;
+            data.value = 0.;
         }
 
         // 点中间 → 一半。
         assert!(store.set_slider_value_at(slider, crate::geom::Point::new(100.0, 10.0)));
-        assert_eq!(store.slider_value(slider), Some(50));
+        assert_eq!(store.slider_value(slider), Some(50.));
 
         // 点最右 → 满值。
         store.set_slider_value_at(slider, crate::geom::Point::new(200.0, 10.0));
-        assert_eq!(store.slider_value(slider), Some(100));
+        assert_eq!(store.slider_value(slider), Some(100.));
 
         // 超出右边界也夹在满值。
         store.set_slider_value_at(slider, crate::geom::Point::new(999.0, 10.0));
-        assert_eq!(store.slider_value(slider), Some(100));
+        assert_eq!(store.slider_value(slider), Some(100.));
 
         // 回到最左。
         store.set_slider_value_at(slider, crate::geom::Point::new(0.0, 10.0));
-        assert_eq!(store.slider_value(slider), Some(0));
+        assert_eq!(store.slider_value(slider), Some(0.));
     }
 
     #[test]

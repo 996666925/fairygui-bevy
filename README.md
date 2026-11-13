@@ -439,6 +439,28 @@ Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐�
 `GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在同帧 Sync 后反映最新的控件状态；
 状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
 
+滑动条的 `GuiSliderValue` 使用 `f64`，完整状态可通过 `GuiSliderState` 或
+`gui.slider(entity)` 查询。范围、小数值和输入策略通过实体命令设置：
+
+```rust,ignore
+commands.write_message(GuiObjectCommand::new(slider,
+    GuiObjectAction::SetSliderRange { min: 0., max: 1. }));
+commands.write_message(GuiObjectCommand::new(slider,
+    GuiObjectAction::SetSliderValue(0.25)));
+commands.write_message(GuiObjectCommand::new(slider,
+    GuiObjectAction::SetSliderWholeNumbers(false)));
+```
+
+程序赋值保留小数及范围外的原值，仅将显示比例限制在 0..1；整数模式只对指针输入
+取整。横向和纵向条带按比例伸缩，grip 跟随导出的关联，缩放后拖动仍按控件局部位移
+取值，按下不跳变。`SetSliderChangeOnClick(false)` 关闭轨道点击取值；
+`SetSliderCanDrag(false)` 暂停当前拖动，同原版，新一次 grip 按下会重新启用拖动。
+`SetSliderTitleType` 使用 0=百分比、1=值/最大值、2=值、3=最大值。
+范围必须有限且 min <= max；命令可在资产就绪前排队，首个视图即应用最终值和几何。
+输入导致值改变才触发 `StateChanged`，控件 observer 内可读取当前滑动条状态；
+程序赋值不触发该事件。`--smoke-slider` 验证实际布局与 picking 下的缩放拖动、
+小数、取整、输入开关和销毁。
+
 下拉框实体带有 `GuiComboBoxState`，也可用 `gui.combo_box(entity)` 读取选项、value、
 选中索引、可见项数、展开方向、绑定控制器以及当前 dropdown/list 视图。
 通过实体命令设置数据和选择：

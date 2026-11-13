@@ -769,7 +769,7 @@ fn slider_child_owns_drag_instead_of_scroll_parent() {
             gui.store_mut().attach_to_stage(root);
             gui.store().for_each_descendant(root, &mut |id| {
                 if matches!(gui.store().object(id).map(|o| o.control()),
-                    Some(fairygui_core::widget::ControlData::Slider(data)) if data.min == 0 && data.max == 100) {
+                    Some(fairygui_core::widget::ControlData::Slider(data)) if data.min == 0. && data.max == 100.) {
                     found = Some(id);
                 }
             });
@@ -780,7 +780,8 @@ fn slider_child_owns_drag_instead_of_scroll_parent() {
         let slider = found.expect("Basics contains a configured slider");
         gui.store_mut().set_size(slider, 200.0, 20.0);
         gui.store_mut().set_parent(slider, Some(container));
-        gui.store_mut().set_parent(child, Some(slider));
+        let grip = gui.store().child_by_name(slider, "grip").unwrap();
+        gui.store_mut().set_parent(child, Some(grip));
         slider
     };
     let entity = app
@@ -809,7 +810,7 @@ fn slider_child_owns_drag_instead_of_scroll_parent() {
             .non_send::<GuiRuntime>()
             .store()
             .slider_value(slider),
-        Some(50)
+        Some(50.)
     );
     app.world_mut()
         .get_mut::<RelativeCursorPosition>(entity)
@@ -818,14 +819,14 @@ fn slider_child_owns_drag_instead_of_scroll_parent() {
     app.world_mut()
         .get_mut::<Window>(window)
         .unwrap()
-        .set_cursor_position(Some(Vec2::new(80.0, 80.0)));
+        .set_cursor_position(Some(Vec2::new(220.0, 80.0)));
     app.update();
     assert_eq!(
         app.world()
             .non_send::<GuiRuntime>()
             .store()
             .slider_value(slider),
-        Some(100)
+        Some(100.)
     );
     assert_eq!(
         app.world()

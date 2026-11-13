@@ -50,8 +50,8 @@ pub struct GuiListSelection(pub Vec<usize>);
 pub struct GuiProgressValue(pub i32);
 
 /// Current value projected from a FairyGUI slider.
-#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct GuiSliderValue(pub i32);
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq)]
+pub struct GuiSliderValue(pub f64);
 
 /// Current selected state projected from a FairyGUI button.
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -178,7 +178,16 @@ pub enum GuiObjectAction {
     AdvanceAnimation(f32),
     /// Rewind without restarting an ended finite playback.
     RewindAnimation,
-    SetSliderValue(i32),
+    SetSliderValue(f64),
+    SetSliderRange {
+        min: f64,
+        max: f64,
+    },
+    SetSliderWholeNumbers(bool),
+    SetSliderChangeOnClick(bool),
+    SetSliderCanDrag(bool),
+    /// 0=Percent, 1=ValueAndMax, 2=Value, 3=Max.
+    SetSliderTitleType(i32),
     SetControllerPage {
         name: String,
         index: i32,
@@ -2343,6 +2352,25 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetSliderValue(value) => {
                 runtime.store_mut().set_slider_value(object, *value);
+            }
+            GuiObjectAction::SetSliderRange { min, max } => {
+                runtime.store_mut().set_slider_range(object, *min, *max);
+            }
+            GuiObjectAction::SetSliderWholeNumbers(whole) => {
+                runtime.store_mut().set_slider_whole_numbers(object, *whole);
+            }
+            GuiObjectAction::SetSliderChangeOnClick(change) => {
+                runtime
+                    .store_mut()
+                    .set_slider_change_on_click(object, *change);
+            }
+            GuiObjectAction::SetSliderCanDrag(can_drag) => {
+                runtime.store_mut().set_slider_can_drag(object, *can_drag);
+            }
+            GuiObjectAction::SetSliderTitleType(title_type) => {
+                runtime
+                    .store_mut()
+                    .set_slider_title_type(object, *title_type);
             }
             GuiObjectAction::SetControllerPage { name, index } => {
                 runtime

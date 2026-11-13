@@ -477,6 +477,7 @@ fn build_component(
         store.object_mut(child).unwrap().under_construct = false;
         store.initialize_button(child);
         store.initialize_progress(child);
+        store.initialize_slider(child);
         if matches!(
             store.object(child).map(|object| object.control()),
             Some(ControlData::ComboBox(_))
@@ -634,6 +635,16 @@ fn build_component(
         data.title_type = i32::from(buffer.read_u8()?);
         data.reverse = buffer.read_bool()?;
     }
+    if let ControlData::Slider(data) = &mut control
+        && buffer.seek(0, 6)?
+    {
+        data.title_type = i32::from(buffer.read_u8()?);
+        data.reverse = buffer.read_bool()?;
+        if buffer.version() >= 2 {
+            data.whole_numbers = buffer.read_bool()?;
+            data.change_on_click = buffer.read_bool()?;
+        }
+    }
 
     if let ControlData::ScrollBar(data) = &mut control {
         data.fixed_grip_size =
@@ -679,6 +690,7 @@ fn build_component(
     // they do not pass through the parent component's child initialization loop.
     store.initialize_button(object);
     store.initialize_progress(object);
+    store.initialize_slider(object);
 
     Ok(())
 }

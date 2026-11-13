@@ -141,7 +141,7 @@ fn slider_value_moves_its_grip() {
     assert!(store.set_slider_value(id, max));
     assert_eq!(store.slider_value(id), Some(max));
 
-    // 越界同样被夹住。
-    assert!(!store.set_slider_value(id, max + 100));
-    assert_eq!(store.slider_value(id), Some(max));
+    // Native programmatic assignment preserves the requested value.
+    assert!(store.set_slider_value(id, max + 100.));
+    assert_eq!(store.slider_value(id), Some(max + 100.));
 }

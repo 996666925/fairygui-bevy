@@ -202,20 +202,39 @@ impl Default for ProgressData {
 }
 
 /// 滑动条数据。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SliderData {
     /// 容器部分的数据。
     pub component: ComponentData,
     /// 当前值。
-    pub value: i32,
+    pub value: f64,
     /// 最大值。
-    pub max: i32,
+    pub max: f64,
     /// 最小值（格式 2 及以上才有）。
-    pub min: i32,
+    pub min: f64,
     /// 是否整数值。
     pub whole_numbers: bool,
     /// 是否反向。
     pub reverse: bool,
+    pub title_type: i32,
+    pub change_on_click: bool,
+    pub can_drag: bool,
+}
+
+impl Default for SliderData {
+    fn default() -> Self {
+        Self {
+            component: ComponentData::default(),
+            value: 50.,
+            max: 100.,
+            min: 0.,
+            whole_numbers: false,
+            reverse: false,
+            title_type: 0,
+            change_on_click: true,
+            can_drag: true,
+        }
+    }
 }
 
 /// 读取按钮的扩展数据（组件描述块 6）。
@@ -382,10 +401,10 @@ pub(crate) fn setup_slider(
         return Ok(());
     }
 
-    data.value = buffer.read_i32()?;
-    data.max = buffer.read_i32()?;
+    data.value = f64::from(buffer.read_i32()?);
+    data.max = f64::from(buffer.read_i32()?);
     if buffer.version() >= 2 {
-        data.min = buffer.read_i32()?;
+        data.min = f64::from(buffer.read_i32()?);
     }
 
     let _ = table;

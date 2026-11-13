@@ -483,6 +483,7 @@ pub struct GuiQuery<'w, 's> {
     animations: Query<'w, 's, &'static crate::GuiAnimationState>,
     lists: Query<'w, 's, &'static GuiListState>,
     combos: Query<'w, 's, &'static crate::GuiComboBoxState>,
+    sliders: Query<'w, 's, &'static crate::GuiSliderState>,
     controllers: Query<'w, 's, &'static GuiControllers>,
     windows: Query<'w, 's, &'static GuiWindowState>,
     trees: Query<'w, 's, &'static crate::GuiTreeState>,
@@ -544,6 +545,9 @@ impl GuiQuery<'_, '_> {
 
     pub fn combo_box(&self, entity: Entity) -> Option<&crate::GuiComboBoxState> {
         self.combos.get(self.view(entity)?).ok()
+    }
+    pub fn slider(&self, entity: Entity) -> Option<&crate::GuiSliderState> {
+        self.sliders.get(self.view(entity)?).ok()
     }
 
     pub fn tooltips(&self, entity: Entity) -> Option<&str> {
@@ -770,16 +774,34 @@ pub(crate) fn sync_gui_properties(
         Option<&GuiText>,
         Option<&GuiDisplay>,
         Option<&crate::GuiComboBoxState>,
+        Option<&crate::GuiSliderState>,
     )>,
 ) {
     let store = runtime.store();
-    for (entity, reference, text, display, combo) in &objects {
+    for (entity, reference, text, display, combo, slider) in &objects {
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
         let Some(object) = store.object(reference.0) else {
             continue;
         };
+        if let ControlData::Slider(data) = object.control() {
+            let next = crate::GuiSliderState {
+                min: data.min,
+                max: data.max,
+                value: data.value,
+                whole_numbers: data.whole_numbers,
+                reverse: data.reverse,
+                change_on_click: data.change_on_click,
+                can_drag: data.can_drag,
+                title_type: data.title_type,
+            };
+            if slider != Some(&next) {
+                commands.entity(entity).insert(next);
+            }
+        } else if slider.is_some() {
+            commands.entity(entity).remove::<crate::GuiSliderState>();
+        }
         if let ControlData::ComboBox(data) = object.control() {
             let popup = store.combo_popup(reference.0);
             let next = crate::GuiComboBoxState {

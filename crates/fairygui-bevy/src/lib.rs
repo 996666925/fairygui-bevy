@@ -65,6 +65,8 @@ pub mod movie;
 pub mod popup;
 pub mod pull;
 pub mod runtime;
+pub mod slider;
+pub use slider::GuiSliderState;
 pub mod text;
 mod text_stroke;
 pub mod tree;
@@ -156,10 +158,10 @@ pub mod prelude {
         GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPointerCapture,
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
         GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
-        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSpace, GuiSystems, GuiText,
-        GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
-        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSpace,
+        GuiSystems, GuiText, GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
+        GuiTooltipState, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
         GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
         GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,

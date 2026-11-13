@@ -62,7 +62,14 @@ impl PointerTransform {
 #[derive(Debug)]
 pub(super) enum Gesture {
     None,
-    Slider(GObjectId),
+    Slider {
+        owner: GObjectId,
+        grip: bool,
+        initial: f64,
+        transform: PointerTransform,
+        applied: bool,
+        touch_id: Option<u64>,
+    },
     Object {
         owner: GObjectId,
         parent: GObjectId,
@@ -95,7 +102,7 @@ impl Gesture {
     pub(super) fn owner(&self, runtime: &GuiRuntime) -> Option<GObjectId> {
         match self {
             Self::None => None,
-            Self::Slider(id) => Some(*id),
+            Self::Slider { owner, .. } => Some(*owner),
             Self::Object { owner, .. } => Some(*owner),
             Self::Grip { container, .. } => Some(*container),
             Self::Scroll {
@@ -133,7 +140,36 @@ impl Gesture {
                 if occupied.contains(&id) {
                     return Self::None;
                 }
-                return Self::Slider(id);
+                let grip_object = runtime.store().child_by_name(id, "grip");
+                let mut part = Some(target);
+                let mut grip = false;
+                while let Some(part_id) = part {
+                    if Some(part_id) == grip_object {
+                        grip = true;
+                        break;
+                    }
+                    if part_id == id {
+                        break;
+                    }
+                    part = runtime
+                        .store()
+                        .object(part_id)
+                        .and_then(|object| object.parent());
+                }
+                let initial = runtime.store().slider_percent(id).unwrap_or_default();
+                let transform = pointer_transform(runtime, id, transforms);
+                // GSlider's grip-down handler explicitly enables this flag.
+                if grip {
+                    runtime.store_mut().set_slider_can_drag(id, true);
+                }
+                return Self::Slider {
+                    owner: id,
+                    grip,
+                    initial,
+                    transform,
+                    applied: false,
+                    touch_id: None,
+                };
             }
             if let Some(bar) = runtime.store().scroll_bar_of_part(id) {
                 // Arrows and track clicks never capture the grip or scroll content.
@@ -406,12 +442,68 @@ impl Gesture {
                     }
                 }
             }
-            Self::Slider(id) => {
-                if let Some((_, n)) = positions.iter().find(|(object, _)| object == id)
-                    && let Some(object) = runtime.store().object(*id)
-                {
-                    let point = Point::new(n.x * object.width(), n.y * object.height());
-                    runtime.store_mut().set_slider_value_at(*id, point);
+            Self::Slider {
+                owner,
+                grip,
+                initial,
+                transform,
+                applied,
+                touch_id,
+            } => {
+                let changed = if *grip {
+                    // Native sliders update on pointer movement, not on press
+                    // or idle frames (which would round/clamp raw setter values).
+                    if cursor == last {
+                        return;
+                    }
+                    let Some(ControlData::Slider(data)) = runtime
+                        .store()
+                        .object(*owner)
+                        .map(|object| object.control())
+                    else {
+                        return;
+                    };
+                    if !data.can_drag {
+                        return;
+                    }
+                    let reverse = data.reverse;
+                    let Some((vertical, track)) = runtime
+                        .store()
+                        .slider_track(*owner)
+                        .filter(|(_, track)| *track > 0.)
+                    else {
+                        return;
+                    };
+                    let delta = transform.displacement(cursor - start);
+                    let delta =
+                        f64::from(if vertical { delta.y } else { delta.x }) / f64::from(track);
+                    runtime.store_mut().set_slider_percent_from_input(
+                        *owner,
+                        *initial + if reverse { -delta } else { delta },
+                    )
+                } else if !*applied {
+                    *applied = true;
+                    let Some(object) = runtime.store().object(*owner) else {
+                        return;
+                    };
+                    let point = positions
+                        .iter()
+                        .find(|(id, _)| id == owner)
+                        .map(|(_, n)| Point::new(n.x * object.width(), n.y * object.height()))
+                        .or_else(|| {
+                            runtime
+                                .store()
+                                .global_to_local(*owner, Point::new(cursor.x, cursor.y))
+                        });
+                    point.is_some_and(|point| runtime.store_mut().click_slider_at(*owner, point))
+                } else {
+                    false
+                };
+                if changed {
+                    let mut event = UiEvent::new(EventKind::StateChanged, *owner)
+                        .with_pointer(Point::new(cursor.x, cursor.y));
+                    event.touch_id = *touch_id;
+                    runtime.dispatch_event(event);
                 }
             }
             Self::Grip {
@@ -547,7 +639,7 @@ impl Gesture {
     }
 
     pub(super) fn set_touch_id(&mut self, id: u64) {
-        if let Self::Object { touch_id, .. } = self {
+        if let Self::Object { touch_id, .. } | Self::Slider { touch_id, .. } = self {
             *touch_id = Some(id);
         }
     }
