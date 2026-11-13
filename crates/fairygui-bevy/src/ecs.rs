@@ -382,6 +382,7 @@ pub struct GuiObjectInfo {
     kind: ObjectType,
     parent: Option<Entity>,
     children: Vec<Entity>,
+    children_in_view: Option<Vec<Entity>>,
 }
 
 impl GuiObjectInfo {
@@ -399,6 +400,12 @@ impl GuiObjectInfo {
 
     pub fn children(&self) -> &[Entity] {
         &self.children
+    }
+
+    /// Direct children intersecting this component's native viewport. This is
+    /// a geometry query, independent of visibility, scaling or ancestor clips.
+    pub fn children_in_view(&self) -> Option<&[Entity]> {
+        self.children_in_view.as_deref()
     }
 }
 
@@ -500,6 +507,19 @@ impl GuiQuery<'_, '_> {
             .iter()
             .copied()
             .find(|&child| self.objects.get(child).is_ok_and(|info| info.name == name))
+    }
+
+    /// Native inclusive-edge geometry test for a direct logical child. Owners
+    /// resolve to views; missing/non-component/unrelated targets return None.
+    /// Like hierarchy/geometry snapshots, refreshes before PostLayout and at Sync end.
+    pub fn is_child_in_view(&self, parent: Entity, child: Entity) -> Option<bool> {
+        let parent = self.view(parent)?;
+        let child = self.view(child)?;
+        if self.get(child)?.parent() != Some(parent) {
+            return None;
+        }
+        let info = self.get(parent)?;
+        Some(info.children_in_view()?.contains(&child))
     }
 
     /// Find a descendant using FairyGUI's direct-children-before-subtrees order.
@@ -713,6 +733,15 @@ pub(crate) fn sync_gui_objects(
             .children()
             .iter()
             .filter_map(|&id| runtime.entity_of(id));
+        let children_in_view = object.control().component().map(|_| {
+            object
+                .children()
+                .iter()
+                .copied()
+                .filter(|&child| runtime.store().is_child_in_view(reference.0, child) == Some(true))
+                .filter_map(|child| runtime.entity_of(child))
+                .collect::<Vec<_>>()
+        });
         if let Some(mut current) = current {
             if current.name != object.name() {
                 current.name = object.name().to_owned();
@@ -723,6 +752,9 @@ pub(crate) fn sync_gui_objects(
             if current.parent != parent {
                 current.parent = parent;
             }
+            if current.children_in_view != children_in_view {
+                current.children_in_view = children_in_view;
+            }
             if !current.children.iter().copied().eq(children.clone()) {
                 current.children = children.collect();
             }
@@ -732,6 +764,7 @@ pub(crate) fn sync_gui_objects(
                 kind: object.kind(),
                 parent,
                 children: children.collect(),
+                children_in_view,
             });
         }
     }

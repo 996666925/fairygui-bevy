@@ -5,6 +5,21 @@ Applications own interfaces through `FairyGuiRoot` components, find controls wit
 ordinary Bevy systems. The core object tree executes FairyGUI package semantics
 internally; the plugin projects its state into Bevy UI and read-only ECS components.
 
+GuiObjectInfo snapshots the native children_in_view set alongside its hierarchy;
+non-components expose no such set. GuiQuery::is_child_in_view accepts a root owner
+or component view and a direct logical child. Core implements GComponent's hidden
+overflow rectangle and ScrollPane's current-display geometry test with inclusive
+edges and unscaled child dimensions. Pane axes without overflow do not reject a
+child. Visibility, on-stage state, pivot/rotation/scale and ancestor clipping are
+not part of this query. Snapshots update with hierarchy/geometry before PostLayout
+and at Sync end, retaining change ticks while unchanged.
+
+ListEffect creates ten ordinary rows through GuiListContent, assigns IsRead/c1
+pages and time/title text, then schedules initial visible rows in PostLayout.
+Each gets SetVisible(false) followed by the exported t0 with a 0.2-second stagger;
+the transition owns visibility restoration and the horizontal entry motion. The
+pending marker is removed once, so frame updates and scrolling never restart it.
+
 ## Responsibilities
 
 | Layer | Responsibility |

@@ -8,6 +8,12 @@ use bevy::picking::{
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
 
+#[path = "smoke_list_effect.rs"]
+mod list_effect;
+pub(super) fn install_list_effect(app: &mut App) {
+    list_effect::install(app);
+}
+
 #[path = "smoke_bag.rs"]
 mod bag;
 #[path = "smoke_nested_scroll.rs"]

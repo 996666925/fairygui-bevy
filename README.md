@@ -149,6 +149,12 @@ app.add_systems(Update, bind_menu.after(GuiSystems::Sync));
 
 `child_by_name` 查找直属子节点，`find_by_name` 按 FairyGUI 逻辑顺序递归查找，
 `child_by_path` 按 `/` 分隔的子节点名查找；都接受根拥有者或控件视图实体。
+
+`gui.is_child_in_view(parent, child)` 查询直属控件是否与原生视口相交，也可通过
+`GuiObjectInfo::children_in_view()` 获取有序结果。它使用逻辑几何、未缩放尺寸和
+滚动面板当前显示偏移，包含边缘接触；不受控件显隐、舞台连接或祖先裁剪影响。
+没有溢出的滚动轴不参与判断；普通非裁剪组件的子控件都在视口内。无效或非直属
+目标返回 `None`。快照在 PostLayout 前与 Sync 末尾刷新，适合在本帧布局后选择动画行。
 控件上的只读 `GuiObjectInfo` 提供名称、类型、父节点及有序子节点，排除渲染辅助实体，
 隐藏或暂离舞台的控件仍可查询。数据在 `GuiSystems::Sync` 更新；Respond 阶段读取
 上一帧的快照，Sync 后可查询本帧新建的控件。高级模型操作可通过
@@ -361,6 +367,11 @@ if let Some(list) = gui.child_by_name(root_entity, "mailList") {
 数据快照。通过 ECS 修改 `item_count`、`set_renderer` 或替换组件，会刷新当前行；
 数量和渲染器一起修改时，先更新数量，旧索引不会访问新的短数据集。
 外部共享数据更新后也可用 `Mut<GuiVirtualList>::set_changed()` 请求重绘。
+
+ListEffect 使用 `GuiListContent` 创建十封邮件，配置已读/领取页和时间文字；在
+`GuiSystems::PostLayout` 查询初始可见行，通过 `PlayTransitionWithOptions` 每隔
+0.2 秒播放导出的 `t0`，等待期间隐藏对应行。效果只在创建后启动一次，滚动进入的
+其他行保留普通显示。`--smoke-list-effect` 验证错开播放、最终位置、点击选择和销毁。
 
 `GuiVirtualListState` 提供 `info()` 布局统计和 `error()` 配置错误，Sync 后可读取。
 `.looping()` 使用原生六份循环记录，回调仍接收逻辑索引；普通/循环模式在首次

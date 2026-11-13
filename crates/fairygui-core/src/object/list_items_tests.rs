@@ -6,6 +6,102 @@ use crate::{
     widget::{ButtonMode, ListItemData, ListSelectionMode},
 };
 
+#[test]
+fn native_child_view_geometry_uses_inclusive_edges_display_scroll_and_unscaled_hidden_children() {
+    use crate::geom::Point;
+    use crate::widget::OverflowType;
+    let mut store = ObjectStore::new();
+    let owner = store.create(ObjectType::Component);
+    store.set_size(owner, 100., 80.);
+    let child = store.create(ObjectType::Component);
+    store.set_parent(child, Some(owner));
+    store.set_size(child, 30., 20.);
+    store.set_xy(child, 500., 500.);
+    assert_eq!(
+        store.is_child_in_view(owner, child),
+        Some(true),
+        "unclipped component"
+    );
+    store.objects[owner]
+        .control
+        .component_mut()
+        .unwrap()
+        .overflow = OverflowType::Hidden;
+    for (x, y, expected) in [
+        (-30., 0., true),
+        (-30.1, 0., false),
+        (100., 80., true),
+        (100.1, 80., false),
+        (0., -20., true),
+        (0., -20.1, false),
+    ] {
+        store.set_xy(child, x, y);
+        assert_eq!(store.is_child_in_view(owner, child), Some(expected));
+    }
+    store.set_visible(child, false);
+    store.set_scale(child, 100., 100.);
+    store.set_rotation(child, 45.);
+    store.set_xy(child, -31., 0.);
+    assert_eq!(
+        store.is_child_in_view(owner, child),
+        Some(false),
+        "scale and visibility do not change the geometric test"
+    );
+    let mut pane = ScrollPane::default();
+    pane.scroll_type = ScrollType::Vertical;
+    pane.set_view_size(Size::new(100., 80.));
+    pane.set_content_size(Size::new(100., 500.));
+    pane.set_pos(0., 100., false);
+    let component = store.objects[owner].control.component_mut().unwrap();
+    component.overflow = OverflowType::Scroll;
+    component.scroll_pane = Some(pane);
+    store.set_xy(child, 900., 180.);
+    assert_eq!(
+        store.is_child_in_view(owner, child),
+        Some(true),
+        "only the overflowing axis is checked"
+    );
+    store.set_xy(child, 0., 180.1);
+    assert_eq!(store.is_child_in_view(owner, child), Some(false));
+    store.objects[owner]
+        .control
+        .component_mut()
+        .unwrap()
+        .scroll_pane
+        .as_mut()
+        .unwrap()
+        .set_pos_animated(0., 200., true);
+    assert_eq!(
+        store.scroll_pane(owner).unwrap().pos(),
+        Point::new(0., 200.)
+    );
+    assert_eq!(
+        store.is_child_in_view(owner, child),
+        Some(false),
+        "uses display offset before animation advances"
+    );
+    store.advance_scrolls(0.5);
+    assert_eq!(store.is_child_in_view(owner, child), Some(true));
+    store.objects[owner]
+        .control
+        .component_mut()
+        .unwrap()
+        .scroll_pane
+        .as_mut()
+        .unwrap()
+        .set_content_size(Size::new(100., 50.));
+    store.set_xy(child, 500., 500.);
+    assert_eq!(
+        store.is_child_in_view(owner, child),
+        Some(true),
+        "axis without overflow does not clip this query"
+    );
+    let unrelated = store.create(ObjectType::Component);
+    assert_eq!(store.is_child_in_view(unrelated, child), None);
+    store.remove(child);
+    assert_eq!(store.is_child_in_view(owner, child), None);
+}
+
 pub(crate) fn bars(store: &mut ObjectStore, list: GObjectId) -> [GObjectId; 2] {
     let mut pane = ScrollPane::default();
     pane.scroll_type = ScrollType::Both;

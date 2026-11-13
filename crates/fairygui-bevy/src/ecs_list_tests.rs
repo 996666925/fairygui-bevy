@@ -44,6 +44,92 @@ fn config(count: usize) -> GuiVirtualList {
     })
 }
 
+#[test]
+fn child_view_snapshots_track_native_geometry_hidden_rows_and_display_scroll_without_tick_churn() {
+    use bevy::ecs::system::SystemState;
+    let (mut app, owner, _, list) = fixture(
+        "ListEffect",
+        include_bytes!("../../fairygui-demo/assets/ui/ListEffect.fui"),
+        "mailList",
+    );
+    app.world_mut()
+        .entity_mut(list)
+        .insert(GuiListContent::new(10, |_, row| row.set_text("Mail")));
+    app.update();
+    let rows = app
+        .world()
+        .get::<GuiListState>(list)
+        .unwrap()
+        .items()
+        .to_vec();
+    assert_eq!(rows.len(), 10);
+    let mut query = SystemState::<GuiQuery>::new(app.world_mut());
+    let gui = query.get(app.world()).unwrap();
+    assert_eq!(
+        gui.get(list).unwrap().children_in_view().unwrap(),
+        &rows[..4]
+    );
+    assert_eq!(gui.is_child_in_view(list, rows[0]), Some(true));
+    assert_eq!(gui.is_child_in_view(list, rows[4]), Some(false));
+    assert_eq!(
+        gui.is_child_in_view(owner, list),
+        Some(true),
+        "owner resolves to its view"
+    );
+    assert_eq!(
+        gui.is_child_in_view(owner, rows[0]),
+        None,
+        "must be a direct child"
+    );
+    let tick = app
+        .world()
+        .entity(list)
+        .get_ref::<crate::GuiObjectInfo>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(list)
+            .get_ref::<crate::GuiObjectInfo>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    app.world_mut().write_message(GuiObjectCommand::new(
+        rows[0],
+        GuiObjectAction::SetVisible(false),
+    ));
+    app.update();
+    assert_eq!(
+        query
+            .get(app.world())
+            .unwrap()
+            .is_child_in_view(list, rows[0]),
+        Some(true)
+    );
+    app.world_mut().write_message(GuiObjectCommand::new(
+        list,
+        GuiObjectAction::ScrollTo {
+            position: Vec2::new(0., 500.),
+            animated: false,
+        },
+    ));
+    app.update();
+    let gui = query.get(app.world()).unwrap();
+    assert_eq!(gui.is_child_in_view(list, rows[0]), Some(false));
+    assert_eq!(
+        gui.is_child_in_view(list, rows[3]),
+        Some(true),
+        "exact trailing edge is included"
+    );
+    assert_eq!(gui.is_child_in_view(list, rows[7]), Some(true));
+    assert_eq!(gui.is_child_in_view(list, rows[8]), Some(false));
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(query.get(app.world()).unwrap().get(list).is_none());
+}
+
 #[derive(Resource, Default)]
 struct ItemEvents(Vec<crate::GuiListItemClick>);
 

@@ -7,6 +7,31 @@ use crate::widget::ControlData;
 pub(crate) mod tests;
 
 impl ObjectStore {
+    /// Native GComponent.isChildInView: geometry only, inclusive edges, using
+    /// unscaled child bounds and the pane's current display offset. Visibility,
+    /// stage connection and ancestor clipping do not affect this query.
+    pub fn is_child_in_view(&self, owner: GObjectId, child: GObjectId) -> Option<bool> {
+        let parent = self.object(owner)?;
+        let component = parent.control().component()?;
+        let child = self.object(child)?;
+        if child.parent() != Some(owner) {
+            return None;
+        }
+        let rect = crate::geom::Rect::new(child.x(), child.y(), child.width(), child.height());
+        Some(
+            if component.overflow == crate::widget::OverflowType::Hidden {
+                rect.x + rect.width >= 0.
+                    && rect.x <= parent.width()
+                    && rect.y + rect.height >= 0.
+                    && rect.y <= parent.height()
+            } else if let Some(pane) = component.scroll_pane.as_ref() {
+                pane.is_child_in_view(rect)
+            } else {
+                true
+            },
+        )
+    }
+
     /// True only for the current pane's registered bar directly owned here.
     /// A user-authored ScrollBar used as a row is still ordinary list content.
     pub fn is_scroll_bar_overlay(&self, object: GObjectId) -> bool {
