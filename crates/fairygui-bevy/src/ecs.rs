@@ -252,6 +252,16 @@ impl GuiText {
     }
 }
 
+/// Native icon URL of a Loader, button, label or combo box. Empty means no icon;
+/// buttons expose the base icon even while a selected icon is displayed.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct GuiIcon(String);
+impl GuiIcon {
+    pub fn value(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Read-only local drawing and interaction state from the FairyGUI model.
 ///
 /// Explicit visibility, controller/group display visibility and stage attachment
@@ -401,6 +411,7 @@ pub struct GuiQuery<'w, 's> {
     objects: Query<'w, 's, &'static GuiObjectInfo>,
     transforms: Query<'w, 's, &'static GuiTransform>,
     texts: Query<'w, 's, &'static GuiText>,
+    icons: Query<'w, 's, &'static GuiIcon>,
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
     transitions: Query<'w, 's, &'static GuiTransitions>,
@@ -437,6 +448,10 @@ impl GuiQuery<'_, '_> {
     /// Native text of a root owner or control view, before presentation.
     pub fn text(&self, entity: Entity) -> Option<&str> {
         Some(self.texts.get(self.view(entity)?).ok()?.value())
+    }
+
+    pub fn icon(&self, entity: Entity) -> Option<&str> {
+        Some(self.icons.get(self.view(entity)?).ok()?.value())
     }
 
     pub fn display(&self, entity: Entity) -> Option<&GuiDisplay> {
@@ -583,6 +598,39 @@ pub(crate) fn sync_gui_scroll_state(
         };
         if current != Some(&next) {
             commands.entity(entity).insert(next);
+        }
+    }
+}
+
+pub(crate) fn sync_gui_icons(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    objects: Query<(Entity, &GObjectRef, Option<&GuiIcon>)>,
+) {
+    use fairygui_core::widget::ControlData;
+    for (entity, reference, current) in &objects {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let source =
+            runtime
+                .store()
+                .object(reference.0)
+                .and_then(|object| match object.control() {
+                    ControlData::Loader(data) => Some(data.url.as_deref().unwrap_or_default()),
+                    ControlData::Button(data) => Some(data.icon.as_deref().unwrap_or_default()),
+                    ControlData::Label(data) => Some(data.icon.as_deref().unwrap_or_default()),
+                    ControlData::ComboBox(data) => Some(data.icon.as_deref().unwrap_or_default()),
+                    _ => None,
+                });
+        match (current, source) {
+            (current, Some(source)) if current.is_none_or(|current| current.value() != source) => {
+                commands.entity(entity).insert(GuiIcon(source.to_owned()));
+            }
+            (Some(_), None) => {
+                commands.entity(entity).remove::<GuiIcon>();
+            }
+            _ => {}
         }
     }
 }

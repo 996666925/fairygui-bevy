@@ -13,6 +13,7 @@ use fairygui_core::object::GObjectId;
 
 mod catalog;
 mod demos;
+mod drag_drop_demo;
 mod loop_list_demo;
 mod modal_wait_demo;
 mod pull_refresh_demo;
@@ -159,6 +160,7 @@ fn main() -> AppExit {
             bind_demo_observers,
             window_demo::bind,
             modal_wait_demo::bind,
+            drag_drop_demo::bind,
         )
             .chain()
             .after(GuiSystems::Sync),
@@ -171,7 +173,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-window-wait") {
+    if std::env::args().any(|arg| arg == "--smoke-drag-drop") {
+        smoke::install_drag_drop(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-window-wait") {
         smoke::install_window_wait(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-windows") {
         smoke::install_windows(&mut app);

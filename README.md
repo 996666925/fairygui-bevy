@@ -209,6 +209,30 @@ PostLayout 均可发送。Focus/PreventSubmit 接受已就绪的根/窗口拥有
 复合控件转发到输入标题；资产未就绪或目标不存在时丢弃请求。隐藏、离台、模态
 遮挡等仍遵循统一输入策略。Blur 保留其他 Bevy 控件的焦点，同帧焦点请求以最后一个为准。
 
+拖放也由实体驱动。在源控件上添加 `GuiDragSource`，目标上添加 `GuiDropTarget`
+并绑定 observer，即可在鼠标或触摸超过拖动阈值后搬运数据：
+
+```rust,ignore
+commands.entity(source).insert(GuiDragSource {
+    icon: Some("ui://package/item".into()),
+    data: Some("inventory:42".into()),
+});
+commands.entity(receiver).insert(GuiDropTarget).observe(on_drop);
+
+fn on_drop(event: On<GuiDrop>) {
+    // event.entity 是接收者，event.source 是源控件实体。
+    info!("drop {:?} from {:?}", event.data, event.source);
+}
+```
+
+源和目标组件添加在控件视图上；释放时最近的目标祖先接收一次 `GuiDrop`。
+可选图标使用原生 100×100、中心轴心、不接收输入的 Loader，结束或取消后回收。
+`GuiDragState` 资源提供源、临时图标、当前目标、数据和所属触摸 ID；
+`GuiDragCommand::Start` 支持业务主动启动已捕获指针的拖放，`Cancel` 取消当前拖放。
+源销毁、隐藏、离台或被模态界面阻挡时自动取消；取消后需重新按下才会自动开始。
+`GuiIcon` / `gui.icon(entity)` 读取原生图标地址，`SetIcon` 修改图标，空字符串清除。
+Basics 的 b→c 拖放使用这套接口，`--smoke-drag-drop` 可运行真实窗口专项回归。
+
 滚动容器上的只读 `GuiScrollState`（或 `gui.scroll(entity)`）提供逻辑目标位置、
 动画当前显示位置、视口/内容尺寸、最大位置、两种位置对应的进度比例及当前页。
 它在输入事件发布前和 Sync 结束时更新，没有滚动容器的对象不带该组件。

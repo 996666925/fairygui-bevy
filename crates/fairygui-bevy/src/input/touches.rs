@@ -329,6 +329,7 @@ pub(super) fn route_touches(
                     last: position,
                     moved: false,
                     dragged: false,
+                    drop_started: false,
                     gesture,
                     link,
                     editing: input,

@@ -16,6 +16,8 @@ use crate::asset::FuiAsset;
 use crate::backend;
 use crate::ecs::GuiRootView;
 
+#[path = "drag_drop.rs"]
+pub(crate) mod ecs_drag_drop;
 #[cfg(test)]
 #[path = "ecs_root_tests.rs"]
 mod ecs_root_tests;
@@ -100,6 +102,8 @@ pub enum GuiObjectAction {
     },
     SetRotation(f32),
     SetText(String),
+    /// Set the native Loader/button/label/combo icon URL; empty clears it.
+    SetIcon(String),
     SetColor(fairygui_core::color::Color),
     SetGrayed(bool),
     SetButtonSelected(bool),
@@ -528,6 +532,9 @@ pub struct GuiRuntime {
     just_closed_popups: Vec<GObjectId>,
     /// 拖拽状态：被拖对象、跟手图标与当前命中的放置目标。
     drag_drop: fairygui_core::drag_drop::DragDrop,
+    ecs_drag: Option<ecs_drag_drop::Session>,
+    drop_targets: HashMap<GObjectId, Entity>,
+    drop_events: Vec<ecs_drag_drop::GuiDrop>,
     pub(crate) drag_touch_id: Option<u64>,
     /// 已加载的包。跨包引用（`ui://别的包/条目`）靠它解析。
     registry: fairygui_core::package::PackageRegistry,
@@ -1625,7 +1632,7 @@ impl GuiRuntime {
 
     /// 开始一次拖拽。
     ///
-    /// `icon` 是跟手图标对象，由使用方从包里创建；它会被挂到根节点的弹窗层，
+    /// `icon` 是跟手图标对象，由使用方从包里创建；它会被挂到根节点的顶层，
     /// 随指针移动。「什么能拖」属于业务逻辑，因此**开始与否由使用方决定**；
     /// 松手与命中判定则由输入层负责。已有拖拽时忽略新请求。
     pub fn start_drag(
@@ -1644,7 +1651,7 @@ impl GuiRuntime {
         if let Some(icon) = icon {
             self.store.set_touchable(icon, false);
             if let Some(root) = self.root.as_mut() {
-                root.show_popup(&mut self.store, icon, false);
+                self.store.set_parent(icon, Some(root.owner()));
             }
             self.queue_spawn(icon);
         }
@@ -1698,15 +1705,37 @@ impl GuiRuntime {
         self.drag_touch_id = None;
         let icon = self.drag_drop.icon();
         let result = self.drag_drop.finish(&mut self.store);
+        let session = self.ecs_drag.take();
 
         if let Some(icon) = icon {
             self.despawn_subtree(commands, icon);
         }
         if let Some(result) = result
-            && let Some(target) = result.target
+            && let Some(target) = result.target.and_then(|target| {
+                if session.is_some() {
+                    self.ecs_drop_target(target).map(|(target, _)| target)
+                } else {
+                    Some(target)
+                }
+            })
             && self.store.object(result.source).is_some()
             && crate::input::eligible(self, target)
+            && session.as_ref().is_none_or(|session| {
+                self.entity_of(result.source) == Some(session.source)
+                    && crate::input::eligible(self, result.source)
+            })
         {
+            if let Some(session) = session
+                && let Some(&entity) = self.drop_targets.get(&target)
+            {
+                self.drop_events.push(ecs_drag_drop::GuiDrop {
+                    entity,
+                    source: session.source,
+                    data: data.clone(),
+                    position: Vec2::new(pointer.x, pointer.y),
+                    touch_id,
+                });
+            }
             let mut event =
                 fairygui_core::object::UiEvent::new(fairygui_core::object::EventKind::Drop, target)
                     .with_pointer(pointer)
@@ -1722,6 +1751,7 @@ impl GuiRuntime {
 
     /// Cancel the active drag, reclaiming its temporary icon without a Drop event.
     pub fn cancel_drag(&mut self, commands: &mut Commands) {
+        self.ecs_drag = None;
         self.drag_touch_id = None;
         let icon = self.drag_drop.icon();
         self.drag_drop.cancel(&mut self.store);
@@ -1739,6 +1769,7 @@ impl GuiRuntime {
         self.preserve_surviving_views(commands);
 
         for object in removed.into_iter().rev() {
+            self.object_assets.remove(&object);
             if let Some(entity) = self.entities.remove(&object) {
                 commands.entity(entity).despawn();
             }
@@ -2044,6 +2075,9 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetText(text) => {
                 runtime.store_mut().set_object_text(object, text);
+            }
+            GuiObjectAction::SetIcon(icon) => {
+                runtime.store_mut().apply_icon_to(object, icon);
             }
             GuiObjectAction::SetColor(color) => {
                 runtime.store_mut().set_control_color(object, *color, None);

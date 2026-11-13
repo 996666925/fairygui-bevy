@@ -18,6 +18,8 @@ mod button_fire;
 mod color_filters;
 #[path = "smoke_compositor.rs"]
 mod compositor;
+#[path = "smoke_drag_drop.rs"]
+mod drag_drop;
 #[path = "smoke_external_inline.rs"]
 mod external_inline;
 #[path = "smoke_fills.rs"]
@@ -67,6 +69,10 @@ mod windows;
 
 pub(super) fn install_window_wait(app: &mut App) {
     window_wait::install(app);
+}
+
+pub(super) fn install_drag_drop(app: &mut App) {
+    drag_drop::install(app);
 }
 
 pub(super) fn install_windows(app: &mut App) {

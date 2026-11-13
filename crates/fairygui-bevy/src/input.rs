@@ -263,6 +263,47 @@ impl GuiInputState {
     pub fn wants_keyboard_input(&self) -> bool {
         self.focused.is_some()
     }
+
+    pub(crate) fn drag_pointers(&self) -> Vec<(Option<u64>, GObjectId, Vec2, bool, bool)> {
+        let mut pointers = Vec::new();
+        if let Some(capture) = &self.capture {
+            pointers.push((
+                None,
+                capture.target,
+                capture.last,
+                capture.moved,
+                capture.drop_started,
+            ));
+        }
+        let mut touches: Vec<_> = self.touches.iter().collect();
+        touches.sort_by_key(|(id, _)| **id);
+        pointers.extend(touches.into_iter().map(|(&id, capture)| {
+            (
+                Some(id),
+                capture.target,
+                capture.last,
+                capture.moved,
+                capture.drop_started,
+            )
+        }));
+        pointers
+    }
+
+    pub(crate) fn claim_drag_pointer(&mut self, touch_id: Option<u64>, runtime: &mut GuiRuntime) {
+        if let Some(id) = touch_id {
+            if let Some(capture) = self.touches.get_mut(&id) {
+                capture.gesture.finish(runtime, 0.);
+                capture.gesture = Gesture::None;
+                capture.moved = true;
+                capture.drop_started = true;
+            }
+        } else if let Some(capture) = &mut self.capture {
+            capture.gesture.finish(runtime, 0.);
+            capture.gesture = Gesture::None;
+            capture.moved = true;
+            capture.drop_started = true;
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -272,6 +313,7 @@ struct Capture {
     last: Vec2,
     moved: bool,
     dragged: bool,
+    drop_started: bool,
     gesture: Gesture,
     link: Option<crate::runtime::LinkHit>,
     editing: Option<Entity>,
@@ -294,6 +336,7 @@ struct TouchCapture {
     last: Vec2,
     moved: bool,
     dragged: bool,
+    drop_started: bool,
     gesture: Gesture,
     link: Option<crate::runtime::LinkHit>,
     editing: Option<Entity>,
@@ -307,11 +350,13 @@ pub fn register(app: &mut App) {
         .add_systems(
             Update,
             (
+                crate::runtime::ecs_drag_drop::prepare_drag_targets,
                 crate::runtime::sync_text_inputs,
                 crate::runtime::sync_input_policy,
                 crate::runtime::apply_input_edits,
                 route_pointer,
                 touches::route_touches,
+                crate::runtime::ecs_drag_drop::begin_configured_drags,
                 editing::reconcile_focus,
             )
                 .chain()
@@ -891,6 +936,7 @@ fn route_pointer(
                 last: position,
                 moved: false,
                 dragged: false,
+                drop_started: false,
                 gesture,
                 link,
                 editing: input,

@@ -18,6 +18,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `runtime::windows` | Asset-backed ECS window ownership, entity commands and native window snapshots |
 | `runtime::global_wait` | Resource-configured stage-wide wait ownership, native stack ordering and input gating |
+| `runtime::ecs_drag_drop` | ECS drag sources, marked receivers, proxy ownership, pointer arbitration and entity drop events |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
 | `core::fill`, `image_fill`, `image_fill.wesl` | Native fill polygons, image/movie UI material masks, atlas/slice mapping and retained material ownership |
@@ -52,6 +53,36 @@ also preserves the view identity if it is disposed before publication. Core
 notifications without a materialized view are not published as ECS messages.
 `GuiInputState::focused_entity()` follows reconciled focus in PreUpdate and Sync;
 business handlers can compare entities or send commands without runtime access.
+
+`GuiDragSource` on a control view opts its captured pointer into application
+drag-and-drop after the shared drag threshold. The nearest configured ancestor
+of the capture wins, with mouse before touch and ascending touch ID if several
+pointers become eligible together. Starting claims that pointer's gesture and
+suppresses its click. Cancelled automatic starts do not restart until a new press.
+`GuiDragCommand::Start` explicitly starts from a materialized view/root/window
+owner containing the live captured target. Released, absent and unrelated pointer
+requests are discarded, while a current drag ignores subsequent starts.
+
+The optional proxy follows the native DragDropManager Loader: 100x100, centered
+alignment and anchor pivot, untouchable, high stacking order and source-package
+asset context. It is a stage child independent from the popup stack. Its model,
+views and asset binding are disposed when the drag ends or is cancelled. Global
+modal waiting still paints above it and invalidates a blocked source.
+
+Before routing releases and again after Sync, drop target bindings and source
+eligibility are reconciled. Removing/hiding/detaching/blocking the source cancels
+the session. The release hit walks logical ancestors to the nearest marked
+`GuiDropTarget`, emitting one target-only `GuiDrop` entity event with source,
+data, logical position and touch ID. Its observer can send ordinary object
+commands for same-frame updates. Generic GuiEvent Drop events use the selected
+receiver as their original target and retain logical bubbling. Unmarked release
+hits and pointer cancellation produce no application drop.
+
+`GuiDragState` publishes entity references before Publish and at Sync end without
+changing unchanged resource ticks. `GuiIcon` snapshots the native base icon/URL
+for buttons, labels, combo boxes and Loaders before Publish, PostLayout and at
+Sync end; `SetIcon` uses the core forwarding/gear setter. The Basics b-to-c demo
+binds source/receiver components and responds directly to the receiver event.
 
 `GuiPopupCommand` accepts root owners or view entities for existing popups and
 menu template sources. Commands run after root reconciliation and object commands
