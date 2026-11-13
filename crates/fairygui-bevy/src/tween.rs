@@ -6,6 +6,23 @@ mod tests;
 use crate::core::transition::{Tween, TweenValue};
 use bevy::prelude::*;
 
+/// Natural completion on the control view entity, after Sync has published the
+/// final geometry. Observe the view, including when the command used its root
+/// owner. Stop, replacement and disposal suppress unconsumed completions.
+#[derive(EntityEvent, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuiTweenComplete {
+    pub entity: Entity,
+    pub property: GuiTweenProperty,
+}
+
+pub(crate) fn emit_completions(mut runtime: NonSendMut<crate::GuiRuntime>, mut commands: Commands) {
+    for (object, property) in runtime.store_mut().take_tween_completions() {
+        if let Some(entity) = runtime.entity_of(object) {
+            commands.trigger(GuiTweenComplete { entity, property });
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GuiTweenTarget {
     Position(Vec2),
@@ -64,8 +81,7 @@ impl GuiTweenTarget {
             .with_ease(ease);
         if duration == 0. {
             tween.advance(store, f32::EPSILON);
-        } else {
-            store.add_tween(tween);
         }
+        store.add_tween(tween);
     }
 }

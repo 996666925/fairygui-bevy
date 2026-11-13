@@ -118,6 +118,8 @@ pub enum GuiObjectAction {
     SetColor(fairygui_core::color::Color),
     SetGrayed(bool),
     SetButtonSelected(bool),
+    /// Let application observers own selection instead of native click toggles.
+    SetButtonChangeStateOnClick(bool),
     SetSliderValue(i32),
     SetControllerPage {
         name: String,
@@ -2188,6 +2190,11 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetButtonSelected(selected) => {
                 runtime.store_mut().set_button_selected(object, *selected);
+            }
+            GuiObjectAction::SetButtonChangeStateOnClick(enabled) => {
+                runtime
+                    .store_mut()
+                    .set_button_change_state_on_click(object, *enabled);
             }
             GuiObjectAction::SetSliderValue(value) => {
                 runtime.store_mut().set_slider_value(object, *value);

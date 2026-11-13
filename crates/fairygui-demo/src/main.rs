@@ -16,6 +16,7 @@ mod catalog;
 mod demos;
 mod drag_drop_demo;
 mod guide_demo;
+mod joystick_demo;
 mod list_effect_demo;
 mod loop_list_demo;
 mod modal_wait_demo;
@@ -145,6 +146,12 @@ fn main() -> AppExit {
             .in_set(GuiSystems::Respond)
             .after(open_pending_demo),
     )
+    .add_systems(
+        Update,
+        joystick_demo::fit
+            .in_set(GuiSystems::Respond)
+            .after(open_pending_demo),
+    )
     .add_systems(Update, modal_wait_demo::advance.in_set(GuiSystems::Respond))
     .add_systems(
         Update,
@@ -181,6 +188,7 @@ fn main() -> AppExit {
             scroll_pane_demo::bind,
             list_effect_demo::bind,
             guide_demo::bind,
+            joystick_demo::bind,
         )
             .chain()
             .after(GuiSystems::Sync),
@@ -193,7 +201,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-guide") {
+    if std::env::args().any(|arg| arg == "--smoke-joystick") {
+        smoke::install_joystick(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-guide") {
         smoke::install_guide(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-list-effect") {
         smoke::install_list_effect(&mut app);

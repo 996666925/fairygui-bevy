@@ -379,6 +379,7 @@ impl Tween {
 #[derive(Debug, Default)]
 pub struct TweenManager {
     tweens: Vec<Tween>,
+    completed: Vec<(GObjectId, TweenProperty)>,
 }
 
 impl TweenManager {
@@ -399,7 +400,18 @@ impl TweenManager {
 
     /// 加入一个补间。
     pub fn add(&mut self, tween: Tween) {
-        self.tweens.push(tween);
+        if tween.is_completed() {
+            if let Some(target) = tween.target {
+                self.completed.push(target);
+            }
+        } else if !tween.is_killed() {
+            self.tweens.push(tween);
+        }
+    }
+
+    /// Drain natural completions, including already-completed zero-duration tweens.
+    pub fn take_completions(&mut self) -> Vec<(GObjectId, TweenProperty)> {
+        std::mem::take(&mut self.completed)
     }
 
     /// 推进全部补间，并回收已结束的。
@@ -412,6 +424,11 @@ impl TweenManager {
         for mut tween in std::mem::take(&mut self.tweens) {
             if tween.advance(store, dt) {
                 alive.push(tween);
+            } else if tween.is_completed()
+                && let Some(target) = tween.target
+                && store.contains(target.0)
+            {
+                self.completed.push(target);
             }
         }
         self.tweens = alive;
@@ -423,10 +440,12 @@ impl TweenManager {
             tween.kill(complete, store);
         }
         self.tweens.clear();
+        self.completed.clear();
     }
 
     /// 终止作用在某个对象上的补间。
     pub fn kill_for(&mut self, store: &mut ObjectStore, owner: GObjectId) {
+        self.completed.retain(|(id, _)| *id != owner);
         let mut remaining = Vec::with_capacity(self.tweens.len());
         for mut tween in std::mem::take(&mut self.tweens) {
             if tween.target.is_some_and(|(id, _)| id == owner) {
@@ -439,6 +458,7 @@ impl TweenManager {
     }
 
     pub fn kill_property(&mut self, owner: GObjectId, property: TweenProperty) {
+        self.completed.retain(|target| *target != (owner, property));
         self.tweens
             .retain(|tween| tween.target != Some((owner, property)));
     }

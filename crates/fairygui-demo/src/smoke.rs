@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_joystick.rs"]
+mod joystick;
+pub(super) fn install_joystick(app: &mut App) {
+    joystick::install(app);
+}
 #[path = "smoke_guide.rs"]
 mod guide;
 pub(super) fn install_guide(app: &mut App) {

@@ -19,6 +19,20 @@ advance; replacing/cancelling affects only the chosen property. Duration zero
 applies immediately, invalid requests leave existing tweens untouched, and removed
 targets are reclaimed by the next tween advance. Different properties coexist.
 Ordinary setters retain their normal native semantics; StopTween is explicit.
+The native manager queues natural property completions. Stop, replacement and
+disposal discard unconsumed notifications for the affected property/target.
+Zero-duration tweens apply immediately and enter the same completion queue.
+After Sync refreshes geometry, GuiTweenComplete targets the materialized view
+entity, even when its command addressed a root owner. Observer commands follow
+normal deferred command processing; completion observers read final snapshots.
+
+Joystick stores pointer ownership and incremental movement on its page component.
+Its touch area receives captured pointer events outside the original hit region;
+unrelated fingers cannot move or release the active gesture. Page observers
+consume typed Moving/Released events, while the button's GuiTweenComplete observer
+restores selection/rotation/center after CircOut return. A new press stops the old
+return before positioning the new center. Viewport changes cancel interaction and
+restore the bottom-relative home. All application mutations use entity commands.
 
 Guide owns a retained, initially inactive GuideLayer root as ChildOf its page.
 The example normalizes both roots to the viewport, converts bag bounds through

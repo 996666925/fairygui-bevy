@@ -64,7 +64,7 @@ pub mod text;
 mod text_stroke;
 pub mod tree;
 pub mod tween;
-pub use tween::{GuiTweenProperty, GuiTweenTarget};
+pub use tween::{GuiTweenComplete, GuiTweenProperty, GuiTweenTarget};
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use ecs::{
@@ -141,8 +141,8 @@ pub mod prelude {
         GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
         GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
-        GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction,
-        GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
+        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
+        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
     };
 }
 
@@ -366,7 +366,11 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_transitions,
                 runtime::emit_transition_hooks,
                 runtime::emit_transition_callbacks,
-                runtime::emit_transition_completions,
+                (
+                    runtime::emit_transition_completions,
+                    tween::emit_completions,
+                )
+                    .chain(),
                 popup::sync_popup_state,
                 runtime::windows::sync_window_state,
                 runtime::global_wait::sync_global_wait_state,

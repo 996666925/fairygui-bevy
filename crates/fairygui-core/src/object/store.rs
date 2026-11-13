@@ -2189,6 +2189,16 @@ impl ObjectStore {
         self.tweens.len()
     }
 
+    /// Natural property tween completions; stopping/replacing a tween discards
+    /// its unconsumed completion, and disposed targets are never reported.
+    pub fn take_tween_completions(&mut self) -> Vec<(GObjectId, crate::transition::TweenProperty)> {
+        self.tweens
+            .take_completions()
+            .into_iter()
+            .filter(|(owner, _)| self.contains(*owner))
+            .collect()
+    }
+
     /// 终止作用在某个对象上的补间。
     pub fn kill_tweens_for(&mut self, owner: GObjectId) {
         let mut tweens = std::mem::take(&mut self.tweens);
