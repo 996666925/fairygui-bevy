@@ -294,9 +294,10 @@ pub fn align_text(
         &bevy::text::TextLayoutInfo,
         &TextLayout,
         &mut Node,
+        &mut ComputedNode,
     )>,
 ) {
-    for (reference, layout, text_layout, mut node) in &mut query {
+    for (reference, layout, text_layout, mut node, mut computed) in &mut query {
         let Some(object) = runtime.store().object(reference.0) else {
             continue;
         };
@@ -333,6 +334,25 @@ pub fn align_text(
         };
         if node.padding != padding {
             node.padding = padding;
+        }
+        // Text is measured after Bevy UI layout. Apply the resolved inset in
+        // that same frame so extraction, link hits and inline images share the
+        // new origin immediately; changing Node alone waits for another layout.
+        let Val::Px(left) = padding.left else {
+            continue;
+        };
+        let Val::Px(top) = padding.top else { continue };
+        let scale = if computed.inverse_scale_factor.is_finite()
+            && computed.inverse_scale_factor > f32::EPSILON
+        {
+            computed.inverse_scale_factor.recip()
+        } else {
+            scale
+        };
+        let min = Vec2::new(left, top) * scale;
+        if computed.padding.min_inset != min || computed.padding.max_inset != Vec2::ZERO {
+            computed.padding.min_inset = min;
+            computed.padding.max_inset = Vec2::ZERO;
         }
     }
 }

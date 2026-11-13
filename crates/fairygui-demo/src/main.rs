@@ -140,18 +140,8 @@ fn main() -> AppExit {
             .after(advance_demo_behaviors),
     )
     .add_systems(Startup, setup_camera)
-    .add_systems(
-        Update,
-        guide_demo::update
-            .in_set(GuiSystems::Respond)
-            .after(open_pending_demo),
-    )
-    .add_systems(
-        Update,
-        joystick_demo::fit
-            .in_set(GuiSystems::Respond)
-            .after(open_pending_demo),
-    )
+    .add_systems(Update, guide_demo::update.in_set(GuiSystems::Respond))
+    .add_systems(Update, joystick_demo::fit.in_set(GuiSystems::Respond))
     .add_systems(Update, modal_wait_demo::advance.in_set(GuiSystems::Respond))
     .add_systems(
         Update,
@@ -164,8 +154,6 @@ fn main() -> AppExit {
     .add_systems(
         Update,
         (
-            boot_menu,
-            open_pending_demo,
             demos::handle_links,
             demos::handle_menu_actions,
             advance_demo_behaviors,
@@ -175,10 +163,22 @@ fn main() -> AppExit {
             .chain()
             .in_set(GuiSystems::Respond),
     );
+    // Root geometry is available in Prepare on its creation frame. Position
+    // new pages before Project/Bevy layout instead of waiting for Respond.
     app.add_systems(
         Update,
         (
+            boot_menu,
+            open_pending_demo,
             demos::initialize_demo_roots,
+            fit_fullscreen_demo_roots,
+        )
+            .chain()
+            .in_set(GuiSystems::PostLayout),
+    );
+    app.add_systems(
+        Update,
+        (
             bind_demo_observers,
             window_demo::bind,
             modal_wait_demo::bind,
@@ -201,7 +201,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-animation") {
+    if std::env::args().any(|arg| arg == "--smoke-first-frame") {
+        smoke::install_first_frame(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-animation") {
         smoke::install_animation(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-joystick") {
         smoke::install_joystick(&mut app);
@@ -256,6 +258,36 @@ fn keep_close_button_on_top(
         && layers.get(entity).is_err()
     {
         commands.entity(entity).insert(GlobalZIndex(1000));
+    }
+}
+
+fn fit_fullscreen_demo_roots(
+    roots: Query<(Entity, &FairyGuiRoot), Added<GuiRootView>>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    gui: GuiQuery,
+    mut commands: MessageWriter<GuiObjectCommand>,
+) {
+    let Ok(window) = windows.single() else { return };
+    let size = Vec2::new(window.width(), window.height());
+    for (owner, source) in &roots {
+        if source.item_name != "Main"
+            || !source.asset.path().is_some_and(|path| {
+                path.path().ends_with("Guide.fui") || path.path().ends_with("Joystick.fui")
+            })
+        {
+            continue;
+        }
+        let Some(transform) = gui.transform(owner) else {
+            continue;
+        };
+        // Supersede generic centering on this root's first materialized frame.
+        commands.write(GuiObjectCommand::new(
+            owner,
+            GuiObjectAction::SetPosition(Vec2::ZERO),
+        ));
+        if transform.size() != size {
+            commands.write(GuiObjectCommand::new(owner, GuiObjectAction::SetSize(size)));
+        }
     }
 }
 

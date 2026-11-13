@@ -181,6 +181,12 @@ fn center_root(gui: &GuiQuery, commands: &mut Commands, root: Entity, viewport: 
 可同时配置比例轴心与锚点定位。`GuiFont` 资源也在根构建前同步，首帧和后续动态
 界面会直接使用配置的字体，无需业务系统手工调用 `GuiRuntime::set_font`。
 
+依赖新建视图尺寸的居中和初始化系统放入 `GuiSystems::PostLayout`，该阶段在首次
+创建视图的同一帧执行，命令会赶在 Bevy 布局和渲染之前应用。demo 的菜单、关闭
+按钮、演示页和动态子页使用此阶段完成初始定位。普通文本在 Bevy 完成本帧测量后
+同步逻辑与物理内边距，首批字形就按正确位置绘制；`--smoke-first-frame` 在每个
+视图首次完成布局的帧检查位置和文本对齐，并实际打开 Basics 的 Button 页面。
+
 `GuiSpace`（`gui.space(entity)`）提供原生逻辑坐标转换，也可直接调用
 `gui.local_to_global`、`global_to_local` 及对应的 `_rect` 方法。转换包含祖先变换、
 锚点轴心、边距、当前滚动显示偏移和虚拟列表对齐，不依赖 Bevy 布局或窗口 DPI。

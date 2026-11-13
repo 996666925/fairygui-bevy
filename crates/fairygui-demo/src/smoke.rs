@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_first_frame.rs"]
+mod first_frame;
+pub(super) fn install_first_frame(app: &mut App) {
+    first_frame::install(app);
+}
 #[path = "smoke_animation.rs"]
 mod animation;
 pub(super) fn install_animation(app: &mut App) {

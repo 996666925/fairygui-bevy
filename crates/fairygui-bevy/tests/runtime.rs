@@ -240,10 +240,22 @@ fn menu_title_is_centered_without_moving_its_hit_rectangle() {
             info.scale_factor = scale;
             info.size = Vec2::new(120.0, 24.0) * scale;
         }
+        {
+            let mut computed = app.world_mut().get_mut::<ComputedNode>(entity).unwrap();
+            computed.size = Vec2::new(240., 50.) * scale;
+            computed.inverse_scale_factor = scale.recip();
+        }
         app.update();
         let node = app.world().get::<Node>(entity).unwrap();
         assert_eq!(node.padding.left, Val::Px(60.0));
         assert_eq!(node.padding.top, Val::Px(13.0));
+        let computed = app.world().get::<ComputedNode>(entity).unwrap();
+        assert!(
+            computed
+                .padding
+                .min_inset
+                .abs_diff_eq(Vec2::new(60., 13.) * scale, 0.0001)
+        );
         assert_eq!(
             (node.left, node.top, node.width, node.height),
             (original.left, original.top, original.width, original.height)

@@ -417,6 +417,15 @@ impl Plugin for FairyGuiPlugin {
 
         app.add_systems(
             PostUpdate,
+            backend::align_text
+                .after(bevy::ui::widget::text_system)
+                .after(bevy::ui::widget::update_editable_text_layout)
+                .after(runtime::publish_password_layout)
+                .before(runtime::position_inline_images)
+                .before(bevy::ui::update::update_clipping_system),
+        );
+        app.add_systems(
+            PostUpdate,
             runtime::project_scroll_overflow
                 .after(bevy::ui::UiSystems::Layout)
                 .before(bevy::ui::widget::text_system)

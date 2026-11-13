@@ -5,6 +5,15 @@ Applications own interfaces through `FairyGuiRoot` components, find controls wit
 ordinary Bevy systems. The core object tree executes FairyGUI package semantics
 internally; the plugin projects its state into Bevy UI and read-only ECS components.
 
+Demo root positioning and dynamic-page initialization run in GuiSystems::PostLayout
+on the same frame that Prepare materializes their views. Project consumes these
+commands before Bevy UI layout, avoiding an origin-position flash. New Guide and
+Joystick pages override generic centering with viewport-sized initial geometry.
+Raster text alignment also runs after Bevy's current-frame text/editor measurement:
+it updates Node padding and ComputedNode's physical inset together, before inline
+image projection, clipping and render extraction. This avoids waiting for the next
+layout pass to apply measured text alignment while preserving the hit rectangle.
+
 GuiSpace wraps an opaque core CoordinateTransform on every materialized view.
 The transform retains native f64 matrix composition, anchor-coordinate semantics,
 ancestor margins/display scroll and virtual alignment. GuiQuery conversion accepts
