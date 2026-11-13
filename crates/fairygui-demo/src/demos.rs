@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use fairygui_bevy::{
-    FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiRootInstance, GuiRuntime,
-    GuiTransitionHook,
+    FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiQuery, GuiRootInstance,
+    GuiRuntime, GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -50,7 +50,7 @@ pub struct DemoController {
     pub elapsed: f32,
     pub basics_page: Option<usize>,
     pub transition_sample: Option<usize>,
-    basics_page_owner: Option<Entity>,
+    pub(super) basics_page_owner: Option<Entity>,
     transition_sample_owner: Option<Entity>,
     pub last_menu_action: Option<GuiMenuAction>,
     numeric_elapsed: Option<f32>,
@@ -230,18 +230,14 @@ pub fn initialize_demo(runtime: &mut GuiRuntime, package: &str, root: GObjectId)
     }
 }
 
-pub fn demo_action_bindings(
-    runtime: &GuiRuntime,
-    package: &str,
-    root: GObjectId,
-) -> Vec<(GObjectId, u64)> {
+pub fn demo_action_bindings(gui: &GuiQuery, package: &str, root: Entity) -> Vec<(Entity, u64)> {
     let mut bindings = Vec::new();
     if package == "Basics" {
-        if let Some(back) = runtime.store().find_by_name(root, "btn_Back") {
+        if let Some(back) = gui.find_by_name(root, "btn_Back") {
             bindings.push((back, BASICS_BACK));
         }
         for (index, page) in BASICS_PAGES.iter().enumerate() {
-            if let Some(button) = runtime.store().find_by_name(root, &format!("btn_{page}")) {
+            if let Some(button) = gui.find_by_name(root, &format!("btn_{page}")) {
                 bindings.push((button, BASICS_ENTRY + index as u64));
             }
         }
@@ -253,9 +249,7 @@ pub fn demo_action_bindings(
         _ => &[],
     };
     bindings.extend(names.iter().enumerate().filter_map(|(index, name)| {
-        runtime
-            .store()
-            .find_by_name(root, name)
+        gui.find_by_name(root, name)
             .map(|object| (object, DEMO_ACTION_BASE + index as u64))
     }));
     bindings

@@ -197,11 +197,11 @@ fn main() -> AppExit {
 
 fn keep_close_button_on_top(
     mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     demo: Res<Demo>,
     layers: Query<&GlobalZIndex>,
 ) {
-    if let Some(entity) = demo.close_button.and_then(|id| runtime.entity_of(id))
+    if let Some(entity) = demo.close_owner.and_then(|owner| gui.view(owner))
         && layers.get(entity).is_err()
     {
         commands.entity(entity).insert(GlobalZIndex(1000));
@@ -305,6 +305,7 @@ fn open_pending_demo(
     assets: Res<Assets<FuiAsset>>,
     font: Res<GuiFont>,
     windows: Query<&Window>,
+    gui: GuiQuery,
     mut runtime: NonSendMut<GuiRuntime>,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
@@ -333,10 +334,7 @@ fn open_pending_demo(
         }
         demos::initialize_demo(&mut runtime, &name, root);
         if name == "Basics"
-            && let Some(back) = runtime
-                .store()
-                .find_by_name(root, "btn_Back")
-                .and_then(|id| runtime.entity_of(id))
+            && let Some(back) = gui.find_by_name(owner, "btn_Back")
         {
             gui_commands.write(GuiObjectCommand::new(
                 back,
@@ -366,18 +364,13 @@ fn open_pending_demo(
         .id();
 
     // 菜单让位：演示界面盖在上面。
-    if let Some(menu) = demo.menu
-        && let Some(root) = runtime.root_object(menu)
-        && let Some(target) = runtime.entity_of(root)
-    {
+    if let Some(target) = demo.menu_owner {
         gui_commands.write(GuiObjectCommand::new(
             target,
             GuiObjectAction::SetVisible(false),
         ));
     }
-    if let Some(close) = demo.close_button
-        && let Some(target) = runtime.entity_of(close)
-    {
+    if let Some(target) = demo.close_owner {
         gui_commands.write(GuiObjectCommand::new(
             target,
             GuiObjectAction::SetVisible(true),
@@ -390,13 +383,13 @@ fn open_pending_demo(
 
 fn bind_demo_observers(
     mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     demo: Res<Demo>,
     controller: Res<demos::DemoController>,
     bound: Query<(), With<DemoObserverBound>>,
 ) {
-    if let Some(close) = demo.close_button
-        && let Some(entity) = runtime.entity_of(close)
+    if let Some(owner) = demo.close_owner
+        && let Some(entity) = gui.view(owner)
         && bound.get(entity).is_err()
     {
         commands
@@ -404,12 +397,9 @@ fn bind_demo_observers(
             .insert(DemoObserverBound)
             .observe(close_demo);
     }
-    if let Some(menu) = demo.menu
-        && let Some(root) = runtime.root_object(menu)
-    {
+    if let Some(root) = demo.menu_owner {
         for (name, package) in catalog::ENTRIES {
-            if let Some(object) = runtime.store().find_by_name(root, name)
-                && let Some(entity) = runtime.entity_of(object)
+            if let Some(entity) = gui.find_by_name(root, name)
                 && bound.get(entity).is_err()
             {
                 commands
@@ -419,11 +409,10 @@ fn bind_demo_observers(
             }
         }
     }
-    if let (Some(package), Some(root)) = (controller.package.as_deref(), controller.root) {
-        for (object, action) in demos::demo_action_bindings(&runtime, package, root) {
-            if let Some(entity) = runtime.entity_of(object)
-                && bound.get(entity).is_err()
-            {
+    if let (Some(package), Some((root, _, _))) = (controller.package.as_deref(), demo.open.as_ref())
+    {
+        for (entity, action) in demos::demo_action_bindings(&gui, package, *root) {
+            if bound.get(entity).is_err() {
                 let mut target = commands.entity(entity);
                 target.insert((DemoObserverBound, DemoAction(action)));
                 match package {
@@ -441,12 +430,8 @@ fn bind_demo_observers(
             }
         }
     }
-    if let Some(page) = controller
-        .basics_page
-        .and_then(|handle| runtime.root_object(handle))
-    {
-        if let Some(object) = runtime.store().find_by_name(page, "n25")
-            && let Some(entity) = runtime.entity_of(object)
+    if let Some(page) = controller.basics_page_owner {
+        if let Some(entity) = gui.find_by_name(page, "n25")
             && bound.get(entity).is_err()
         {
             commands
@@ -454,8 +439,7 @@ fn bind_demo_observers(
                 .insert(DemoObserverBound)
                 .observe(basics_text_get_input);
         }
-        if let Some(object) = runtime.store().find_by_name(page, "n0")
-            && let Some(entity) = runtime.entity_of(object)
+        if let Some(entity) = gui.find_by_name(page, "n0")
             && bound.get(entity).is_err()
         {
             commands
@@ -486,18 +470,13 @@ fn close_demo(
     controller.package = None;
     controller.root = None;
     controller.elapsed = 0.0;
-    if let Some(close) = demo.close_button
-        && let Some(target) = runtime.entity_of(close)
-    {
+    if let Some(target) = demo.close_owner {
         gui_commands.write(GuiObjectCommand::new(
             target,
             GuiObjectAction::SetVisible(false),
         ));
     }
-    if let Some(menu) = demo.menu
-        && let Some(root) = runtime.root_object(menu)
-        && let Some(target) = runtime.entity_of(root)
-    {
+    if let Some(target) = demo.menu_owner {
         gui_commands.write(GuiObjectCommand::new(
             target,
             GuiObjectAction::SetVisible(true),

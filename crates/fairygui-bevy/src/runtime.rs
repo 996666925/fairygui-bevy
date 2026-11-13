@@ -14,6 +14,7 @@ use fairygui_core::widget::{ControlData, OverflowType};
 
 use crate::asset::FuiAsset;
 use crate::backend;
+use crate::ecs::GuiRootView;
 
 #[cfg(test)]
 #[path = "ecs_root_tests.rs"]
@@ -2066,7 +2067,9 @@ pub fn sync_ecs_roots(
             runtime.remove_root(&mut commands, handle);
         }
         if entities.get(owner).is_ok() {
-            commands.entity(owner).remove::<GuiRootInstance>();
+            commands
+                .entity(owner)
+                .remove::<(GuiRootInstance, GuiRootView)>();
         }
     }
 
@@ -2087,7 +2090,9 @@ pub fn sync_ecs_roots(
                 }
 
                 runtime.ecs_roots.get_mut(&owner).unwrap().handle = None;
-                commands.entity(owner).remove::<GuiRootInstance>();
+                commands
+                    .entity(owner)
+                    .remove::<(GuiRootInstance, GuiRootView)>();
             }
             runtime.ecs_roots.get_mut(&owner).unwrap().active = source.active;
             continue;
@@ -2098,7 +2103,9 @@ pub fn sync_ecs_roots(
         {
             runtime.remove_root(&mut commands, handle);
         }
-        commands.entity(owner).remove::<GuiRootInstance>();
+        commands
+            .entity(owner)
+            .remove::<(GuiRootInstance, GuiRootView)>();
         runtime.ecs_roots.insert(
             owner,
             EcsRootBinding {
@@ -2123,7 +2130,9 @@ pub fn sync_ecs_roots(
         .collect();
     for owner in stale {
         runtime.ecs_roots.get_mut(&owner).unwrap().handle = None;
-        commands.entity(owner).remove::<GuiRootInstance>();
+        commands
+            .entity(owner)
+            .remove::<(GuiRootInstance, GuiRootView)>();
     }
 
     let pending: Vec<_> = runtime

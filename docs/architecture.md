@@ -1,8 +1,9 @@
 # Runtime architecture
 
-The core object tree owns UI state. Bevy entities are a rendered view, not a
-second widget model. Applications load packages, create roots, register actions,
-and mutate the runtime from ordinary Bevy systems.
+Applications own interfaces through `FairyGuiRoot` components, find controls with
+`GuiQuery`, attach entity observers and send `GuiObjectCommand` messages from
+ordinary Bevy systems. The core object tree executes FairyGUI package semantics
+internally; the plugin projects its state into Bevy UI and read-only ECS components.
 
 ## Responsibilities
 
@@ -10,6 +11,7 @@ and mutate the runtime from ordinary Bevy systems.
 | --- | --- |
 | `fairygui-core` | Package parsing, object ownership, widget state, scrolling and animation; no Bevy dependency |
 | `asset` | Bevy asset loading and package resource paths |
+| `ecs` | Root-to-view references and read-only control identity and logical hierarchy queries |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
@@ -37,29 +39,41 @@ Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these
 
 1. `GuiSystems::Input`: choose a target, update capture, apply built-in behavior.
 2. `GuiSystems::Publish`: trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
-3. `GuiSystems::Respond`: application systems consume messages and mutate UI state.
+3. `GuiSystems::Respond`: application systems consume messages and send UI commands.
 4. `GuiSystems::Advance`: advance builds, scrolling, transitions and animations.
-5. `GuiSystems::Sync`: spawn pending views, synchronize dirty objects and play sounds.
+5. `GuiSystems::Sync`: reconcile ECS root ownership, apply commands, spawn pending views, synchronize state components and play sounds.
 
 Application changes in `Respond` reach view synchronization in the same frame.
 Bevy layout still runs later; hit geometry and text measurements reflect the last
 completed layout. Chain application systems if they depend on each other.
 
+`GuiRootView` and `GuiObjectInfo` are updated at the end of Sync. Systems in
+Respond read the previous snapshot; systems after Sync can find newly created
+controls and bind their observers. Logical children follow FairyGUI order and
+exclude generated render nodes. Detached, hidden and pooled views remain
+queryable until disposal. Unchanged hierarchy snapshots preserve ECS change ticks.
+
 ```rust
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 
-fn react(event: On<GuiEvent>, mut gui: NonSendMut<GuiRuntime>) {
-    // The payload retains the original target, bubbling recipient and pointer.
-    let _ = (&mut gui, &event.event().event);
+fn react(event: On<GuiEvent>, mut commands: Commands) {
+    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
+        commands.write_message(GuiObjectCommand::new(
+            event.entity,
+            GuiObjectAction::SetText("Clicked".into()),
+        ));
+    }
 }
 
-fn attach_observer(commands: &mut Commands, entity: Entity) {
-    commands.entity(entity).observe(react);
+fn attach_observer(commands: &mut Commands, gui: &GuiQuery, root: Entity) {
+    if let Some(entity) = gui.child_by_path(root, "n1") {
+        commands.entity(entity).observe(react);
+    }
 }
 ```
 
-Attach observers to the entity returned by `GuiRuntime::entity_of`. Click events
+Attach observers to control entities returned by `GuiQuery`. Click events
 trigger once on the original target and again on each logical ancestor while
 bubbling; each observer receives its current entity in `GuiEvent::entity` and the
 complete FairyGUI payload in `GuiEvent::event`. `dispatch_event` accepts a full

@@ -75,12 +75,56 @@ Windows 下 demo 默认使用 DX12，避免部分 Vulkan 驱动的交换链异�
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 
+#[derive(Component)]
+struct Menu;
+
 fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.spawn(FairyGuiRoot::new(assets.load("ui/MainMenu.fui"), "Main"));
+    commands.spawn((Menu, FairyGuiRoot::new(assets.load("ui/MainMenu.fui"), "Main")));
 }
 ```
 
-运行时会在所有者实体上添加 `GuiRootInstance`，提供底层对象 ID 和 root handle。
+运行时会在所有者实体上添加 `GuiRootView`，指向根视图实体。
+`GuiQuery` 只读取 ECS 组件，可按名称或路径找到控件实体并直接挂载业务组件和 observer：
+
+```rust,ignore
+#[derive(Component)]
+struct Bound;
+
+fn bind_menu(
+    mut commands: Commands,
+    gui: GuiQuery,
+    menus: Query<Entity, With<Menu>>,
+    bound: Query<(), With<Bound>>,
+) {
+    for root in &menus {
+        if let Some(button) = gui.child_by_path(root, "n1")
+            && !bound.contains(button)
+        {
+            commands.entity(button).insert(Bound).observe(on_menu_button);
+        }
+    }
+}
+
+fn on_menu_button(event: On<GuiEvent>, mut commands: Commands) {
+    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
+        commands.write_message(GuiObjectCommand::new(
+            event.entity,
+            GuiObjectAction::SetText("Clicked".into()),
+        ));
+    }
+}
+
+// 在 Sync 后绑定本帧刚创建的控件。
+app.add_systems(Update, bind_menu.after(GuiSystems::Sync));
+```
+
+`child_by_name` 查找直属子节点，`find_by_name` 按 FairyGUI 逻辑顺序递归查找，
+`child_by_path` 按 `/` 分隔的子节点名查找；都接受根拥有者或控件视图实体。
+控件上的只读 `GuiObjectInfo` 提供名称、类型、父节点及有序子节点，排除渲染辅助实体，
+隐藏或暂离舞台的控件仍可查询。数据在 `GuiSystems::Sync` 更新；Respond 阶段读取
+上一帧的快照，Sync 后可查询本帧新建的控件。高级模型操作可通过
+`GuiRootInstance` 获取底层对象 ID 和 root handle。
+
 业务系统可在 `GuiSystems::Respond` 用实体发送 `GuiObjectCommand`，本帧 Sync 会把
 修改应用到对象模型并投影到 Bevy UI 视图：
 

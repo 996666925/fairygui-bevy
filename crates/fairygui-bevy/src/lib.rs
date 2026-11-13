@@ -1,8 +1,8 @@
 //! FairyGUI 运行时的 Bevy 集成层。
 //!
 //! 面向应用的界面生命周期、事件响应与控件修改都通过 Bevy ECS 完成：用
-//! [`FairyGuiRoot`] 拥有界面，用 [`GuiEvent`] observer 响应交互，再通过
-//! [`GuiObjectCommand`] 修改控件。
+//! [`FairyGuiRoot`] 拥有界面，用 [`GuiQuery`] 查找控件实体，用 [`GuiEvent`]
+//! observer 响应交互，再通过 [`GuiObjectCommand`] 修改控件。
 //!
 //! [`fairygui_core`] 在内部执行 FairyGUI 包语义，运行时把结果同步到对应的 ECS
 //! 实体与 Bevy UI 组件。应用代码通常不需要直接访问 [`GuiRuntime`] 或
@@ -24,7 +24,7 @@
 //!
 //! ```no_run
 //! use bevy::prelude::*;
-//! use fairygui_bevy::{FairyGuiPlugin, GuiRuntime};
+//! use fairygui_bevy::FairyGuiPlugin;
 //!
 //! App::new()
 //!     .add_plugins((DefaultPlugins, FairyGuiPlugin))
@@ -51,6 +51,7 @@
 pub mod asset;
 pub mod backend;
 mod compositor;
+pub mod ecs;
 mod graph;
 mod image_fill;
 pub mod input;
@@ -60,6 +61,7 @@ pub mod text;
 mod text_stroke;
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
+pub use ecs::{GuiObjectInfo, GuiQuery, GuiRootView};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -90,9 +92,9 @@ pub mod prelude {
         FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
         GuiButtonSelected, GuiConfig, GuiEvent, GuiFont, GuiInputSettings, GuiInputState, GuiLink,
         GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
-        GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease, GuiRootInstance,
-        GuiRuntime, GuiSliderValue, GuiSystems, GuiTextInput, GuiTransitionCallback,
-        GuiTransitionHook, PopupMenuTemplates,
+        GuiObjectAction, GuiObjectCommand, GuiObjectInfo, GuiProgressValue, GuiPullRelease,
+        GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiSliderValue, GuiSystems,
+        GuiTextInput, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
     };
 }
 
@@ -225,6 +227,7 @@ impl Plugin for FairyGuiPlugin {
             (
                 runtime::sync_list_selection_components,
                 runtime::sync_control_state_components,
+                ecs::sync_gui_hierarchy,
             )
                 .chain()
                 .in_set(GuiSystems::Sync)
