@@ -336,6 +336,15 @@ impl GuiIcon {
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct GuiSortingOrder(pub i32);
 
+/// Paint order of a component's children, independent of their logical indices.
+/// Arch paints the prefix forward and suffix backward, ending at `apex_index`.
+/// The raw apex is retained; painting clamps it to the current child count.
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct GuiRenderOrder {
+    pub order: crate::ChildrenRenderOrder,
+    pub apex_index: i32,
+}
+
 /// Writable local drawing and interaction state from the FairyGUI model.
 ///
 /// Explicit visibility, controller/group display visibility and stage attachment
@@ -541,6 +550,7 @@ pub struct GuiQuery<'w, 's> {
     texts: Query<'w, 's, &'static GuiText>,
     icons: Query<'w, 's, &'static GuiIcon>,
     sorting_orders: Query<'w, 's, &'static GuiSortingOrder>,
+    render_orders: Query<'w, 's, &'static GuiRenderOrder>,
     loaders: Query<'w, 's, &'static crate::GuiLoaderState>,
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
@@ -614,6 +624,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn sorting_order(&self, entity: Entity) -> Option<i32> {
         Some(self.sorting_orders.get(self.view(entity)?).ok()?.0)
+    }
+
+    pub fn render_order(&self, entity: Entity) -> Option<&GuiRenderOrder> {
+        self.render_orders.get(self.view(entity)?).ok()
     }
 
     /// Logical index among all siblings, independent of list paint order.

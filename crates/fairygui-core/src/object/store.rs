@@ -22,6 +22,8 @@ pub use display::DisplayLockToken;
 mod child_order;
 #[path = "progress.rs"]
 mod progress;
+#[path = "render_order.rs"]
+mod render_order;
 #[path = "slider.rs"]
 mod slider;
 

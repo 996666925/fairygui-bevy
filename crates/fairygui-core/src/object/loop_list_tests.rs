@@ -206,7 +206,7 @@ fn loop_lists_match_native_sixfold_records_commands_drag_tweens_and_selection() 
                 p.display_pos().y,
                 info.alignment.x,
                 info.alignment.y,
-                d.apex_index as f32,
+                d.component.apex_index as f32,
                 info.pooled_count as f32,
                 ids.borrow().len() as f32,
                 rendered.get() as f32,

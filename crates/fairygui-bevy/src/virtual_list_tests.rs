@@ -721,10 +721,10 @@ fn exported_loop_list_retains_views_and_native_record_mapping_through_wraps_and_
         let ControlData::List(data) = gui.store().object(list).unwrap().control() else {
             unreachable!()
         };
-        if data.children_render_order == 2 {
+        if data.component.children_render_order == crate::core::widget::ChildrenRenderOrder::Arch {
             let apex = gui
                 .store()
-                .list_item_at(list, data.apex_index as usize)
+                .list_item_at(list, data.component.apex_index as usize)
                 .unwrap();
             let z = app
                 .world()

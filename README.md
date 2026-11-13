@@ -263,6 +263,29 @@ fn reorder(mut gui: GuiMut, button: Entity, sibling: Entity) {
 列表选中项随对象保留，并更新其索引。`GuiSortingOrder` 可随等待资源的根拥有者一起挂载。
 `--smoke-child-order` 使用重叠按钮验证优先级、重排、交换和真实点击目标。
 
+容器的绘制顺序通过 `GuiRenderOrder` 修改，与逻辑层级分开：
+
+```rust,ignore
+fn render_order(mut containers: Query<&mut GuiRenderOrder>, view: Entity) {
+    if let Ok(mut order) = containers.get_mut(view) {
+        order.order = ChildrenRenderOrder::Arch;
+        order.apex_index = 2;
+    }
+}
+```
+
+`Ascent` 按逻辑顺序绘制，`Descent` 倒序绘制；`Arch` 先正序绘制 apex 之前的节点，
+再倒序绘制剩余节点，使 apex 最后绘制。原始 apex 保留在组件中，绘制时限制在
+`0..=子节点数`；负值等同倒序，超出末尾等同正序。隐藏或无显示对象的子节点仍占
+逻辑索引，apex 以该索引为准。绘制设置不会修改 `GuiObjectInfo::children()`、
+关联、控制器目标或列表选中索引；Bevy 的局部层级及实际点击目标同步变化。
+
+普通容器、按钮、列表、树及其他组件派生控件共用这套设置。`GuiRenderOrder` 可随
+根拥有者一起声明初始值；即时操作也可用 `GuiObjectMut::set_children_render_order`
+和 `set_apex_index`。虚拟列表在拱形模式下继续按视口中心自动选择 apex，并同步回
+组件；未修改的属性不会覆盖该结果。滚动条始终位于内容上方，刷新头尾保留在内容
+下方。`--smoke-render-order` 验证三种模式、隐藏 apex、边界 apex 和真实点击目标。
+
 新建视图的绑定和初始配置放入 `GuiSystems::Initialize`：此时根视图、逻辑子控件和
 几何/文本快照已就绪，列表与树的数据尚未准备。此阶段挂载的 `GuiListContent`、
 `GuiVirtualList`、`GuiTreeContent` 会在同帧生成行，随后 `GuiSystems::PostLayout`

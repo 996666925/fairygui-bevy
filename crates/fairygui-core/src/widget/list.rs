@@ -120,10 +120,6 @@ pub struct ListData {
     pub column_count: i32,
     /// 项是否随列表尺寸自动拉伸。
     pub auto_resize_item: bool,
-    /// 子对象的渲染顺序。
-    pub children_render_order: i32,
-    /// 渲染顺序的参考项。
-    pub apex_index: i32,
     /// 项四周的边距。
     pub item_margin: Margin,
     /// 点击时是否把该项滚动到可视区。
@@ -157,8 +153,6 @@ impl Default for ListData {
             line_count: 0,
             column_count: 0,
             auto_resize_item: false,
-            children_render_order: 0,
-            apex_index: 0,
             item_margin: Margin::default(),
             scroll_item_to_view_on_click: true,
             fold_invisible_items: false,
@@ -373,8 +367,9 @@ pub(crate) fn read_list(
         data.line_count = i32::from(buffer.read_i16()?);
         data.column_count = i32::from(buffer.read_i16()?);
         data.auto_resize_item = buffer.read_bool()?;
-        data.children_render_order = i32::from(buffer.read_i8()?);
-        data.apex_index = i32::from(buffer.read_i16()?);
+        data.component.children_render_order =
+            super::ChildrenRenderOrder::from_code(buffer.read_i8()?);
+        data.component.apex_index = i32::from(buffer.read_i16()?);
 
         if buffer.read_bool()? {
             data.item_margin.top = buffer.read_i32()? as f32;

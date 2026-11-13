@@ -21,7 +21,7 @@ mod tree;
 
 pub use combo::{ComboBoxData, ComboPopup, popup_position};
 pub use component::{
-    ChildOverride, ComponentData, HitTestArea, create_from_package,
+    ChildOverride, ChildrenRenderOrder, ComponentData, HitTestArea, create_from_package,
     create_from_package_with_registry,
 };
 pub use controller::{Controller, PackageEnv};
@@ -78,7 +78,7 @@ pub enum ControlData {
     /// 输入框。
     TextInput(TextInputData),
     /// 普通容器。
-    Component(ComponentData),
+    Component(Box<ComponentData>),
     /// 按钮。
     Button(Box<ButtonData>),
     /// 标签。
@@ -206,7 +206,7 @@ impl ControlData {
             ObjectType::Tree => Self::Tree(Box::default()),
             ObjectType::ComboBox => Self::ComboBox(Box::default()),
             ObjectType::ScrollBar => Self::ScrollBar(Box::default()),
-            ObjectType::Component => Self::Component(ComponentData::default()),
+            ObjectType::Component => Self::Component(Box::default()),
             // 3D 装载器与未知类型没有专有数据。
             _ => Self::None,
         }

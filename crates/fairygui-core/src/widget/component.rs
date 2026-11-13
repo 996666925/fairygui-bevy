@@ -21,6 +21,27 @@ use crate::object::{GObjectId, ObjectStore};
 use crate::package::{FuiPackage, LoadContext, ObjectType, PackageItemType};
 use crate::widget::{ControlData, OverflowType, leaf};
 
+/// Paint ordering of a component's logical children. It never changes their
+/// indices, controller bindings, relations or list selection.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ChildrenRenderOrder {
+    #[default]
+    Ascent = 0,
+    Descent = 1,
+    /// Paint the prefix forward, then the suffix backward, with the apex last.
+    Arch = 2,
+}
+impl ChildrenRenderOrder {
+    pub const fn from_code(code: i8) -> Self {
+        match code {
+            1 => Self::Descent,
+            2 => Self::Arch,
+            _ => Self::Ascent,
+        }
+    }
+}
+
 /// 命中测试区域。
 #[derive(Debug, Clone)]
 pub enum HitTestArea {
@@ -56,6 +77,9 @@ pub struct ChildOverride {
 /// 容器的数据。
 #[derive(Debug, Clone, Default)]
 pub struct ComponentData {
+    pub children_render_order: ChildrenRenderOrder,
+    /// Raw native apex, clamped to 0..=child count only when painting.
+    pub apex_index: i32,
     /// 边距，用于内容区域的自动尺寸计算。
     pub margin: Margin,
     /// 溢出处理方式。
@@ -613,7 +637,7 @@ fn build_component(
             component,
             ..Default::default()
         })),
-        _ => ControlData::Component(component),
+        _ => ControlData::Component(Box::new(component)),
     };
 
     if let ControlData::Button(data) = &mut control {

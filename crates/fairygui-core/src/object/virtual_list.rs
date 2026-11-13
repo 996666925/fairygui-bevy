@@ -1,5 +1,5 @@
 //! Native virtual rows: retained measurements, ordered reuse and per-list pools.
-use super::{GObjectId, ObjectStore, dirty};
+use super::{GObjectId, ObjectStore};
 use crate::{
     geom::{Point, Size},
     widget::{ControlData, ListLayoutType, VirtualGeometry, VirtualLayout},
@@ -1014,7 +1014,9 @@ impl ObjectStore {
         let Some(ControlData::List(data)) = self.object(list).map(|o| o.control()) else {
             return;
         };
-        if data.children_render_order != 2 || data.layout == ListLayoutType::Pagination {
+        if data.component.children_render_order != crate::widget::ChildrenRenderOrder::Arch
+            || data.layout == ListLayoutType::Pagination
+        {
             return;
         }
         let vertical = self.virtual_states[&list].geometry.config.vertical();
@@ -1044,9 +1046,6 @@ impl ObjectStore {
                 apex = i;
             }
         }
-        if let ControlData::List(data) = &mut self.objects[list].control {
-            data.apex_index = apex as i32;
-        }
-        self.touch(list, dirty::CHILDREN);
+        self.set_apex_index(list, apex as i32);
     }
 }

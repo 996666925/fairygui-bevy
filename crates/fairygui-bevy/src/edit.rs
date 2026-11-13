@@ -46,6 +46,14 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_children_render_order(&mut self, order: crate::ChildrenRenderOrder) {
+        self.runtime
+            .store_mut()
+            .set_children_render_order(self.object, order);
+    }
+    pub fn set_apex_index(&mut self, index: i32) {
+        self.runtime.store_mut().set_apex_index(self.object, index);
+    }
     pub fn sorting_order(&self) -> i32 {
         self.runtime
             .store()

@@ -206,7 +206,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-controllers") {
+    if std::env::args().any(|arg| arg == "--smoke-render-order") {
+        smoke::install_render_order(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-controllers") {
         smoke::install_controllers(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-child-order") {
         smoke::install_child_order(&mut app);

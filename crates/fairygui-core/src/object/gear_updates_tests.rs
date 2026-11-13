@@ -168,7 +168,7 @@ fn binding_stays_with_original_controller_after_reparenting() {
         .component()
         .unwrap()
         .clone();
-    store.object_mut(other).unwrap().control = ControlData::Component(data);
+    store.object_mut(other).unwrap().control = ControlData::Component(Box::new(data));
     store.set_parent(child, Some(other));
     store.set_xy(child, 50.0, 30.0);
     assert_eq!(
@@ -537,15 +537,16 @@ fn executable_native_gear_defaults_page_storage_locks_forwarding_and_setter_call
                     "reparent" => {
                         let parent = store.create(ObjectType::Component);
                         store.set_size(parent, 200.0, 100.0);
-                        store.object_mut(parent).unwrap().control = ControlData::Component(
-                            store
-                                .object(root)
-                                .unwrap()
-                                .control()
-                                .component()
-                                .unwrap()
-                                .clone(),
-                        );
+                        store.object_mut(parent).unwrap().control =
+                            ControlData::Component(Box::new(
+                                store
+                                    .object(root)
+                                    .unwrap()
+                                    .control()
+                                    .component()
+                                    .unwrap()
+                                    .clone(),
+                            ));
                         store.set_parent(child, Some(parent));
                         other = Some(parent);
                     }

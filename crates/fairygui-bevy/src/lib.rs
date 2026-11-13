@@ -81,7 +81,7 @@ pub use tween::{GuiTweenComplete, GuiTweenProperty, GuiTweenTarget};
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use ecs::{
     GuiControllerState, GuiControllers, GuiDisplay, GuiIcon, GuiObjectInfo, GuiPullPart, GuiQuery,
-    GuiRootView, GuiScrollState, GuiSortingOrder, GuiSpace, GuiText, GuiTransform,
+    GuiRenderOrder, GuiRootView, GuiScrollState, GuiSortingOrder, GuiSpace, GuiText, GuiTransform,
     GuiTransitionState, GuiTransitions,
 };
 pub use extension::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
@@ -119,6 +119,7 @@ pub use tree::{
 };
 
 pub use fairygui_core as core;
+pub use fairygui_core::widget::ChildrenRenderOrder;
 
 use bevy::prelude::*;
 
@@ -150,28 +151,28 @@ enum SyncPhase {
 
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
-    pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
     pub use crate::{
-        FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiAnimationComplete,
-        GuiAnimationPlaySettings, GuiAnimationState, GuiButtonSelected, GuiComboBoxState,
-        GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
-        GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
-        GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
-        GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,
-        GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
-        GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiMut,
-        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiPointerCapture, GuiPointerId,
-        GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
-        GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease,
-        GuiQuery, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollState,
-        GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText,
-        GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
-        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        ChildrenRenderOrder, FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef,
+        GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState, GuiButtonSelected,
+        GuiComboBoxState, GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds,
+        GuiDragCommand, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget,
+        GuiEvent, GuiFont, GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings,
+        GuiGlobalWaitState, GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink,
+        GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
+        GuiListRow, GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState,
+        GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiPointerCapture,
+        GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
+        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
+        GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
+        GuiRuntime, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace,
+        GuiSystems, GuiText, GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
+        GuiTooltipState, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
         GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
         GuiWindowAction, GuiWindowCommand, GuiWindowState, GuiWorldExt, PopupMenuTemplates,
     };
+    pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }
 
 /// FairyGUI 集成插件。

@@ -39,7 +39,7 @@ pub(super) fn fixture(
     d.line_gap = 2;
     d.align = 1;
     d.vertical_align = 1;
-    d.children_render_order = 2;
+    d.component.children_render_order = crate::widget::ChildrenRenderOrder::Arch;
     d.selection_mode = ListSelectionMode::Multiple;
     d.component.overflow = OverflowType::Scroll;
     let mut p = ScrollPane::default();
@@ -208,7 +208,7 @@ fn virtual_rows_match_native_layout_pool_identity_measurement_and_selection_trac
                 pane.display_pos().y,
                 info.alignment.x,
                 info.alignment.y,
-                d.apex_index as f32,
+                d.component.apex_index as f32,
                 info.pooled_count as f32,
                 ids.borrow().len() as f32,
                 rendered.get() as f32,

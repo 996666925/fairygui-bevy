@@ -2859,39 +2859,13 @@ fn spawn_object(
             // so keep an explicit local z value on every direct child.  This
             // also makes newly spawned children deterministic when the parent
             // already contains dynamic content.
-            commands
-                .entity(child_entity)
-                .insert(ZIndex(child_paint_order(store, object, child, index)));
+            commands.entity(child_entity).insert(ZIndex(
+                store.child_paint_index(child).unwrap_or(index as i32),
+            ));
         }
     }
 
     Some(entity_id)
-}
-
-/// GList paint order is independent of logical row/index order. Refresh parts
-/// stay behind content; pane bars stay above it, including with Arch ordering.
-fn child_paint_order(store: &ObjectStore, parent: GObjectId, child: GObjectId, raw: usize) -> i32 {
-    let Some(ControlData::List(data)) = store.object(parent).map(|o| o.control()) else {
-        return raw as i32;
-    };
-    if store.is_scroll_refresh_overlay(child) {
-        return raw as i32 - store.object(parent).unwrap().children().len() as i32;
-    }
-    if data.children_render_order == 0 {
-        return raw as i32;
-    }
-    let rows = store.list_items(parent).unwrap_or_default();
-    let Some(index) = rows.iter().position(|&id| id == child) else {
-        return (rows.len() + raw) as i32;
-    };
-    let apex = (data.apex_index.max(0) as usize).min(rows.len().saturating_sub(1));
-    if data.children_render_order == 1 {
-        (rows.len() - 1 - index) as i32
-    } else if index >= apex {
-        (rows.len() - 1 - index + apex) as i32
-    } else {
-        index as i32
-    }
 }
 
 /// 按对象当前引用的资源取出它的图集切片。
@@ -3552,14 +3526,12 @@ pub(crate) fn sync_dirty(
         if let Some(parent_object) = runtime.store().object(object) {
             for (index, child) in parent_object.children().iter().copied().enumerate() {
                 if let Some(child_entity) = runtime.entity_of(child) {
-                    commands
-                        .entity(child_entity)
-                        .insert(ZIndex(child_paint_order(
-                            runtime.store(),
-                            object,
-                            child,
-                            index,
-                        )));
+                    commands.entity(child_entity).insert(ZIndex(
+                        runtime
+                            .store()
+                            .child_paint_index(child)
+                            .unwrap_or(index as i32),
+                    ));
                 }
             }
         }

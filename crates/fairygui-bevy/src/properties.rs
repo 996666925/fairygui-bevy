@@ -22,6 +22,7 @@ pub(crate) fn sync(world: &mut World) {
     // Controller gears can change every property below. Consume application
     // page edits before publishing geometry, values, text and display state.
     sync_property::<GuiControllers>(world);
+    sync_property::<GuiRenderOrder>(world);
     sync_property::<GuiSortingOrder>(world);
     sync_property::<GuiTransform>(world);
     sync_property::<GuiDisplay>(world);
@@ -108,6 +109,25 @@ impl Property for GuiSortingOrder {
     }
     fn apply(&self, _: &Self, _: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
         runtime.store_mut().set_sorting_order(object, self.0);
+    }
+}
+
+impl Property for GuiRenderOrder {
+    fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
+        Some(Self {
+            order: runtime.store().children_render_order(object)?,
+            apex_index: runtime.store().apex_index(object)?,
+        })
+    }
+    fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        field!(self, previous, native, order, {
+            runtime
+                .store_mut()
+                .set_children_render_order(object, self.order);
+        });
+        field!(self, previous, native, apex_index, {
+            runtime.store_mut().set_apex_index(object, self.apex_index);
+        });
     }
 }
 impl Property for GuiIcon {
@@ -390,3 +410,7 @@ mod child_order_tests;
 #[cfg(test)]
 #[path = "ecs_controller_tests.rs"]
 mod controller_tests;
+
+#[cfg(test)]
+#[path = "ecs_render_order_tests.rs"]
+mod render_order_tests;
