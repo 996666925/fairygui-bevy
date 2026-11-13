@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_guide.rs"]
+mod guide;
+pub(super) fn install_guide(app: &mut App) {
+    guide::install(app);
+}
 
 #[path = "smoke_list_effect.rs"]
 mod list_effect;

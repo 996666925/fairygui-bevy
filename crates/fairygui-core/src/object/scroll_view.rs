@@ -13,25 +13,30 @@ impl ObjectStore {
     /// Native GObject.localToGlobal, including pivot-anchor API coordinates,
     /// ancestor transforms and component content offsets. Coordinates are logical
     /// stage pixels, independent of renderer layout and window DPI.
-    pub fn local_to_global(&self, id: GObjectId, mut point: Point) -> Option<Point> {
-        let object = self.object(id)?;
-        if object.pivot_as_anchor() {
-            point.x += object.pivot().x * object.width();
-            point.y += object.pivot().y * object.height();
-        }
-        let point = self.scroll_global_transform(id)?.point(point);
-        (point.x.is_finite() && point.y.is_finite()).then_some(point)
+    pub fn local_to_global(&self, id: GObjectId, point: Point) -> Option<Point> {
+        self.coordinate_transform(id)?.transform_point(point)
     }
 
     /// Inverse of local_to_global. Singular/nonfinite transforms return None.
     pub fn global_to_local(&self, id: GObjectId, point: Point) -> Option<Point> {
+        self.coordinate_transform(id)?
+            .inverse()?
+            .transform_point(point)
+    }
+
+    /// Native API-coordinate transform, including the object's anchor pivot.
+    pub fn coordinate_transform(&self, id: GObjectId) -> Option<CoordinateTransform> {
         let object = self.object(id)?;
-        let mut point = self.scroll_global_transform(id)?.inverse()?.point(point);
+        let mut transform = self.scroll_global_transform(id)?;
         if object.pivot_as_anchor() {
-            point.x -= object.pivot().x * object.width();
-            point.y -= object.pivot().y * object.height();
+            let (x, y) = (
+                f64::from(object.pivot().x * object.width()),
+                f64::from(object.pivot().y * object.height()),
+            );
+            transform.tx += transform.a * x + transform.c * y;
+            transform.ty += transform.b * x + transform.d * y;
         }
-        (point.x.is_finite() && point.y.is_finite()).then_some(point)
+        Some(transform)
     }
 
     /// Native two-corner rectangle conversion; intentionally preserves negative
@@ -208,12 +213,12 @@ impl ObjectStore {
         Some(Rect::new(low.x, low.y, high.x - low.x, high.y - low.y))
     }
 
-    fn scroll_global_transform(&self, id: GObjectId) -> Option<Transform> {
-        let mut result = Transform::IDENTITY;
+    fn scroll_global_transform(&self, id: GObjectId) -> Option<CoordinateTransform> {
+        let mut result = CoordinateTransform::IDENTITY;
         let mut current = Some(id);
         while let Some(id) = current {
             let object = self.object(id)?;
-            let mut local = Transform::object(object);
+            let mut local = CoordinateTransform::object(object);
             if let Some(parent) = object.parent()
                 && let Some(component) = self.object(parent)?.control().component()
             {
@@ -232,8 +237,9 @@ impl ObjectStore {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Transform {
+/// Opaque native logical coordinate transform, independent of renderer layout.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CoordinateTransform {
     a: f64,
     b: f64,
     c: f64,
@@ -241,7 +247,11 @@ struct Transform {
     tx: f64,
     ty: f64,
 }
-impl Transform {
+impl CoordinateTransform {
+    pub fn transform_point(self, point: Point) -> Option<Point> {
+        let point = self.point(point);
+        (point.x.is_finite() && point.y.is_finite()).then_some(point)
+    }
     const IDENTITY: Self = Self {
         a: 1.,
         b: 0.,
@@ -300,7 +310,7 @@ impl Transform {
         )
     }
 
-    fn inverse(self) -> Option<Self> {
+    pub fn inverse(self) -> Option<Self> {
         let det = self.a * self.d - self.b * self.c;
         if !det.is_finite() || det == 0. {
             return None;

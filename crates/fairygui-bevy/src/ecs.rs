@@ -12,6 +12,9 @@ use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
 #[cfg(test)]
 #[path = "ecs_scroll_tests.rs"]
 mod scroll_tests;
+#[cfg(test)]
+#[path = "ecs_space_tests.rs"]
+mod space_tests;
 
 #[cfg(test)]
 #[path = "ecs_transition_tests.rs"]
@@ -330,6 +333,46 @@ pub struct GuiTransform {
     rotation: f32,
 }
 
+/// Native logical local/global conversion snapshot, including anchor pivots,
+/// ancestor transforms, margins, scroll display offsets and virtual alignment.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct GuiSpace(fairygui_core::object::CoordinateTransform);
+impl GuiSpace {
+    pub fn local_to_global(&self, point: Vec2) -> Option<Vec2> {
+        let point = self
+            .0
+            .transform_point(fairygui_core::Point::new(point.x, point.y))?;
+        Some(Vec2::new(point.x, point.y))
+    }
+    pub fn global_to_local(&self, point: Vec2) -> Option<Vec2> {
+        let point = self
+            .0
+            .inverse()?
+            .transform_point(fairygui_core::Point::new(point.x, point.y))?;
+        Some(Vec2::new(point.x, point.y))
+    }
+    pub fn local_to_global_rect(&self, rect: fairygui_core::Rect) -> Option<fairygui_core::Rect> {
+        let low = self.local_to_global(Vec2::new(rect.x, rect.y))?;
+        let high = self.local_to_global(Vec2::new(rect.right(), rect.bottom()))?;
+        Some(fairygui_core::Rect::new(
+            low.x,
+            low.y,
+            high.x - low.x,
+            high.y - low.y,
+        ))
+    }
+    pub fn global_to_local_rect(&self, rect: fairygui_core::Rect) -> Option<fairygui_core::Rect> {
+        let low = self.global_to_local(Vec2::new(rect.x, rect.y))?;
+        let high = self.global_to_local(Vec2::new(rect.right(), rect.bottom()))?;
+        Some(fairygui_core::Rect::new(
+            low.x,
+            low.y,
+            high.x - low.x,
+            high.y - low.y,
+        ))
+    }
+}
+
 impl GuiTransform {
     pub fn position(&self) -> Vec2 {
         self.position
@@ -421,6 +464,7 @@ pub struct GuiQuery<'w, 's> {
     roots: Query<'w, 's, &'static GuiRootView>,
     objects: Query<'w, 's, &'static GuiObjectInfo>,
     transforms: Query<'w, 's, &'static GuiTransform>,
+    spaces: Query<'w, 's, &'static GuiSpace>,
     texts: Query<'w, 's, &'static GuiText>,
     icons: Query<'w, 's, &'static GuiIcon>,
     loaders: Query<'w, 's, &'static crate::GuiLoaderState>,
@@ -456,6 +500,30 @@ impl GuiQuery<'_, '_> {
     /// Logical geometry of a root owner or control view entity.
     pub fn transform(&self, entity: Entity) -> Option<&GuiTransform> {
         self.transforms.get(self.view(entity)?).ok()
+    }
+
+    pub fn space(&self, entity: Entity) -> Option<&GuiSpace> {
+        self.spaces.get(self.view(entity)?).ok()
+    }
+    pub fn local_to_global(&self, entity: Entity, point: Vec2) -> Option<Vec2> {
+        self.space(entity)?.local_to_global(point)
+    }
+    pub fn global_to_local(&self, entity: Entity, point: Vec2) -> Option<Vec2> {
+        self.space(entity)?.global_to_local(point)
+    }
+    pub fn local_to_global_rect(
+        &self,
+        entity: Entity,
+        rect: fairygui_core::Rect,
+    ) -> Option<fairygui_core::Rect> {
+        self.space(entity)?.local_to_global_rect(rect)
+    }
+    pub fn global_to_local_rect(
+        &self,
+        entity: Entity,
+        rect: fairygui_core::Rect,
+    ) -> Option<fairygui_core::Rect> {
+        self.space(entity)?.global_to_local_rect(rect)
     }
 
     /// Native text of a root owner or control view, before presentation.
@@ -706,6 +774,7 @@ pub(crate) fn sync_gui_properties(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn sync_gui_objects(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,
@@ -714,10 +783,11 @@ pub(crate) fn sync_gui_objects(
         &GObjectRef,
         Option<&mut GuiObjectInfo>,
         Option<&GuiTransform>,
+        Option<&GuiSpace>,
     )>,
     roots: Query<(Entity, &GuiRootInstance, Option<&GuiRootView>)>,
 ) {
-    for (entity, reference, current, transform) in &mut objects {
+    for (entity, reference, current, transform, space) in &mut objects {
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
@@ -725,6 +795,14 @@ pub(crate) fn sync_gui_objects(
             continue;
         };
         let next_transform = GuiTransform::from_object(object);
+        if let Some(next) = runtime
+            .store()
+            .coordinate_transform(reference.0)
+            .map(GuiSpace)
+            && space != Some(&next)
+        {
+            commands.entity(entity).insert(next);
+        }
         if transform != Some(&next_transform) {
             commands.entity(entity).insert(next_transform);
         }

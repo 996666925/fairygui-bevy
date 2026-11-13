@@ -15,6 +15,7 @@ mod bag_demo;
 mod catalog;
 mod demos;
 mod drag_drop_demo;
+mod guide_demo;
 mod list_effect_demo;
 mod loop_list_demo;
 mod modal_wait_demo;
@@ -138,6 +139,12 @@ fn main() -> AppExit {
             .after(advance_demo_behaviors),
     )
     .add_systems(Startup, setup_camera)
+    .add_systems(
+        Update,
+        guide_demo::update
+            .in_set(GuiSystems::Respond)
+            .after(open_pending_demo),
+    )
     .add_systems(Update, modal_wait_demo::advance.in_set(GuiSystems::Respond))
     .add_systems(
         Update,
@@ -173,6 +180,7 @@ fn main() -> AppExit {
             bag_demo::bind,
             scroll_pane_demo::bind,
             list_effect_demo::bind,
+            guide_demo::bind,
         )
             .chain()
             .after(GuiSystems::Sync),
@@ -185,7 +193,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-list-effect") {
+    if std::env::args().any(|arg| arg == "--smoke-guide") {
+        smoke::install_guide(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-list-effect") {
         smoke::install_list_effect(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-nested-scroll") {
         smoke::install_nested_scroll(&mut app);

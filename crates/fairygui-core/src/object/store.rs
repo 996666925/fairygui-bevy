@@ -58,6 +58,7 @@ mod scroll_pages;
 mod scroll_refresh;
 #[path = "scroll_view.rs"]
 mod scroll_view;
+pub use scroll_view::CoordinateTransform;
 #[path = "scroll_wheel.rs"]
 mod scroll_wheel;
 
@@ -2193,6 +2194,14 @@ impl ObjectStore {
         let mut tweens = std::mem::take(&mut self.tweens);
         tweens.kill_for(self, owner);
         self.tweens = tweens;
+    }
+
+    pub fn kill_tween_property(
+        &mut self,
+        owner: GObjectId,
+        property: crate::transition::TweenProperty,
+    ) {
+        self.tweens.kill_property(owner, property);
     }
 
     // ---- 控件交互 ----

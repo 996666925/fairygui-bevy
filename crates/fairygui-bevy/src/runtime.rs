@@ -94,6 +94,13 @@ pub struct GuiRootInstance {
 /// object (`GObjectRef`) or root (`GuiRootInstance`).
 #[derive(Debug, Clone)]
 pub enum GuiObjectAction {
+    /// Animate from the current value, replacing only this property tween.
+    Tween {
+        target: crate::GuiTweenTarget,
+        duration: f32,
+        ease: i32,
+    },
+    StopTween(crate::GuiTweenProperty),
     SetPosition(Vec2),
     SetSize(Vec2),
     SetVisible(bool),
@@ -2131,6 +2138,16 @@ pub(crate) fn apply_object_commands(
             continue;
         };
         match &command.action {
+            GuiObjectAction::Tween {
+                target,
+                duration,
+                ease,
+            } => {
+                target.apply(runtime.store_mut(), object, *duration, *ease);
+            }
+            GuiObjectAction::StopTween(property) => {
+                runtime.store_mut().kill_tween_property(object, *property)
+            }
             GuiObjectAction::SetPosition(position) if position.is_finite() => {
                 runtime.store_mut().set_xy(object, position.x, position.y);
             }

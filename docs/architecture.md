@@ -5,6 +5,29 @@ Applications own interfaces through `FairyGuiRoot` components, find controls wit
 ordinary Bevy systems. The core object tree executes FairyGUI package semantics
 internally; the plugin projects its state into Bevy UI and read-only ECS components.
 
+GuiSpace wraps an opaque core CoordinateTransform on every materialized view.
+The transform retains native f64 matrix composition, anchor-coordinate semantics,
+ancestor margins/display scroll and virtual alignment. GuiQuery conversion accepts
+owner aliases and reads these snapshots without borrowing runtime or Bevy layout.
+Rectangle conversion uses two corners, retaining signed dimensions. Inverse or
+nonfinite point failures return None. Geometry synchronization updates descendant
+spaces after ancestor edits while preserving equal snapshots' change ticks.
+
+GuiObjectAction::Tween resolves typed GuiTweenTarget endpoints against current
+model values when its command executes. Native Tween handles easing and frame
+advance; replacing/cancelling affects only the chosen property. Duration zero
+applies immediately, invalid requests leave existing tweens untouched, and removed
+targets are reclaimed by the next tween advance. Different properties coexist.
+Ordinary setters retain their normal native semantics; StopTween is explicit.
+
+Guide owns a retained, initially inactive GuideLayer root as ChildOf its page.
+The example normalizes both roots to the viewport, converts bag bounds through
+global into layer coordinates, sizes its reversed ellipse and animates its XY.
+The masked input path gates both the overlay and its descendants; the exposed
+bag receives its own observer click and detaches the layer. Page disposal owns
+all generated roots/views and native tween lifetime. Viewport changes normalize
+both roots, wait for refreshed logical geometry and retarget the active cutout.
+
 GuiObjectInfo snapshots the native children_in_view set alongside its hierarchy;
 non-components expose no such set. GuiQuery::is_child_in_view accepts a root owner
 or component view and a direct logical child. Core implements GComponent's hidden

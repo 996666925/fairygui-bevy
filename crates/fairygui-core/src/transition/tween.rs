@@ -255,6 +255,9 @@ impl Tween {
 
     /// 推进一帧。返回是否仍在进行。
     pub fn advance(&mut self, store: &mut ObjectStore, dt: f32) -> bool {
+        if self.target.is_some_and(|(owner, _)| !store.contains(owner)) {
+            return false;
+        }
         if self.killed {
             return false;
         }
@@ -433,6 +436,11 @@ impl TweenManager {
             }
         }
         self.tweens = remaining;
+    }
+
+    pub fn kill_property(&mut self, owner: GObjectId, property: TweenProperty) {
+        self.tweens
+            .retain(|tween| tween.target != Some((owner, property)));
     }
 }
 

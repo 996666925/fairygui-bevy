@@ -181,6 +181,12 @@ fn center_root(gui: &GuiQuery, commands: &mut Commands, root: Entity, viewport: 
 可同时配置比例轴心与锚点定位。`GuiFont` 资源也在根构建前同步，首帧和后续动态
 界面会直接使用配置的字体，无需业务系统手工调用 `GuiRuntime::set_font`。
 
+`GuiSpace`（`gui.space(entity)`）提供原生逻辑坐标转换，也可直接调用
+`gui.local_to_global`、`global_to_local` 及对应的 `_rect` 方法。转换包含祖先变换、
+锚点轴心、边距、当前滚动显示偏移和虚拟列表对齐，不依赖 Bevy 布局或窗口 DPI。
+矩形遵循原版两角转换，镜像/旋转可能保留负宽高；不可逆变换返回 `None`。
+快照随逻辑几何在 PostLayout 前和 Sync 末尾刷新，未变化时保留变更标记。
+
 `GuiText::value()` 或 `gui.text(entity)` 读取 FairyGUI 原始文本：按钮返回基础标题，
 标签和下拉框转发到标题子控件；输入框返回已提交内容，不含提示文字、密码掩码、
 IME 预编辑或翻译/UBB 渲染结果。无文本属性的控件没有 `GuiText`。
@@ -342,6 +348,17 @@ ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、�
 按钮选择、滑动条值、控制器切页、进度值、滚动位置、列表选择替换/清空/滚入视口和
 过渡播放。命令在 `GuiSystems::Sync` 应用，因此 observer 和业务系统只需写消息，
 不需要独占借用运行时。
+
+`GuiObjectAction::Tween { target, duration, ease }` 从命令执行时的当前值启动通用
+补间。`GuiTweenTarget` 支持位置、尺寸、缩放、透明度和旋转；`ease` 使用 FairyGUI
+缓动编号（5 为默认 QuadOut）。相同对象与属性的新补间会替换旧补间，不同属性可
+同时运行；`StopTween(GuiTweenProperty)` 停在当前值。零时长立即落到终值，非法
+尺寸、非有限值或负时长丢弃；根资产等待期间遵循普通对象命令规则。
+
+Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐背包按钮，以
+0.5 秒补间移动反向遮罩窗口。点击高亮区域内的背包会撤下引导层；页面销毁会
+回收引导层和动画；窗口缩放时会重新对齐。`--smoke-guide` 验证实际开关、动画位置、
+遮罩穿透、复用、缩放和销毁。
 过渡命令还支持暂停/恢复、速度、反向播放和停止。临时界面也用 `FairyGuiRoot`
 实体管理；销毁所有者实体会自动回收对应 FairyGUI 对象树。
 列表、进度条、滑动条和按钮实体分别带有 `GuiListSelection`、`GuiProgressValue`、

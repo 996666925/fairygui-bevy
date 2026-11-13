@@ -63,11 +63,14 @@ pub mod runtime;
 pub mod text;
 mod text_stroke;
 pub mod tree;
+pub mod tween;
+pub use tween::{GuiTweenProperty, GuiTweenTarget};
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use ecs::{
     GuiControllerState, GuiControllers, GuiDisplay, GuiIcon, GuiObjectInfo, GuiPullPart, GuiQuery,
-    GuiRootView, GuiScrollState, GuiText, GuiTransform, GuiTransitionState, GuiTransitions,
+    GuiRootView, GuiScrollState, GuiSpace, GuiText, GuiTransform, GuiTransitionState,
+    GuiTransitions,
 };
 pub use input::{GuiInputCommand, GuiInputSettings, GuiInputState};
 pub use list::{
@@ -134,12 +137,12 @@ pub mod prelude {
         GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand,
         GuiObjectDragState, GuiObjectInfo, GuiPopupCommand, GuiPopupMenu, GuiPopupState,
         GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
-        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput,
-        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSpace, GuiSystems, GuiText,
+        GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
-        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
-        PopupMenuTemplates,
+        GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction,
+        GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
     };
 }
 
