@@ -258,7 +258,10 @@ impl Plugin for FairyGuiPlugin {
         .init_non_send::<GuiRuntime>()
         .add_systems(
             Update,
-            pull::apply_pull_commands
+            // Consume Respond edits before any clock advances. In particular,
+            // an ECS pause must stop this tick instead of one tick later.
+            (properties::sync, pull::apply_pull_commands)
+                .chain()
                 .after(GuiSystems::Respond)
                 .before(GuiSystems::Advance),
         )

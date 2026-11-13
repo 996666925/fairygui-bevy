@@ -481,7 +481,7 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 
 普通属性直接修改 ECS 组件：`GuiText`、`GuiIcon`、`GuiTransform`、`GuiDisplay`、
 `GuiTextFormat`、`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
-将业务系统放在 `GuiSystems::Respond`，插件会在本帧 Sync 应用修改并更新 Bevy UI。
+将业务系统放在 `GuiSystems::Respond`，插件在推进动画前应用修改，并在本帧 Sync 更新 Bevy UI。
 
 ```rust,ignore
 fn update_label(mut labels: Query<&mut GuiText>, target: Entity) {
@@ -1016,7 +1016,25 @@ runtime.store_mut().play_transition_with_options(owner, "t0", TransitionPlayOpti
 起点之前的属性会直接还原，历史音效与起始标签会跳过；已完成补间的结束标签仍可触发。
 正向跳转同时补偿序列帧。`end_time: None` 表示不截断，`reversed: true` 使用反向时间轴。
 
-序列帧和 Loader 的动画通过 `GuiMut` 控制：
+序列帧和 Loader 的播放属性直接修改 `GuiAnimationState`：
+
+```rust,ignore
+fn pause_at_frame(mut animations: Query<&mut GuiAnimationState>, movie: Entity) {
+    if let Ok(mut animation) = animations.get_mut(movie) {
+        animation.playing = false;
+        animation.frame = 3;
+        animation.time_scale = 2.0;
+    }
+}
+```
+
+Respond 中的暂停在本帧动画推进前生效；只修改速度或播放开关会保留当前帧及其计时。
+未编辑的字段跟随播放器、控制器和过渡变化，连续播放不会被旧快照反复跳回。
+可在等待资产的根拥有者上挂载 `GuiAnimationState::new(false, 3, 2.0)` 设置初始属性；
+其默认值为播放开启、第 0 帧、1 倍速度。`frame_count()` 和 `is_ended()` 保持只读。
+Loader 的 URL 改变后，旧播放器的帧数和结束状态不会用于新 URL。
+
+分段播放、时间补偿和回到开头等操作通过 `GuiMut` 调用：
 
 ```rust,ignore
 gui_edit.edit(movie, |object: &mut GuiObjectMut| object.set_animation_play_settings(GuiAnimationPlaySettings { start: 1, end: 3, times: 2, end_at: 2 }));

@@ -10,7 +10,7 @@ fn completed(event: On<GuiAnimationComplete>, gui: GuiQuery, mut records: ResMut
         .0
         .push((event.entity, *gui.animation(event.entity).unwrap()));
 }
-fn fixture(item: &str, delayed: bool) -> (App, Entity, Handle<FuiAsset>, FuiAsset) {
+pub(super) fn fixture(item: &str, delayed: bool) -> (App, Entity, Handle<FuiAsset>, FuiAsset) {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
@@ -70,7 +70,7 @@ fn fixture(item: &str, delayed: bool) -> (App, Entity, Handle<FuiAsset>, FuiAsse
         },
     )
 }
-fn send(app: &mut App, entity: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
+pub(super) fn send(app: &mut App, entity: Entity, action: impl FnOnce(&mut crate::GuiObjectMut)) {
     action(
         &mut app
             .world_mut()
@@ -78,14 +78,14 @@ fn send(app: &mut App, entity: Entity, action: impl FnOnce(&mut crate::GuiObject
             .expect("GUI object must be ready"),
     );
 }
-fn view(app: &App, owner: Entity) -> Entity {
+pub(super) fn view(app: &App, owner: Entity) -> Entity {
     app.world().get::<GuiRootView>(owner).unwrap().0
 }
-fn state(app: &mut App, entity: Entity) -> GuiAnimationState {
+pub(super) fn state(app: &mut App, entity: Entity) -> GuiAnimationState {
     let mut queries = SystemState::<GuiQuery>::new(app.world_mut());
     *queries.get(app.world()).unwrap().animation(entity).unwrap()
 }
-fn assert_painted_frame(app: &App, entity: Entity) {
+pub(super) fn assert_painted_frame(app: &App, entity: Entity) {
     let player = app.world().get::<MovieClipPlayer>(entity).unwrap();
     let frame = player.current().unwrap();
     let image = app

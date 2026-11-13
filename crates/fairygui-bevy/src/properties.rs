@@ -7,6 +7,8 @@ pub(crate) trait Property:
     Component<Mutability = bevy::ecs::component::Mutable> + Clone + PartialEq
 {
     fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self>;
+    /// Add read-only metadata owned by the materialized ECS view.
+    fn read_view(&mut self, _world: &World, _object: GObjectId) {}
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId);
 }
 
@@ -32,6 +34,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiDisplay>(world);
     sync_property::<GuiText>(world);
     sync_property::<GuiIcon>(world);
+    sync_property::<GuiAnimationState>(world);
     sync_property::<GuiButtonSelected>(world);
     sync_property::<GuiSliderState>(world);
     sync_property::<GuiSliderValue>(world);
@@ -40,7 +43,13 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiComboBoxState>(world);
 }
 
-fn sync_property<T: Property>(world: &mut World) {
+fn snapshot<T: Property>(world: &World, object: GObjectId) -> Option<T> {
+    let mut value = T::read(world.non_send::<GuiRuntime>(), object)?;
+    value.read_view(world, object);
+    Some(value)
+}
+
+pub(crate) fn sync_property<T: Property>(world: &mut World) {
     let entities: Vec<_> = world
         .query_filtered::<Entity, Or<(With<GObjectRef>, With<T>)>>()
         .iter(world)
@@ -53,7 +62,7 @@ fn sync_property<T: Property>(world: &mut World) {
             .or_else(|| runtime.ecs_root_object(entity))
             .or_else(|| runtime.ecs_window_object(entity));
         let Some(object) = object else { continue };
-        let Some(native) = T::read(runtime, object) else {
+        let Some(native) = snapshot::<T>(world, object) else {
             world.entity_mut(entity).remove::<(T, NativeValue<T>)>();
             continue;
         };
@@ -73,7 +82,7 @@ fn sync_property<T: Property>(world: &mut World) {
                 object,
             );
         }
-        let next = T::read(world.get_non_send::<GuiRuntime>().unwrap(), object).unwrap_or(native);
+        let next = snapshot::<T>(world, object).unwrap_or(native);
         if value.as_ref() != Some(&next) {
             world.entity_mut(entity).insert(next.clone());
         }

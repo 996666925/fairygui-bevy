@@ -22,6 +22,7 @@ fn click(
     event: On<GuiEvent>,
     controls: Query<&Controls>,
     mut results: ResMut<Results>,
+    mut animations: Query<&mut GuiAnimationState>,
     mut objects: GuiMut,
 ) {
     if event.event.kind != fairygui_core::object::EventKind::Click {
@@ -32,37 +33,37 @@ fn click(
     };
     results.clicks += 1;
     for entity in controls.0 {
-        let Some(mut object) = objects.get_mut(entity) else {
+        let Ok(mut animation) = animations.get_mut(entity) else {
             continue;
         };
         if results.clicks == 1 {
-            object.set_animation_playing(false);
-            object.set_animation_frame(1);
+            animation.playing = false;
+            animation.frame = 1;
         } else {
-            object.set_animation_playing(true);
-            object.set_animation_time_scale(100.);
-            object.set_animation_play_settings(GuiAnimationPlaySettings {
-                start: 1,
-                end: 2,
-                times: 1,
-                end_at: 3,
-            });
+            animation.playing = true;
+            animation.time_scale = 100.;
+            objects
+                .get_mut(entity)
+                .unwrap()
+                .set_animation_play_settings(GuiAnimationPlaySettings {
+                    start: 1,
+                    end: 2,
+                    times: 1,
+                    end_at: 3,
+                });
         }
     }
 }
 fn completed(
     event: On<GuiAnimationComplete>,
-    gui: GuiQuery,
+    mut animations: Query<&mut GuiAnimationState>,
     mut results: ResMut<Results>,
-    mut objects: GuiMut,
 ) {
-    let state = gui.animation(event.entity).unwrap();
+    let mut state = animations.get_mut(event.entity).unwrap();
     assert!(state.is_ended() && state.is_playing());
     assert_eq!(state.frame(), 3);
     results.completed.push((event.entity, state.frame()));
-    objects.edit(event.entity, |object: &mut GuiObjectMut| {
-        object.set_animation_playing(false)
-    });
+    state.playing = false;
 }
 
 pub(super) fn install(app: &mut App) {
@@ -173,7 +174,7 @@ fn drive(
                 let current = gui.animation(entity).unwrap();
                 assert!(
                     !current.is_playing(),
-                    "completion observer's command must apply"
+                    "completion observer's component edit must apply"
                 );
                 assert!(current.is_ended());
                 assert_eq!(current.frame(), 3);
@@ -240,7 +241,7 @@ fn drive(
             );
             assert_eq!(results.completed.len(), 2);
             println!(
-                "demo smoke PASSED: ECS animation button observers, pause/frame, finite direct and Loader playback, entity completion with final snapshots, callback commands, rendered terminal frame, retained Loader source replacement and disposal"
+                "demo smoke PASSED: writable ECS animation properties through actual button observers, pause/frame/speed, finite direct and Loader playback, current completion metadata, callback component edits, rendered terminal frame, retained Loader source replacement and disposal"
             );
             exit.write(AppExit::Success);
             next = true;
