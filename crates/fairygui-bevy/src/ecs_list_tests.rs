@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand, GuiRootInstance,
-    GuiText, GuiTransform,
+    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand, GuiQuery,
+    GuiRootInstance, GuiSystems, GuiText, GuiTransform,
 };
 use fairygui_core::package::{FuiPackage, ObjectType};
 
@@ -44,6 +44,40 @@ fn config(count: usize) -> GuiVirtualList {
     })
 }
 
+fn assert_list_snapshot(app: &App, list: GObjectId, view: Entity) {
+    let runtime = app.world().non_send::<GuiRuntime>();
+    let store = runtime.store();
+    let state = app.world().get::<GuiListState>(view).unwrap();
+    assert_eq!(state.item_count(), store.list_num_items(list));
+    assert_eq!(
+        state.first_item_in_view(),
+        store.list_first_item_in_view(list)
+    );
+    let items = store.list_items(list).unwrap();
+    assert_eq!(
+        state.items(),
+        items
+            .iter()
+            .map(|&id| runtime.entity_of(id).unwrap())
+            .collect::<Vec<_>>()
+    );
+    for (child_index, &item) in items.iter().enumerate() {
+        let row = app
+            .world()
+            .get::<GuiListRow>(runtime.entity_of(item).unwrap())
+            .unwrap();
+        assert_eq!(row.list(), view);
+        assert_eq!(
+            row.index(),
+            store.virtual_item_index(list, item).unwrap_or(child_index)
+        );
+        assert_eq!(
+            row.record_index(),
+            store.virtual_item_record_index(list, item)
+        );
+    }
+}
+
 #[test]
 fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measurement() {
     let (mut app, owner, list, view) = fixture(
@@ -53,6 +87,7 @@ fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measureme
     );
     app.world_mut().entity_mut(view).insert(config(1000));
     app.update();
+    assert_list_snapshot(&app, list, view);
     let info = *app
         .world()
         .get::<GuiVirtualListState>(view)
@@ -105,6 +140,7 @@ fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measureme
         .unwrap()
         .last_changed();
     app.update();
+    assert_list_snapshot(&app, list, view);
     assert_eq!(
         app.world()
             .entity(view)
@@ -121,6 +157,7 @@ fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measureme
         },
     ));
     app.update();
+    assert_list_snapshot(&app, list, view);
     assert_eq!(
         app.world()
             .non_send::<GuiRuntime>()
@@ -147,6 +184,7 @@ fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measureme
             row.set_text(&labels[index])
         }));
     app.update();
+    assert_list_snapshot(&app, list, view);
     assert_eq!(
         app.world()
             .get::<GuiVirtualListState>(view)
@@ -219,6 +257,11 @@ fn ecs_list_removal_drops_callback_clears_rows_and_reinsertion_reuses_the_pool()
     app.world_mut().entity_mut(view).remove::<GuiVirtualList>();
     app.update();
     assert!(weak.upgrade().is_none());
+    assert_list_snapshot(&app, list, view);
+    for &row in &rows {
+        let entity = app.world().non_send::<GuiRuntime>().entity_of(row).unwrap();
+        assert!(app.world().get::<GuiListRow>(entity).is_none());
+    }
     assert!(app.world().get::<GuiVirtualListState>(view).is_none());
     assert_eq!(
         app.world()
@@ -229,6 +272,7 @@ fn ecs_list_removal_drops_callback_clears_rows_and_reinsertion_reuses_the_pool()
     );
     app.world_mut().entity_mut(view).insert(config(5));
     app.update();
+    assert_list_snapshot(&app, list, view);
     assert!(
         app.world()
             .non_send::<GuiRuntime>()
@@ -282,6 +326,7 @@ fn ecs_list_loop_mode_uses_logical_indices_and_rejects_mode_changes_without_repl
         .looping(),
     );
     app.update();
+    assert_list_snapshot(&app, list, view);
     let info = *app
         .world()
         .get::<GuiVirtualListState>(view)
@@ -351,4 +396,150 @@ fn ecs_list_configuration_errors_are_visible_and_do_not_change_unsupported_contr
             .kind(),
         ObjectType::Graph
     );
+}
+
+#[test]
+fn ecs_list_rows_track_ordinary_membership_order_and_unchanged_ticks() {
+    let (mut app, _owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    assert_list_snapshot(&app, list, view);
+    let row = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let row = runtime.store_mut().create(ObjectType::Button);
+        runtime.store_mut().set_parent(row, Some(list));
+        runtime.queue_subtree(row);
+        row
+    };
+    app.update();
+    assert_list_snapshot(&app, list, view);
+    let entity = app.world().non_send::<GuiRuntime>().entity_of(row).unwrap();
+    assert!(
+        app.world()
+            .get::<GuiListRow>(entity)
+            .unwrap()
+            .record_index()
+            .is_none()
+    );
+    let list_tick = app
+        .world()
+        .entity(view)
+        .get_ref::<GuiListState>()
+        .unwrap()
+        .last_changed();
+    let row_tick = app
+        .world()
+        .entity(entity)
+        .get_ref::<GuiListRow>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(view)
+            .get_ref::<GuiListState>()
+            .unwrap()
+            .last_changed(),
+        list_tick
+    );
+    assert_eq!(
+        app.world()
+            .entity(entity)
+            .get_ref::<GuiListRow>()
+            .unwrap()
+            .last_changed(),
+        row_tick
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(row, None);
+    app.update();
+    assert_list_snapshot(&app, list, view);
+    assert!(app.world().get::<GuiListRow>(entity).is_none());
+}
+
+#[test]
+fn ecs_post_layout_sees_rebound_rows_and_projects_commands_in_the_same_frame() {
+    #[derive(Component)]
+    struct Carousel;
+    #[derive(Resource, Default)]
+    struct Seen(Vec<(Entity, usize)>);
+    fn decorate(
+        gui: GuiQuery,
+        lists: Query<(Entity, &GuiListState), With<Carousel>>,
+        rows: Query<&GuiListRow>,
+        mut seen: ResMut<Seen>,
+        mut commands: Commands,
+    ) {
+        seen.0.clear();
+        for (entity, list) in &lists {
+            assert_eq!(gui.list(entity), Some(list));
+            for &row in list.items() {
+                let binding = rows.get(row).unwrap();
+                assert_eq!(binding.list(), entity);
+                assert!(gui.transform(row).is_some());
+                seen.0.push((row, binding.index()));
+                commands.write_message(GuiObjectCommand::new(
+                    row,
+                    GuiObjectAction::SetScale(Vec2::splat(1.2)),
+                ));
+                commands.write_message(GuiObjectCommand::new(
+                    row,
+                    GuiObjectAction::SetText(format!("index {}", binding.index())),
+                ));
+            }
+        }
+    }
+    let (mut app, _owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.init_resource::<Seen>()
+        .add_systems(Update, decorate.in_set(GuiSystems::PostLayout));
+    app.world_mut()
+        .entity_mut(view)
+        .insert((Carousel, config(1000)));
+    app.update();
+    let before = app.world().resource::<Seen>().0.clone();
+    assert!(!before.is_empty());
+    app.world_mut().write_message(GuiObjectCommand::new(
+        view,
+        GuiObjectAction::SelectListIndex {
+            index: 500,
+            scroll_to_view: true,
+        },
+    ));
+    app.update();
+    assert_list_snapshot(&app, list, view);
+    let after = &app.world().resource::<Seen>().0;
+    assert!(after.iter().all(|&(_, index)| index > 400));
+    assert!(after.iter().any(|&(entity, index)| {
+        before
+            .iter()
+            .any(|&(old, old_index)| old == entity && old_index != index)
+    }));
+    for &(entity, index) in after {
+        assert_eq!(
+            app.world().get::<GuiText>(entity).unwrap().value(),
+            format!("index {index}")
+        );
+        assert_eq!(
+            app.world().get::<GuiTransform>(entity).unwrap().scale(),
+            Vec2::splat(1.2)
+        );
+        let object = app.world().get::<GObjectRef>(entity).unwrap().0;
+        assert_eq!(
+            app.world()
+                .non_send::<GuiRuntime>()
+                .store()
+                .object(object)
+                .unwrap()
+                .scale_x(),
+            1.2
+        );
+    }
 }

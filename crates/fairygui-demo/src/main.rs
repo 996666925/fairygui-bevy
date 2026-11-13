@@ -132,9 +132,7 @@ fn main() -> AppExit {
     .add_systems(Startup, setup_camera)
     .add_systems(
         Update,
-        loop_list_demo::update
-            .after(GuiSystems::Advance)
-            .before(GuiSystems::Sync),
+        loop_list_demo::update.in_set(GuiSystems::PostLayout),
     )
     .add_systems(
         Update,
@@ -293,7 +291,6 @@ fn open_pending_demo(
     windows: Query<&Window>,
     gui: GuiQuery,
     roots: Query<&GuiRootInstance>,
-    mut runtime: NonSendMut<GuiRuntime>,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
@@ -321,7 +318,12 @@ fn open_pending_demo(
         {
             commands.entity(list).insert(demos::mail_list_config());
         } else if name == "LoopList" {
-            loop_list_demo::initialize(&mut runtime, root);
+            loop_list_demo::initialize(
+                &mut commands,
+                &gui,
+                owner,
+                &assets.get(&handle).unwrap().package,
+            );
         }
         if name == "Basics"
             && let Some(back) = gui.find_by_name(owner, "btn_Back")

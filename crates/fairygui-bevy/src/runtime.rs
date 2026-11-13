@@ -472,6 +472,8 @@ pub struct GuiRuntime {
     entities: HashMap<GObjectId, Entity>,
     roots: Vec<GuiRoot>,
     ecs_roots: HashMap<Entity, EcsRootBinding>,
+    object_command_cursor: bevy::ecs::message::MessageCursor<GuiObjectCommand>,
+    pending_object_commands: Vec<(FairyGuiRoot, GuiObjectCommand)>,
     /// 已派发但尚未被取走的事件。
     events: fairygui_core::object::EventQueue,
     links: Vec<fairygui_core::object::UiEvent>,
@@ -1879,25 +1881,36 @@ pub fn emit_gui_events(
     }
 }
 
-/// Apply entity-addressed model changes in `GuiSystems::Sync`, before the
-/// authoritative properties are projected back onto Bevy UI components.
-pub fn apply_object_commands(
-    mut commands: MessageReader<GuiObjectCommand>,
-    objects: Query<&GObjectRef>,
-    roots: Query<&GuiRootInstance>,
-    sources: Query<&FairyGuiRoot>,
+pub(crate) fn discard_removed_object_commands(
     mut removed: RemovedComponents<FairyGuiRoot>,
-    mut pending: Local<Vec<(FairyGuiRoot, GuiObjectCommand)>>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     for target in removed.read() {
-        pending.retain(|(_, command)| command.target != target);
+        runtime
+            .pending_object_commands
+            .retain(|(_, command)| command.target != target);
     }
-    let waiting = std::mem::take(&mut *pending);
+}
+
+/// Both Sync passes share their cursor and pending requests. Commands sent in
+/// PostLayout apply this frame without replaying commands from Respond.
+pub(crate) fn apply_object_commands(
+    messages: Res<Messages<GuiObjectCommand>>,
+    objects: Query<&GObjectRef>,
+    roots: Query<&GuiRootInstance>,
+    sources: Query<&FairyGuiRoot>,
+    mut runtime: NonSendMut<GuiRuntime>,
+) {
+    let incoming = runtime
+        .object_command_cursor
+        .read(&messages)
+        .cloned()
+        .collect::<Vec<_>>();
+    let waiting = std::mem::take(&mut runtime.pending_object_commands);
     for (expected, command) in waiting
         .into_iter()
         .map(|(source, command)| (Some(source), command))
-        .chain(commands.read().cloned().map(|command| (None, command)))
+        .chain(incoming.into_iter().map(|command| (None, command)))
     {
         let source = sources.get(command.target).ok();
         if let Some(expected) = expected
@@ -1918,7 +1931,9 @@ pub fn apply_object_commands(
                     .get(&command.target)
                     .is_some_and(|binding| binding.failed)
             {
-                pending.push((source.clone(), command));
+                runtime
+                    .pending_object_commands
+                    .push((source.clone(), command));
             }
             continue;
         };

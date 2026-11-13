@@ -270,6 +270,18 @@ if let Some(list) = gui.child_by_name(root_entity, "mailList") {
 移除组件会清空逻辑行、释放回调，原生行池保留至列表拥有者销毁；重新挂组件可复用
 池中的对象和视图。控件的创建、渲染器配置和行视图生成都由插件执行。
 
+所有列表及树控件上的 `GuiListState` 提供逻辑条目数、当前实体行 `items()` 和
+`first_item_in_view()`；行实体上的 `GuiListRow` 提供所属列表、当前逻辑索引和虚拟
+记录索引。滚动条、刷新头尾和池中行不属于当前实体行；同一行实体复用时索引自动
+更新，归池时移除 `GuiListRow`。也可通过 `gui.list(root_or_view)` 查询列表状态。
+
+依赖本帧列表布局的装饰系统可放入 `GuiSystems::PostLayout`。这是 Sync 内部的
+阶段：原生列表刷新、行视图创建后，插件先更新逻辑层级、几何、文本、滚动及列表
+快照，再运行业务系统，最后应用其 `GuiObjectCommand` 并投影视图。循环列表示例
+在此查询实际行并发送缩放和序号文本命令，业务不借用 `GuiRuntime`。
+该阶段早于 Bevy 的 PostUpdate 布局及文本测量；改变可见范围或行生成的配置应在
+`Respond` 修改，使本帧原生列表布局能使用它们。
+
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
 会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长和分页阈值。
 导出包显式设置的显示方式及触摸/回弹开关优先。配置在创建时捕获，修改资源影响

@@ -65,6 +65,23 @@ preserving the existing renderer. Business systems update the component or mark
 it changed when captured/shared data changes; ordinary frame refreshes reuse rows
 and do not re-run the renderer unless native layout requests it.
 
+`GuiListState` is projected for ordinary lists, virtual lists and trees. It exposes
+the logical count, materialized row entities in native child order, and the native
+first item in view. Pane overlays and pooled rows are excluded. `GuiListRow` gives
+each active row its list entity, logical index and optional virtual record index.
+Recycling changes the binding on the same entity; pooling removes membership.
+Unchanged list and row snapshots preserve their change ticks.
+
+`GuiSystems::PostLayout` is nested inside Sync, between native list refresh/view
+spawning and final property projection. Fresh hierarchy, geometry, text, display,
+scroll and list snapshots are available there. Application decorators can query
+the actual retained rows and send scale/text commands for the current frame; the
+carousel demo uses this path without borrowing the runtime. Both object-command
+passes share one cursor and pending-root queue, so early commands are not replayed
+and playback generations/one-shot effects remain unique. Changes that influence
+the virtual range or row creation belong in Respond, before native layout.
+PostLayout precedes Bevy PostUpdate layout and text measurement.
+
 ## Frame contract
 
 Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these ordered
@@ -74,7 +91,7 @@ Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these
 2. `GuiSystems::Publish`: refresh text/display/scroll snapshots, trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
 3. `GuiSystems::Respond`: application systems consume messages and send UI commands.
 4. `GuiSystems::Advance`: advance builds, scrolling, transitions and animations.
-5. `GuiSystems::Sync`: reconcile ECS root ownership, apply commands, spawn pending views, synchronize state components and play sounds.
+5. `GuiSystems::Sync`: reconcile ECS root ownership, apply commands, spawn pending views, refresh logical snapshots, run the nested `PostLayout` application set, apply its object commands, synchronize final state components and play sounds.
 
 Application changes in `Respond` reach view synchronization in the same frame.
 Bevy layout still runs later; hit geometry and text measurements reflect the last

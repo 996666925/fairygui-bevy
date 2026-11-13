@@ -49,6 +49,67 @@ fn take(app: &mut App) -> Vec<GuiTransitionComplete> {
 }
 
 #[test]
+fn ecs_post_layout_commands_share_one_cursor_and_do_not_replay_early_commands() {
+    #[derive(Resource)]
+    struct Target(Entity);
+    fn play(target: Res<Target>, mut once: Local<bool>, mut commands: Commands) {
+        if !*once {
+            *once = true;
+            commands.write_message(GuiObjectCommand::new(
+                target.0,
+                GuiObjectAction::PlayTransitionWithOptions {
+                    name: "t0".into(),
+                    options: TransitionPlayOptions {
+                        end_time: Some(0.),
+                        ..Default::default()
+                    },
+                },
+            ));
+        }
+    }
+    let (mut app, owner, view) = fixture("PowerUp");
+    let initial = app
+        .world()
+        .get::<GuiTransitions>(view)
+        .unwrap()
+        .get("t0")
+        .unwrap()
+        .play_generation();
+    app.insert_resource(Target(owner))
+        .add_systems(Update, play.in_set(crate::GuiSystems::PostLayout));
+    send(
+        &mut app,
+        owner,
+        GuiObjectAction::PlayTransitionWithOptions {
+            name: "t0".into(),
+            options: TransitionPlayOptions {
+                end_time: Some(0.),
+                ..Default::default()
+            },
+        },
+    );
+    app.update();
+    let done = take(&mut app);
+    assert_eq!(
+        done.iter()
+            .map(|done| done.play_generation)
+            .collect::<Vec<_>>(),
+        vec![initial + 1, initial + 2]
+    );
+    app.update();
+    assert!(take(&mut app).is_empty());
+    assert_eq!(
+        app.world()
+            .get::<GuiTransitions>(view)
+            .unwrap()
+            .get("t0")
+            .unwrap()
+            .play_generation(),
+        initial + 2
+    );
+}
+
+#[test]
 fn ecs_transition_completion_captures_immediate_playbacks_and_preserves_each_generation() {
     let (mut app, owner, view) = fixture("PowerUp");
     let mut query = SystemState::<GuiQuery>::new(app.world_mut());

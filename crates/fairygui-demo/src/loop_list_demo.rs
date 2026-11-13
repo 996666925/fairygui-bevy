@@ -1,62 +1,84 @@
-//! Original five-icon loop carousel and its scroll-time scale/label behavior.
-use super::*;
+//! Original five-icon loop carousel, driven by ECS list and scroll snapshots.
+use bevy::prelude::*;
+use fairygui_bevy::prelude::*;
+use fairygui_core::package::FuiPackage;
 
-pub fn initialize(runtime: &mut GuiRuntime, root: GObjectId) {
-    let list = runtime
-        .store()
-        .child_by_name(root, "list")
-        .expect("LoopList list");
-    let icons: Vec<_> = (1..=5)
-        .map(|i| {
-            runtime
-                .registry()
-                .item_url("LoopList", &format!("n{i}"))
-                .expect("LoopList icon")
-        })
-        .collect();
-    runtime
-        .enable_loop_virtual_list(list, move |store, index, row| {
-            store.set_pivot(row, 0.5, 0.5, false);
-            store.apply_icon_to(row, &icons[index]);
-        })
-        .expect("LoopList template");
-    runtime
-        .set_virtual_item_count(list, 5)
-        .expect("LoopList renderer");
+#[derive(Component)]
+pub(crate) struct Carousel {
+    label: Entity,
 }
 
-pub fn update(mut runtime: NonSendMut<GuiRuntime>, controller: Res<demos::DemoController>) {
-    if controller.package.as_deref() != Some("LoopList") {
-        return;
-    }
-    let Some(root) = controller.root else {
-        return;
+pub fn initialize(
+    commands: &mut Commands,
+    gui: &GuiQuery,
+    root: Entity,
+    package: &FuiPackage,
+) -> bool {
+    let Some((list, label)) = gui
+        .child_by_name(root, "list")
+        .zip(gui.child_by_name(root, "n3"))
+    else {
+        return false;
     };
-    let Some(list) = runtime.store().child_by_name(root, "list") else {
-        return;
-    };
-    runtime
-        .refresh_virtual_list(list)
-        .expect("LoopList scroll renderer");
-    let pane = runtime.store().scroll_pane(list).unwrap();
-    let mid = pane.pos().x + pane.view_size().width / 2.;
-    for row in runtime.store().list_items(list).unwrap() {
-        let o = runtime.store().object(row).unwrap();
-        let distance = (mid - o.x() - o.width() / 2.).abs();
-        let scale = if distance > o.width() {
-            1.
-        } else {
-            1. + (1. - distance / o.width()) * 0.24
-        };
-        runtime.store_mut().set_scale(row, scale, scale);
-    }
-    let count = runtime.store().list_num_items(list);
-    if count > 0
-        && let Some(first) = runtime.store().list_first_item_in_view(list)
-        && let Some(label) = runtime.store().child_by_name(root, "n3")
-    {
-        runtime
-            .store_mut()
-            .set_object_text(label, &((first + 1) % count).to_string());
+    let icons: Vec<_> = (1..=5)
+        .map(|index| {
+            let item = package
+                .item(
+                    package
+                        .item_index_by_name(&format!("n{index}"))
+                        .expect("LoopList icon"),
+                )
+                .unwrap();
+            format!("ui://{}{}", package.id(), item.id)
+        })
+        .collect();
+    commands.entity(list).insert((
+        Carousel { label },
+        GuiVirtualList::new(icons.len(), move |index, row| {
+            row.set_pivot(Vec2::splat(0.5), false);
+            row.set_icon(&icons[index]);
+        })
+        .looping(),
+    ));
+    true
+}
+
+/// PostLayout sees this frame's retained rows, indices and logical geometry.
+pub fn update(
+    gui: GuiQuery,
+    lists: Query<(&Carousel, &GuiListState, &GuiScrollState)>,
+    mut commands: MessageWriter<GuiObjectCommand>,
+) {
+    for (carousel, list, scroll) in &lists {
+        let mid = scroll.position().x + scroll.view_size().x / 2.;
+        for &row in list.items() {
+            let Some(transform) = gui.transform(row) else {
+                continue;
+            };
+            let width = transform.size().x;
+            let distance = (mid - transform.position().x - width / 2.).abs();
+            let scale = if width <= 0. || distance > width {
+                1.
+            } else {
+                1. + (1. - distance / width) * 0.24
+            };
+            if transform.scale() != Vec2::splat(scale) {
+                commands.write(GuiObjectCommand::new(
+                    row,
+                    GuiObjectAction::SetScale(Vec2::splat(scale)),
+                ));
+            }
+        }
+        if list.item_count() > 0
+            && let Some(first) = list.first_item_in_view()
+        {
+            let text = ((first + 1) % list.item_count()).to_string();
+            if gui.text(carousel.label) != Some(text.as_str()) {
+                commands.write(GuiObjectCommand::new(
+                    carousel.label,
+                    GuiObjectAction::SetText(text),
+                ));
+            }
+        }
     }
 }

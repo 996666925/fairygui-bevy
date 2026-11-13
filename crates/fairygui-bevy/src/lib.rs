@@ -68,7 +68,7 @@ pub use ecs::{
     GuiTransitionState, GuiTransitions,
 };
 pub use input::{GuiInputSettings, GuiInputState};
-pub use list::{GuiListItem, GuiVirtualList, GuiVirtualListState};
+pub use list::{GuiListItem, GuiListRow, GuiListState, GuiVirtualList, GuiVirtualListState};
 pub use popup::{GuiPopupCommand, GuiPopupMenu, GuiPopupState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -91,6 +91,16 @@ pub enum GuiSystems {
     Respond,
     Advance,
     Sync,
+    /// Inside Sync, after native list layout and row spawning, before projection.
+    /// Read fresh logical snapshots and send same-frame object commands here.
+    /// This precedes Bevy's PostUpdate UI layout and text measurement.
+    PostLayout,
+}
+
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum SyncPhase {
+    Prepare,
+    Project,
 }
 
 /// Common application imports; the existing crate-root API remains supported.
@@ -98,13 +108,13 @@ pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
         GuiButtonSelected, GuiConfig, GuiDisplay, GuiEvent, GuiFont, GuiInputSettings,
-        GuiInputState, GuiLink, GuiListItem, GuiListItemClick, GuiListSelection, GuiLoaderFailure,
-        GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiObjectInfo,
-        GuiPopupCommand, GuiPopupMenu, GuiPopupState, GuiProgressValue, GuiPullRelease, GuiQuery,
-        GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems,
-        GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState,
-        PopupMenuTemplates,
+        GuiInputState, GuiLink, GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection,
+        GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction,
+        GuiObjectCommand, GuiObjectInfo, GuiPopupCommand, GuiPopupMenu, GuiPopupState,
+        GuiProgressValue, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime,
+        GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput, GuiTransform,
+        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
+        GuiTransitions, GuiVirtualList, GuiVirtualListState, PopupMenuTemplates,
     };
 }
 
@@ -138,6 +148,16 @@ impl Plugin for FairyGuiPlugin {
                 GuiSystems::Sync,
             )
                 .chain(),
+        )
+        .configure_sets(
+            Update,
+            (
+                SyncPhase::Prepare,
+                GuiSystems::PostLayout,
+                SyncPhase::Project,
+            )
+                .chain()
+                .in_set(GuiSystems::Sync),
         )
         .add_message::<GuiLink>()
         .add_message::<GuiMenuAction>()
@@ -206,6 +226,19 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 runtime::spawn_pending_roots,
                 runtime::spawn_pending_objects,
+                ecs::sync_gui_objects,
+                ecs::sync_gui_properties,
+                ecs::sync_gui_scroll_state,
+                list::sync_list_state,
+                list::sync_virtual_list_state,
+            )
+                .chain()
+                .in_set(SyncPhase::Prepare),
+        )
+        .add_systems(
+            Update,
+            (
+                runtime::apply_object_commands,
                 runtime::sync_text_inputs,
                 runtime::content::sync_content_layout,
                 (runtime::sync_dirty, runtime::sync_scroll_extents).chain(),
@@ -233,17 +266,18 @@ impl Plugin for FairyGuiPlugin {
                 runtime::play_queued_sounds,
             )
                 .chain()
-                .in_set(GuiSystems::Sync),
+                .in_set(SyncPhase::Project),
         );
         app.add_systems(
             Update,
             (
                 runtime::sync_ecs_roots,
+                runtime::discard_removed_object_commands,
                 runtime::apply_object_commands,
                 popup::apply_popup_commands,
             )
                 .chain()
-                .in_set(GuiSystems::Sync)
+                .in_set(SyncPhase::Prepare)
                 .before(runtime::sync_loader_components),
         );
         app.add_systems(
@@ -259,10 +293,11 @@ impl Plugin for FairyGuiPlugin {
                 runtime::emit_transition_callbacks,
                 runtime::emit_transition_completions,
                 popup::sync_popup_state,
+                list::sync_list_state,
                 list::sync_virtual_list_state,
             )
                 .chain()
-                .in_set(GuiSystems::Sync)
+                .in_set(SyncPhase::Project)
                 .after(runtime::play_queued_sounds),
         );
 

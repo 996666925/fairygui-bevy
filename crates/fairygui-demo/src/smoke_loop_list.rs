@@ -21,6 +21,7 @@ struct State {
     step: u8,
     asset: Option<Handle<FuiAsset>>,
     root: Option<usize>,
+    initialized: bool,
     list: Option<GObjectId>,
     views: Vec<(GObjectId, Entity)>,
     cursor: Option<Vec2>,
@@ -168,6 +169,7 @@ fn drive(
     demo: Res<Demo>,
     mut controller: ResMut<demos::DemoController>,
     mut runtime: NonSendMut<GuiRuntime>,
+    gui: GuiQuery,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     mut windows: Query<(Entity, &mut Window)>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
@@ -203,13 +205,18 @@ fn drive(
     let Some(asset) = assets.get(&handle) else {
         return;
     };
+    if !state.initialized
+        && let Some(root) = state.root.and_then(|index| runtime.root_object(index))
+        && let Some(view) = runtime.entity_of(root)
+    {
+        state.initialized = loop_list_demo::initialize(&mut commands, &gui, view, &asset.package);
+    }
     let elapsed = state.frame - state.since;
     match state.step {
         0 => {
             let index = runtime.create_root(handle, &asset.package, "Main").unwrap();
             center_root(&mut runtime, index, (window.width(), window.height()));
             let root = runtime.root_object(index).unwrap();
-            loop_list_demo::initialize(&mut runtime, root);
             state.root = Some(index);
             state.list = runtime.store().child_by_name(root, "list");
             controller.root = Some(root);
@@ -396,7 +403,7 @@ fn drive(
         _ => {}
     }
     if let Some(list) = state.list
-        && runtime.store().contains(list)
+        && runtime.store().is_virtual_list(list)
     {
         marks(&mut runtime, list);
     }

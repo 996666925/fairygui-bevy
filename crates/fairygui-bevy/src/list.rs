@@ -65,6 +65,53 @@ impl GuiListItem<'_> {
 
 type ItemRenderer = dyn Fn(usize, &mut GuiListItem<'_>) + Send + Sync;
 
+/// Materialized content rows of a native list or tree, in logical child order.
+/// Pane bars and pull headers/footers are excluded. Pooled rows are not active
+/// items, even though their view entities may still exist.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct GuiListState {
+    item_count: usize,
+    items: Vec<Entity>,
+    first_item_in_view: Option<usize>,
+}
+
+impl GuiListState {
+    /// Logical data count; a virtual list may materialize only a few rows.
+    pub fn item_count(&self) -> usize {
+        self.item_count
+    }
+    pub fn items(&self) -> &[Entity] {
+        &self.items
+    }
+    /// Native logical index, accounting for looping and the current display offset.
+    pub fn first_item_in_view(&self) -> Option<usize> {
+        self.first_item_in_view
+    }
+}
+
+/// Current membership of a materialized list row. Removed while the row is
+/// pooled; updated when the same view is rebound to another data index.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuiListRow {
+    list: Entity,
+    index: usize,
+    record_index: Option<usize>,
+}
+
+impl GuiListRow {
+    pub fn list(&self) -> Entity {
+        self.list
+    }
+    pub fn index(&self) -> usize {
+        self.index
+    }
+    /// Internal record in a virtual list, including the six copies in loop mode.
+    /// Ordinary rows have no virtual record.
+    pub fn record_index(&self) -> Option<usize> {
+        self.record_index
+    }
+}
+
 /// Attach to a list view to configure virtual rows through ECS. Only visible rows
 /// are rendered. Change `item_count` or replace the component/renderer to refresh.
 /// Removing it empties the list and drops the callback, retaining the native pool
@@ -206,6 +253,73 @@ pub(crate) fn sync_virtual_list_state(
         };
         if current != Some(&next) {
             commands.entity(entity).insert(next);
+        }
+    }
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn sync_list_state(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    objects: Query<(
+        Entity,
+        &GObjectRef,
+        Option<&GuiListState>,
+        Option<&GuiListRow>,
+    )>,
+) {
+    let store = runtime.store();
+    let mut rows = HashMap::new();
+    for (entity, reference, current, _) in &objects {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let Some(items) = store.list_items(reference.0) else {
+            if current.is_some() {
+                commands.entity(entity).remove::<GuiListState>();
+            }
+            continue;
+        };
+        let items = items
+            .into_iter()
+            .enumerate()
+            .filter_map(|(child_index, object)| {
+                let row = runtime.entity_of(object)?;
+                let record_index = store.virtual_item_record_index(reference.0, object);
+                let index = if store.is_virtual_list(reference.0) {
+                    store.virtual_item_index(reference.0, object)?
+                } else {
+                    child_index
+                };
+                rows.insert(
+                    row,
+                    GuiListRow {
+                        list: entity,
+                        index,
+                        record_index,
+                    },
+                );
+                Some(row)
+            })
+            .collect();
+        let next = GuiListState {
+            item_count: store.list_num_items(reference.0),
+            items,
+            first_item_in_view: store.list_first_item_in_view(reference.0),
+        };
+        if current != Some(&next) {
+            commands.entity(entity).insert(next);
+        }
+    }
+    for (entity, _, _, current) in &objects {
+        match rows.get(&entity) {
+            Some(next) if current != Some(next) => {
+                commands.entity(entity).insert(*next);
+            }
+            None if current.is_some() => {
+                commands.entity(entity).remove::<GuiListRow>();
+            }
+            _ => {}
         }
     }
 }

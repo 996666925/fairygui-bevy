@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use fairygui_core::object::GObject;
 use fairygui_core::package::ObjectType;
 
+use crate::list::GuiListState;
 use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
 
 #[cfg(test)]
@@ -321,6 +322,7 @@ pub struct GuiQuery<'w, 's> {
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
     transitions: Query<'w, 's, &'static GuiTransitions>,
+    lists: Query<'w, 's, &'static GuiListState>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -353,6 +355,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn scroll(&self, entity: Entity) -> Option<&GuiScrollState> {
         self.scrolls.get(self.view(entity)?).ok()
+    }
+
+    pub fn list(&self, entity: Entity) -> Option<&GuiListState> {
+        self.lists.get(self.view(entity)?).ok()
     }
 
     pub fn transitions(&self, entity: Entity) -> Option<&GuiTransitions> {
