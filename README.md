@@ -207,6 +207,21 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 `Empty`、`Loading`、`Ready` 或具体失败原因。URL 改变时不会继续暴露旧 URL 的失败
 结果；状态在 Publish 前、PostLayout 前和 Sync 末尾投影，未变化时保留变更标记。
 
+冒泡的 `GuiEvent.entity` 表示当前接收实体，`target` 是原始目标的视图实体（没有
+对应视图时为 `None`）。可沿 `GuiObjectInfo::parent()` 判断点击是否来自某个子控件，
+无需借用运行时解析原生对象 ID。
+
+嵌套滚动在指针超过本地轴的拖动阈值后选择面板。横纵方向竞争时按主要位移方向
+处理，同方向优先最近面板；取得拖动权后保持到松手。鼠标和触摸使用相同规则。
+`GuiScrollState::is_dragging()` 提供当前状态；
+`GuiInputCommand::CancelScrollDrag(entity)` 取消该面板当前和等待中的指针拖动，
+不产生惯性、吸附或下拉释放，并保留已发起的程序滚动动画。
+
+ScrollPane 示例通过 `GuiVirtualList` 配置 1000 行，竖向拖动列表、横向滑出每行的
+Stick/Delete 按钮。虚拟行重新绑定数据时通过 `GuiListItem::set_scroll_position`
+重置横向位置；点按钮会更新右侧文字，在其他位置按下会收回已展开行，并取消
+展开行与外层列表的拖动。`--smoke-nested-scroll` 验证实际拖动、按钮点击、回收重绑与销毁。
+
 输入框通过 `GuiInputCommand::Focus(entity)` 获取焦点，`Blur` 释放 GUI 输入焦点；
 `GuiInputState::focused_entity()` 返回实际输入框视图实体。`GuiTextInput.entity`
 也指向该输入框，可在 Respond 中响应 Enter 并保留编辑会话：

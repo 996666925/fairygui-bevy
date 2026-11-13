@@ -123,6 +123,7 @@ pub struct GuiScrollState {
     display_percentage: Vec2,
     current_page: IVec2,
     animating: bool,
+    dragging: bool,
     header: Option<GuiPullPart>,
     footer: Option<GuiPullPart>,
     refresh_vertical: Option<bool>,
@@ -131,6 +132,9 @@ pub struct GuiScrollState {
 }
 
 impl GuiScrollState {
+    pub fn is_dragging(&self) -> bool {
+        self.dragging
+    }
     /// Logical endpoint requested by an animated scroll.
     pub fn position(&self) -> Vec2 {
         self.position
@@ -599,6 +603,7 @@ pub(crate) fn sync_gui_scroll_state(
             display_percentage: Vec2::new(pane.display_perc_x(), pane.display_perc_y()),
             current_page: IVec2::new(pane.current_page_x(), pane.current_page_y()),
             animating: pane.is_animating(),
+            dragging: pane.is_dragging(),
             header: part(runtime.store().scroll_header(reference.0)),
             footer: part(runtime.store().scroll_footer(reference.0)),
             refresh_vertical: pane.refresh_axis(),

@@ -152,6 +152,12 @@ pub struct FairyGuiPlugin;
 
 impl Plugin for FairyGuiPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            input::apply_scroll_drag_commands
+                .after(GuiSystems::Respond)
+                .before(GuiSystems::Advance),
+        );
         // Text source snapshots also run in renderer-free apps. Preserve an
         // existing ImagePlugin store; init_asset would replace it if repeated.
         if !app.world().contains_resource::<Assets<Image>>() {
@@ -271,6 +277,7 @@ impl Plugin for FairyGuiPlugin {
                     tree::sync_tree_content,
                     list::sync_virtual_list_bindings,
                     runtime::sync_virtual_lists,
+                    runtime::sync_component_scroll_content,
                 )
                     .chain(),
                 runtime::spawn_pending_roots,
@@ -289,10 +296,16 @@ impl Plugin for FairyGuiPlugin {
         .add_systems(
             Update,
             (
+                input::apply_scroll_drag_commands,
                 runtime::apply_object_commands,
                 runtime::sync_text_inputs,
                 runtime::content::sync_content_layout,
-                (runtime::sync_dirty, runtime::sync_scroll_extents).chain(),
+                (
+                    runtime::sync_component_scroll_content,
+                    runtime::sync_dirty,
+                    runtime::sync_scroll_extents,
+                )
+                    .chain(),
                 (
                     runtime::sync_text_fonts,
                     runtime::sync_input_policy,
@@ -326,6 +339,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_ecs_roots,
                 runtime::windows::sync_ecs_windows,
                 runtime::discard_removed_object_commands,
+                input::apply_scroll_drag_commands,
                 runtime::apply_object_commands,
                 runtime::windows::apply_window_commands,
                 popup::apply_popup_commands,

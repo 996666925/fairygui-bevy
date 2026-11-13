@@ -3098,6 +3098,72 @@ impl ObjectStore {
         self.end_scroll_drag_after(container, 0.)
     }
 
+    pub fn cancel_scroll_drag(&mut self, container: GObjectId) -> bool {
+        let Some(pane) = self
+            .objects
+            .get_mut(container)
+            .and_then(|object| object.control.component_mut())
+            .and_then(|data| data.scroll_pane.as_mut())
+        else {
+            return false;
+        };
+        pane.cancel_dragging();
+        self.pull_releases.retain(|(owner, _)| *owner != container);
+        self.touch(container, dirty::SCROLL);
+        self.sync_scroll_bars(container);
+        true
+    }
+
+    /// GComponent bounds include every direct child, even hidden ones, using
+    /// unrotated actual sizes. Native setBounds rounds the right/bottom edges.
+    /// Lists and trees own their logical content extent through their layout.
+    pub fn layout_component_scroll_content(&mut self, container: GObjectId) -> bool {
+        let Some(object) = self.object(container) else {
+            return false;
+        };
+        if matches!(
+            object.control(),
+            crate::widget::ControlData::List(_) | crate::widget::ControlData::Tree(_)
+        ) || self.scroll_pane(container).is_none()
+        {
+            return false;
+        }
+        let mut right = f32::NEG_INFINITY;
+        let mut bottom = f32::NEG_INFINITY;
+        for child in object
+            .children()
+            .iter()
+            .copied()
+            .filter(|&id| !self.is_scroll_overlay(id))
+        {
+            if let Some(child) = self.object(child) {
+                right = right.max(child.x() + child.width() * child.scale_x().abs());
+                bottom = bottom.max(child.y() + child.height() * child.scale_y().abs());
+            }
+        }
+        let size = crate::geom::Size::new(
+            if right.is_finite() {
+                (right + 0.5).floor().max(0.)
+            } else {
+                0.
+            },
+            if bottom.is_finite() {
+                (bottom + 0.5).floor().max(0.)
+            } else {
+                0.
+            },
+        );
+        self.layout_scroll_bars(container);
+        if self
+            .scroll_pane(container)
+            .is_some_and(|pane| pane.content_size() == size)
+        {
+            return false;
+        }
+        self.update_scroll_content_size(container, size);
+        true
+    }
+
     pub fn end_scroll_drag_after(&mut self, container: GObjectId, idle: f32) -> bool {
         self.prepare_scroll_snapping(container);
         let changed = match self

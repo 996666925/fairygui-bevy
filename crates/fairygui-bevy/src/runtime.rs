@@ -329,6 +329,9 @@ mod resource_tests;
 #[derive(EntityEvent, Debug, Clone)]
 pub struct GuiEvent {
     pub entity: Entity,
+    /// Original control view, independent of the current bubbling recipient.
+    /// None for native notifications whose original object has no view.
+    pub target: Option<Entity>,
     /// Original target, current logical bubbling recipient and pointer payload.
     pub event: fairygui_core::object::UiEvent,
 }
@@ -749,6 +752,7 @@ impl GuiRuntime {
                 self.store.initialize_tree_cells(id);
             }
             self.store.layout_list(id);
+            self.store.layout_component_scroll_content(id);
         }
     }
 
@@ -2025,7 +2029,16 @@ pub fn emit_gui_events(
         }) else {
             continue;
         };
-        commands.trigger(GuiEvent { entity, event });
+        let target = runtime.entity_of(event.target).or_else(|| {
+            entities
+                .iter()
+                .find_map(|(entity, object)| (object.0 == event.target).then_some(entity))
+        });
+        commands.trigger(GuiEvent {
+            entity,
+            target,
+            event,
+        });
     }
 }
 
@@ -3954,11 +3967,30 @@ pub fn sync_gui_font(font: Res<GuiFont>, mut runtime: NonSendMut<GuiRuntime>) {
     }
 }
 
+/// Refresh ordinary component panes after child geometry and ownership changes.
+pub(crate) fn sync_component_scroll_content(mut runtime: NonSendMut<GuiRuntime>) {
+    let panes: Vec<_> = runtime
+        .store()
+        .iter()
+        .filter_map(|(id, object)| {
+            (object
+                .control()
+                .component()
+                .is_some_and(|component| component.scroll_pane.is_some())
+                && !matches!(
+                    object.control(),
+                    ControlData::List(_) | ControlData::Tree(_)
+                ))
+            .then_some(id)
+        })
+        .collect();
+    for pane in panes {
+        runtime.store_mut().layout_component_scroll_content(pane);
+    }
+}
+
 /// 把引擎算出的文本尺寸回填到核心层，驱动自动尺寸策略。
-///
-/// Bevy 的布局与实体生成之间存在一帧延迟，因此这里的尺寸总是「上一帧的结果」。
-/// 这对最终显示没有影响（属性写入后会走既有的增量同步），但意味着
-/// 依赖文本自动尺寸的布局会晚一帧到位。
+/// Bevy 布局与实体生成之间存在一帧延迟，依赖文本自动尺寸的布局会晚一帧到位。
 pub fn sync_text_sizes(
     mut runtime: NonSendMut<GuiRuntime>,
     query: Query<(&GObjectRef, &ComputedNode, Option<&BitmapTextMetrics>)>,

@@ -87,6 +87,7 @@ pub(super) enum Gesture {
         started: bool,
         transform: PointerTransform,
         elapsed: f32,
+        candidates: Option<Vec<(GObjectId, PointerTransform)>>,
     },
 }
 
@@ -96,7 +97,14 @@ impl Gesture {
             Self::None => None,
             Self::Slider(id) => Some(*id),
             Self::Object { owner, .. } => Some(*owner),
-            Self::Grip { container, .. } | Self::Scroll { container, .. } => Some(*container),
+            Self::Grip { container, .. } => Some(*container),
+            Self::Scroll {
+                container,
+                candidates,
+                ..
+            } => candidates
+                .as_ref()
+                .map_or(Some(*container), |panes| panes.first().map(|(id, _)| *id)),
             Self::Window { owner, .. } => runtime.window_index(*owner).map(|_| *owner),
         }
     }
@@ -223,18 +231,120 @@ impl Gesture {
                 };
             }
         }
-        if let Some(container) = scrollable_ancestor(runtime, target) {
-            if occupied.contains(&container) {
-                return Self::None;
+        let mut candidates = Vec::new();
+        let mut current = Some(target);
+        while let Some(id) = current {
+            let Some(object) = runtime.store().object(id) else {
+                break;
+            };
+            if runtime
+                .store()
+                .scroll_pane(id)
+                .is_some_and(|pane| pane.touch_effect)
+                && !occupied.contains(&id)
+            {
+                candidates.push((id, pointer_transform(runtime, id, transforms)));
             }
+            current = object.parent();
+        }
+        if let Some(&(container, transform)) = candidates.first() {
             return Self::Scroll {
                 container,
                 started: false,
-                transform: pointer_transform(runtime, container, transforms),
+                transform,
                 elapsed: 0.,
+                candidates: Some(candidates),
             };
         }
         Self::None
+    }
+
+    /// Hold all eligible ancestor panes until a local axis exceeds sensitivity.
+    /// Opposing nested axes use dominance; ties keep the nearest pane.
+    pub(super) fn select_scroll(
+        &mut self,
+        runtime: &GuiRuntime,
+        displacement: Vec2,
+        sensitivity: f32,
+        occupied: &[GObjectId],
+    ) {
+        let Self::Scroll {
+            container,
+            transform,
+            candidates: Some(candidates),
+            ..
+        } = self
+        else {
+            return;
+        };
+        let available = |id: GObjectId| {
+            !occupied.contains(&id)
+                && eligible(runtime, id)
+                && runtime
+                    .store()
+                    .scroll_pane(id)
+                    .is_some_and(|pane| pane.touch_effect)
+        };
+        let horizontal = candidates.iter().any(|(id, _)| {
+            available(*id)
+                && runtime
+                    .store()
+                    .scroll_pane(*id)
+                    .unwrap()
+                    .scroll_type
+                    .allows_horizontal()
+        });
+        let vertical = candidates.iter().any(|(id, _)| {
+            available(*id)
+                && runtime
+                    .store()
+                    .scroll_pane(*id)
+                    .unwrap()
+                    .scroll_type
+                    .allows_vertical()
+        });
+        let selected = candidates.iter().copied().find(|(id, transform)| {
+            if !available(*id) {
+                return false;
+            }
+            let pane = runtime.store().scroll_pane(*id).unwrap();
+            let delta = transform.displacement(displacement).abs();
+            match pane.scroll_type {
+                fairygui_core::scroll::ScrollType::Horizontal => {
+                    delta.x >= sensitivity && (!vertical || delta.x >= delta.y)
+                }
+                fairygui_core::scroll::ScrollType::Vertical => {
+                    delta.y >= sensitivity && (!horizontal || delta.y >= delta.x)
+                }
+                fairygui_core::scroll::ScrollType::Both => delta.max_element() >= sensitivity,
+            }
+        });
+        if let Some((selected, selected_transform)) = selected {
+            *container = selected;
+            *transform = selected_transform;
+            if let Self::Scroll { candidates, .. } = self {
+                *candidates = None;
+            }
+        }
+    }
+
+    pub(super) fn cancel_scroll(&mut self, target: GObjectId) {
+        if let Self::Scroll {
+            container,
+            candidates,
+            ..
+        } = self
+        {
+            if let Some(candidates) = candidates {
+                candidates.retain(|(id, _)| *id != target);
+                if !candidates.is_empty() {
+                    return;
+                }
+            } else if *container != target {
+                return;
+            }
+            *self = Self::None;
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -340,9 +450,10 @@ impl Gesture {
                 started,
                 transform,
                 elapsed,
+                candidates,
             } => {
                 *elapsed += dt;
-                if !moved {
+                if !moved || candidates.is_some() {
                     return;
                 }
                 let delta = transform.displacement(cursor - if *started { last } else { start });
@@ -420,6 +531,17 @@ impl Gesture {
                 runtime.store().scroll_container_of_bar(*bar) == Some(*container)
                     && runtime.store().scroll_bar_axis(*bar) == Some(*vertical)
             }
+            Self::Scroll {
+                container,
+                candidates: None,
+                ..
+            } => {
+                eligible(runtime, *container)
+                    && runtime
+                        .store()
+                        .scroll_pane(*container)
+                        .is_some_and(|pane| pane.touch_effect)
+            }
             _ => true,
         }
     }
@@ -460,18 +582,6 @@ fn world_scale(runtime: &GuiRuntime, target: GObjectId) -> Vec2 {
         scale.y = 1.0;
     }
     scale
-}
-
-pub(super) fn scrollable_ancestor(runtime: &GuiRuntime, target: GObjectId) -> Option<GObjectId> {
-    let mut current = Some(target);
-    while let Some(id) = current {
-        let object = runtime.store().object(id)?;
-        if runtime.store().scroll_pane(id).is_some() {
-            return Some(id);
-        }
-        current = object.parent();
-    }
-    None
 }
 
 #[cfg(test)]

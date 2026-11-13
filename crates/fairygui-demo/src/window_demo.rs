@@ -102,6 +102,7 @@ mod tests {
             );
             let object = app.world().get::<GObjectRef>(button).unwrap().0;
             app.world_mut().trigger(GuiEvent {
+                target: Some(button),
                 entity: button,
                 event: fairygui_bevy::core::object::UiEvent::new(
                     fairygui_bevy::core::object::EventKind::Click,

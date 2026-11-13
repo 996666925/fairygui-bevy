@@ -5,6 +5,8 @@ pub(crate) mod editing;
 pub use editing::GuiInputCommand;
 mod gestures;
 mod masks;
+#[cfg(test)]
+mod nested_scroll_tests;
 mod touches;
 
 use crate::runtime::{GObjectRef, GuiRuntime};
@@ -224,6 +226,24 @@ pub struct GuiInputState {
     text_press: Option<(Entity, Vec2, f64, u8)>,
 }
 impl GuiInputState {
+    fn gesture_owners(&self, runtime: &GuiRuntime) -> Vec<GObjectId> {
+        self.capture
+            .iter()
+            .map(|capture| &capture.gesture)
+            .chain(self.touches.values().map(|capture| &capture.gesture))
+            .filter_map(|gesture| gesture.owner(runtime))
+            .collect()
+    }
+
+    pub(crate) fn cancel_scroll_drag(&mut self, runtime: &mut GuiRuntime, target: GObjectId) {
+        if let Some(capture) = &mut self.capture {
+            capture.gesture.cancel_scroll(target);
+        }
+        for capture in self.touches.values_mut() {
+            capture.gesture.cancel_scroll(target);
+        }
+        runtime.store_mut().cancel_scroll_drag(target);
+    }
     pub fn hovered(&self) -> Option<GObjectId> {
         self.hovered
     }
@@ -364,12 +384,40 @@ pub fn register(app: &mut App) {
                 .in_set(crate::GuiSystems::Input),
         );
     editing::register(app);
+    app.init_resource::<ScrollCancelCursor>();
     app.add_systems(
         Update,
         masks::sync
             .in_set(crate::GuiSystems::Sync)
             .after(crate::runtime::sync_stage_hierarchy),
     );
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct ScrollCancelCursor(bevy::ecs::message::MessageCursor<GuiInputCommand>);
+
+pub(crate) fn apply_scroll_drag_commands(
+    messages: Res<Messages<GuiInputCommand>>,
+    mut cursor: ResMut<ScrollCancelCursor>,
+    objects: Query<&GObjectRef>,
+    roots: Query<&crate::GuiRootInstance>,
+    mut state: ResMut<GuiInputState>,
+    mut runtime: NonSendMut<GuiRuntime>,
+) {
+    for message in cursor.0.read(&messages) {
+        let GuiInputCommand::CancelScrollDrag(target) = message else {
+            continue;
+        };
+        let object = objects
+            .get(*target)
+            .map(|reference| reference.0)
+            .or_else(|_| roots.get(*target).map(|root| root.object))
+            .ok()
+            .or_else(|| runtime.ecs_window_object(*target));
+        if let Some(object) = object {
+            state.cancel_scroll_drag(&mut runtime, object);
+        }
+    }
 }
 
 /// Shared policy for clicks, wheel input, capture and drop targets.
@@ -689,6 +737,12 @@ fn route_pointer(
                     r.and_then(top_left_position).map(|n| (o.0, n))
                 })
                 .collect::<Vec<_>>();
+            capture.gesture.select_scroll(
+                &runtime,
+                position - capture.start,
+                settings.drag_threshold.max(0.),
+                &state.gesture_owners(&runtime),
+            );
             capture.gesture.update(
                 &mut runtime,
                 position,

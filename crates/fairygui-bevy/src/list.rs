@@ -23,6 +23,13 @@ impl std::fmt::Debug for GuiListItem<'_> {
 }
 
 impl GuiListItem<'_> {
+    /// Reset a retained nested scroll pane when its virtual row is rebound.
+    pub fn set_scroll_position(&mut self, position: Vec2) {
+        if position.is_finite() {
+            self.store
+                .set_scroll_pos(self.object, position.x, position.y, false);
+        }
+    }
     pub fn set_text(&mut self, text: &str) {
         self.store.set_object_text(self.object, text);
     }

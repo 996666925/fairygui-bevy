@@ -179,6 +179,19 @@ impl ScrollPane {
         self.sync_bar_activity();
     }
 
+    /// Release pointer ownership without inertia, snapping or a pull release.
+    /// A separately requested programmatic animation continues normally.
+    pub fn cancel_dragging(&mut self) {
+        self.dragging = false;
+        self.motion.moved = false;
+        self.motion.pending_release = None;
+        self.sync_bar_activity();
+    }
+
+    pub fn is_dragging(&self) -> bool {
+        self.dragging
+    }
+
     /// Local pointer displacement and time since the preceding sample. Zero
     /// displacement represents a stationary hold; it ages velocity at release.
     pub fn drag(&mut self, dx: f32, dy: f32, dt: f32) {

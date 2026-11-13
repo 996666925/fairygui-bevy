@@ -30,6 +30,9 @@ pub enum GuiInputCommand {
     /// Keep the current input session open after its Enter notification.
     /// Send while handling `GuiTextInput` in Respond.
     PreventSubmit(Entity),
+    /// Cancel this pane's pending/active mouse and touch scrolling. No inertia
+    /// or pull release is generated; programmatic scroll animation is preserved.
+    CancelScrollDrag(Entity),
 }
 
 pub(crate) fn apply_input_commands(
@@ -41,6 +44,7 @@ pub(crate) fn apply_input_commands(
     for &message in messages.read() {
         let target = match message {
             GuiInputCommand::Focus(target) | GuiInputCommand::PreventSubmit(target) => target,
+            GuiInputCommand::CancelScrollDrag(_) => continue,
             GuiInputCommand::Blur => {
                 runtime.request_input_focus(None);
                 continue;
@@ -65,7 +69,7 @@ pub(crate) fn apply_input_commands(
             GuiInputCommand::PreventSubmit(_) => {
                 runtime.prevent_input_submit(input);
             }
-            GuiInputCommand::Blur => unreachable!(),
+            GuiInputCommand::Blur | GuiInputCommand::CancelScrollDrag(_) => unreachable!(),
         }
     }
 }

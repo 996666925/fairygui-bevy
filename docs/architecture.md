@@ -40,6 +40,46 @@ The Bevy integration exposes FairyGUI events as Bevy entity events. Applications
 attach observers to the entities they own; there is no numeric click-listener
 registry or compatibility layer for an older API.
 
+GuiEvent.target resolves the original native object to its control view, while
+entity identifies the current logical recipient. Bubbling handlers can inspect
+the target's GuiObjectInfo ancestry without accessing GuiRuntime. Missing original
+views produce None; the native UiEvent remains available for pointer payloads.
+
+Scroll gestures retain eligible, unoccupied ancestor panes until a local axis
+crosses GuiInputSettings.drag_threshold. Opposing horizontal/vertical candidates
+also require that axis to dominate the other local displacement; equal values
+prefer the nearest candidate. Both-axis panes accept either axis. Transforms use
+each pane's inverse UI matrix (with model-scale fallback), including DPI. The
+winner exclusively owns that pane until release; other pointers recheck ownership
+when choosing, while independent panes can scroll simultaneously. A pending
+pointer reserves its nearest candidate, preserving first-press ownership when two
+fingers press the same pane before either crosses the threshold. Outer candidates
+remain available until claimed by a direction that can use them.
+
+CancelScrollDrag is an entity-addressed GuiInputCommand. It removes only the
+specified pane from pending mouse/touch candidates, or releases its active scroll
+gesture, retaining pointer capture and existing click-suppression history. Core
+cancels drag state and pending pull notifications without release inertia/snap;
+programmatic scroll animations remain active. GuiScrollState projects is_dragging.
+Cancelling nested panes and their outer list prevents a closing-row press from
+starting a new scroll during the same held pointer.
+Cancellation runs after Respond before Advance, and before both object-command
+passes (including PostLayout responses). A shared message cursor prevents replay,
+so active-drag cancellation precedes animation setup and release advancement.
+
+Ordinary component panes derive native content size from direct child right/bottom
+edges, including hidden children and absolute scale but excluding pane overlays.
+Empty components produce zero extent. Lists/trees retain their own logical extent.
+Bounds update during subtree preparation and before row snapshots/final projection,
+so newly constructed row panes can actually scroll and dynamic child changes resize
+their limits without relying on Bevy layout.
+
+ScrollPane configures 1000 virtual rows with nested horizontal panes. The renderer
+resets each rebound row with GuiListItem::set_scroll_position. Retained row action
+observers resolve current row text, so pooled view reuse cannot retain a previous
+logical index. The list's MouseDown observer exempts Stick/Delete descendants;
+other presses close one open row and cancel that row/list's pending gestures.
+
 `GuiInputCommand` addresses materialized input views or root/window owners:
 Focus forwards compound titles, Blur releases only GUI text focus, and
 PreventSubmit responds to Enter without ending the editing session. Commands run

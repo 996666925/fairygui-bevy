@@ -6,6 +6,66 @@ use crate::{
 };
 
 #[test]
+fn ordinary_component_scroll_bounds_include_hidden_scaled_children_and_exclude_overlays() {
+    let mut store = ObjectStore::new();
+    let owner = store.create(ObjectType::Button);
+    store.set_size(owner, 100., 80.);
+    let mut pane = ScrollPane::default();
+    pane.scroll_type = ScrollType::Both;
+    store.objects[owner]
+        .control
+        .component_mut()
+        .unwrap()
+        .scroll_pane = Some(pane);
+    let child = store.create(ObjectType::Component);
+    store.set_parent(child, Some(owner));
+    store.set_xy(child, 20.25, 10.75);
+    store.set_size(child, 120., 60.);
+    store.set_scale(child, -2., 3.);
+    store.set_visible(child, false);
+    store.set_rotation(child, 45.);
+    let bar = store.create(ObjectType::ScrollBar);
+    store.set_parent(bar, Some(owner));
+    store.set_xy(bar, 9000., 9000.);
+    store.objects[owner]
+        .control
+        .component_mut()
+        .unwrap()
+        .scroll_pane
+        .as_mut()
+        .unwrap()
+        .vt_bar = Some(bar);
+    assert!(store.layout_component_scroll_content(owner));
+    assert_eq!(
+        store.scroll_pane(owner).unwrap().content_size(),
+        Size::new(260., 191.)
+    );
+    assert!(!store.layout_component_scroll_content(owner));
+    store.set_xy(child, -100., -100.);
+    assert!(store.layout_component_scroll_content(owner));
+    assert_eq!(
+        store.scroll_pane(owner).unwrap().content_size(),
+        Size::new(140., 80.)
+    );
+    store.remove(child);
+    assert!(store.layout_component_scroll_content(owner));
+    assert_eq!(store.scroll_pane(owner).unwrap().content_size(), Size::ZERO);
+    let list = store.create(ObjectType::List);
+    let mut pane = ScrollPane::default();
+    pane.set_content_size(Size::new(100., 5000.));
+    store.objects[list]
+        .control
+        .component_mut()
+        .unwrap()
+        .scroll_pane = Some(pane);
+    assert!(!store.layout_component_scroll_content(list));
+    assert_eq!(
+        store.scroll_pane(list).unwrap().content_size(),
+        Size::new(100., 5000.)
+    );
+}
+
+#[test]
 fn releasing_a_drag_refreshes_snap_geometry_after_child_changes() {
     let mut store = ObjectStore::new();
     let owner = store.create(ObjectType::List);

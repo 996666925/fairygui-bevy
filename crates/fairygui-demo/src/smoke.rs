@@ -10,6 +10,11 @@ use bevy::ui::UiSystems;
 
 #[path = "smoke_bag.rs"]
 mod bag;
+#[path = "smoke_nested_scroll.rs"]
+mod nested_scroll;
+pub(super) fn install_nested_scroll(app: &mut App) {
+    nested_scroll::install(app);
+}
 pub(super) fn install_bag(app: &mut App) {
     bag::install(app);
 }

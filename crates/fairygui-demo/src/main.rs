@@ -18,6 +18,7 @@ mod drag_drop_demo;
 mod loop_list_demo;
 mod modal_wait_demo;
 mod pull_refresh_demo;
+mod scroll_pane_demo;
 mod smoke;
 mod tree_demo;
 mod window_demo;
@@ -165,6 +166,7 @@ fn main() -> AppExit {
             drag_drop_demo::bind,
             tree_demo::bind,
             bag_demo::bind,
+            scroll_pane_demo::bind,
         )
             .chain()
             .after(GuiSystems::Sync),
@@ -177,7 +179,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-bag") {
+    if std::env::args().any(|arg| arg == "--smoke-nested-scroll") {
+        smoke::install_nested_scroll(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-bag") {
         smoke::install_bag(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-tree") {
         smoke::install_tree(&mut app);
