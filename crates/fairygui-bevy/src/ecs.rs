@@ -17,6 +17,9 @@ mod scroll_tests;
 mod space_tests;
 
 #[cfg(test)]
+#[path = "ecs_initialize_tests.rs"]
+mod initialize_tests;
+#[cfg(test)]
 #[path = "ecs_transition_tests.rs"]
 mod transition_tests;
 

@@ -163,8 +163,8 @@ fn main() -> AppExit {
             .chain()
             .in_set(GuiSystems::Respond),
     );
-    // Root geometry is available in Prepare on its creation frame. Position
-    // new pages before Project/Bevy layout instead of waiting for Respond.
+    // Initialize sees fresh root geometry before list preparation. Position
+    // pages and bind their content before the first PostLayout/Bevy layout.
     app.add_systems(
         Update,
         (
@@ -174,7 +174,7 @@ fn main() -> AppExit {
             fit_fullscreen_demo_roots,
         )
             .chain()
-            .in_set(GuiSystems::PostLayout),
+            .in_set(GuiSystems::Initialize),
     );
     app.add_systems(
         Update,
@@ -191,7 +191,8 @@ fn main() -> AppExit {
             joystick_demo::bind,
         )
             .chain()
-            .after(GuiSystems::Sync),
+            .in_set(GuiSystems::Initialize)
+            .after(fit_fullscreen_demo_roots),
     );
 
     // Use the bundled OFL font so CJK demo text renders consistently across hosts.

@@ -11,6 +11,7 @@ struct State {
     titles: HashSet<Entity>,
     cursor: Option<Vec2>,
     page: bool,
+    lists: HashSet<String>,
 }
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>()
@@ -47,6 +48,52 @@ fn inspect(
             continue;
         }
         let transform = gui.transform(owner).unwrap();
+        if source.item_name == "Main"
+            && let Some(path) = source.asset.path()
+        {
+            if path.path().ends_with("ListEffect.fui") {
+                let list = gui.child_by_name(owner, "mailList").unwrap();
+                let content = gui.list(list).expect("configured on the first frame");
+                assert_eq!(content.items().len(), 10);
+                for (index, &row) in content.items().iter().enumerate() {
+                    assert_eq!(gui.text(row), Some("Mail title here"));
+                    assert_eq!(
+                        gui.transition(row, "t0").unwrap().play_generation(),
+                        u64::from(index < 4)
+                    );
+                    assert_eq!(
+                        gui.display(row).unwrap().visible(),
+                        index == 0 || index >= 4
+                    );
+                }
+                state.lists.insert("ListEffect".into());
+            } else if path.path().ends_with("LoopList.fui") {
+                let list = gui.child_by_name(owner, "list").unwrap();
+                let content = gui.list(list).expect("loop rows on the first frame");
+                assert_eq!(content.item_count(), 5);
+                assert!(!content.items().is_empty());
+                assert!(
+                    content
+                        .items()
+                        .iter()
+                        .any(|&row| gui.transform(row).unwrap().scale().x > 1.)
+                );
+                assert!(
+                    content
+                        .items()
+                        .iter()
+                        .all(|&row| gui.icon(row).is_some_and(|icon| !icon.is_empty()))
+                );
+                state.lists.insert("LoopList".into());
+            } else if path.path().ends_with("TreeView.fui") {
+                let tree = gui.child_by_name(owner, "tree2").unwrap();
+                let content = gui.tree(tree).expect("keyed tree on the first frame");
+                assert_eq!(content.nodes().len(), 16);
+                assert!(content.node_by_key("top").is_some());
+                assert!(content.node_by_key("heart").is_some());
+                state.lists.insert("TreeView".into());
+            }
+        }
         let expected = if source.item_name == "CloseButton" {
             viewport - transform.size() - Vec2::splat(10.)
         } else if source.item_name.starts_with("Demo_") {
@@ -144,11 +191,11 @@ fn drive(
             ));
             next = true;
         }
-        1 | 5 | 8 if elapsed >= 4 => {
+        1 | 5 | 8 | 11 | 14 | 17 | 20 | 23 | 26 if elapsed >= 4 => {
             mouse.press(MouseButton::Left);
             next = true;
         }
-        2 | 6 | 9 if elapsed >= 4 => {
+        2 | 6 | 9 | 12 | 15 | 18 | 21 | 24 | 27 if elapsed >= 4 => {
             mouse.release(MouseButton::Left);
             next = true;
         }
@@ -179,9 +226,33 @@ fn drive(
             state.cursor = Some(center(gui.view(demo.close_owner.unwrap()).unwrap()));
             next = true;
         }
-        10 if elapsed >= 8 && demo.open.is_none() => {
+        10 | 16 | 22 if elapsed >= 8 && demo.open.is_none() => {
+            let name = match state.step {
+                10 => "n12",
+                16 => "n5",
+                _ => "n14",
+            };
+            state.cursor = Some(center(
+                gui.child_by_name(demo.menu_owner.unwrap(), name).unwrap(),
+            ));
+            next = true;
+        }
+        13 | 19 | 25 if elapsed >= 8 => {
+            let name = match state.step {
+                13 => "ListEffect",
+                19 => "LoopList",
+                _ => "TreeView",
+            };
+            if !state.lists.contains(name) {
+                return;
+            }
+            state.cursor = Some(center(gui.view(demo.close_owner.unwrap()).unwrap()));
+            next = true;
+        }
+        28 if elapsed >= 8 && demo.open.is_none() => {
+            assert_eq!(state.lists.len(), 3);
             println!(
-                "demo smoke PASSED: first-rendered-frame root/menu/close-button/page placement and fresh text alignment; actual Basics and Button page navigation without settling frames"
+                "demo smoke PASSED: first-rendered-frame root/menu/close-button/page placement and fresh text alignment; immediate ListEffect rows/stagger, LoopList icons/scales and keyed TreeView content through actual menu navigation"
             );
             exit.write(AppExit::Success);
             next = true;

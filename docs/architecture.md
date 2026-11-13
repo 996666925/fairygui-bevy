@@ -5,14 +5,24 @@ Applications own interfaces through `FairyGuiRoot` components, find controls wit
 ordinary Bevy systems. The core object tree executes FairyGUI package semantics
 internally; the plugin projects its state into Bevy UI and read-only ECS components.
 
-Demo root positioning and dynamic-page initialization run in GuiSystems::PostLayout
-on the same frame that Prepare materializes their views. Project consumes these
+Demo root positioning and dynamic-page initialization run in GuiSystems::Initialize
+on the same frame that Materialize creates their views. Prepare consumes these
 commands before Bevy UI layout, avoiding an origin-position flash. New Guide and
 Joystick pages override generic centering with viewport-sized initial geometry.
 Raster text alignment also runs after Bevy's current-frame text/editor measurement:
 it updates Node padding and ComputedNode's physical inset together, before inline
 image projection, clipping and render extraction. This avoids waiting for the next
 layout pass to apply measured text alignment while preserving the hit rectangle.
+
+Sync orders Materialize -> Initialize -> Prepare -> PostLayout -> Project.
+Materialize creates root views and publishes logical hierarchy/geometry/text
+snapshots. Initialize application systems attach observers and list/tree data
+components, and may issue initial geometry commands. Prepare applies those
+commands before reconciling content/virtual lists/trees, spawns their generated
+row views and refreshes snapshots. PostLayout then sees the configured rows on
+their first ready frame; Project consumes final row commands before Bevy layout.
+This also handles delayed assets and replacement on an existing owner without
+requiring a second frame or hiding the page while it initializes.
 
 GuiSpace wraps an opaque core CoordinateTransform on every materialized view.
 The transform retains native f64 matrix composition, anchor-coordinate semantics,

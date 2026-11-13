@@ -14,7 +14,15 @@ fn visible_mail_rows_start_once_with_native_stagger_and_offscreen_rows_remain_un
     .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
         std::time::Duration::from_millis(100),
     ))
+    .add_systems(Update, initialize.in_set(GuiSystems::Initialize))
     .add_systems(Update, play.in_set(GuiSystems::PostLayout));
+    fn initialize(mut commands: Commands, roots: Query<Entity, Added<GuiRootView>>, gui: GuiQuery) {
+        for owner in &roots {
+            if let Some(list) = gui.child_by_name(owner, "mailList") {
+                commands.entity(list).insert((Pending, content()));
+            }
+        }
+    }
     let package = fairygui_bevy::core::FuiPackage::parse(
         "ListEffect",
         include_bytes!("../assets/ui/ListEffect.fui"),
@@ -35,10 +43,8 @@ fn visible_mail_rows_start_once_with_native_stagger_and_offscreen_rows_remain_un
         .unwrap()
         .child_by_name(owner, "mailList")
         .unwrap();
-    app.world_mut()
-        .entity_mut(list)
-        .insert((Pending, content()));
-    app.update();
+    // The very first app.update must already expose the configured rows with
+    // their initial transition state; no unconfigured frame may be rendered.
     let rows = app
         .world()
         .get::<GuiListState>(list)

@@ -116,6 +116,10 @@ pub enum GuiSystems {
     Respond,
     Advance,
     Sync,
+    /// Inside Sync, after root views and logical snapshots exist, before list
+    /// and tree data are prepared. Attach control components and observers here
+    /// to configure newly loaded roots before their first rendered frame.
+    Initialize,
     /// Inside Sync, after native list layout and row spawning, before projection.
     /// Read fresh logical snapshots and send same-frame object commands here.
     /// This precedes Bevy's PostUpdate UI layout and text measurement.
@@ -124,6 +128,7 @@ pub enum GuiSystems {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SyncPhase {
+    Materialize,
     Prepare,
     Project,
 }
@@ -191,6 +196,8 @@ impl Plugin for FairyGuiPlugin {
         .configure_sets(
             Update,
             (
+                SyncPhase::Materialize,
+                GuiSystems::Initialize,
                 SyncPhase::Prepare,
                 GuiSystems::PostLayout,
                 SyncPhase::Project,
@@ -278,8 +285,23 @@ impl Plugin for FairyGuiPlugin {
             (
                 runtime::sync_loader_components,
                 runtime::sync_loader_status,
+                runtime::cleanup_retained_popups,
+                runtime::spawn_pending_roots,
+                ecs::sync_gui_objects,
+                ecs::sync_gui_properties,
+                ecs::sync_gui_icons,
+                ecs::sync_gui_controllers,
+                ecs::sync_gui_scroll_state,
+            )
+                .chain()
+                .in_set(SyncPhase::Materialize),
+        )
+        .add_systems(
+            Update,
+            (
+                input::apply_scroll_drag_commands,
+                runtime::apply_object_commands,
                 (
-                    runtime::cleanup_retained_popups,
                     list::sync_list_content,
                     tree::sync_tree_content,
                     list::sync_virtual_list_bindings,
@@ -287,7 +309,6 @@ impl Plugin for FairyGuiPlugin {
                     runtime::sync_component_scroll_content,
                 )
                     .chain(),
-                runtime::spawn_pending_roots,
                 runtime::spawn_pending_objects,
                 (
                     runtime::sync_movie_sources,
@@ -372,7 +393,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::global_wait::sync_global_wait,
             )
                 .chain()
-                .in_set(SyncPhase::Prepare)
+                .in_set(SyncPhase::Materialize)
                 .before(runtime::sync_loader_components),
         );
         app.add_systems(

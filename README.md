@@ -143,8 +143,8 @@ fn on_menu_button(event: On<GuiEvent>, mut commands: Commands) {
     }
 }
 
-// 在 Sync 后绑定本帧刚创建的控件。
-app.add_systems(Update, bind_menu.after(GuiSystems::Sync));
+// 新根就绪后立即绑定，并在同帧布局前应用业务配置。
+app.add_systems(Update, bind_menu.in_set(GuiSystems::Initialize));
 ```
 
 `child_by_name` 查找直属子节点，`find_by_name` 按 FairyGUI 逻辑顺序递归查找，
@@ -157,7 +157,7 @@ app.add_systems(Update, bind_menu.after(GuiSystems::Sync));
 目标返回 `None`。快照在 PostLayout 前与 Sync 末尾刷新，适合在本帧布局后选择动画行。
 控件上的只读 `GuiObjectInfo` 提供名称、类型、父节点及有序子节点，排除渲染辅助实体，
 隐藏或暂离舞台的控件仍可查询。数据在 `GuiSystems::Sync` 更新；Respond 阶段读取
-上一帧的快照，Sync 后可查询本帧新建的控件。高级模型操作可通过
+上一帧的快照，Initialize 可查询本帧新建的根及其逻辑控件。高级模型操作可通过
 `GuiRootInstance` 获取底层对象 ID 和 root handle。
 
 `GuiTransform` 提供控件的逻辑位置、未缩放尺寸、缩放、轴心、旋转与斜切；
@@ -181,11 +181,14 @@ fn center_root(gui: &GuiQuery, commands: &mut Commands, root: Entity, viewport: 
 可同时配置比例轴心与锚点定位。`GuiFont` 资源也在根构建前同步，首帧和后续动态
 界面会直接使用配置的字体，无需业务系统手工调用 `GuiRuntime::set_font`。
 
-依赖新建视图尺寸的居中和初始化系统放入 `GuiSystems::PostLayout`，该阶段在首次
-创建视图的同一帧执行，命令会赶在 Bevy 布局和渲染之前应用。demo 的菜单、关闭
-按钮、演示页和动态子页使用此阶段完成初始定位。普通文本在 Bevy 完成本帧测量后
+新建视图的绑定和初始配置放入 `GuiSystems::Initialize`：此时根视图、逻辑子控件和
+几何/文本快照已就绪，列表与树的数据尚未准备。此阶段挂载的 `GuiListContent`、
+`GuiVirtualList`、`GuiTreeContent` 会在同帧生成行，随后 `GuiSystems::PostLayout`
+可读取完成布局的行快照并发命令。demo 的菜单、关闭按钮、演示页和动态子页通过
+Initialize 完成初始定位与绑定，首次绘制就使用业务配置。普通文本在 Bevy 完成本帧测量后
 同步逻辑与物理内边距，首批字形就按正确位置绘制；`--smoke-first-frame` 在每个
-视图首次完成布局的帧检查位置和文本对齐，并实际打开 Basics 的 Button 页面。
+视图首次完成布局的帧检查位置和文本对齐，并实际打开 Basics 的 Button 页面、
+ListEffect、LoopList 和 TreeView，检查首帧内容、图标、缩放及动画状态。
 
 `GuiSpace`（`gui.space(entity)`）提供原生逻辑坐标转换，也可直接调用
 `gui.local_to_global`、`global_to_local` 及对应的 `_rect` 方法。转换包含祖先变换、
@@ -475,7 +478,7 @@ observer 可直接查询本次选择和行文本。
 快照，再运行业务系统，最后应用其 `GuiObjectCommand` 并投影视图。循环列表示例
 在此查询实际行并发送缩放和序号文本命令，业务不借用 `GuiRuntime`。
 该阶段早于 Bevy 的 PostUpdate 布局及文本测量；改变可见范围或行生成的配置应在
-`Respond` 修改，使本帧原生列表布局能使用它们。
+`Respond` 或 `Initialize` 修改，使本帧原生列表布局能使用它们。
 
 普通列表可挂 `GuiListContent`，用同一套行接口配置全部数据行：
 
