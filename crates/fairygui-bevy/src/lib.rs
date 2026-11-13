@@ -55,6 +55,7 @@ pub mod ecs;
 mod graph;
 mod image_fill;
 pub mod input;
+pub mod list;
 pub mod movie;
 pub mod popup;
 pub mod runtime;
@@ -67,6 +68,7 @@ pub use ecs::{
     GuiTransitionState, GuiTransitions,
 };
 pub use input::{GuiInputSettings, GuiInputState};
+pub use list::{GuiListItem, GuiVirtualList, GuiVirtualListState};
 pub use popup::{GuiPopupCommand, GuiPopupMenu, GuiPopupState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -96,12 +98,13 @@ pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
         GuiButtonSelected, GuiConfig, GuiDisplay, GuiEvent, GuiFont, GuiInputSettings,
-        GuiInputState, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure,
+        GuiInputState, GuiLink, GuiListItem, GuiListItemClick, GuiListSelection, GuiLoaderFailure,
         GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiObjectInfo,
         GuiPopupCommand, GuiPopupMenu, GuiPopupState, GuiProgressValue, GuiPullRelease, GuiQuery,
         GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems,
         GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, PopupMenuTemplates,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState,
+        PopupMenuTemplates,
     };
 }
 
@@ -197,6 +200,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_loader_status,
                 (
                     runtime::cleanup_retained_popups,
+                    list::sync_virtual_list_bindings,
                     runtime::sync_virtual_lists,
                 )
                     .chain(),
@@ -255,6 +259,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::emit_transition_callbacks,
                 runtime::emit_transition_completions,
                 popup::sync_popup_state,
+                list::sync_virtual_list_state,
             )
                 .chain()
                 .in_set(GuiSystems::Sync)

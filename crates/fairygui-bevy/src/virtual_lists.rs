@@ -38,11 +38,40 @@ impl GuiRuntime {
             renderer: Box::new(renderer),
             provider: Box::new(|_| None),
         };
-        let result = self.render_virtual_rows(list, &mut callbacks, Some(looping));
-        if self.store.is_virtual_list(list) {
+        let result = self.render_virtual_rows(list, &mut callbacks, Some(looping), None);
+        if self.store.is_virtual_list(list)
+            && !matches!(result, Err(VirtualListError::LoopModeMismatch))
+        {
             self.virtual_renderers.insert(list, callbacks);
         }
         result.map(|_| ())
+    }
+
+    pub(crate) fn configure_ecs_virtual_list(
+        &mut self,
+        list: GObjectId,
+        count: usize,
+        looping: bool,
+        renderer: impl FnMut(&mut ObjectStore, usize, GObjectId) + 'static,
+    ) -> Result<(), VirtualListError> {
+        let mut callbacks = VirtualCallbacks {
+            renderer: Box::new(renderer),
+            provider: Box::new(|_| None),
+        };
+        let result = self.render_virtual_rows(list, &mut callbacks, Some(looping), Some(count));
+        if self.store.is_virtual_list(list)
+            && !matches!(result, Err(VirtualListError::LoopModeMismatch))
+        {
+            self.virtual_renderers.insert(list, callbacks);
+        }
+        result.map(|_| ())
+    }
+
+    pub(crate) fn clear_ecs_virtual_list(&mut self, list: GObjectId) {
+        if self.store.is_virtual_list(list) {
+            let _ = self.set_virtual_item_count(list, 0);
+        }
+        self.virtual_renderers.remove(&list);
     }
 
     /// Provider URLs accept the same aliases and cross-package forms as normal
@@ -86,7 +115,7 @@ impl GuiRuntime {
             .virtual_renderers
             .remove(&list)
             .ok_or(VirtualListError::MissingPane)?;
-        let result = self.render_virtual_rows(list, &mut callbacks, None);
+        let result = self.render_virtual_rows(list, &mut callbacks, None, None);
         if self.store.is_virtual_list(list) {
             self.virtual_renderers.insert(list, callbacks);
         }
@@ -98,6 +127,7 @@ impl GuiRuntime {
         list: GObjectId,
         callbacks: &mut VirtualCallbacks,
         enable: Option<bool>,
+        count: Option<usize>,
     ) -> Result<usize, VirtualListError> {
         self.store.layout_scroll_bars(list);
         let object = self.store.object(list).ok_or(VirtualListError::Removed)?;
@@ -165,6 +195,9 @@ impl GuiRuntime {
                     self.store
                         .enable_virtual_list(list, &default_url, &mut factory)?;
                 }
+            }
+            if let Some(count) = count {
+                self.store.set_virtual_item_count(list, count)?;
             }
             self.store.refresh_virtual_list(
                 list,

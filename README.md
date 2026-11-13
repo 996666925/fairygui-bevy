@@ -243,6 +243,33 @@ ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、�
 列表、进度条、滑动条和按钮实体分别带有 `GuiListSelection`、`GuiProgressValue`、
 `GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在同帧 Sync 后反映最新的控件状态；
 状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
+
+虚拟列表可直接在列表视图实体上挂 `GuiVirtualList`，同步行测量由插件负责：
+
+```rust,ignore
+if let Some(list) = gui.child_by_name(root_entity, "mailList") {
+    commands.entity(list).insert(GuiVirtualList::new(1000, |index, row| {
+        row.set_text(&format!("Mail {index}"));
+        row.set_controller_page("IsRead", i32::from(index % 2 == 0));
+        if let Some(mut time) = row.child_by_path("timeText") {
+            time.set_text("5 Nov 2015 16:24:33");
+        }
+    }));
+}
+```
+
+渲染器只处理可见行，`GuiListItem` 可设置文本、图标、控制器、尺寸和轴心，按路径
+访问子控件；尺寸在计算最终可见范围前生效。回调要求 `Send + Sync`，可捕获业务
+数据快照。通过 ECS 修改 `item_count`、`set_renderer` 或替换组件，会刷新当前行；
+数量和渲染器一起修改时，先更新数量，旧索引不会访问新的短数据集。
+外部共享数据更新后也可用 `Mut<GuiVirtualList>::set_changed()` 请求重绘。
+
+`GuiVirtualListState` 提供 `info()` 布局统计和 `error()` 配置错误，Sync 后可读取。
+`.looping()` 使用原生六份循环记录，回调仍接收逻辑索引；普通/循环模式在首次
+初始化后固定，尝试切换会报告 `LoopModeMismatch` 并保留原来的渲染逻辑。
+移除组件会清空逻辑行、释放回调，原生行池保留至列表拥有者销毁；重新挂组件可复用
+池中的对象和视图。控件的创建、渲染器配置和行视图生成都由插件执行。
+
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
 会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长和分页阈值。
 导出包显式设置的显示方式及触摸/回弹开关优先。配置在创建时捕获，修改资源影响

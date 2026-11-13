@@ -15,6 +15,8 @@ mod tests;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum VirtualListError {
+    #[error("virtual list loop mode cannot change after initialization")]
+    LoopModeMismatch,
     #[error("virtual list requires a List with a ScrollPane")]
     MissingPane,
     #[error("loop virtual lists do not support flow layouts")]
@@ -218,8 +220,12 @@ impl ObjectStore {
         looping: bool,
         create: &mut VirtualItemFactory<'_>,
     ) -> Result<(), VirtualListError> {
-        if self.is_virtual_list(list) {
-            return Ok(());
+        if let Some(state) = self.virtual_states.get(&list) {
+            return if state.looping == looping {
+                Ok(())
+            } else {
+                Err(VirtualListError::LoopModeMismatch)
+            };
         }
         let config = self
             .virtual_config(list)

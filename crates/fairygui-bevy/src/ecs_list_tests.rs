@@ -1,0 +1,354 @@
+use super::*;
+use crate::{
+    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiObjectAction, GuiObjectCommand, GuiRootInstance,
+    GuiText, GuiTransform,
+};
+use fairygui_core::package::{FuiPackage, ObjectType};
+
+fn fixture(package: &str, bytes: &[u8], name: &str) -> (App, Entity, GObjectId, Entity) {
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        bevy::asset::AssetPlugin::default(),
+        FairyGuiPlugin,
+    ))
+    .init_resource::<ButtonInput<MouseButton>>()
+    .add_message::<bevy::input::mouse::MouseWheel>();
+    let package = FuiPackage::parse(package, bytes).unwrap();
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            res_key: format!("ui/{}", package.name()),
+            package,
+        });
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let root = app.world().get::<GuiRootInstance>(owner).unwrap().object;
+    let runtime = app.world().non_send::<GuiRuntime>();
+    let list = runtime.store().child_by_name(root, name).unwrap();
+    let view = runtime.entity_of(list).unwrap();
+    (app, owner, list, view)
+}
+
+fn config(count: usize) -> GuiVirtualList {
+    GuiVirtualList::new(count, |index, row| {
+        row.set_text(&format!("Mail {index}"));
+        row.set_controller_page("IsRead", i32::from(index % 2 == 0));
+        row.set_controller_page("c1", i32::from(index % 3 == 0));
+        if let Some(mut time) = row.child_by_path("timeText") {
+            time.set_text("ECS row");
+        }
+        assert!(row.child_by_path("missing/child").is_none());
+        row.set_size(Vec2::new(row.size().x, 45. + (index % 3) as f32 * 6.));
+    })
+}
+
+#[test]
+fn ecs_list_components_render_only_visible_rows_and_reconfigure_before_measurement() {
+    let (mut app, owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.world_mut().entity_mut(view).insert(config(1000));
+    app.update();
+    let info = *app
+        .world()
+        .get::<GuiVirtualListState>(view)
+        .unwrap()
+        .info()
+        .unwrap();
+    assert_eq!(info.item_count, 1000);
+    assert!(info.active_count > 1 && info.active_count < 30);
+    assert!(
+        app.world()
+            .get::<GuiVirtualListState>(view)
+            .unwrap()
+            .error()
+            .is_none()
+    );
+    let rows = {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        runtime
+            .store()
+            .list_items(list)
+            .unwrap()
+            .into_iter()
+            .map(|row| (row, runtime.entity_of(row).unwrap()))
+            .collect::<Vec<_>>()
+    };
+    for &(row, entity) in &rows {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        let index = runtime.store().virtual_item_index(list, row).unwrap();
+        assert_eq!(
+            app.world().get::<GuiText>(entity).unwrap().value(),
+            format!("Mail {index}")
+        );
+        assert_eq!(
+            app.world().get::<GuiTransform>(entity).unwrap().size().y,
+            45. + (index % 3) as f32 * 6.
+        );
+        let time = runtime.store().child_by_name(row, "timeText").unwrap();
+        assert_eq!(
+            app.world()
+                .get::<GuiText>(runtime.entity_of(time).unwrap())
+                .unwrap()
+                .value(),
+            "ECS row"
+        );
+    }
+    let unchanged = app
+        .world()
+        .entity(view)
+        .get_ref::<GuiVirtualListState>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(view)
+            .get_ref::<GuiVirtualListState>()
+            .unwrap()
+            .last_changed(),
+        unchanged
+    );
+    app.world_mut().write_message(GuiObjectCommand::new(
+        view,
+        GuiObjectAction::SelectListIndex {
+            index: 500,
+            scroll_to_view: true,
+        },
+    ));
+    app.update();
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_selection(list),
+        Some(500)
+    );
+    assert!(
+        app.world()
+            .get::<GuiVirtualListState>(view)
+            .unwrap()
+            .info()
+            .unwrap()
+            .first_index
+            > 400
+    );
+
+    // The replacement callback indexes a shorter data set. It must never render
+    // the previous 1000-item range while count and renderer change together.
+    let labels = ["Only row".to_string()];
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiVirtualList::new(labels.len(), move |index, row| {
+            row.set_text(&labels[index])
+        }));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiVirtualListState>(view)
+            .unwrap()
+            .info()
+            .unwrap()
+            .item_count,
+        1
+    );
+    let row = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .virtual_item_object(list, 0)
+        .unwrap();
+    let row_entity = app.world().non_send::<GuiRuntime>().entity_of(row).unwrap();
+    assert_eq!(
+        app.world().get::<GuiText>(row_entity).unwrap().value(),
+        "Only row"
+    );
+    assert!(
+        rows.iter()
+            .any(|&(old, entity)| old == row && entity == row_entity)
+    );
+    app.world_mut()
+        .get_mut::<GuiVirtualList>(view)
+        .unwrap()
+        .item_count = 0;
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiVirtualListState>(view)
+            .unwrap()
+            .info()
+            .unwrap()
+            .active_count,
+        0
+    );
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(app.world().get::<GuiVirtualListState>(view).is_none());
+    assert!(
+        rows.iter()
+            .all(|&(_, entity)| app.world().get_entity(entity).is_err())
+    );
+}
+
+#[test]
+fn ecs_list_removal_drops_callback_clears_rows_and_reinsertion_reuses_the_pool() {
+    let (mut app, _owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    let captured = Arc::new(String::from("Captured"));
+    let weak = Arc::downgrade(&captured);
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiVirtualList::new(5, move |_, row| {
+            row.set_text(&captured)
+        }));
+    app.update();
+    assert!(weak.upgrade().is_some());
+    let rows = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .list_items(list)
+        .unwrap();
+    app.world_mut().entity_mut(view).remove::<GuiVirtualList>();
+    app.update();
+    assert!(weak.upgrade().is_none());
+    assert!(app.world().get::<GuiVirtualListState>(view).is_none());
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_num_items(list),
+        0
+    );
+    app.world_mut().entity_mut(view).insert(config(5));
+    app.update();
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_items(list)
+            .unwrap()
+            .iter()
+            .any(|row| rows.contains(row))
+    );
+    // Removal/reinsertion between updates starts a fresh binding immediately.
+    app.world_mut()
+        .entity_mut(view)
+        .remove::<GuiVirtualList>()
+        .insert(config(2));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiVirtualListState>(view)
+            .unwrap()
+            .info()
+            .unwrap()
+            .item_count,
+        2
+    );
+}
+
+#[test]
+fn ecs_list_loop_mode_uses_logical_indices_and_rejects_mode_changes_without_replacing_rows() {
+    let (mut app, _owner, list, view) = fixture(
+        "LoopList",
+        include_bytes!("../../fairygui-demo/assets/ui/LoopList.fui"),
+        "list",
+    );
+    let icons = {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        (1..=5)
+            .map(|index| {
+                runtime
+                    .registry()
+                    .item_url("LoopList", &format!("n{index}"))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
+    };
+    app.world_mut().entity_mut(view).insert(
+        GuiVirtualList::new(5, move |index, row| {
+            assert!(index < icons.len());
+            row.set_icon(&icons[index]);
+            row.set_pivot(Vec2::splat(0.5), false);
+        })
+        .looping(),
+    );
+    app.update();
+    let info = *app
+        .world()
+        .get::<GuiVirtualListState>(view)
+        .unwrap()
+        .info()
+        .unwrap();
+    assert!(info.looping);
+    assert_eq!(info.real_item_count, 30);
+    let first = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .list_items(list)
+        .unwrap()[0];
+    let entity = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(first)
+        .unwrap();
+    assert_eq!(
+        app.world().get::<GuiTransform>(entity).unwrap().pivot(),
+        Vec2::splat(0.5)
+    );
+    app.world_mut().entity_mut(view).insert(config(7));
+    app.update();
+    let state = app.world().get::<GuiVirtualListState>(view).unwrap();
+    assert_eq!(state.error(), Some(&VirtualListError::LoopModeMismatch));
+    assert_eq!(state.info().unwrap().item_count, 5);
+    assert_eq!(
+        app.world().non_send::<GuiRuntime>().entity_of(first),
+        Some(entity)
+    );
+}
+
+#[test]
+fn ecs_list_configuration_errors_are_visible_and_do_not_change_unsupported_controls() {
+    let (mut app, owner, _, _) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    let root = app.world().get::<GuiRootInstance>(owner).unwrap().object;
+    let graph = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let graph = runtime.store_mut().create(ObjectType::Graph);
+        runtime.store_mut().set_parent(graph, Some(root));
+        runtime.queue_subtree(graph);
+        graph
+    };
+    app.update();
+    let view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(graph)
+        .unwrap();
+    app.world_mut().entity_mut(view).insert(config(100));
+    app.update();
+    let state = app.world().get::<GuiVirtualListState>(view).unwrap();
+    assert!(state.info().is_none());
+    assert!(state.error().is_some());
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object(graph)
+            .unwrap()
+            .kind(),
+        ObjectType::Graph
+    );
+}

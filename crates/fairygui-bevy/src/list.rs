@@ -1,0 +1,211 @@
+//! ECS configuration of synchronous, retained virtual-list rows.
+use crate::{GObjectRef, GuiRuntime};
+
+#[cfg(test)]
+#[path = "ecs_list_tests.rs"]
+mod tests;
+use bevy::prelude::*;
+use fairygui_core::object::{GObjectId, ObjectStore, VirtualListError, VirtualListInfo};
+use std::{collections::HashMap, sync::Arc};
+
+/// Temporary access to a row during native virtual layout. Sizes are committed
+/// before the visible range is finalized. No runtime borrow or object IDs are
+/// exposed to application renderers.
+pub struct GuiListItem<'a> {
+    store: &'a mut ObjectStore,
+    object: GObjectId,
+}
+
+impl std::fmt::Debug for GuiListItem<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuiListItem").finish_non_exhaustive()
+    }
+}
+
+impl GuiListItem<'_> {
+    pub fn set_text(&mut self, text: &str) {
+        self.store.set_object_text(self.object, text);
+    }
+    pub fn set_icon(&mut self, icon: &str) {
+        self.store.apply_icon_to(self.object, icon);
+    }
+    pub fn set_controller_page(&mut self, name: &str, index: i32) {
+        self.store
+            .set_controller_page_index(self.object, name, index);
+    }
+    pub fn size(&self) -> Vec2 {
+        self.store.object(self.object).map_or(Vec2::ZERO, |object| {
+            Vec2::new(object.width(), object.height())
+        })
+    }
+    pub fn set_size(&mut self, size: Vec2) {
+        if size.is_finite() && size.min_element() >= 0. {
+            self.store.set_size(self.object, size.x, size.y);
+        }
+    }
+    pub fn set_pivot(&mut self, pivot: Vec2, as_anchor: bool) {
+        if pivot.is_finite() {
+            self.store
+                .set_pivot(self.object, pivot.x, pivot.y, as_anchor);
+        }
+    }
+    pub fn child_by_path(&mut self, path: &str) -> Option<GuiListItem<'_>> {
+        let mut object = self.object;
+        if !path.is_empty() {
+            for name in path.split('/') {
+                object = self.store.child_by_name(object, name)?;
+            }
+        }
+        Some(GuiListItem {
+            store: self.store,
+            object,
+        })
+    }
+}
+
+type ItemRenderer = dyn Fn(usize, &mut GuiListItem<'_>) + Send + Sync;
+
+/// Attach to a list view to configure virtual rows through ECS. Only visible rows
+/// are rendered. Change `item_count` or replace the component/renderer to refresh.
+/// Removing it empties the list and drops the callback, retaining the native pool
+/// until its list owner is disposed. Virtual/loop mode is fixed at initialization.
+#[derive(Component, Clone)]
+pub struct GuiVirtualList {
+    pub item_count: usize,
+    looping: bool,
+    renderer: Arc<ItemRenderer>,
+}
+
+impl std::fmt::Debug for GuiVirtualList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuiVirtualList")
+            .field("item_count", &self.item_count)
+            .field("looping", &self.looping)
+            .finish_non_exhaustive()
+    }
+}
+
+impl GuiVirtualList {
+    pub fn new(
+        item_count: usize,
+        renderer: impl Fn(usize, &mut GuiListItem<'_>) + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            item_count,
+            looping: false,
+            renderer: Arc::new(renderer),
+        }
+    }
+    /// Configure native sixfold loop records. Apply before the list initializes.
+    pub fn looping(mut self) -> Self {
+        self.looping = true;
+        self
+    }
+    pub fn is_looping(&self) -> bool {
+        self.looping
+    }
+    pub fn set_renderer(
+        &mut self,
+        renderer: impl Fn(usize, &mut GuiListItem<'_>) + Send + Sync + 'static,
+    ) {
+        self.renderer = Arc::new(renderer);
+    }
+}
+
+/// Current virtual layout diagnostics or the last configuration error.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct GuiVirtualListState {
+    info: Option<VirtualListInfo>,
+    error: Option<VirtualListError>,
+}
+impl GuiVirtualListState {
+    pub fn info(&self) -> Option<&VirtualListInfo> {
+        self.info.as_ref()
+    }
+    pub fn error(&self) -> Option<&VirtualListError> {
+        self.error.as_ref()
+    }
+}
+
+#[derive(Component, Debug, Default)]
+pub(crate) struct Binding {
+    object: Option<GObjectId>,
+    error: Option<VirtualListError>,
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn sync_virtual_list_bindings(
+    mut commands: Commands,
+    mut runtime: NonSendMut<GuiRuntime>,
+    mut removed: RemovedComponents<GuiVirtualList>,
+    mut applied: Local<HashMap<Entity, GObjectId>>,
+    mut lists: Query<(
+        Entity,
+        &GObjectRef,
+        Ref<GuiVirtualList>,
+        Option<&mut Binding>,
+    )>,
+    existing: Query<()>,
+) {
+    for entity in removed.read() {
+        if let Some(object) = applied.remove(&entity) {
+            runtime.clear_ecs_virtual_list(object);
+        }
+        if existing.contains(entity) && !lists.contains(entity) {
+            commands
+                .entity(entity)
+                .remove::<(Binding, GuiVirtualListState)>();
+        }
+    }
+    for (entity, reference, config, binding) in &mut lists {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        if !config.is_changed()
+            && binding
+                .as_ref()
+                .is_some_and(|binding| binding.object == Some(reference.0))
+        {
+            continue;
+        }
+        let renderer = config.renderer.clone();
+        let result = runtime.configure_ecs_virtual_list(
+            reference.0,
+            config.item_count,
+            config.looping,
+            move |store, index, object| {
+                renderer(index, &mut GuiListItem { store, object });
+            },
+        );
+        applied.insert(entity, reference.0);
+        let next = Binding {
+            object: Some(reference.0),
+            error: result.err(),
+        };
+        if let Some(mut binding) = binding {
+            *binding = next;
+        } else {
+            commands.entity(entity).insert(next);
+        }
+    }
+    applied.retain(|&entity, _| existing.contains(entity));
+}
+
+pub(crate) fn sync_virtual_list_state(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    lists: Query<
+        (Entity, &GObjectRef, &Binding, Option<&GuiVirtualListState>),
+        With<GuiVirtualList>,
+    >,
+) {
+    for (entity, reference, binding, current) in &lists {
+        let next = GuiVirtualListState {
+            info: runtime.store().virtual_list_info(reference.0),
+            error: binding.error.clone(),
+        };
+        if current != Some(&next) {
+            commands.entity(entity).insert(next);
+        }
+    }
+}

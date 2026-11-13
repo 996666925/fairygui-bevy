@@ -209,7 +209,7 @@ fn drive(
             let index = runtime.create_root(handle, &asset.package, "Main").unwrap();
             center_root(&mut runtime, index, (window.width(), window.height()));
             let root = runtime.root_object(index).unwrap();
-            demos::initialize_demo(&mut runtime, "LoopList", root);
+            loop_list_demo::initialize(&mut runtime, root);
             state.root = Some(index);
             state.list = runtime.store().child_by_name(root, "list");
             controller.root = Some(root);

@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 use fairygui_bevy::{
     FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiPopupCommand, GuiPopupMenu,
-    GuiQuery, GuiRootInstance, GuiRuntime, GuiTransitionComplete, GuiTransitionHook,
+    GuiQuery, GuiRootInstance, GuiTransitionComplete, GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -187,28 +187,16 @@ pub const BASICS_PAGES: &[&str] = &[
     "Drag&Drop",
 ];
 
-/// Initialize behavior that does not depend on Bevy entity observers.
-pub fn initialize_demo(runtime: &mut GuiRuntime, package: &str, root: GObjectId) {
-    if package == "LoopList" {
-        crate::loop_list_demo::initialize(runtime, root);
-    }
-    if package == "VirtualList"
-        && let Some(list) = runtime.store().child_by_name(root, "mailList")
-    {
-        runtime
-            .enable_virtual_list(list, |store, index, row| {
-                store.set_controller_page_index(row, "IsRead", i32::from(index % 2 == 0));
-                store.set_controller_page_index(row, "c1", i32::from(index % 3 == 0));
-                if let Some(time) = store.child_by_name(row, "timeText") {
-                    store.set_object_text(time, "5 Nov 2015 16:24:33");
-                }
-                store.set_object_text(row, &format!("{index} Mail title here"));
-            })
-            .expect("VirtualList default item");
-        runtime
-            .set_virtual_item_count(list, 1000)
-            .expect("VirtualList renderer");
-    }
+/// Synchronous row measurements and values configured by an ECS component.
+pub fn mail_list_config() -> fairygui_bevy::GuiVirtualList {
+    fairygui_bevy::GuiVirtualList::new(1000, |index, row| {
+        row.set_controller_page("IsRead", i32::from(index % 2 == 0));
+        row.set_controller_page("c1", i32::from(index % 3 == 0));
+        if let Some(mut time) = row.child_by_path("timeText") {
+            time.set_text("5 Nov 2015 16:24:33");
+        }
+        row.set_text(&format!("{index} Mail title here"));
+    })
 }
 
 pub fn demo_action_bindings(gui: &GuiQuery, package: &str, root: Entity) -> Vec<(Entity, u64)> {

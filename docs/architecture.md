@@ -13,6 +13,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `asset` | Bevy asset loading and package resource paths |
 | `ecs` | Root-to-view references and read-only identity, hierarchy, geometry, text, display and scroll queries |
 | `popup` | Entity-addressed popup/menu commands, pending asset requests and popup stack snapshots |
+| `list` | ECS virtual-list configuration, restricted synchronous row renderers and layout diagnostics |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
@@ -47,6 +48,22 @@ Positions use stage logical pixels. Commands refresh the stage viewport from the
 window selected by `GuiInputSettings`; renderer-free apps preserve an existing
 stage or default to 1280x720. Template resolution starts with the source object's
 declared package, with registered cross-package URLs following normal rules.
+
+`GuiVirtualList` is attached to the list view entity. The plugin reconciles changed
+configurations before virtual layout and view spawning. Its `Send + Sync` renderer
+receives a logical row index and temporary `GuiListItem`, which exposes row/title
+updates, child paths, controllers, icons, pivot and synchronous dimensions without
+runtime or object IDs. A new item count is installed before the new renderer runs,
+so shrinking data and replacing its renderer cannot access old indices.
+
+`GuiVirtualListState` projects current virtual geometry diagnostics and the latest
+configuration error after Sync. Removing the configuration empties the logical
+list and drops its callback; native FIFO row pools remain owned by the list and
+are reclaimed on disposal. Reinsertion can reuse them. Loop mode is fixed at
+initialization, and a conflicting configuration reports `LoopModeMismatch` while
+preserving the existing renderer. Business systems update the component or mark
+it changed when captured/shared data changes; ordinary frame refreshes reuse rows
+and do not re-run the renderer unless native layout requests it.
 
 ## Frame contract
 

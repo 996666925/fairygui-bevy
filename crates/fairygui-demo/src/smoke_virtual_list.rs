@@ -185,10 +185,9 @@ fn drive(
             let index = runtime.create_root(handle, &asset.package, "Main").unwrap();
             center_root(&mut runtime, index, (window.width(), window.height()));
             let root = runtime.root_object(index).unwrap();
-            demos::initialize_demo(&mut runtime, "VirtualList", root);
             let list = runtime.store().child_by_name(root, "mailList").unwrap();
             markers(&mut runtime, list, false);
-            runtime.invalidate_virtual_list(list).unwrap();
+            runtime.set_virtual_item_count(list, 1000).unwrap();
             controller.root = Some(root);
             controller.package = Some("VirtualList".into());
             state.root = Some(index);

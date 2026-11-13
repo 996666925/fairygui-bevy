@@ -316,7 +316,13 @@ fn open_pending_demo(
                 (window.width(), window.height()),
             );
         }
-        demos::initialize_demo(&mut runtime, &name, root);
+        if name == "VirtualList"
+            && let Some(list) = gui.child_by_name(owner, "mailList")
+        {
+            commands.entity(list).insert(demos::mail_list_config());
+        } else if name == "LoopList" {
+            loop_list_demo::initialize(&mut runtime, root);
+        }
         if name == "Basics"
             && let Some(back) = gui.find_by_name(owner, "btn_Back")
         {
