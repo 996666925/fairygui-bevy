@@ -37,6 +37,8 @@ mod groups;
 
 #[path = "buttons.rs"]
 mod buttons;
+#[path = "combo.rs"]
+mod combo;
 #[path = "list_items.rs"]
 mod list_items;
 #[path = "list_selection.rs"]
@@ -1462,13 +1464,19 @@ impl ObjectStore {
 
     /// 按序号选中下拉框的项，并把标题与图标回填到控件上。
     pub fn select_combo_index(&mut self, combo: GObjectId, index: i32) -> bool {
-        let changed = match self
+        let (changed, icon_assigned) = match self
             .objects
             .get_mut(combo)
             .map(|object| &mut object.control)
         {
-            Some(crate::widget::ControlData::ComboBox(data)) => data.set_selected_index(index),
-            _ => false,
+            Some(crate::widget::ControlData::ComboBox(data)) => {
+                let at = usize::try_from(index).ok();
+                let icon_assigned = data.icons.as_ref().is_some_and(|icons| {
+                    at.is_none_or(|at| at >= data.items.len() || at < icons.len())
+                });
+                (data.set_selected_index(index), icon_assigned)
+            }
+            _ => (false, false),
         };
 
         if changed {
@@ -1476,10 +1484,10 @@ impl ObjectStore {
             // 标题与图标要落到子对象上才会显示出来。
             self.apply_title_of(combo);
             self.update_gear_state(combo, crate::widget::GearKind::Text);
-            if matches!(&self.objects[combo].control,crate::widget::ControlData::ComboBox(d) if !d.icons.is_empty())
-            {
+            if icon_assigned {
                 self.update_gear_state(combo, crate::widget::GearKind::Icon);
             }
+            self.update_combo_selection_controller(combo);
         }
         changed
     }
@@ -3337,6 +3345,7 @@ impl ObjectStore {
             self.apply_gears(component, Some(&name));
             self.sync_related_buttons(component, &name);
             self.sync_related_lists(component, &name);
+            self.sync_related_combos(component, &name);
             self.sync_related_scroll_panes(component, &name);
             self.run_controller_actions(component, &name);
         }
@@ -3398,6 +3407,7 @@ impl ObjectStore {
             self.apply_gears(component, Some(controller_name));
             self.sync_related_buttons(component, controller_name);
             self.sync_related_lists(component, controller_name);
+            self.sync_related_combos(component, controller_name);
             self.sync_related_scroll_panes(component, controller_name);
             self.sync_tree_controller(component, controller_name);
             self.run_controller_actions(component, controller_name);
@@ -3432,6 +3442,7 @@ impl ObjectStore {
             self.apply_gears(component, Some(controller_name));
             self.sync_related_buttons(component, controller_name);
             self.sync_related_lists(component, controller_name);
+            self.sync_related_combos(component, controller_name);
             self.sync_related_scroll_panes(component, controller_name);
             self.sync_tree_controller(component, controller_name);
             self.run_controller_actions(component, controller_name);

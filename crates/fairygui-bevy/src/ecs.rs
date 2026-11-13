@@ -4,6 +4,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use fairygui_core::object::GObject;
 use fairygui_core::package::ObjectType;
+use fairygui_core::widget::ControlData;
 
 use crate::GuiWindowState;
 use crate::list::GuiListState;
@@ -481,6 +482,7 @@ pub struct GuiQuery<'w, 's> {
     transitions: Query<'w, 's, &'static GuiTransitions>,
     animations: Query<'w, 's, &'static crate::GuiAnimationState>,
     lists: Query<'w, 's, &'static GuiListState>,
+    combos: Query<'w, 's, &'static crate::GuiComboBoxState>,
     controllers: Query<'w, 's, &'static GuiControllers>,
     windows: Query<'w, 's, &'static GuiWindowState>,
     trees: Query<'w, 's, &'static crate::GuiTreeState>,
@@ -538,6 +540,10 @@ impl GuiQuery<'_, '_> {
     /// Native text of a root owner or control view, before presentation.
     pub fn text(&self, entity: Entity) -> Option<&str> {
         Some(self.texts.get(self.view(entity)?).ok()?.value())
+    }
+
+    pub fn combo_box(&self, entity: Entity) -> Option<&crate::GuiComboBoxState> {
+        self.combos.get(self.view(entity)?).ok()
     }
 
     pub fn tooltips(&self, entity: Entity) -> Option<&str> {
@@ -754,19 +760,55 @@ pub(crate) fn sync_gui_icons(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn sync_gui_properties(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,
-    objects: Query<(Entity, &GObjectRef, Option<&GuiText>, Option<&GuiDisplay>)>,
+    objects: Query<(
+        Entity,
+        &GObjectRef,
+        Option<&GuiText>,
+        Option<&GuiDisplay>,
+        Option<&crate::GuiComboBoxState>,
+    )>,
 ) {
     let store = runtime.store();
-    for (entity, reference, text, display) in &objects {
+    for (entity, reference, text, display, combo) in &objects {
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
         let Some(object) = store.object(reference.0) else {
             continue;
         };
+        if let ControlData::ComboBox(data) = object.control() {
+            let popup = store.combo_popup(reference.0);
+            let next = crate::GuiComboBoxState {
+                items: data.items.clone(),
+                values: data.values.clone(),
+                icons: data.icons.clone(),
+                selected_index: data.selected_index,
+                visible_item_count: data.visible_item_count,
+                direction: match data.popup_direction {
+                    1 => crate::GuiPopupDirection::Up,
+                    2 => crate::GuiPopupDirection::Down,
+                    _ => crate::GuiPopupDirection::Auto,
+                },
+                selection_controller: store
+                    .combo_selection_controller(reference.0)
+                    .map(str::to_owned),
+                dropdown: popup
+                    .as_ref()
+                    .and_then(|popup| runtime.entity_of(popup.dropdown)),
+                list: popup
+                    .as_ref()
+                    .and_then(|popup| runtime.entity_of(popup.list)),
+            };
+            if combo != Some(&next) {
+                commands.entity(entity).insert(next);
+            }
+        } else if combo.is_some() {
+            commands.entity(entity).remove::<crate::GuiComboBoxState>();
+        }
         match (text, store.object_text(reference.0)) {
             (current, Some(value)) if current.is_none_or(|current| current.value() != value) => {
                 commands.entity(entity).insert(GuiText(value.to_owned()));

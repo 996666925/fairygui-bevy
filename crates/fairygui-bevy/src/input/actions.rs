@@ -9,10 +9,11 @@ pub(super) fn combo_click(
     if let Some(combo) = runtime.store().combo_of_popup(object) {
         if let Some(index) = list_child_index(runtime, combo, object) {
             // Native defers the item handler, hides the complete root popup
-            // stack, then forces selectedIndex through -1 before assigning it.
+            // stack, then forces the selected title/icon to reapply on reselect.
             runtime.hide_popup(None);
-            runtime.store_mut().select_combo_index(combo, -1);
-            runtime.store_mut().select_combo_index(combo, index as i32);
+            runtime
+                .store_mut()
+                .select_combo_index_from_input(combo, index as i32);
             let mut event = UiEvent::new(EventKind::StateChanged, combo)
                 .with_pointer(Point::new(cursor.x, cursor.y));
             event.touch_id = touch_id;

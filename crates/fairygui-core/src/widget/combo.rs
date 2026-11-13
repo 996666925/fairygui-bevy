@@ -53,7 +53,7 @@ pub fn popup_position(
 }
 
 /// 下拉框数据。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ComboBoxData {
     /// 容器部分的数据。
     pub component: ComponentData,
@@ -62,7 +62,7 @@ pub struct ComboBoxData {
     /// 各选项对应的值。
     pub values: Vec<String>,
     /// 各选项的图标。
-    pub icons: Vec<Option<String>>,
+    pub icons: Option<Vec<Option<String>>>,
     /// 当前显示文本。
     pub title: String,
     /// 当前图标。
@@ -82,6 +82,27 @@ pub struct ComboBoxData {
     /// Native pointer state is independent of whether the dropdown is open.
     pub hovered: bool,
     pub pressed: bool,
+}
+
+impl Default for ComboBoxData {
+    fn default() -> Self {
+        Self {
+            component: ComponentData::default(),
+            items: Vec::new(),
+            values: Vec::new(),
+            icons: None,
+            title: String::new(),
+            icon: None,
+            title_color: None,
+            visible_item_count: 10,
+            popup_direction: 0,
+            selection_controller: -1,
+            selected_index: -1,
+            dropdown: None,
+            hovered: false,
+            pressed: false,
+        }
+    }
 }
 
 impl ComboBoxData {
@@ -112,12 +133,9 @@ impl ComboBoxData {
         self.values.iter().position(|item| item == value)
     }
 
-    /// 按值选中。值不存在时不做任何事。
+    /// 按值选中。值不存在时取消选择，与原版 value setter 一致。
     pub fn set_selected_value(&mut self, value: &str) -> bool {
-        match self.index_of_value(value) {
-            Some(index) => self.set_selected_index(index as i32),
-            None => false,
-        }
+        self.set_selected_index(self.index_of_value(value).map_or(-1, |index| index as i32))
     }
 
     /// 当前选中项的图标。
@@ -126,29 +144,32 @@ impl ComboBoxData {
             return None;
         }
         self.icons
+            .as_ref()?
             .get(self.selected_index as usize)
             .and_then(|icon| icon.as_deref())
     }
 
     /// 切换选中项。返回是否发生变化。
     pub fn set_selected_index(&mut self, index: i32) -> bool {
-        let index = if index < 0 || index as usize >= self.items.len() {
-            -1
-        } else {
-            index
-        };
         if index == self.selected_index {
             return false;
         }
         self.selected_index = index;
 
-        // 标题与图标一起回填——它们是同一次选择的两个面。取消选中时都要清空。
         let at = usize::try_from(index).ok();
         self.title = at
             .and_then(|at| self.items.get(at))
             .cloned()
             .unwrap_or_default();
-        self.icon = at.and_then(|at| self.icons.get(at).cloned().flatten());
+        if let Some(icons) = &self.icons {
+            if at.is_some_and(|at| at < self.items.len()) {
+                if let Some(icon) = at.and_then(|at| icons.get(at)) {
+                    self.icon = icon.clone();
+                }
+            } else {
+                self.icon = None;
+            }
+        }
 
         true
     }
@@ -179,7 +200,12 @@ pub(crate) fn read_combo(
 
         data.items.push(buffer.read_s(table)?.unwrap_or_default());
         data.values.push(buffer.read_s(table)?.unwrap_or_default());
-        data.icons.push(buffer.read_s(table)?);
+        let icon = buffer.read_s(table)?;
+        if icon.is_some() {
+            let icons = data.icons.get_or_insert_with(Vec::new);
+            icons.resize(data.items.len(), None);
+            *icons.last_mut().unwrap() = icon;
+        }
 
         buffer.set_position(end);
     }
@@ -245,9 +271,43 @@ mod tests {
         for (index, item) in items.iter().enumerate() {
             data.items.push((*item).to_string());
             data.values.push(format!("v{index}"));
-            data.icons.push(None);
         }
         data
+    }
+
+    #[test]
+    fn exported_icons_keep_null_array_and_sparse_trailing_length_distinct() {
+        let mut table = StringTable::new();
+        table.push(Some("icon".into()));
+        for has_icon in [false, true] {
+            let mut bytes = vec![0u8; 20];
+            bytes[0] = 7;
+            bytes[1] = 1;
+            bytes[14..16].copy_from_slice(&20u16.to_be_bytes());
+            bytes.push(13); // ObjectType.ComboBox
+            bytes.extend_from_slice(&3i16.to_be_bytes());
+            for index in 0..3 {
+                bytes.extend_from_slice(&6i16.to_be_bytes());
+                bytes.extend_from_slice(&65533u16.to_be_bytes()); // empty caption
+                bytes.extend_from_slice(&65533u16.to_be_bytes()); // empty value
+                bytes.extend_from_slice(
+                    &(if has_icon && index == 1 { 0u16 } else { 65534 }).to_be_bytes(),
+                );
+            }
+            bytes.extend_from_slice(&65534u16.to_be_bytes()); // default title
+            bytes.extend_from_slice(&65534u16.to_be_bytes()); // no explicit icon
+            bytes.push(0); // no title color
+            bytes.extend_from_slice(&10i32.to_be_bytes());
+            bytes.push(0); // automatic popup direction
+            bytes.extend_from_slice(&(-1i16).to_be_bytes());
+            let mut combo = ComboBoxData::default();
+            read_combo(&mut combo, &mut ByteBuffer::new(&bytes), &table, 0).unwrap();
+            if has_icon {
+                assert_eq!(combo.icons, Some(vec![None, Some("icon".into())]));
+            } else {
+                assert!(combo.icons.is_none());
+            }
+        }
     }
 
     #[test]
@@ -264,11 +324,11 @@ mod tests {
     }
 
     #[test]
-    fn out_of_range_clears_selection() {
+    fn out_of_range_preserves_requested_index_with_no_selected_value() {
         let mut combo = combo_with(&["a"]);
         combo.set_selected_index(0);
         assert!(combo.set_selected_index(9));
-        assert_eq!(combo.selected_index, -1);
+        assert_eq!(combo.selected_index, 9);
         assert_eq!(combo.selected_value(), None);
     }
 

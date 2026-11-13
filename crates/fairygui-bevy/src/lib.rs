@@ -52,6 +52,8 @@ pub mod animation;
 pub mod asset;
 pub use animation::{GuiAnimationPlaySettings, GuiAnimationState};
 pub mod backend;
+pub mod combo;
+pub use combo::GuiComboBoxState;
 mod compositor;
 pub mod ecs;
 pub mod extension;
@@ -144,8 +146,8 @@ pub mod prelude {
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiAnimationComplete,
-        GuiAnimationPlaySettings, GuiAnimationState, GuiButtonSelected, GuiConfig,
-        GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
+        GuiAnimationPlaySettings, GuiAnimationState, GuiButtonSelected, GuiComboBoxState,
+        GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
         GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
         GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
         GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,

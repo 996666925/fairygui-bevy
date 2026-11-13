@@ -10,7 +10,7 @@ pub(super) struct RetainedCombo {
     source_handle: Handle<FuiAsset>,
     items: Vec<String>,
     values: Vec<String>,
-    icons: Vec<Option<String>>,
+    icons: Option<Vec<Option<String>>>,
 }
 
 impl GuiRuntime {
@@ -85,7 +85,7 @@ impl GuiRuntime {
                 source_handle: template.handle.clone(),
                 items: Vec::new(),
                 values: Vec::new(),
-                icons: Vec::new(),
+                icons: None,
             }
         };
         let list_owner = self
@@ -118,7 +118,7 @@ impl GuiRuntime {
                 &item_template,
                 &data.items,
                 &data.values,
-                &data.icons,
+                data.icons.as_deref().unwrap_or_default(),
             ) {
                 if !reuse {
                     self.store.remove(cached.popup.dropdown);
@@ -149,7 +149,7 @@ impl GuiRuntime {
             x += anchor.width - size.width;
         }
         let mut y = anchor.y + anchor.height;
-        if data.popup_direction == 2
+        if data.popup_direction == 1
             || (data.popup_direction == 0 && anchor.y + size.height > container.height)
         {
             y = anchor.y - size.height - 1.0;

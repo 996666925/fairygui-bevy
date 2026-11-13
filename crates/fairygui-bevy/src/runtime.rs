@@ -158,6 +158,17 @@ pub enum GuiObjectAction {
     SetButtonSelected(bool),
     /// Let application observers own selection instead of native click toggles.
     SetButtonChangeStateOnClick(bool),
+    /// Native caption assignment, preserving/clamping the existing selection.
+    SetComboItems(Vec<String>),
+    SetComboValues(Vec<String>),
+    SetComboIcons(Option<Vec<Option<String>>>),
+    SetComboSelection(i32),
+    /// Missing values cancel selection; None selects the first empty value.
+    SetComboValue(Option<String>),
+    SetComboVisibleItemCount(i32),
+    SetComboPopupDirection(crate::GuiPopupDirection),
+    /// Bind to a controller on the combo's logical parent; None detaches it.
+    SetComboSelectionController(Option<String>),
     SetAnimationPlaying(bool),
     SetAnimationFrame(i32),
     SetAnimationTimeScale(f32),
@@ -2270,6 +2281,41 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetText(text) => {
                 runtime.store_mut().set_object_text(object, text);
+            }
+            GuiObjectAction::SetComboItems(items) => {
+                runtime.store_mut().set_combo_items(object, items.clone());
+            }
+            GuiObjectAction::SetComboValues(values) => {
+                runtime.store_mut().set_combo_values(object, values.clone());
+            }
+            GuiObjectAction::SetComboIcons(icons) => {
+                runtime.store_mut().set_combo_icons(object, icons.clone());
+            }
+            GuiObjectAction::SetComboSelection(index) => {
+                runtime.store_mut().select_combo_index(object, *index);
+            }
+            GuiObjectAction::SetComboValue(value) => {
+                runtime
+                    .store_mut()
+                    .select_combo_value(object, value.as_deref());
+            }
+            GuiObjectAction::SetComboVisibleItemCount(count) => {
+                runtime
+                    .store_mut()
+                    .set_combo_visible_item_count(object, *count);
+            }
+            GuiObjectAction::SetComboPopupDirection(direction) => {
+                let code = match direction {
+                    crate::GuiPopupDirection::Auto => 0,
+                    crate::GuiPopupDirection::Up => 1,
+                    crate::GuiPopupDirection::Down => 2,
+                };
+                runtime.store_mut().set_combo_popup_direction(object, code);
+            }
+            GuiObjectAction::SetComboSelectionController(name) => {
+                runtime
+                    .store_mut()
+                    .set_combo_selection_controller(object, name.as_deref());
             }
             GuiObjectAction::SetTooltips(text) => {
                 runtime.store_mut().set_tooltips(object, text.clone());

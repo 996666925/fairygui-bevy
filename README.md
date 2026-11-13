@@ -439,6 +439,31 @@ Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐�
 `GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在同帧 Sync 后反映最新的控件状态；
 状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
 
+下拉框实体带有 `GuiComboBoxState`，也可用 `gui.combo_box(entity)` 读取选项、value、
+选中索引、可见项数、展开方向、绑定控制器以及当前 dropdown/list 视图。
+通过实体命令设置数据和选择：
+
+```rust,ignore
+commands.write_message(GuiObjectCommand::new(combo,
+    GuiObjectAction::SetComboItems(vec!["Apple".into(), "Banana".into()])));
+commands.write_message(GuiObjectCommand::new(combo,
+    GuiObjectAction::SetComboValues(vec!["apple".into(), "banana".into()])));
+commands.write_message(GuiObjectCommand::new(combo,
+    GuiObjectAction::SetComboValue(Some("banana".into()))));
+```
+
+`SetComboSelection` 按索引选择；不存在的 value 会取消选择，`None` 选择第一个空 value。
+items、values 和 icons 独立，不要求等长。更新 items 会保留或收拢当前索引，空表取消
+选择；`SetComboIcons(None)` 移除图标数组并保留当前显示图标，短数组不覆盖其范围外
+的有效选项图标。`SetComboVisibleItemCount`、`SetComboPopupDirection` 调整下次展开，
+`SetComboSelectionController` 按名称绑定逻辑父组件上的控制器，`None` 解除绑定。
+选中索引与控制器双向联动，超出控制器页面数的索引不会改变控制器。
+
+同原版，programmatic setters 不发出 `StateChanged`；真实选择或重选都会触发控件的
+`GuiEvent` observer，observer 内可直接读取当前 `GuiComboBoxState`。选项修改在下次
+展开时刷新弹层内容，隐藏保留弹层视图，销毁下拉框拥有者时一并回收。
+`--smoke-combo` 验证实际菜单导航、选择/重选、value 设置、数据替换、弹层复用与回收。
+
 虚拟列表可直接在列表视图实体上挂 `GuiVirtualList`，同步行测量由插件负责：
 
 ```rust,ignore

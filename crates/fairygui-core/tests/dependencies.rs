@@ -198,8 +198,13 @@ fn combo_instance_title_and_runtime_selection_reach_the_real_text_and_icon_child
         "Item 3"
     );
     assert!(
+        matches!(store.object(icon).unwrap().control(), ControlData::Loader(data) if data.url.as_deref() == Some("ui://PopupTheme/VtSeperator")),
+        "the native null icon array preserves a manually assigned icon"
+    );
+    store.set_combo_icons(combo, Some(vec![None, None, None]));
+    assert!(
         matches!(store.object(icon).unwrap().control(), ControlData::Loader(data) if data.url.as_deref() == Some("")),
-        "an item without an icon clears the old image"
+        "an explicit empty icon entry clears the real Loader"
     );
     store.set_object_text(combo, "Custom");
     assert_eq!(
