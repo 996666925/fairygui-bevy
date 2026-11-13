@@ -9,16 +9,16 @@ use fairygui_core::{FuiPackage, object::EventKind};
 #[derive(Resource, Default)]
 pub(super) struct Log {
     events: Vec<fairygui_bevy::GuiTextInput>,
-    prevent: Option<GObjectId>,
+    prevent: Option<Entity>,
 }
 fn observe(
     mut messages: MessageReader<fairygui_bevy::GuiTextInput>,
     mut log: ResMut<Log>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    mut commands: MessageWriter<GuiInputCommand>,
 ) {
     for message in messages.read() {
-        if message.event.kind == EventKind::Enter && log.prevent == Some(message.event.target) {
-            assert!(runtime.prevent_input_submit(message.event.target));
+        if message.event.kind == EventKind::Enter && log.prevent == Some(message.entity) {
+            commands.write(GuiInputCommand::PreventSubmit(message.entity));
         }
         log.events.push(message.clone());
     }
@@ -353,8 +353,8 @@ pub(super) fn drive(
             );
             assert!(runtime.focused_input().is_none());
             assert!(!window.ime_enabled);
-            log.prevent = Some(state.owners[0]);
-            runtime.request_input_focus(Some(state.owners[0]));
+            log.prevent = Some(state.views[0]);
+            commands.write_message(GuiInputCommand::Focus(state.views[0]));
             state.stage = 17;
             state.since = frames;
         }
@@ -367,7 +367,7 @@ pub(super) fn drive(
             assert_eq!(runtime.focused_input(), Some(state.owners[0]));
             assert_eq!(kinds(log, state.owners[0]).last(), Some(&EventKind::Enter));
             log.prevent = None;
-            runtime.request_input_focus(None);
+            commands.write_message(GuiInputCommand::Blur);
             runtime.remove_root(commands, state.root.unwrap());
             for &label in &state.labels {
                 commands.entity(label).despawn();

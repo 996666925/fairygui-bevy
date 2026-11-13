@@ -2,6 +2,7 @@
 //! Read `GuiInputState` after `GuiSystems::Input` to arbitrate game input.
 mod actions;
 pub(crate) mod editing;
+pub use editing::GuiInputCommand;
 mod gestures;
 mod masks;
 mod touches;
@@ -219,6 +220,7 @@ pub struct GuiInputState {
     touches: HashMap<u64, TouchCapture>,
     last_position: Option<Vec2>,
     focused: Option<GObjectId>,
+    focused_entity: Option<Entity>,
     text_press: Option<(Entity, Vec2, f64, u8)>,
 }
 impl GuiInputState {
@@ -253,6 +255,10 @@ impl GuiInputState {
     }
     pub fn focused_input(&self) -> Option<GObjectId> {
         self.focused
+    }
+    /// The actual focused input view, including when a compound label was focused.
+    pub fn focused_entity(&self) -> Option<Entity> {
+        self.focused_entity
     }
     pub fn wants_keyboard_input(&self) -> bool {
         self.focused.is_some()

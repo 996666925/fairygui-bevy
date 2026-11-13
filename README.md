@@ -187,6 +187,28 @@ IME 预编辑或翻译/UBB 渲染结果。无文本属性的控件没有 `GuiTex
 `SetTouchable(bool)` 通过命令修改输入开关。富文本链接消息 `GuiLink.entity`
 直接提供原始目标的控件实体，可据此查询、发命令或匹配业务组件。
 
+输入框通过 `GuiInputCommand::Focus(entity)` 获取焦点，`Blur` 释放 GUI 输入焦点；
+`GuiInputState::focused_entity()` 返回实际输入框视图实体。`GuiTextInput.entity`
+也指向该输入框，可在 Respond 中响应 Enter 并保留编辑会话：
+
+```rust,ignore
+fn keep_editing(
+    mut inputs: MessageReader<GuiTextInput>,
+    mut commands: MessageWriter<GuiInputCommand>,
+) {
+    for input in inputs.read() {
+        if input.event.kind == fairygui_bevy::core::object::EventKind::Enter {
+            commands.write(GuiInputCommand::PreventSubmit(input.entity));
+        }
+    }
+}
+```
+
+输入命令在 Sync 完成视图、编辑策略和舞台同步后、焦点协调前执行；Respond 和
+PostLayout 均可发送。Focus/PreventSubmit 接受已就绪的根/窗口拥有者和控件视图，
+复合控件转发到输入标题；资产未就绪或目标不存在时丢弃请求。隐藏、离台、模态
+遮挡等仍遵循统一输入策略。Blur 保留其他 Bevy 控件的焦点，同帧焦点请求以最后一个为准。
+
 滚动容器上的只读 `GuiScrollState`（或 `gui.scroll(entity)`）提供逻辑目标位置、
 动画当前显示位置、视口/内容尺寸、最大位置、两种位置对应的进度比例及当前页。
 它在输入事件发布前和 Sync 结束时更新，没有滚动容器的对象不带该组件。

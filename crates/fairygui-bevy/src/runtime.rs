@@ -327,6 +327,8 @@ pub struct GuiLink {
 /// Input/Change/Enter retain their native timing and do not bubble.
 #[derive(Message, Debug, Clone)]
 pub struct GuiTextInput {
+    /// Input view that emitted this notification, including for compound labels.
+    pub entity: Entity,
     pub event: fairygui_core::object::UiEvent,
     /// The real committed value, including for password fields; preedit is excluded.
     pub value: String,
@@ -1856,10 +1858,13 @@ impl GuiRuntime {
     ) {
         let event = fairygui_core::object::UiEvent::new(kind, target);
         self.events.push(event.clone());
-        self.input_events.push(GuiTextInput {
-            event,
-            value: value.to_owned(),
-        });
+        if let Some(entity) = self.entity_of(target) {
+            self.input_events.push(GuiTextInput {
+                entity,
+                event,
+                value: value.to_owned(),
+            });
+        }
     }
 
     pub(crate) fn emit_list_item_click(

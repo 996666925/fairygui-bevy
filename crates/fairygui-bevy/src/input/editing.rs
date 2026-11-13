@@ -16,8 +16,63 @@ mod tests;
 #[derive(Resource, Default)]
 struct GuiImeWindow(Option<Entity>);
 
+/// Entity-addressed input responses. Send in `GuiSystems::Respond` (or
+/// PostLayout); commands execute in order after view/policy synchronization and
+/// before focus reconciliation. Targets must already be materialized; requests
+/// for missing entities or assets still loading are discarded.
+#[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuiInputCommand {
+    /// Focus an input view, or a compound control whose title is an input.
+    /// Root/window owners are accepted too. Normal visibility/modal rules apply.
+    Focus(Entity),
+    /// Release GUI text focus without clearing another Bevy widget's focus.
+    Blur,
+    /// Keep the current input session open after its Enter notification.
+    /// Send while handling `GuiTextInput` in Respond.
+    PreventSubmit(Entity),
+}
+
+pub(crate) fn apply_input_commands(
+    mut messages: MessageReader<GuiInputCommand>,
+    objects: Query<&GObjectRef>,
+    roots: Query<&crate::GuiRootInstance>,
+    mut runtime: NonSendMut<GuiRuntime>,
+) {
+    for &message in messages.read() {
+        let target = match message {
+            GuiInputCommand::Focus(target) | GuiInputCommand::PreventSubmit(target) => target,
+            GuiInputCommand::Blur => {
+                runtime.request_input_focus(None);
+                continue;
+            }
+        };
+        let object = objects
+            .get(target)
+            .map(|reference| reference.0)
+            .or_else(|_| roots.get(target).map(|root| root.object))
+            .ok()
+            .or_else(|| runtime.ecs_window_object(target));
+        let Some(input) = object.and_then(|object| runtime.store().input_field_of(object)) else {
+            continue;
+        };
+        if runtime.entity_of(input).is_none() {
+            continue;
+        }
+        match message {
+            GuiInputCommand::Focus(_) => {
+                runtime.request_input_focus(Some(input));
+            }
+            GuiInputCommand::PreventSubmit(_) => {
+                runtime.prevent_input_submit(input);
+            }
+            GuiInputCommand::Blur => unreachable!(),
+        }
+    }
+}
+
 pub(super) fn register(app: &mut App) {
     app.init_resource::<InputFocus>()
+        .add_message::<GuiInputCommand>()
         .init_resource::<ButtonInput<Key>>()
         .init_resource::<GuiImeWindow>()
         .add_message::<Ime>()
@@ -81,12 +136,12 @@ pub(crate) fn reconcile_focus(
     if let Some(request) = request {
         if let Some(entity) = request.and_then(|owner| runtime.entity_of(owner)) {
             focus.set(entity, FocusCause::Navigated);
-        } else if runtime.focused_input.is_some()
-            || focus
-                .get()
-                .and_then(|entity| objects.get(entity).ok())
-                .is_some_and(|owner| runtime.store().input_field_of(owner.0) == Some(owner.0))
-        {
+        } else if focus.get().is_some_and(|entity| {
+            state.focused_entity == Some(entity)
+                || objects
+                    .get(entity)
+                    .is_ok_and(|owner| runtime.store().input_field_of(owner.0) == Some(owner.0))
+        }) {
             focus.clear();
         }
     }
@@ -149,6 +204,7 @@ pub(crate) fn reconcile_focus(
         }
     }
     state.focused = next;
+    state.focused_entity = next.and_then(|owner| runtime.entity_of(owner));
 }
 
 fn shortcut(input: &KeyboardInput, letter: &str, code: KeyCode) -> bool {

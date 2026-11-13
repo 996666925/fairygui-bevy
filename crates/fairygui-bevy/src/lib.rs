@@ -68,7 +68,7 @@ pub use ecs::{
     GuiControllerState, GuiControllers, GuiDisplay, GuiObjectInfo, GuiPullPart, GuiQuery,
     GuiRootView, GuiScrollState, GuiText, GuiTransform, GuiTransitionState, GuiTransitions,
 };
-pub use input::{GuiInputSettings, GuiInputState};
+pub use input::{GuiInputCommand, GuiInputSettings, GuiInputState};
 pub use list::{
     GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListRow,
     GuiListState, GuiVirtualList, GuiVirtualListState,
@@ -118,15 +118,16 @@ pub mod prelude {
         FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiAnimationComplete,
         GuiButtonSelected, GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiEvent,
         GuiFont, GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings,
-        GuiGlobalWaitState, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,
-        GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
-        GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
-        GuiObjectAction, GuiObjectCommand, GuiObjectInfo, GuiPopupCommand, GuiPopupMenu,
-        GuiPopupState, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery,
-        GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems,
-        GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
+        GuiGlobalWaitState, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink,
+        GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
+        GuiListRow, GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState,
+        GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiObjectInfo, GuiPopupCommand,
+        GuiPopupMenu, GuiPopupState, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease,
+        GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue,
+        GuiSystems, GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback,
+        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
+        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
+        PopupMenuTemplates,
     };
 }
 
@@ -284,6 +285,7 @@ impl Plugin for FairyGuiPlugin {
                 image_fill::sync_image_fills,
                 (
                     runtime::sync_stage_hierarchy,
+                    input::editing::apply_input_commands,
                     input::editing::reconcile_focus,
                 )
                     .chain(),

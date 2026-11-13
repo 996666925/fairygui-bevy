@@ -37,6 +37,22 @@ The Bevy integration exposes FairyGUI events as Bevy entity events. Applications
 attach observers to the entities they own; there is no numeric click-listener
 registry or compatibility layer for an older API.
 
+`GuiInputCommand` addresses materialized input views or root/window owners:
+Focus forwards compound titles, Blur releases only GUI text focus, and
+PreventSubmit responds to Enter without ending the editing session. Commands run
+after stage/view/edit-policy synchronization and before Sync focus reconciliation,
+so Respond and PostLayout can both send them. Focus requests are resolved once,
+with the last valid request winning; absent/loading targets are discarded, and
+native visibility, modality, host-window and editor eligibility still apply.
+Rejected focus does not retry when a hidden or blocked field becomes eligible.
+
+`GuiTextInput.entity` captures the originating input view when the native
+notification is created; compound titles report their real input entity. This
+also preserves the view identity if it is disposed before publication. Core
+notifications without a materialized view are not published as ECS messages.
+`GuiInputState::focused_entity()` follows reconciled focus in PreUpdate and Sync;
+business handlers can compare entities or send commands without runtime access.
+
 `GuiPopupCommand` accepts root owners or view entities for existing popups and
 menu template sources. Commands run after root reconciliation and object commands
 in Sync. Requests for roots awaiting assets retain the source component identity;
