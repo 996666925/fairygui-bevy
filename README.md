@@ -14,7 +14,7 @@ Cargo workspace，按「平台无关核心」与「Bevy 适配层」分层：
 | --- | --- |
 | `crates/fairygui-core` | 平台无关运行时：字节流读取、`.fui` 包解析、对象模型、全部控件与行为。**不依赖 Bevy**。 |
 | `crates/fairygui-bevy` | Bevy 集成层：资产加载、对象树到实体树的生成与增量同步、输入桥接。所有易变的 `bevy_ui` API 收敛在 `backend` 模块。 |
-| `crates/fairygui-bevy-macros` | 派生宏（预留：自定义扩展组件注册）。 |
+| `crates/fairygui-bevy-macros` | `GuiExtension` 派生宏：按资源地址自动绑定应用组件与子控件引用。 |
 | `crates/fairygui-demo` | 可运行示例。 |
 
 依赖方向固定为 `fairygui-bevy` → `fairygui-core`，核心层永不反向依赖 Bevy。
@@ -449,6 +449,46 @@ ListEffect 使用 `GuiListContent` 创建十封邮件，配置已读/领取页�
 `GuiSystems::PostLayout` 查询初始可见行，通过 `PlayTransitionWithOptions` 每隔
 0.2 秒播放导出的 `t0`，等待期间隐藏对应行。效果只在创建后启动一次，滚动进入的
 其他行保留普通显示。`--smoke-list-effect` 验证错开播放、最终位置、点击选择和销毁。
+
+包内组件可以注册为应用的 ECS 扩展，对应原版 `UIObjectFactory.setExtension`：
+
+```rust,no_run
+use bevy::prelude::*;
+use fairygui_bevy::prelude::*;
+
+#[derive(Component, GuiExtension)]
+#[gui(url = "ui://VirtualList/mailItem")]
+struct MailItem {
+    #[gui(path = "timeText")]
+    time: Entity,
+    #[gui(path = "")]
+    view: Entity,
+    #[gui(path = "optionalBadge")]
+    badge: Option<Entity>,
+    // Unannotated application fields start with Default::default().
+    opened: bool,
+}
+
+fn register(app: &mut App) {
+    app.register_gui_extension::<MailItem>()
+        .register_gui_extension_at::<MailItem>("ui://ListEffect/mailItem");
+}
+```
+
+注册支持 `ui://包名/条目名` 与 `ui://包ID条目ID`，同一资源优先匹配 ID 地址。
+注册可在插件和包加载前完成，替换注册只影响之后创建的视图。扩展挂在控件视图
+实体上，根拥有者可通过 `GuiRootView` 找到；`path` 使用精确子控件路径，空路径
+绑定当前实体，`Option<Entity>` 允许缺失。必需路径缺失时不会插入半成品组件，
+`GuiExtensionState::error()` 提供原因，原生控件仍保留。
+
+使用 `#[gui(url = "...", on_construct = bind_mail)]` 可指定接收
+`&mut bevy::ecs::system::EntityCommands` 的构建钩子，用于附加 observer 或发送
+控件命令。也可手动实现 `GuiExtension`，自定义 `construct` 和 `on_construct`。
+构建按子组件到父组件的顺序执行一次：根扩展在 `GuiSystems::Initialize` 前就绪，
+列表新增行在 `PostLayout` 前就绪；该阶段滚动产生的行也在同帧投影前构建。
+普通根、窗口、嵌套组件、跨包 Loader 和列表模板共用注册，归池或离台不重新构建，
+销毁视图会回收扩展组件。`ListEffect` 通过自动绑定的 `MailItem` 播放邮件动画，
+首帧检查同时验证时间控件绑定。
 
 `GuiVirtualListState` 提供 `info()` 布局统计和 `error()` 配置错误，Sync 后可读取。
 `.looping()` 使用原生六份循环记录，回调仍接收逻辑索引；普通/循环模式在首次

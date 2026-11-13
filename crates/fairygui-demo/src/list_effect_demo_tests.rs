@@ -9,6 +9,7 @@ fn visible_mail_rows_start_once_with_native_stagger_and_offscreen_rows_remain_un
         bevy::asset::AssetPlugin::default(),
         FairyGuiPlugin,
     ))
+    .register_gui_extension_at::<MailItem>("ui://ListEffect/mailItem")
     .init_resource::<ButtonInput<MouseButton>>()
     .add_message::<bevy::input::mouse::MouseWheel>()
     .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(

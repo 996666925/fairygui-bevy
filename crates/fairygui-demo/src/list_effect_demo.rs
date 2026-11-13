@@ -1,6 +1,6 @@
 //! Mail rows and staggered exported transitions, configured through ECS.
+use crate::mail_item::MailItem;
 use bevy::prelude::*;
-use fairygui_bevy::core::transition::TransitionPlayOptions;
 
 #[cfg(test)]
 #[path = "list_effect_demo_tests.rs"]
@@ -50,6 +50,7 @@ pub fn bind(
 pub fn play(
     mut commands: Commands,
     lists: Query<(Entity, &GuiListState), With<Pending>>,
+    mail_items: Query<&MailItem>,
     gui: GuiQuery,
 ) {
     for (list, content) in &lists {
@@ -60,20 +61,11 @@ pub fn play(
             if gui.is_child_in_view(list, row) != Some(true) {
                 break;
             }
-            commands.write_message(GuiObjectCommand::new(
-                row,
-                GuiObjectAction::SetVisible(false),
-            ));
-            commands.write_message(GuiObjectCommand::new(
-                row,
-                GuiObjectAction::PlayTransitionWithOptions {
-                    name: "t0".into(),
-                    options: TransitionPlayOptions {
-                        delay: index as f32 * 0.2,
-                        ..default()
-                    },
-                },
-            ));
+            let Ok(mail) = mail_items.get(row) else {
+                continue;
+            };
+            debug_assert!(gui.text(mail.time).is_some());
+            mail.play_effect(&mut commands, index as f32 * 0.2);
         }
         commands.entity(list).remove::<Pending>();
     }

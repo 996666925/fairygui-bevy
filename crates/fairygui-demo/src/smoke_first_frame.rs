@@ -39,6 +39,7 @@ fn inspect(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     texts: Query<(&bevy::text::TextLayoutInfo, &TextLayout)>,
+    mail_items: Query<&crate::mail_item::MailItem>,
     mut commands: Commands,
 ) {
     let Ok(window) = windows.single() else { return };
@@ -56,6 +57,11 @@ fn inspect(
                 let content = gui.list(list).expect("configured on the first frame");
                 assert_eq!(content.items().len(), 10);
                 for (index, &row) in content.items().iter().enumerate() {
+                    let mail = mail_items
+                        .get(row)
+                        .expect("extension bound before first PostLayout");
+                    assert_eq!(mail.entity, row);
+                    assert_eq!(gui.text(mail.time), Some("5 Nov 2015 16:24:33"));
                     assert_eq!(gui.text(row), Some("Mail title here"));
                     assert_eq!(
                         gui.transition(row, "t0").unwrap().play_generation(),

@@ -20,6 +20,7 @@ mod guide_demo;
 mod joystick_demo;
 mod list_effect_demo;
 mod loop_list_demo;
+mod mail_item;
 mod modal_wait_demo;
 mod pull_refresh_demo;
 mod scroll_pane_demo;
@@ -130,6 +131,8 @@ fn main() -> AppExit {
             }),
         FairyGuiPlugin,
     ))
+    .register_gui_extension::<mail_item::MailItem>()
+    .register_gui_extension_at::<mail_item::MailItem>("ui://ListEffect/mailItem")
     .init_resource::<Demo>()
     .init_resource::<demos::DemoController>()
     .init_resource::<pull_refresh_demo::PullDemo>()

@@ -54,6 +54,7 @@ pub use animation::{GuiAnimationPlaySettings, GuiAnimationState};
 pub mod backend;
 mod compositor;
 pub mod ecs;
+pub mod extension;
 mod graph;
 mod image_fill;
 pub mod input;
@@ -74,6 +75,8 @@ pub use ecs::{
     GuiRootView, GuiScrollState, GuiSpace, GuiText, GuiTransform, GuiTransitionState,
     GuiTransitions,
 };
+pub use extension::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
+pub use fairygui_bevy_macros::GuiExtension;
 pub use input::{
     GuiInputCommand, GuiInputSettings, GuiInputState, GuiPointerCapture, GuiPointerId,
 };
@@ -135,6 +138,7 @@ enum SyncPhase {
 
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
+    pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiAnimationComplete,
         GuiAnimationPlaySettings, GuiAnimationState, GuiButtonSelected, GuiConfig,
@@ -293,6 +297,7 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_icons,
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
+                extension::construct,
             )
                 .chain()
                 .in_set(SyncPhase::Materialize),
@@ -329,6 +334,7 @@ impl Plugin for FairyGuiPlugin {
                     list::sync_virtual_list_state,
                     runtime::sync_loader_states,
                     input::sync_input_state,
+                    extension::construct,
                 )
                     .chain(),
             )
@@ -346,7 +352,17 @@ impl Plugin for FairyGuiPlugin {
                     movie::discard_unused_animation_commands,
                 )
                     .chain(),
-                (runtime::sync_virtual_lists, runtime::spawn_pending_objects).chain(),
+                (
+                    runtime::sync_virtual_lists,
+                    runtime::spawn_pending_objects,
+                    ecs::sync_gui_objects,
+                    ecs::sync_gui_properties,
+                    ecs::sync_gui_icons,
+                    ecs::sync_gui_controllers,
+                    extension::construct,
+                    runtime::apply_object_commands,
+                )
+                    .chain(),
                 runtime::sync_text_inputs,
                 runtime::text_measure::sync_sizes,
                 runtime::content::sync_content_layout,
