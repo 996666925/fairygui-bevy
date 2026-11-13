@@ -3,6 +3,24 @@ use crate::color::Color;
 use crate::widget::ControlData;
 
 impl ObjectStore {
+    /// Native Color/TitleColor, before alpha inheritance, graying and filters.
+    /// Controls without a color property return None. Compound title getters
+    /// use native black when no text field is present.
+    pub fn object_color(&self, id: GObjectId) -> Option<Color> {
+        Some(match self.object(id)?.control() {
+            ControlData::Image(data) => data.color.unwrap_or(Color::WHITE),
+            ControlData::MovieClip(data) => data.color.unwrap_or(Color::WHITE),
+            ControlData::Loader(data) => data.color.unwrap_or(Color::WHITE),
+            ControlData::Graph(data) => data.fill_color,
+            ControlData::Text(data) => data.color,
+            ControlData::TextInput(data) => data.text_field.color,
+            ControlData::Button(_) | ControlData::Label(_) | ControlData::ComboBox(_) => self
+                .object_text_field(id)
+                .map_or(Color::from_rgba8(0, 0, 0, 255), |data| data.color),
+            _ => return None,
+        })
+    }
+
     /// Native text property, including forwarded label and combo-box titles.
     /// Buttons return their base title even while a selected title is displayed.
     /// Input fields return committed text, before translation and presentation.

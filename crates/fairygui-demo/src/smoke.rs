@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_visual_properties.rs"]
+mod visual_properties;
+pub(super) fn install_visual_properties(app: &mut App) {
+    visual_properties::install(app);
+}
 #[path = "smoke_text_format.rs"]
 mod text_format;
 pub(super) fn install_text_format(app: &mut App) {

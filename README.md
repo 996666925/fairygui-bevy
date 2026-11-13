@@ -528,6 +528,48 @@ UBB 和 HTML 开关。`font = None` 使用默认字体，也支持系统字体�
 即时操作可用 `GuiObjectMut::text_format` / `set_text_format`。无文字标题的控件不带
 该组件。`--smoke-text-format` 验证格式修改、普通/富文本/位图输入切换和真实按钮点击。
 
+图片和 Loader 的常用属性也可直接修改：
+
+```rust,ignore
+fn configure_loader(
+    mut loaders: Query<&mut GuiLoaderSettings>,
+    mut fills: Query<&mut GuiImageFill>,
+    mut colors: Query<&mut GuiColor>,
+    target: Entity,
+) {
+    if let Ok(mut loader) = loaders.get_mut(target) {
+        loader.fill = 1; // fit
+        loader.align = 1;
+        loader.vertical_align = 1;
+        loader.shrink_only = true;
+    }
+    if let Ok(mut fill) = fills.get_mut(target) {
+        fill.method = FillMethod::Radial360;
+        fill.amount = 0.75;
+    }
+    if let Ok(mut color) = colors.get_mut(target) {
+        color.0 = Color::srgb(0.4, 0.8, 1.0);
+    }
+}
+```
+
+`GuiLoaderSettings` 提供六种内容缩放、水平/垂直对齐、只缩小、自动尺寸、组件
+`use_resize` 和后续失败时的错误图标开关。资源地址通过 `GuiIcon` 修改，加载结果
+通过 `GuiLoaderState` 读取。改设置会保留已装载组件及其实体，自动尺寸结果同步回
+`GuiTransform`；`use_resize` 让组件内容使用其自身关联调整尺寸。
+
+`GuiImageFill` 用于 Image 和 Loader 图片/影片的填充遮罩。`amount` 保留 `f64`
+精度及原始值，绘制时限制在 0..=1；修改遮罩保留对象的布局和输入矩形。
+未编辑的字段会跟随进度条等原生更新。Loader 装载的组件通过自身属性控制外观，
+Loader 的颜色和图片遮罩作用于其图片/影片通道。
+
+`GuiColor` 提供图片、影片、Loader 的着色、图形填充色以及文字/控件标题颜色，
+使用 Bevy `Color` 并转换到 sRGB。它与 `GuiTextFormat.color` 同步；同帧显式修改
+二者时以 `GuiTextFormat.color` 为准。灰态、滤镜与祖先透明度继续参与最终绘制，
+组件中保留原始颜色。`GuiQuery::color`、`image_fill`、`loader_settings` 可读取这些
+属性，`GuiObjectMut` 也提供对应即时 setter。无对应属性的对象不会挂载该组件。
+`--smoke-visual-properties` 验证 Loader 布局、颜色、遮罩、资源切换及实体保留。
+
 播放、补间、滚动和树展开等操作通过 `GuiMut` 直接调用，不经过对象消息队列：
 
 ```rust,ignore

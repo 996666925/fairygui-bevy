@@ -550,6 +550,9 @@ pub struct GuiQuery<'w, 's> {
     texts: Query<'w, 's, &'static GuiText>,
     text_formats: Query<'w, 's, &'static crate::GuiTextFormat>,
     icons: Query<'w, 's, &'static GuiIcon>,
+    colors: Query<'w, 's, &'static crate::GuiColor>,
+    image_fills: Query<'w, 's, &'static crate::GuiImageFill>,
+    loader_settings: Query<'w, 's, &'static crate::GuiLoaderSettings>,
     sorting_orders: Query<'w, 's, &'static GuiSortingOrder>,
     render_orders: Query<'w, 's, &'static GuiRenderOrder>,
     loaders: Query<'w, 's, &'static crate::GuiLoaderState>,
@@ -633,6 +636,18 @@ impl GuiQuery<'_, '_> {
 
     pub fn text_format(&self, entity: Entity) -> Option<&crate::GuiTextFormat> {
         self.text_formats.get(self.view(entity)?).ok()
+    }
+
+    pub fn color(&self, entity: Entity) -> Option<Color> {
+        Some(self.colors.get(self.view(entity)?).ok()?.0)
+    }
+
+    pub fn image_fill(&self, entity: Entity) -> Option<&crate::GuiImageFill> {
+        self.image_fills.get(self.view(entity)?).ok()
+    }
+
+    pub fn loader_settings(&self, entity: Entity) -> Option<&crate::GuiLoaderSettings> {
+        self.loader_settings.get(self.view(entity)?).ok()
     }
 
     /// Logical index among all siblings, independent of list paint order.

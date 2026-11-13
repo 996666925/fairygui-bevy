@@ -46,6 +46,25 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_color(&mut self, color: Color) {
+        use crate::properties::Property;
+        let value = crate::GuiColor(color);
+        if let Some(native) = crate::GuiColor::read(self.runtime, self.object) {
+            value.apply(&native, &native, self.runtime, self.object);
+        }
+    }
+    pub fn set_image_fill(&mut self, fill: crate::GuiImageFill) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiImageFill::read(self.runtime, self.object) {
+            fill.apply(&native, &native, self.runtime, self.object);
+        }
+    }
+    pub fn set_loader_settings(&mut self, settings: crate::GuiLoaderSettings) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiLoaderSettings::read(self.runtime, self.object) {
+            settings.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn text_format(&self) -> Option<crate::GuiTextFormat> {
         <crate::GuiTextFormat as crate::properties::Property>::read(self.runtime, self.object)
     }
@@ -277,11 +296,6 @@ impl GuiObjectMut<'_> {
         let icon = icon.into();
         let icon = &icon;
         runtime.store_mut().apply_icon_to(object, icon);
-    }
-    pub fn set_color(&mut self, color: fairygui_core::color::Color) {
-        let runtime = &mut *self.runtime;
-        let object = self.object;
-        runtime.store_mut().set_control_color(object, color, None);
     }
     pub fn set_grayed(&mut self, grayed: bool) {
         let runtime = &mut *self.runtime;

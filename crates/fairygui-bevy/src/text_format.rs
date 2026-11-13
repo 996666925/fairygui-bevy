@@ -56,7 +56,7 @@ impl Default for GuiTextFormat {
     }
 }
 
-fn native_color(color: Color) -> Option<NativeColor> {
+pub(crate) fn native_color(color: Color) -> Option<NativeColor> {
     let color = color.to_srgba();
     [color.red, color.green, color.blue, color.alpha]
         .into_iter()

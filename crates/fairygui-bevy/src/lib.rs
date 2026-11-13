@@ -66,6 +66,8 @@ pub mod movie;
 pub mod popup;
 pub mod progress;
 mod properties;
+mod visual_properties;
+pub use visual_properties::{GuiColor, GuiImageFill, GuiLoaderSettings};
 pub mod pull;
 pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;
@@ -122,7 +124,7 @@ pub use tree::{
 };
 
 pub use fairygui_core as core;
-pub use fairygui_core::widget::ChildrenRenderOrder;
+pub use fairygui_core::widget::{ChildrenRenderOrder, FillMethod};
 
 use bevy::prelude::*;
 
@@ -155,14 +157,15 @@ enum SyncPhase {
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
     pub use crate::{
-        ChildrenRenderOrder, FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef,
-        GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState, GuiButtonSelected,
-        GuiComboBoxState, GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds,
-        GuiDragCommand, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget,
-        GuiEvent, GuiFont, GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings,
-        GuiGlobalWaitState, GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink,
-        GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
-        GuiListRow, GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState,
+        ChildrenRenderOrder, FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FillMethod, FuiAsset,
+        GObjectRef, GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState,
+        GuiButtonSelected, GuiColor, GuiComboBoxState, GuiConfig, GuiControllerState,
+        GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand, GuiDragSource, GuiDragState,
+        GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont, GuiGlobalWaitCommand,
+        GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState, GuiIcon, GuiImageFill,
+        GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,
+        GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
+        GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState,
         GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiPointerCapture,
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
         GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,

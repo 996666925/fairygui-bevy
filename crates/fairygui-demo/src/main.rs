@@ -206,7 +206,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-text-format") {
+    if std::env::args().any(|arg| arg == "--smoke-visual-properties") {
+        smoke::install_visual_properties(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-text-format") {
         smoke::install_text_format(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-render-order") {
         smoke::install_render_order(&mut app);
