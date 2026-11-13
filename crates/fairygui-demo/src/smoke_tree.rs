@@ -10,6 +10,8 @@ struct State {
     tree: Option<Entity>,
     rows: Vec<Entity>,
     cursor: Option<Vec2>,
+    dynamic: Option<Entity>,
+    dynamic_rows: Vec<Entity>,
 }
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>().add_systems(
@@ -161,13 +163,97 @@ fn drive(
             next = true;
         }
         10 if elapsed >= 8 => {
+            let dynamic = gui.child_by_name(state.owner.unwrap(), "tree2").unwrap();
+            let Some(tree) = gui
+                .tree(dynamic)
+                .filter(|tree| tree.node_by_key("top").is_some())
+            else {
+                return;
+            };
+            assert_eq!(tree.nodes().len(), 16);
+            assert_eq!(tree.visible_nodes(), [0, 15]);
+            state.dynamic = Some(dynamic);
+            state.dynamic_rows = tree
+                .nodes()
+                .iter()
+                .map(|node| node.view().unwrap())
+                .collect();
+            assert_eq!(gui.text(state.dynamic_rows[0]), Some("I'm a top node"));
+            assert_eq!(gui.text(state.dynamic_rows[15]), Some("I'm a top node too"));
+            state.cursor = Some(center(state.dynamic_rows[0]));
+            next = true;
+        }
+        11 if elapsed >= 4 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        12 if elapsed >= 4 => {
+            mouse.release(MouseButton::Left);
+            next = true;
+        }
+        13 if elapsed >= 8 => {
+            let tree = gui.tree(state.dynamic.unwrap()).unwrap();
+            assert_eq!(tree.visible_nodes().len(), 11);
+            let folder = tree.node_by_key("folder").unwrap().view().unwrap();
+            state.cursor = Some(center(gui.child_by_name(folder, "expandButton").unwrap()));
+            next = true;
+        }
+        14 if elapsed >= 4 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        15 if elapsed >= 4 => {
+            mouse.release(MouseButton::Left);
+            next = true;
+        }
+        16 if elapsed >= 8 => {
+            let tree = gui.tree(state.dynamic.unwrap()).unwrap();
+            assert_eq!(tree.visible_nodes().len(), 16);
+            let file = tree.node_by_key("good-2").unwrap().view().unwrap();
+            assert_eq!(gui.text(file), Some("Good 2"));
+            assert_eq!(gui.icon(file), Some("ui://TreeView/file"));
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-ecs-tree-content.png"));
+            let mut updated = crate::tree_demo::content();
+            updated.items[0].children[0].title = "Updated through ECS".into();
+            updated.items[0]
+                .children
+                .push(GuiTreeItem::leaf("new", "Added through ECS"));
+            commands.entity(state.dynamic.unwrap()).insert(updated);
+            next = true;
+        }
+        17 if elapsed >= 8 => {
+            let tree = gui.tree(state.dynamic.unwrap()).unwrap();
+            assert_eq!(tree.nodes().len(), 17);
+            assert!(tree.node_by_key("folder").unwrap().is_expanded());
+            assert_eq!(
+                tree.node_by_key("hello-0").unwrap().view(),
+                Some(state.dynamic_rows[1])
+            );
+            assert_eq!(gui.text(state.dynamic_rows[1]), Some("Updated through ECS"));
+            let new = tree.node_by_key("new").unwrap().view().unwrap();
+            state.dynamic_rows.push(new);
+            commands
+                .entity(state.dynamic.unwrap())
+                .insert(GuiTreeContent::default());
+            next = true;
+        }
+        18 if elapsed >= 8 => {
+            assert!(gui.tree(state.dynamic.unwrap()).unwrap().nodes().is_empty());
+            assert!(
+                state
+                    .dynamic_rows
+                    .iter()
+                    .all(|&row| !existing.contains(row))
+            );
             commands.entity(state.owner.unwrap()).despawn();
             next = true;
         }
-        11 if elapsed >= 8 => {
+        19 if elapsed >= 8 => {
             assert!(state.rows.iter().all(|&row| !existing.contains(row)));
             println!(
-                "demo smoke PASSED: exported tree titles/icons and indentation, actual folder/arrow clicks, collapse reflow, retained rows, hidden-node selection and ECS disposal"
+                "demo smoke PASSED: exported and keyed dynamic trees, actual row/arrow clicks, native collapse defaults, folder/file icons, keyed row reuse, data updates, growth and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

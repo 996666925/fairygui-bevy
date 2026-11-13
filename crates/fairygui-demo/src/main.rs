@@ -18,6 +18,7 @@ mod loop_list_demo;
 mod modal_wait_demo;
 mod pull_refresh_demo;
 mod smoke;
+mod tree_demo;
 mod window_demo;
 
 /// 主菜单所在的包与界面名。
@@ -161,6 +162,7 @@ fn main() -> AppExit {
             window_demo::bind,
             modal_wait_demo::bind,
             drag_drop_demo::bind,
+            tree_demo::bind,
         )
             .chain()
             .after(GuiSystems::Sync),

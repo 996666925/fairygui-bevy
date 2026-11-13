@@ -3,6 +3,41 @@ use super::*;
 use crate::widget::ControlData;
 
 impl ObjectStore {
+    /// Replace the logical preorder description after the adapter has prepared
+    /// its cells. Validate all metadata before mutating the tree.
+    pub fn replace_tree_nodes(
+        &mut self,
+        tree: GObjectId,
+        nodes: Vec<crate::widget::TreeNodeData>,
+        items: Vec<crate::widget::ListItemData>,
+        expanded: Vec<bool>,
+    ) -> bool {
+        if nodes.len() != items.len() || nodes.len() != expanded.len() {
+            return false;
+        }
+        let mut previous: Option<&crate::widget::TreeNodeData> = None;
+        for node in &nodes {
+            if previous.is_none() && node.level != 0 {
+                return false;
+            }
+            if let Some(previous) = previous
+                && (u16::from(node.level) > u16::from(previous.level) + 1
+                    || (node.level > previous.level && !previous.is_folder))
+            {
+                return false;
+            }
+            previous = Some(node);
+        }
+        let Some(ControlData::Tree(data)) = self.objects.get_mut(tree).map(|o| &mut o.control)
+        else {
+            return false;
+        };
+        data.nodes = nodes;
+        data.list.items = items;
+        data.expanded = expanded;
+        true
+    }
+
     pub fn set_tree_node_expanded(
         &mut self,
         tree: GObjectId,

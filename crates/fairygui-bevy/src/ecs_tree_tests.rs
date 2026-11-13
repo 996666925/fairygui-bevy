@@ -368,6 +368,20 @@ fn click(app: &mut App, target: Entity) {
 
 #[derive(Resource, Default)]
 struct ClickSnapshots(Vec<bool>);
+#[derive(Resource, Default)]
+struct ItemClicks(Vec<(usize, String)>);
+fn observe_item_click(event: On<crate::GuiEvent>, gui: GuiQuery, mut clicks: ResMut<ItemClicks>) {
+    if event.event.kind == crate::core::object::EventKind::ClickItem {
+        let tree = gui.tree(event.entity).unwrap();
+        let index = tree.selected_nodes()[0];
+        clicks.0.push((
+            index,
+            gui.text(tree.node(index).unwrap().view().unwrap())
+                .unwrap()
+                .to_owned(),
+        ));
+    }
+}
 fn observe_folder_click(
     event: On<crate::GuiEvent>,
     nodes: Query<&GuiTreeNode>,
@@ -406,6 +420,8 @@ fn tree_body_and_expander_clicks_each_toggle_once_and_publish_state_before_obser
         .view()
         .unwrap();
     app.init_resource::<ClickSnapshots>();
+    app.init_resource::<ItemClicks>();
+    app.world_mut().entity_mut(tree).observe(observe_item_click);
     app.world_mut()
         .entity_mut(folder)
         .observe(observe_folder_click);
@@ -443,5 +459,9 @@ fn tree_body_and_expander_clicks_each_toggle_once_and_publish_state_before_obser
     assert_eq!(
         app.world().resource::<ClickSnapshots>().0,
         [false, true, false]
+    );
+    assert_eq!(
+        app.world().resource::<ItemClicks>().0,
+        vec![(0, "Folder 1".into()); 3]
     );
 }

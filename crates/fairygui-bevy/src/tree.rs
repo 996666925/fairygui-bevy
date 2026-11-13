@@ -3,11 +3,148 @@ use crate::{GObjectRef, GuiRuntime};
 use bevy::prelude::*;
 
 #[cfg(test)]
+#[path = "ecs_tree_content_tests.rs"]
+mod content_tests;
+#[cfg(test)]
 #[path = "ecs_tree_tests.rs"]
 mod tests;
 
+/// One keyed node in application-owned tree content. Keys are unique across the
+/// whole tree, keeping row entities stable during insertion and reordering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuiTreeItem {
+    pub key: String,
+    pub title: String,
+    /// Some assigns an icon (empty clears it); None leaves the skin/current icon.
+    pub icon: Option<String>,
+    /// Local template or registered ui:// URL; None uses the tree default.
+    pub template: Option<String>,
+    pub is_folder: bool,
+    /// Some forces this value when content changes; None preserves existing
+    /// expansion by key and initializes a new folder collapsed (native default).
+    pub expanded: Option<bool>,
+    pub children: Vec<GuiTreeItem>,
+}
+impl GuiTreeItem {
+    pub fn leaf(key: impl Into<String>, title: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            title: title.into(),
+            icon: None,
+            template: None,
+            is_folder: false,
+            expanded: None,
+            children: Vec::new(),
+        }
+    }
+    pub fn folder(key: impl Into<String>, title: impl Into<String>, children: Vec<Self>) -> Self {
+        Self {
+            is_folder: true,
+            children,
+            ..Self::leaf(key, title)
+        }
+    }
+}
+
+/// Configure a tree view's data through ECS. Changed configurations reconcile
+/// keyed rows; removing the component leaves the current tree content intact.
+#[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
+pub struct GuiTreeContent {
+    pub items: Vec<GuiTreeItem>,
+}
+impl GuiTreeContent {
+    pub fn new(items: Vec<GuiTreeItem>) -> Self {
+        Self { items }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum GuiTreeContentError {
+    #[error("tree content requires a Tree control")]
+    NotTree,
+    #[error("tree node key must not be empty")]
+    EmptyKey,
+    #[error("duplicate tree node key {0}")]
+    DuplicateKey(String),
+    #[error("leaf node {0} cannot have children")]
+    LeafChildren(String),
+    #[error("tree depth exceeds the native level range")]
+    TooDeep,
+    #[error("cannot resolve tree node template {0}")]
+    MissingTemplate(String),
+    #[error("cannot construct tree node template {0}")]
+    CreationFailed(String),
+    #[error("tree node template must be a component: {0}")]
+    InvalidTemplate(String),
+}
+#[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
+pub struct GuiTreeContentState {
+    error: Option<GuiTreeContentError>,
+    object: Option<crate::core::GObjectId>,
+}
+impl GuiTreeContentState {
+    pub fn error(&self) -> Option<&GuiTreeContentError> {
+        self.error.as_ref()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ContentRow {
+    pub key: String,
+    pub template: String,
+    pub object: crate::core::GObjectId,
+    pub is_folder: bool,
+}
+#[derive(Component, Debug, Clone)]
+pub(crate) struct ContentBinding {
+    pub object: crate::core::GObjectId,
+    pub rows: Vec<ContentRow>,
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn sync_tree_content(
+    mut commands: Commands,
+    mut runtime: NonSendMut<GuiRuntime>,
+    configs: Query<(
+        Entity,
+        &GObjectRef,
+        Ref<GuiTreeContent>,
+        Option<&ContentBinding>,
+        Option<&GuiTreeContentState>,
+    )>,
+    removed: Query<Entity, (With<GuiTreeContentState>, Without<GuiTreeContent>)>,
+) {
+    for entity in &removed {
+        commands.entity(entity).remove::<GuiTreeContentState>();
+    }
+    for (entity, reference, config, binding, current) in &configs {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        if !config.is_changed() && current.is_some_and(|state| state.object == Some(reference.0)) {
+            continue;
+        }
+        let result = runtime.configure_tree_content(reference.0, &config, binding);
+        let error = match result {
+            Ok(binding) => {
+                commands.entity(entity).insert(binding);
+                None
+            }
+            Err(error) => Some(error),
+        };
+        let next = GuiTreeContentState {
+            error,
+            object: Some(reference.0),
+        };
+        if current != Some(&next) {
+            commands.entity(entity).insert(next);
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuiTreeNodeState {
+    key: Option<String>,
     index: usize,
     parent: Option<usize>,
     level: u8,
@@ -17,6 +154,10 @@ pub struct GuiTreeNodeState {
     view: Option<Entity>,
 }
 impl GuiTreeNodeState {
+    /// Application content key, absent on unconfigured exported nodes.
+    pub fn key(&self) -> Option<&str> {
+        self.key.as_deref()
+    }
     pub fn index(&self) -> usize {
         self.index
     }
@@ -53,6 +194,9 @@ pub struct GuiTreeState {
     click_to_expand: i32,
 }
 impl GuiTreeState {
+    pub fn node_by_key(&self, key: &str) -> Option<&GuiTreeNodeState> {
+        self.nodes.iter().find(|node| node.key() == Some(key))
+    }
     pub fn nodes(&self) -> &[GuiTreeNodeState] {
         &self.nodes
     }
@@ -97,10 +241,11 @@ pub(crate) fn sync_tree_state(
         &GObjectRef,
         Option<&GuiTreeState>,
         Option<&GuiTreeNode>,
+        Option<&ContentBinding>,
     )>,
 ) {
     let mut rows = std::collections::HashMap::new();
-    for (entity, reference, current, _) in &objects {
+    for (entity, reference, current, _, binding) in &objects {
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
@@ -141,6 +286,10 @@ pub(crate) fn sync_tree_state(
                     );
                 }
                 GuiTreeNodeState {
+                    key: binding
+                        .filter(|binding| binding.object == reference.0)
+                        .and_then(|binding| binding.rows.get(index))
+                        .map(|row| row.key.clone()),
                     index,
                     parent,
                     level: node.level,
@@ -165,7 +314,7 @@ pub(crate) fn sync_tree_state(
             commands.entity(entity).insert(next);
         }
     }
-    for (entity, _, _, current) in &objects {
+    for (entity, _, _, current, _) in &objects {
         match rows.get(&entity) {
             Some(next) if current != Some(next) => {
                 commands.entity(entity).insert(*next);

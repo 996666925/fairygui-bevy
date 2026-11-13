@@ -357,6 +357,28 @@ commands.write_message(GuiObjectCommand::new(tree, GuiObjectAction::SelectTreeNo
 配置。状态在 Publish 前、PostLayout 前和 Sync 末尾刷新，未变化时保留变更标记。
 `--smoke-tree` 验证导出树的真实点击、缩进、布局折叠、隐藏节点选择和回收。
 
+动态树在控件视图上挂 `GuiTreeContent`，用嵌套数据表达层级，无需操作底层对象：
+
+```rust,ignore
+commands.entity(tree).insert(GuiTreeContent::new(vec![
+    GuiTreeItem::folder("documents", "Documents", vec![
+        GuiTreeItem::leaf("readme", "README.md"),
+    ]),
+]));
+```
+
+key 在整棵树内唯一；相同 key、模板和节点类型会复用行实体，调整顺序后选择状态
+跟随对应行，删除的节点回收视图。`GuiTreeState::node_by_key` 可查询当前节点。
+新文件夹默认收起；`expanded: None` 保留用户展开状态，`Some(bool)` 在应用配置时
+指定展开状态。`icon: Some(url)` 赋图标，空字符串清除，`None` 保留皮肤或当前图标。
+`template` 可指定本地模板名或已登记的 `ui://` URL，默认使用树的默认项。
+
+修改组件后按 key 更新，重复 key、无效层级或模板错误会保留当前树，并在
+`GuiTreeContentState::error()` 报告；修改组件或标记变更可重试。移除配置组件保留
+当前内容和 key，重新挂载可继续复用；空内容回收全部数据行。TreeView 右侧的
+动态文件夹和文件已使用这套接口。`GuiEvent::ClickItem` 在列表/树实体上发布一次，
+observer 可直接查询本次选择和行文本。
+
 依赖本帧列表布局的装饰系统可放入 `GuiSystems::PostLayout`。这是 Sync 内部的
 阶段：原生列表刷新、行视图创建后，插件先更新逻辑层级、几何、文本、滚动及列表
 快照，再运行业务系统，最后应用其 `GuiObjectCommand` 并投影视图。循环列表示例

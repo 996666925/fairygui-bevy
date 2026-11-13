@@ -182,6 +182,39 @@ select a logical node by first expanding its ancestors and optionally scrolling.
 Invalid nodes and leaf expansion are no-ops. Normal root-owner pending-command
 rules apply, and non-tree controls ignore tree-specific actions.
 
+`GuiTreeContent` reconciles nested `GuiTreeItem` data on the tree view. Globally
+unique nonempty keys identify rows across insertion/reordering and text changes.
+The same key, canonical template URL and folder/leaf kind retain the same model
+and entity, including application components/observers. A different template or
+node kind replaces the cell. Selected rows follow reorder by retained identity;
+native collapse still clears selection in hidden branches.
+
+Configuration validates keys, leaf children and native u8 depth, resolves all
+local/cross-package/default templates, and constructs new cells while detached.
+Any failure reclaims staged models and asset bindings, preserving the existing
+description and cells. Non-component templates are rejected. Only then does the
+adapter reorder/attach rows, dispose removed branches, replace core metadata and
+apply text/icon overrides. Pane overlays are excluded from row disposal. Core
+validates preorder descriptions before installing them and performs visibility,
+controller and layout reconciliation through the normal tree path.
+
+New folders default collapsed as in GTreeNode construction. Optional expanded
+assignments override on component application; absent assignments preserve live
+state by key. An optional icon means an assignment (empty clears); absence leaves
+the authored/current icon untouched. Unchanged components do not rerun content.
+Errors are projected in GuiTreeContentState; changing/marking the component retries.
+Removing the component releases configuration diagnostics but keeps the current
+tree and key bindings for reuse on reinsertion. Empty data disposes all rows.
+The binding lifetime follows its tree view, so root disposal reclaims everything.
+
+GuiTreeState node snapshots expose optional content keys; exported unconfigured
+nodes have no key. node_by_key resolves the current logical index and entity.
+CLICK_ITEM also enters the ordinary GuiEvent entity observer path once on its
+list/tree, without logical bubbling. Existing message consumers still receive the
+full typed list payload. Observers read freshly synchronized selection/hierarchy.
+The TreeView demo builds the second tree from ECS data with nested folders, file
+icons and the native movie icon, and observes each tree entity for item clicks.
+
 `GuiSystems::PostLayout` is nested inside Sync, between native list refresh/view
 spawning and final property projection. Fresh hierarchy, geometry, text, display,
 scroll and list snapshots are available there. Application decorators can query

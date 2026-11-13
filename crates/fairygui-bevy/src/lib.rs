@@ -91,7 +91,10 @@ pub use runtime::{
     GuiRootInstance, GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback,
     GuiTransitionComplete, GuiTransitionHook, PopupMenuTemplates,
 };
-pub use tree::{GuiTreeNode, GuiTreeNodeState, GuiTreeState};
+pub use tree::{
+    GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
+    GuiTreeNodeState, GuiTreeState,
+};
 
 pub use fairygui_core as core;
 
@@ -133,7 +136,8 @@ pub mod prelude {
         GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
         GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput,
         GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
+        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
         GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
         PopupMenuTemplates,
     };
@@ -263,6 +267,7 @@ impl Plugin for FairyGuiPlugin {
                 (
                     runtime::cleanup_retained_popups,
                     list::sync_list_content,
+                    tree::sync_tree_content,
                     list::sync_virtual_list_bindings,
                     runtime::sync_virtual_lists,
                 )

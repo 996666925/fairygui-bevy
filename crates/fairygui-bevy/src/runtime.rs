@@ -25,6 +25,8 @@ mod ecs_root_tests;
 pub(crate) mod global_wait;
 #[path = "object_drag.rs"]
 pub(crate) mod object_drag;
+#[path = "tree_content.rs"]
+mod tree_content;
 #[path = "windows.rs"]
 pub(crate) mod windows;
 
@@ -1942,6 +1944,7 @@ impl GuiRuntime {
                 .with_data(fairygui_core::object::EventData::Item(index.to_string()));
         event.touch_id = touch_id;
         self.events.push(event.clone());
+        self.gui_events.push(event.clone());
         self.list_clicks.push(GuiListItemClick {
             event,
             item,
