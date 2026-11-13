@@ -550,6 +550,7 @@ pub struct GuiQuery<'w, 's> {
     texts: Query<'w, 's, &'static GuiText>,
     text_formats: Query<'w, 's, &'static crate::GuiTextFormat>,
     input_settings: Query<'w, 's, &'static crate::GuiTextInputSettings>,
+    button_settings: Query<'w, 's, &'static crate::GuiButtonSettings>,
     icons: Query<'w, 's, &'static GuiIcon>,
     colors: Query<'w, 's, &'static crate::GuiColor>,
     image_fills: Query<'w, 's, &'static crate::GuiImageFill>,
@@ -571,6 +572,9 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn button_settings(&self, entity: Entity) -> Option<&crate::GuiButtonSettings> {
+        self.button_settings.get(self.view(entity)?).ok()
+    }
     pub fn root_mount(&self, owner: Entity) -> Option<&crate::GuiRootMountState> {
         self.mounts.get(owner).ok()
     }

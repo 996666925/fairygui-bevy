@@ -334,9 +334,9 @@ pub fn register(app: &mut App) {
         .add_systems(
             Update,
             (
-                // Pending keyboard/IME edits are consumed here, before Publish.
-                // Apply the input configuration before validating those edits.
-                crate::properties::sync_property::<crate::GuiTextInputSettings>,
+                // Apply component edits before the current pointer/keyboard input,
+                // using the same controller/property precedence as later passes.
+                crate::properties::sync,
                 crate::runtime::object_drag::prepare_object_drags,
                 crate::runtime::ecs_drag_drop::prepare_drag_targets,
                 crate::runtime::sync_text_inputs,

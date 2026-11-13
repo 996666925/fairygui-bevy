@@ -84,7 +84,7 @@ drag_drop  translation  async_build    拖拽、多语言、分帧构建
 ## 环境要求
 
 - Rust 1.98（见 `rust-toolchain.toml`）
-- Bevy 0.20.1（2026-11-12 再次核实为最新稳定版，MSRV 为 Rust 1.97.1）
+- Bevy 0.20.1（2026-11-14 再次核实为最新稳定版，MSRV 为 Rust 1.97.1）
 
 ## 快速开始
 
@@ -527,6 +527,35 @@ UBB 和 HTML 开关。`font = None` 使用默认字体，也支持系统字体�
 其所有字段都会作为初始配置；仅修改导出格式的少数字段时，在 Initialize 查询并编辑。
 即时操作可用 `GuiObjectMut::text_format` / `set_text_format`。无文字标题的控件不带
 该组件。`--smoke-text-format` 验证格式修改、普通/富文本/位图输入切换和真实按钮点击。
+
+按钮配置通过 `GuiButtonSettings` 修改：
+
+```rust,ignore
+fn configure_button(mut buttons: Query<&mut GuiButtonSettings>, target: Entity) {
+    if let Ok(mut button) = buttons.get_mut(target) {
+        button.mode = ButtonMode::Check;
+        button.change_state_on_click = true;
+        button.selected_title = Some("已选中".into());
+        button.selected_icon = Some("ui://MyPackage/selectedIcon".into());
+        button.down_effect = 2;
+        button.down_effect_value = 0.8;
+    }
+}
+```
+
+`ButtonMode` 提供 Common、Check、Radio。选中值使用 `GuiButtonSelected`，基础标题和
+图标使用 `GuiText` / `GuiIcon`；选中标题/图标不覆盖基础值或按钮自身的文字/图标齿轮。
+清空选中标题或图标会立即恢复基础值，基础图标也为空时清除已有图标。
+切回 Common 会先按旧模式取消选择，因此 Check 按钮可能联动关联控制器的相反页；
+程序配置和选中赋值不投递 `StateChanged`。
+
+`sound` 为 `None` 或空字符串时关闭点击音效，`sound_volume_scale` 保留有限原始值，
+播放时沿用音频适配层的 0..=1 裁剪。`change_state_on_click = false` 保留点击事件和音效。
+`down_effect` 为 0 关闭、1 压暗非文本子控件、2 绕中心缩放；缩放强度必须为有限正数。
+按住期间更改效果会先撤销旧效果，再应用新效果，松开后恢复基础尺度；无效效果配置
+恢复上次有效值，其余字段仍可更新。配置在本帧输入之前按完整属性顺序同步。
+`GuiQuery::button_settings` 可查询根拥有者或按钮视图，直接编辑可用 `set_button_settings`。
+`--smoke-button-properties` 验证真实点击、选中显示、模式切换、按住时的动态缩放和回收。
 
 输入框的编辑属性通过 `GuiTextInputSettings` 修改：
 

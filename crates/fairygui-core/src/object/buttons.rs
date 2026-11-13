@@ -80,6 +80,87 @@ impl ObjectStore {
             data.change_state_on_click = enabled;
         }
     }
+
+    /// GButton.mode cancels selection using the old mode before entering Common.
+    /// In particular, a selected Check button may select its controller's opposite page.
+    pub fn set_button_mode(&mut self, id: GObjectId, mode: ButtonMode) -> bool {
+        let Some(ControlData::Button(data)) = self.objects.get(id).map(|o| &o.control) else {
+            return false;
+        };
+        if data.mode == mode {
+            return false;
+        }
+        if mode == ButtonMode::Common {
+            self.set_button_selected(id, false);
+        }
+        let ControlData::Button(data) = &mut self.objects[id].control else {
+            unreachable!()
+        };
+        data.mode = mode;
+        true
+    }
+
+    /// Update only the selected title; the base title and this button's text gear stay intact.
+    pub fn set_button_selected_title(&mut self, id: GObjectId, title: Option<&str>) -> bool {
+        let Some(ControlData::Button(data)) = self.objects.get_mut(id).map(|o| &mut o.control)
+        else {
+            return false;
+        };
+        let changed = data.selected_title.as_deref() != title;
+        data.selected_title = title.map(str::to_owned);
+        self.apply_title_parts(id, true, false) || changed
+    }
+
+    /// GButton.selectedIcon always refreshes its icon child, including clearing
+    /// a removed selected icon when the base icon is empty.
+    pub fn set_button_selected_icon(&mut self, id: GObjectId, icon: Option<&str>) -> bool {
+        let Some(ControlData::Button(data)) = self.objects.get_mut(id).map(|o| &mut o.control)
+        else {
+            return false;
+        };
+        let changed = data.selected_icon.as_deref() != icon;
+        data.selected_icon = icon.map(str::to_owned);
+        let display = if data.selected {
+            data.selected_icon
+                .as_deref()
+                .filter(|v| !v.is_empty())
+                .or(data.icon.as_deref())
+        } else {
+            data.icon.as_deref()
+        }
+        .unwrap_or_default()
+        .to_owned();
+        let applied = self
+            .child_by_name(id, "icon")
+            .is_some_and(|child| self.apply_icon_to(child, &display));
+        applied || changed
+    }
+
+    pub fn set_button_sound(&mut self, id: GObjectId, sound: Option<&str>) -> bool {
+        let Some(ControlData::Button(data)) = self.objects.get_mut(id).map(|o| &mut o.control)
+        else {
+            return false;
+        };
+        let changed = data.sound.as_deref() != sound;
+        data.sound = sound.map(str::to_owned);
+        changed
+    }
+
+    /// Preserve finite raw values; the audio adapter decides playback gain.
+    pub fn set_button_sound_volume(&mut self, id: GObjectId, volume: f32) -> bool {
+        if !volume.is_finite() {
+            return false;
+        }
+        let Some(ControlData::Button(data)) = self.objects.get_mut(id).map(|o| &mut o.control)
+        else {
+            return false;
+        };
+        if data.sound_volume_scale == volume {
+            return false;
+        }
+        data.sound_volume_scale = volume;
+        true
+    }
     /// 按钮是否选中；普通按钮始终不参与选择。
     pub fn button_selected(&self, id: GObjectId) -> Option<bool> {
         match &self.objects.get(id)?.control {
@@ -528,6 +609,90 @@ mod tests {
         assert_eq!(page(&store, button, "button"), "down");
         store.set_controller_page_id(parent, "pages", "first-id");
         assert_eq!(page(&store, button, "button"), "up");
+    }
+
+    #[test]
+    fn mode_changes_deselect_using_the_old_check_mode_and_keep_radio_pages() {
+        let (mut store, parent, button) = fixture(ButtonMode::Check);
+        store.set_button_selected(button, true);
+        assert_eq!(page(&store, parent, "pages"), "Second");
+        assert!(store.set_button_mode(button, ButtonMode::Common));
+        assert_eq!(store.button_selected(button), Some(false));
+        assert_eq!(page(&store, parent, "pages"), "First");
+        assert_eq!(page(&store, button, "button"), "up");
+        assert!(!store.set_button_selected(button, true));
+        store.set_button_mode(button, ButtonMode::Radio);
+        store.set_button_selected(button, true);
+        assert!(store.set_button_mode(button, ButtonMode::Check));
+        assert_eq!(store.button_selected(button), Some(true));
+        store.set_button_mode(button, ButtonMode::Radio);
+        store.set_button_mode(button, ButtonMode::Common);
+        assert_eq!(store.button_selected(button), Some(false));
+        assert_eq!(page(&store, parent, "pages"), "Second");
+        assert!(!store.set_button_mode(parent, ButtonMode::Check));
+    }
+
+    #[test]
+    fn selected_properties_refresh_children_and_preserve_base_values_including_empty_icons() {
+        let (mut store, _, button) = fixture(ButtonMode::Check);
+        let title = store.create(ObjectType::Text);
+        store.set_name(title, "title");
+        store.set_parent(title, Some(button));
+        let icon = store.create(ObjectType::Loader);
+        store.set_name(icon, "icon");
+        store.set_parent(icon, Some(button));
+        store.set_object_text(button, "Base");
+        store.set_button_selected_title(button, Some("Selected"));
+        store.set_button_selected_icon(button, Some("selected.png"));
+        assert_eq!(store.object_text(title), Some("Base"));
+        store.set_button_selected(button, true);
+        assert_eq!(store.object_text(title), Some("Selected"));
+        store.set_button_selected_title(button, Some("Updated"));
+        assert_eq!(store.object_text(button), Some("Base"));
+        assert_eq!(store.object_text(title), Some("Updated"));
+        store.set_button_selected_icon(button, None);
+        let ControlData::Loader(data) = store.object(icon).unwrap().control() else {
+            panic!()
+        };
+        assert_eq!(data.url.as_deref(), Some(""));
+        store.apply_icon_to(button, "base.png");
+        store.set_button_selected_icon(button, Some("selected.png"));
+        store.set_button_selected_icon(button, Some(""));
+        let ControlData::Loader(data) = store.object(icon).unwrap().control() else {
+            panic!()
+        };
+        assert_eq!(data.url.as_deref(), Some("base.png"));
+        store.set_button_selected_title(button, None);
+        assert_eq!(store.object_text(title), Some("Base"));
+        store.set_button_selected(button, false);
+        let ControlData::Button(data) = store.object(button).unwrap().control() else {
+            panic!()
+        };
+        assert_eq!(data.icon.as_deref(), Some("base.png"));
+    }
+
+    #[test]
+    fn click_configuration_keeps_sound_when_toggling_is_disabled_and_validates_volume() {
+        let (mut store, _, button) = fixture(ButtonMode::Check);
+        store.set_button_sound(button, Some("click.wav"));
+        store.set_button_sound_volume(button, 0.35);
+        store.set_button_change_state_on_click(button, false);
+        assert!(!store.click_button(button));
+        assert_eq!(
+            store.take_queued_sounds(),
+            vec![(button, "click.wav".into(), 0.35)]
+        );
+        assert!(!store.set_button_sound_volume(button, f32::NAN));
+        assert!(!store.set_button_sound_volume(button, f32::INFINITY));
+        store.set_button_change_state_on_click(button, true);
+        assert!(store.click_button(button));
+        assert_eq!(store.take_queued_sounds()[0].2, 0.35);
+        store.set_button_sound(button, Some(""));
+        assert!(store.click_button(button));
+        assert!(store.take_queued_sounds().is_empty());
+        store.set_button_sound(button, None);
+        assert!(store.click_button(button));
+        assert!(store.take_queued_sounds().is_empty());
     }
 
     #[test]
