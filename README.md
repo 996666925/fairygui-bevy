@@ -125,6 +125,27 @@ app.add_systems(Update, bind_menu.after(GuiSystems::Sync));
 上一帧的快照，Sync 后可查询本帧新建的控件。高级模型操作可通过
 `GuiRootInstance` 获取底层对象 ID 和 root handle。
 
+`GuiTransform` 提供控件的逻辑位置、未缩放尺寸、缩放、轴心、旋转与斜切；
+可用 `Query<&GuiTransform>` 查询视图实体，或用 `gui.transform(root_or_view)` 读取。
+坐标相对 FairyGUI 逻辑父节点，旋转和斜切以度为单位，不包含滚动偏移、轴心补偿
+或祖先变换，也不依赖 Bevy 布局是否已完成。例如根界面居中只需查询 ECS：
+
+```rust,ignore
+fn center_root(gui: &GuiQuery, commands: &mut Commands, root: Entity, viewport: Vec2) {
+    if let Some(transform) = gui.transform(root) {
+        commands.write_message(GuiObjectCommand::new(
+            root,
+            GuiObjectAction::SetPosition((viewport - transform.size()) * 0.5),
+        ));
+    }
+}
+```
+
+几何状态在 Sync 末尾更新，包含本帧命令、控制器、分组和动画引起的变化，
+未变化时不会触发 `Changed<GuiTransform>`。通过 `SetPivot { pivot, as_anchor }`
+可同时配置比例轴心与锚点定位。`GuiFont` 资源也在根构建前同步，首帧和后续动态
+界面会直接使用配置的字体，无需业务系统手工调用 `GuiRuntime::set_font`。
+
 业务系统可在 `GuiSystems::Respond` 用实体发送 `GuiObjectCommand`，本帧 Sync 会把
 修改应用到对象模型并投影到 Bevy UI 视图：
 

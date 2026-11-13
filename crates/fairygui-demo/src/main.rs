@@ -43,29 +43,23 @@ fn center_root(runtime: &mut GuiRuntime, index: usize, viewport: (f32, f32)) {
 }
 
 fn center_root_command(
-    runtime: &GuiRuntime,
+    gui: &GuiQuery,
     commands: &mut MessageWriter<GuiObjectCommand>,
-    index: usize,
+    owner: Entity,
     viewport: (f32, f32),
 ) {
-    let Some(root) = runtime.root_object(index) else {
+    let Some(transform) = gui.transform(owner) else {
         return;
     };
-    let Some((width, height)) = runtime
-        .store()
-        .object(root)
-        .map(|object| (object.width(), object.height()))
-    else {
-        return;
-    };
-
+    let Vec2 {
+        x: width,
+        y: height,
+    } = transform.size();
     let position = Vec2::new((viewport.0 - width) / 2.0, (viewport.1 - height) / 2.0);
-    if let Some(target) = runtime.entity_of(root) {
-        commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetPosition(position),
-        ));
-    }
+    commands.write(GuiObjectCommand::new(
+        owner,
+        GuiObjectAction::SetPosition(position),
+    ));
 
     info!(
         "界面 {width}×{height}，视口 {}×{}，摆到 ({}, {})",
@@ -217,9 +211,9 @@ fn boot_menu(
     mut commands: Commands,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
     asset_server: Res<AssetServer>,
-    font: Res<GuiFont>,
     windows: Query<&Window>,
-    mut runtime: NonSendMut<GuiRuntime>,
+    gui: GuiQuery,
+    roots: Query<&GuiRootInstance>,
     mut demo: ResMut<Demo>,
 ) {
     if demo.menu.is_some() {
@@ -227,7 +221,6 @@ fn boot_menu(
     }
 
     if demo.menu_owner.is_none() {
-        runtime.set_font(font.0.clone());
         let handle = asset_server.load::<FuiAsset>(MENU_PACKAGE);
         demo.menu_owner = Some(
             commands
@@ -246,55 +239,49 @@ fn boot_menu(
         return;
     }
 
-    let Some(index) = demo
-        .menu_owner
-        .and_then(|owner| runtime.ecs_root_handle(owner))
-    else {
+    let Some(owner) = demo.menu_owner else {
+        return;
+    };
+    let Ok(menu) = roots.get(owner) else {
+        return;
+    };
+    let Some(close_owner) = demo.close_owner else {
+        return;
+    };
+    let Ok(close) = roots.get(close_owner) else {
+        return;
+    };
+    let Some(transform) = gui.transform(close_owner) else {
         return;
     };
     // 关闭按钮与主界面平级挂在根节点下，对应官方示例里挂在 GRoot 上的做法。
     // 它自带尺寸，因此单独由 ECS 实体拥有，并摆到右下角。
-    if let Some(close_owner) = demo.close_owner
-        && let Some(close) = runtime.ecs_root_object(close_owner)
-    {
-        let (width, height) = runtime
-            .store()
-            .object(close)
-            .map(|object| (object.width(), object.height()))
-            .unwrap_or_default();
-
-        let (viewport_width, viewport_height) = windows
-            .iter()
-            .next()
-            .map(|window| (window.width(), window.height()))
-            .unwrap_or((1280.0, 720.0));
-        if let Some(target) = runtime.entity_of(close) {
-            gui_commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetPosition(Vec2::new(
-                    viewport_width - width - 10.0,
-                    viewport_height - height - 10.0,
-                )),
-            ));
-        }
-        demo.close_button = Some(close);
-    }
+    let (viewport_width, viewport_height) = windows
+        .iter()
+        .next()
+        .map(|window| (window.width(), window.height()))
+        .unwrap_or((1280.0, 720.0));
+    gui_commands.write(GuiObjectCommand::new(
+        close_owner,
+        GuiObjectAction::SetPosition(Vec2::new(
+            viewport_width - transform.size().x - 10.0,
+            viewport_height - transform.size().y - 10.0,
+        )),
+    ));
 
     // 界面摆到窗口中央。按实际窗口尺寸算，不用假设的分辨率。
     if let Some(window) = windows.iter().next() {
         center_root_command(
-            &runtime,
+            &gui,
             &mut gui_commands,
-            index,
+            owner,
             (window.width(), window.height()),
         );
     }
 
-    demo.close_button = demo
-        .close_owner
-        .and_then(|owner| runtime.ecs_root_object(owner));
+    demo.close_button = Some(close.object);
     info!("主菜单已就绪，点击条目进入演示");
-    demo.menu = Some(index);
+    demo.menu = Some(menu.handle);
 }
 
 /// 演示包的资产到达后创建界面。
@@ -303,32 +290,29 @@ fn open_pending_demo(
     mut commands: Commands,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
     assets: Res<Assets<FuiAsset>>,
-    font: Res<GuiFont>,
     windows: Query<&Window>,
     gui: GuiQuery,
+    roots: Query<&GuiRootInstance>,
     mut runtime: NonSendMut<GuiRuntime>,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
-    runtime.set_font(font.0.clone());
-
     if let Some((owner, handle, name)) = demo.open.clone() {
         if controller.root.is_some() {
             return;
         }
-        let Some(root) = runtime.ecs_root_object(owner) else {
+        let Ok(instance) = roots.get(owner) else {
             return;
         };
+        let root = instance.object;
         if assets.get(&handle).is_none() {
             return;
         }
-        if let Some(window) = windows.iter().next()
-            && let Some(index) = runtime.ecs_root_handle(owner)
-        {
+        if let Some(window) = windows.iter().next() {
             center_root_command(
-                &runtime,
+                &gui,
                 &mut gui_commands,
-                index,
+                owner,
                 (window.width(), window.height()),
             );
         }
@@ -343,6 +327,7 @@ fn open_pending_demo(
         }
         controller.package = Some(name.clone());
         controller.root = Some(root);
+        controller.root_owner = Some(owner);
         controller.elapsed = 0.0;
         info!("已打开演示：{name}");
         return;
@@ -469,6 +454,7 @@ fn close_demo(
     }
     controller.package = None;
     controller.root = None;
+    controller.root_owner = None;
     controller.elapsed = 0.0;
     if let Some(target) = demo.close_owner {
         gui_commands.write(GuiObjectCommand::new(

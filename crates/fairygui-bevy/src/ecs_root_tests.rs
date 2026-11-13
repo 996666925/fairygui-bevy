@@ -1,6 +1,6 @@
 use super::*;
 use crate::FairyGuiPlugin;
-use crate::ecs::{GuiObjectInfo, GuiQuery};
+use crate::ecs::{GuiObjectInfo, GuiQuery, GuiTransform};
 use bevy::ecs::system::SystemState;
 
 fn app() -> (App, Handle<FuiAsset>) {
@@ -291,6 +291,7 @@ fn ecs_queries_follow_root_loading_replacement_removal_and_retained_views() {
     let gui = query.get(app.world()).unwrap();
     assert!(gui.view(owner).is_none());
     assert!(gui.get(replacement).is_none());
+    assert!(gui.transform(replacement).is_none());
 }
 
 #[test]
@@ -365,4 +366,195 @@ fn ecs_queries_preserve_logical_order_and_track_dynamic_names_and_parenting() {
     assert!(gui.child_by_name(owner, "branch").is_none());
     assert_eq!(gui.get(branch_view).unwrap().parent(), None);
     assert_eq!(gui.view(branch_view), Some(branch_view));
+}
+
+#[test]
+fn ecs_geometry_preserves_logical_coordinates_and_updates_views_in_the_same_sync() {
+    let (mut app, asset) = app();
+    load(&mut app, &asset);
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let mut query = SystemState::<GuiQuery>::new(app.world_mut());
+    let (view, child, original_child) = {
+        let gui = query.get(app.world()).unwrap();
+        let child = gui.child_by_name(owner, "n1").unwrap();
+        (
+            gui.view(owner).unwrap(),
+            child,
+            *gui.transform(child).unwrap(),
+        )
+    };
+    for action in [
+        GuiObjectAction::SetPosition(Vec2::new(-10., 20.)),
+        GuiObjectAction::SetSize(Vec2::new(200., 80.)),
+        GuiObjectAction::SetScale(Vec2::new(-2., 0.5)),
+        GuiObjectAction::SetPivot {
+            pivot: Vec2::new(0.25, 0.75),
+            as_anchor: true,
+        },
+        GuiObjectAction::SetRotation(90.),
+    ] {
+        send(&mut app, owner, action);
+    }
+    app.update();
+    let geometry = {
+        let gui = query.get(app.world()).unwrap();
+        let geometry = *gui.transform(owner).unwrap();
+        assert_eq!(gui.transform(view), Some(&geometry));
+        assert_eq!(geometry.position(), Vec2::new(-10., 20.));
+        assert_eq!(geometry.size(), Vec2::new(200., 80.));
+        assert_eq!(geometry.scale(), Vec2::new(-2., 0.5));
+        assert_eq!(geometry.skew(), Vec2::ZERO);
+        assert_eq!(geometry.pivot(), Vec2::new(0.25, 0.75));
+        assert!(geometry.pivot_as_anchor());
+        assert_eq!(geometry.rotation(), 90.);
+        assert_eq!(gui.transform(child), Some(&original_child));
+        geometry
+    };
+    let node = app.world().get::<Node>(view).unwrap();
+    assert_eq!(node.left, Val::Px(-10.));
+    assert_eq!(node.top, Val::Px(20.));
+    assert_eq!(node.width, Val::Px(200.));
+    assert_eq!(node.height, Val::Px(80.));
+    let rendered = app.world().get::<UiTransform>(view).unwrap();
+    let (Val::Px(x), Val::Px(y)) = (rendered.translation.x, rendered.translation.y) else {
+        panic!("pivot compensation must use logical pixels");
+    };
+    assert!((x + 90.).abs() < 0.001 && (y + 140.).abs() < 0.001);
+    assert_eq!(rendered.scale, geometry.scale());
+    assert_eq!(rendered.rotation, Rot2::degrees(90.));
+
+    let unchanged = app
+        .world()
+        .entity(view)
+        .get_ref::<GuiTransform>()
+        .unwrap()
+        .last_changed();
+    send(
+        &mut app,
+        owner,
+        GuiObjectAction::SetPivot {
+            pivot: Vec2::new(f32::NAN, 0.),
+            as_anchor: false,
+        },
+    );
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .active = false;
+    app.update();
+    assert_eq!(
+        query.get(app.world()).unwrap().transform(owner),
+        Some(&geometry)
+    );
+    assert_eq!(
+        app.world()
+            .entity(view)
+            .get_ref::<GuiTransform>()
+            .unwrap()
+            .last_changed(),
+        unchanged
+    );
+
+    // Transforms on an ancestor do not turn local geometry into world
+    // coordinates, even when the child is temporarily off stage.
+    send(
+        &mut app,
+        child,
+        GuiObjectAction::SetPosition(Vec2::new(17., 23.)),
+    );
+    app.update();
+    assert_eq!(
+        query
+            .get(app.world())
+            .unwrap()
+            .transform(child)
+            .unwrap()
+            .position(),
+        Vec2::new(17., 23.)
+    );
+}
+
+#[test]
+fn ecs_geometry_tracks_indirect_group_member_movement() {
+    let (mut app, asset) = app();
+    let package = FuiPackage::parse(
+        "Basics",
+        include_bytes!("../../fairygui-demo/assets/ui/Basics.fui"),
+    )
+    .unwrap();
+    app.world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .insert(
+            asset.id(),
+            FuiAsset {
+                package,
+                res_key: "ui/Basics".into(),
+            },
+        )
+        .unwrap();
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "Demo_Controller"))
+        .id();
+    app.update();
+    let mut query = SystemState::<GuiQuery>::new(app.world_mut());
+    let (group, member, old_group, old_member) = {
+        let gui = query.get(app.world()).unwrap();
+        let group = gui.child_by_name(owner, "n16").unwrap();
+        let member = gui.child_by_name(owner, "n13").unwrap();
+        (
+            group,
+            member,
+            *gui.transform(group).unwrap(),
+            *gui.transform(member).unwrap(),
+        )
+    };
+    let delta = Vec2::new(37., -21.);
+    send(
+        &mut app,
+        group,
+        GuiObjectAction::SetPosition(old_group.position() + delta),
+    );
+    app.update();
+    let gui = query.get(app.world()).unwrap();
+    assert_eq!(
+        gui.transform(member).unwrap().position(),
+        old_member.position() + delta
+    );
+    assert_eq!(gui.get(member).unwrap().parent(), gui.view(owner));
+    assert_eq!(gui.transform(member).unwrap().size(), old_member.size());
+    let node = app.world().get::<Node>(member).unwrap();
+    assert_eq!(node.left, Val::Px(old_member.position().x + delta.x));
+    assert_eq!(node.top, Val::Px(old_member.position().y + delta.y));
+}
+
+#[test]
+fn ecs_roots_capture_global_font_before_their_first_views_are_spawned() {
+    use bevy::text::FontSource;
+    #[derive(Resource, Default)]
+    struct InitialFonts(Vec<FontSource>);
+    fn capture(fonts: Query<&TextFont, Added<GObjectRef>>, mut captured: ResMut<InitialFonts>) {
+        captured.0 = fonts.iter().map(|font| font.font.clone()).collect();
+    }
+    let (mut app, asset) = app();
+    load(&mut app, &asset);
+    app.init_resource::<InitialFonts>().add_systems(
+        Update,
+        capture
+            .after(spawn_pending_roots)
+            .before(spawn_pending_objects),
+    );
+    let first = app.world().resource::<Assets<Font>>().reserve_handle();
+    let second = app.world().resource::<Assets<Font>>().reserve_handle();
+    for font in [Some(first), Some(second), None] {
+        app.world_mut().resource_mut::<GuiFont>().0 = font.clone();
+        app.world_mut()
+            .spawn(FairyGuiRoot::new(asset.clone(), "Main"));
+        app.update();
+        let fonts = &app.world().resource::<InitialFonts>().0;
+        assert!(!fonts.is_empty());
+        let expected = font.map(FontSource::Handle).unwrap_or_default();
+        assert!(fonts.iter().all(|font| *font == expected));
+    }
 }

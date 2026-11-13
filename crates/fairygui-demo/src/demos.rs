@@ -47,6 +47,7 @@ pub const DEMO_ACTION_BASE: u64 = 10_000;
 pub struct DemoController {
     pub package: Option<String>,
     pub root: Option<GObjectId>,
+    pub(super) root_owner: Option<Entity>,
     pub elapsed: f32,
     pub basics_page: Option<usize>,
     pub transition_sample: Option<usize>,
@@ -88,50 +89,42 @@ pub fn initialize_demo_roots(
     mut commands: Commands,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
     roots: Query<(Entity, &GuiRootInstance, &DemoRootKind), Without<DemoRootInitialized>>,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     mut controller: ResMut<DemoController>,
 ) {
+    let Some(root) = controller.root_owner else {
+        return;
+    };
+    let Some(owner) = gui.transform(root) else {
+        return;
+    };
     for (entity, instance, kind) in &roots {
         match *kind {
             DemoRootKind::BasicsPage => {
-                let Some(root) = controller.root else {
-                    continue;
-                };
-                let container = runtime
-                    .store()
-                    .find_by_name(root, "container")
-                    .unwrap_or(root);
-                let Some(owner) = runtime.store().object(root) else {
-                    continue;
-                };
-                let y = owner.y() + runtime.store().object(container).map_or(70.0, |o| o.y());
+                let container = gui.find_by_name(root, "container").unwrap_or(root);
+                let y =
+                    owner.position().y + gui.transform(container).map_or(70.0, |o| o.position().y);
                 gui_commands.write(GuiObjectCommand::new(
                     entity,
-                    GuiObjectAction::SetPosition(Vec2::new(owner.x(), y)),
+                    GuiObjectAction::SetPosition(Vec2::new(owner.position().x, y)),
                 ));
                 controller.basics_page = Some(instance.handle);
                 controller.basics_page_owner = Some(entity);
             }
             DemoRootKind::TransitionSample { index } => {
-                let Some(root) = controller.root else {
-                    continue;
-                };
-                let Some(owner) = runtime.store().object(root) else {
-                    continue;
-                };
-                let Some(sample) = runtime.store().object(instance.object) else {
+                let Some(sample) = gui.transform(entity) else {
                     continue;
                 };
                 let position = match index {
                     3 => Vec2::new(
-                        owner.x() + owner.width() - sample.width() - 20.0,
-                        owner.y() + 100.0,
+                        owner.position().x + owner.size().x - sample.size().x - 20.0,
+                        owner.position().y + 100.0,
                     ),
                     4 => Vec2::new(
-                        owner.x() + 20.0,
-                        owner.y() + owner.height() - sample.height() - 100.0,
+                        owner.position().x + 20.0,
+                        owner.position().y + owner.size().y - sample.size().y - 100.0,
                     ),
-                    _ => Vec2::new(owner.x(), owner.y()),
+                    _ => owner.position(),
                 };
                 gui_commands.write(GuiObjectCommand::new(
                     entity,
@@ -146,11 +139,7 @@ pub fn initialize_demo_roots(
                 ));
                 if index == 4 {
                     for (name, value) in [("value", "10000"), ("add_value", "+2000")] {
-                        if let Some(target) = runtime
-                            .store()
-                            .find_by_name(instance.object, name)
-                            .and_then(|id| runtime.entity_of(id))
-                        {
+                        if let Some(target) = gui.find_by_name(entity, name) {
                             gui_commands.write(GuiObjectCommand::new(
                                 target,
                                 GuiObjectAction::SetText(value.into()),
@@ -158,11 +147,7 @@ pub fn initialize_demo_roots(
                         }
                     }
                 }
-                if let Some(target) = runtime
-                    .store()
-                    .child_by_name(root, "g0")
-                    .and_then(|id| runtime.entity_of(id))
-                {
+                if let Some(target) = gui.child_by_name(root, "g0") {
                     gui_commands.write(GuiObjectCommand::new(
                         target,
                         GuiObjectAction::SetVisible(false),

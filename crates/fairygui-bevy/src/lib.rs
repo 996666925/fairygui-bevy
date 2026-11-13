@@ -61,7 +61,7 @@ pub mod text;
 mod text_stroke;
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
-pub use ecs::{GuiObjectInfo, GuiQuery, GuiRootView};
+pub use ecs::{GuiObjectInfo, GuiQuery, GuiRootView, GuiTransform};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -94,7 +94,7 @@ pub mod prelude {
         GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
         GuiObjectAction, GuiObjectCommand, GuiObjectInfo, GuiProgressValue, GuiPullRelease,
         GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiSliderValue, GuiSystems,
-        GuiTextInput, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+        GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
     };
 }
 
@@ -146,6 +146,7 @@ impl Plugin for FairyGuiPlugin {
             Update,
             (
                 runtime::sync_ui_config,
+                runtime::sync_gui_font,
                 runtime::advance_async_builds,
                 runtime::advance_scrolls,
                 runtime::advance_transitions,
@@ -227,7 +228,7 @@ impl Plugin for FairyGuiPlugin {
             (
                 runtime::sync_list_selection_components,
                 runtime::sync_control_state_components,
-                ecs::sync_gui_hierarchy,
+                ecs::sync_gui_objects,
             )
                 .chain()
                 .in_set(GuiSystems::Sync)

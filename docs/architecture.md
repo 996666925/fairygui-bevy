@@ -11,7 +11,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | --- | --- |
 | `fairygui-core` | Package parsing, object ownership, widget state, scrolling and animation; no Bevy dependency |
 | `asset` | Bevy asset loading and package resource paths |
-| `ecs` | Root-to-view references and read-only control identity and logical hierarchy queries |
+| `ecs` | Root-to-view references and read-only control identity, logical hierarchy and geometry queries |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
@@ -47,11 +47,21 @@ Application changes in `Respond` reach view synchronization in the same frame.
 Bevy layout still runs later; hit geometry and text measurements reflect the last
 completed layout. Chain application systems if they depend on each other.
 
-`GuiRootView` and `GuiObjectInfo` are updated at the end of Sync. Systems in
+`GuiRootView`, `GuiObjectInfo` and `GuiTransform` are updated at the end of Sync. Systems in
 Respond read the previous snapshot; systems after Sync can find newly created
 controls and bind their observers. Logical children follow FairyGUI order and
 exclude generated render nodes. Detached, hidden and pooled views remain
 queryable until disposal. Unchanged hierarchy snapshots preserve ECS change ticks.
+
+`GuiTransform` reports logical model geometry: position relative to the FairyGUI
+parent, unscaled size, scale, fractional pivot, anchor mode, rotation and skew in
+degrees. It excludes scroll offsets, pivot compensation and ancestor transforms;
+use Bevy layout components when actual rendered geometry is needed. Snapshots
+include indirect updates from relations, groups, controllers and animation.
+`GuiQuery::transform` resolves either a root owner or a control view, so layout
+systems can read geometry and send commands without borrowing `GuiRuntime`.
+`GuiFont` is captured before ECS root construction and view spawning, including
+the first update and resource changes before later roots are created.
 
 ```rust
 use bevy::prelude::*;

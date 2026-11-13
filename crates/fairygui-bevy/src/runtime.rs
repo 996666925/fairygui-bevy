@@ -89,6 +89,7 @@ pub enum GuiObjectAction {
     SetVisible(bool),
     SetAlpha(f32),
     SetScale(Vec2),
+    SetPivot { pivot: Vec2, as_anchor: bool },
     SetRotation(f32),
     SetText(String),
     SetColor(fairygui_core::color::Color),
@@ -430,7 +431,7 @@ pub struct GuiRuntime {
     registry: fairygui_core::package::PackageRegistry,
     /// 界面文本使用的字体。
     ///
-    /// 由 `spawn_pending_objects` 每帧从 [`GuiFont`] 同步进来：`create_root`
+    /// 由 `sync_gui_font` 在构建 ECS 根之前从 [`GuiFont`] 同步进来：`create_root`
     /// 这类不在系统里跑的路径拿不到资源，只能从这里取。
     font: Option<Handle<Font>>,
     /// 登记为虚拟化的列表。
@@ -1440,7 +1441,7 @@ impl GuiRuntime {
 
     /// 设置界面文本使用的字体。
     ///
-    /// 一般不必手工调用——`spawn_pending_objects` 每帧会从 [`GuiFont`] 同步。
+    /// ECS 界面不必手工调用——`sync_gui_font` 会在创建根前从 [`GuiFont`] 同步。
     /// 但在**系统之外**建界面时（比如 `Startup` 里、或与同步系统没有先后
     /// 约束的同帧调用），最好先设一次，否则那批界面会拿到空字体。
     pub fn set_font(&mut self, font: Option<Handle<Font>>) {
@@ -1845,6 +1846,11 @@ pub fn apply_object_commands(
             GuiObjectAction::SetScale(scale) if scale.is_finite() => {
                 runtime.store_mut().set_scale(object, scale.x, scale.y);
             }
+            GuiObjectAction::SetPivot { pivot, as_anchor } if pivot.is_finite() => {
+                runtime
+                    .store_mut()
+                    .set_pivot(object, pivot.x, pivot.y, *as_anchor);
+            }
             GuiObjectAction::SetRotation(rotation) if rotation.is_finite() => {
                 runtime.store_mut().set_rotation(object, *rotation);
             }
@@ -1915,6 +1921,7 @@ pub fn apply_object_commands(
             | GuiObjectAction::SetSize(_)
             | GuiObjectAction::SetAlpha(_)
             | GuiObjectAction::SetScale(_)
+            | GuiObjectAction::SetPivot { .. }
             | GuiObjectAction::SetRotation(_)
             | GuiObjectAction::SetScrollPosition { .. }
             | GuiObjectAction::SetTransitionTimeScale { .. }
@@ -2269,14 +2276,7 @@ pub fn spawn_pending_objects(
     assets: Res<Assets<FuiAsset>>,
     asset_server: Res<AssetServer>,
     image_assets: Res<Assets<Image>>,
-    font: Res<GuiFont>,
 ) {
-    // 字体每帧同步一次，供 `create_root` 这类不在系统里跑的路径使用。
-    //
-    // 必须放在下面那个提前返回**之前**：`create_root` 不走待生成队列，界面
-    // 往往在队列为空时就已经建好，同步一旦被跳过，它拿到的字体永远是空。
-    runtime.font = font.0.clone();
-
     if runtime.pending_spawn.is_empty() {
         return;
     }
@@ -2335,7 +2335,7 @@ pub fn spawn_pending_objects(
             &asset_server,
             &image_assets,
             &runtime.translations,
-            font.0.as_ref(),
+            runtime.font.as_ref(),
             object,
             parent,
         );
@@ -3587,6 +3587,13 @@ pub fn advance_async_builds(mut runtime: NonSendMut<GuiRuntime>, assets: Res<Ass
 pub fn sync_ui_config(config: Res<GuiConfig>, mut runtime: NonSendMut<GuiRuntime>) {
     if config.is_changed() {
         runtime.set_scroll_defaults(config.scroll);
+    }
+}
+
+/// Capture the global font before roots, dynamic views and text are generated.
+pub fn sync_gui_font(font: Res<GuiFont>, mut runtime: NonSendMut<GuiRuntime>) {
+    if runtime.font != font.0 {
+        runtime.set_font(font.0.clone());
     }
 }
 

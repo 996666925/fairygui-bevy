@@ -2,6 +2,7 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use fairygui_core::object::GObject;
 use fairygui_core::package::ObjectType;
 
 use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
@@ -10,6 +11,67 @@ use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
 /// Available after `GuiSystems::Sync`; removed when the root is replaced.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GuiRootView(pub Entity);
+
+/// Read-only FairyGUI geometry, refreshed after `GuiSystems::Sync`.
+///
+/// Position is relative to the logical parent, in logical pixels, and size is
+/// unscaled. Rotation and skew use degrees. These are model values, before
+/// Bevy layout, scroll offsets, pivot compensation and inherited transforms.
+/// Change geometry through [`crate::GuiObjectCommand`].
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct GuiTransform {
+    position: Vec2,
+    size: Vec2,
+    scale: Vec2,
+    skew: Vec2,
+    pivot: Vec2,
+    pivot_as_anchor: bool,
+    rotation: f32,
+}
+
+impl GuiTransform {
+    pub fn position(&self) -> Vec2 {
+        self.position
+    }
+
+    pub fn size(&self) -> Vec2 {
+        self.size
+    }
+
+    pub fn scale(&self) -> Vec2 {
+        self.scale
+    }
+
+    pub fn skew(&self) -> Vec2 {
+        self.skew
+    }
+
+    /// Pivot as a fraction of the unscaled size.
+    pub fn pivot(&self) -> Vec2 {
+        self.pivot
+    }
+
+    pub fn pivot_as_anchor(&self) -> bool {
+        self.pivot_as_anchor
+    }
+
+    pub fn rotation(&self) -> f32 {
+        self.rotation
+    }
+
+    fn from_object(object: &GObject) -> Self {
+        let pivot = object.pivot();
+        Self {
+            position: Vec2::new(object.x(), object.y()),
+            size: Vec2::new(object.width(), object.height()),
+            scale: Vec2::new(object.scale_x(), object.scale_y()),
+            skew: Vec2::new(object.skew_x(), object.skew_y()),
+            pivot: Vec2::new(pivot.x, pivot.y),
+            pivot_as_anchor: object.pivot_as_anchor(),
+            rotation: object.rotation(),
+        }
+    }
+}
 
 /// Read-only identity and logical hierarchy of a rendered FairyGUI control.
 /// Decorative Bevy entities are excluded, and children retain FairyGUI order.
@@ -48,6 +110,7 @@ impl GuiObjectInfo {
 pub struct GuiQuery<'w, 's> {
     roots: Query<'w, 's, &'static GuiRootView>,
     objects: Query<'w, 's, &'static GuiObjectInfo>,
+    transforms: Query<'w, 's, &'static GuiTransform>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -62,6 +125,11 @@ impl GuiQuery<'_, '_> {
 
     pub fn get(&self, entity: Entity) -> Option<&GuiObjectInfo> {
         self.objects.get(self.view(entity)?).ok()
+    }
+
+    /// Logical geometry of a root owner or control view entity.
+    pub fn transform(&self, entity: Entity) -> Option<&GuiTransform> {
+        self.transforms.get(self.view(entity)?).ok()
     }
 
     /// First direct child with the exact FairyGUI object name.
@@ -99,19 +167,28 @@ impl GuiQuery<'_, '_> {
     }
 }
 
-pub(crate) fn sync_gui_hierarchy(
+pub(crate) fn sync_gui_objects(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,
-    mut objects: Query<(Entity, &GObjectRef, Option<&mut GuiObjectInfo>)>,
+    mut objects: Query<(
+        Entity,
+        &GObjectRef,
+        Option<&mut GuiObjectInfo>,
+        Option<&GuiTransform>,
+    )>,
     roots: Query<(Entity, &GuiRootInstance, Option<&GuiRootView>)>,
 ) {
-    for (entity, reference, current) in &mut objects {
+    for (entity, reference, current, transform) in &mut objects {
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
         let Some(object) = runtime.store().object(reference.0) else {
             continue;
         };
+        let next_transform = GuiTransform::from_object(object);
+        if transform != Some(&next_transform) {
+            commands.entity(entity).insert(next_transform);
+        }
         let parent = object.parent().and_then(|id| runtime.entity_of(id));
         let children = object
             .children()

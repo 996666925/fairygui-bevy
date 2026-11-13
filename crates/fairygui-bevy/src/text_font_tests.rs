@@ -25,6 +25,7 @@ fn fixture() -> (App, usize, GObjectId) {
     app.insert_non_send(gui).add_systems(
         Update,
         (
+            sync_gui_font,
             spawn_pending_roots,
             spawn_pending_objects,
             sync_text_inputs,
