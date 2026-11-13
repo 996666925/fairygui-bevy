@@ -565,6 +565,7 @@ pub struct GuiQuery<'w, 's> {
     loaders: Query<'w, 's, &'static crate::GuiLoaderState>,
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
+    scroll_settings: Query<'w, 's, &'static crate::GuiScrollSettings>,
     transitions: Query<'w, 's, &'static GuiTransitions>,
     animations: Query<'w, 's, &'static crate::GuiAnimationState>,
     lists: Query<'w, 's, &'static GuiListState>,
@@ -717,6 +718,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn scroll(&self, entity: Entity) -> Option<&GuiScrollState> {
         self.scrolls.get(self.view(entity)?).ok()
+    }
+
+    pub fn scroll_settings(&self, entity: Entity) -> Option<&crate::GuiScrollSettings> {
+        self.scroll_settings.get(self.view(entity)?).ok()
     }
 
     pub fn list(&self, entity: Entity) -> Option<&GuiListState> {

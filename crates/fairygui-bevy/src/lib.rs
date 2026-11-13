@@ -76,6 +76,8 @@ pub mod movie;
 pub mod popup;
 pub mod progress;
 mod properties;
+mod scroll_properties;
+pub use scroll_properties::GuiScrollSettings;
 mod visual_properties;
 pub use visual_properties::{GuiColor, GuiImageFill, GuiImageFlip, GuiLoaderSettings};
 pub mod pull;
@@ -183,14 +185,14 @@ pub mod prelude {
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
         GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
         GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
-        GuiRuntime, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace,
-        GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTooltipCommand,
-        GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTransform, GuiTransitionCallback,
-        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
-        GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
-        GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,
-        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
-        GuiWorldExt, PopupMenuTemplates,
+        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue,
+        GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput,
+        GuiTextInputSettings, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
+        GuiTooltipState, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
+        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
+        GuiWindowAction, GuiWindowCommand, GuiWindowState, GuiWorldExt, PopupMenuTemplates,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }

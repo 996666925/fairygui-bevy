@@ -450,6 +450,25 @@ commands.entity(bounded).insert(GuiDraggable {
 移除组件或失去输入资格会结束拖动；同一控件只允许一个指针操作。Basics 的 A
 自由拖动、D 边界拖动也通过这些组件绑定。
 
+滚动容器上的 `GuiScrollSettings`（或 `gui.scroll_settings(entity)`）提供可写的滚轮开关、
+步长、条目吸附、触摸拖动、回弹与减速率。直接修改组件字段，插件会在处理输入前同步。
+需要影响当帧输入的业务系统应放在 `GuiSystems::Input` 之前：
+
+```rust,ignore
+fn configure_scroll(mut panes: Query<&mut GuiScrollSettings>) {
+    for mut pane in &mut panes {
+        pane.mouse_wheel_enabled = true;
+        pane.scroll_step = 30.;
+        pane.touch_effect = true;
+    }
+}
+```
+
+只修改需要调整的字段可保留导出配置及原生运行时的其他修改。`scroll_step = 0` 恢复配置默认值，
+负数反转滚轮方向，行滚轮移动两倍步长；减速率必须是 0～1 之间的有限值（不含端点）。
+配置修改不主动移动视口或重启补间；位置与播放状态仍从只读 `GuiScrollState` 查询。
+也可在 `FairyGuiRoot` 加载前附加设置组件，或使用直接方法 `set_scroll_settings`。
+
 滚动容器上的只读 `GuiScrollState`（或 `gui.scroll(entity)`）提供逻辑目标位置、
 动画当前显示位置、视口/内容尺寸、最大位置、两种位置对应的进度比例及当前页。
 它在输入事件发布前和 Sync 结束时更新，没有滚动容器的对象不带该组件。

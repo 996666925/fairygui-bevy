@@ -6,6 +6,32 @@ use crate::scroll::ScrollPane;
 mod tests;
 
 impl ObjectStore {
+    /// Native assignment only; does not cancel or reposition an active gesture.
+    pub fn set_scroll_touch_effect(&mut self, container: GObjectId, enabled: bool) -> bool {
+        self.objects
+            .get_mut(container)
+            .and_then(|o| o.control.component_mut())
+            .and_then(|c| c.scroll_pane.as_mut())
+            .is_some_and(|pane| {
+                let changed = pane.touch_effect != enabled;
+                pane.touch_effect = enabled;
+                changed
+            })
+    }
+
+    /// Native assignment only; ongoing motion reads the new bounce policy.
+    pub fn set_scroll_bounceback_effect(&mut self, container: GObjectId, enabled: bool) -> bool {
+        self.objects
+            .get_mut(container)
+            .and_then(|o| o.control.component_mut())
+            .and_then(|c| c.scroll_pane.as_mut())
+            .is_some_and(|pane| {
+                let changed = pane.bounceback_effect != enabled;
+                pane.bounceback_effect = enabled;
+                changed
+            })
+    }
+
     pub fn scroll_mouse_wheel_enabled(&self, container: GObjectId) -> Option<bool> {
         self.scroll_pane(container)
             .map(ScrollPane::mouse_wheel_enabled)

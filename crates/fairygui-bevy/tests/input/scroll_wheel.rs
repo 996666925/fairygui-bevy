@@ -48,6 +48,154 @@ fn exported(app: &mut App, kind: ScrollType) -> GObjectId {
 }
 
 #[test]
+fn ecs_scroll_settings_affect_the_current_wheel_and_do_not_replay_position() {
+    let (mut app, window) = setup();
+    let pane = exported(&mut app, ScrollType::Vertical);
+    // This fixture picks the pane rectangle without materialized row graphics.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_component_opaque(pane, true);
+    let (entity, _) = target(&mut app, 50);
+    app.world_mut().entity_mut(entity).insert(GObjectRef(pane));
+    app.update();
+    let initial = *app.world().get::<GuiScrollSettings>(entity).unwrap();
+    {
+        let mut settings = app
+            .world_mut()
+            .get_mut::<GuiScrollSettings>(entity)
+            .unwrap();
+        settings.mouse_wheel_enabled = false;
+        settings.snap_to_item = false;
+        settings.scroll_step = 12.5;
+    }
+    send(&mut app, window, MouseScrollUnit::Line, 0., -1.);
+    let position = |app: &App| {
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .scroll_pane(pane)
+            .unwrap()
+            .pos()
+            .y
+    };
+    assert_eq!(position(&app), 0.);
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(entity)
+        .unwrap()
+        .mouse_wheel_enabled = true;
+    send(&mut app, window, MouseScrollUnit::Line, 0., -1.);
+    assert_eq!(position(&app), 25.);
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(entity)
+        .unwrap()
+        .scroll_step = -6.25;
+    send(&mut app, window, MouseScrollUnit::Line, 0., -1.);
+    assert_eq!(position(&app), 12.5);
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(entity)
+        .unwrap()
+        .scroll_step = 0.;
+    send(&mut app, window, MouseScrollUnit::Line, 0., -1.);
+    assert_eq!(position(&app), 12.5 + initial.scroll_step * 2.);
+    send(&mut app, window, MouseScrollUnit::Pixel, 0., -0.25);
+    assert_eq!(position(&app), 12.75 + initial.scroll_step * 2.);
+}
+
+#[test]
+fn ecs_touch_and_bounce_settings_control_the_next_pointer_drag() {
+    let (mut app, window) = setup();
+    let pane = exported(&mut app, ScrollType::Vertical);
+    // This fixture picks the pane rectangle without materialized row graphics.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_component_opaque(pane, true);
+    let (entity, _) = target(&mut app, 50);
+    app.world_mut().entity_mut(entity).insert(GObjectRef(pane));
+    app.update();
+    {
+        let mut settings = app
+            .world_mut()
+            .get_mut::<GuiScrollSettings>(entity)
+            .unwrap();
+        settings.touch_effect = false;
+        settings.snap_to_item = false;
+    }
+    let position = |app: &App| {
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .scroll_pane(pane)
+            .unwrap()
+            .display_pos()
+            .y
+    };
+    let move_to = |app: &mut App, y| {
+        app.world_mut()
+            .get_mut::<Window>(window)
+            .unwrap()
+            .set_cursor_position(Some(Vec2::new(10., y)));
+    };
+    move_to(&mut app, 100.);
+    press(&mut app);
+    move_to(&mut app, 60.);
+    app.update();
+    assert_eq!(
+        position(&app),
+        0.,
+        "disabled touch must not start a pane drag"
+    );
+    release(&mut app);
+    {
+        let mut settings = app
+            .world_mut()
+            .get_mut::<GuiScrollSettings>(entity)
+            .unwrap();
+        settings.touch_effect = true;
+        settings.bounceback_effect = true;
+    }
+    move_to(&mut app, 100.);
+    press(&mut app);
+    move_to(&mut app, 140.);
+    app.update();
+    assert_eq!(
+        position(&app),
+        -20.,
+        "bounce halves the displacement beyond the top"
+    );
+    release(&mut app);
+    // Finish the previous bounce before checking an independent clamped drag.
+    // A same-value logical position assignment preserves the display tween.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .advance_scrolls(1.);
+    assert_eq!(position(&app), 0.);
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(entity)
+        .unwrap()
+        .bounceback_effect = false;
+    move_to(&mut app, 100.);
+    press(&mut app);
+    move_to(&mut app, 140.);
+    app.update();
+    assert_eq!(
+        position(&app),
+        0.,
+        "disabled bounce clamps the top boundary"
+    );
+    move_to(&mut app, 60.);
+    app.update();
+    assert_eq!(
+        position(&app),
+        40.,
+        "ordinary content dragging remains enabled"
+    );
+    release(&mut app);
+}
+
+#[test]
 fn actual_wheel_router_uses_raw_nested_hit_and_bubbles_through_disabled_or_bounded_inner_panes() {
     let (mut app, window) = setup();
     let outer = exported(&mut app, ScrollType::Vertical);

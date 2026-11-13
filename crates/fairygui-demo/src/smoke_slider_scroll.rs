@@ -1,5 +1,6 @@
 //! Real Slider rows inside an ECS virtual list, with native press boundaries.
 use super::*;
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 
 #[derive(Resource, Default)]
 struct State {
@@ -11,6 +12,7 @@ struct State {
     slider: Option<Entity>,
     cursor: Option<Vec2>,
     value: f64,
+    scroll_start: f32,
 }
 #[derive(Resource, Default)]
 struct Events {
@@ -52,6 +54,7 @@ fn drive(
     mut windows: Query<(Entity, &mut Window), With<bevy::window::PrimaryWindow>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut pointers: MessageWriter<PointerInput>,
+    mut wheel: MessageWriter<MouseWheel>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     mut gui_edit: GuiMut,
@@ -191,15 +194,81 @@ fn drive(
             next = true;
         }
         14 if elapsed >= 8 => {
+            state.scroll_start = offset();
+            let mut settings = *gui.scroll_settings(state.list.unwrap()).unwrap();
+            settings.mouse_wheel_enabled = false;
+            settings.touch_effect = false;
+            settings.snap_to_item = false;
+            commands.entity(state.list.unwrap()).insert(settings);
+            state.cursor = gui.local_to_global(state.slider.unwrap(), Vec2::new(330., 12.));
+            next = true;
+        }
+        15 if elapsed >= 4 => {
+            wheel.write(MouseWheel {
+                unit: MouseScrollUnit::Line,
+                x: 0.,
+                y: -1.,
+                window: window_entity,
+                phase: bevy::input::touch::TouchPhase::Moved,
+            });
+            next = true;
+        }
+        16 if elapsed >= 4 => {
+            assert!((offset() - state.scroll_start).abs() < 0.1);
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        17 if elapsed >= 4 => {
+            state.cursor.as_mut().unwrap().y -= 40.;
+            next = true;
+        }
+        18 if elapsed >= 4 => {
+            assert!((offset() - state.scroll_start).abs() < 0.1);
+            mouse.release(MouseButton::Left);
+            let mut settings = *gui.scroll_settings(state.list.unwrap()).unwrap();
+            settings.mouse_wheel_enabled = true;
+            settings.scroll_step = 12.5;
+            settings.touch_effect = true;
+            settings.bounceback_effect = false;
+            settings.deceleration_rate = 0.93;
+            commands.entity(state.list.unwrap()).insert(settings);
+            wheel.write(MouseWheel {
+                unit: MouseScrollUnit::Line,
+                x: 0.,
+                y: -1.,
+                window: window_entity,
+                phase: bevy::input::touch::TouchPhase::Moved,
+            });
+            next = true;
+        }
+        19 if elapsed >= 8 => {
+            assert!((offset() - state.scroll_start - 25.).abs() < 0.1);
+            let settings = gui.scroll_settings(state.list.unwrap()).unwrap();
+            assert!(!settings.bounceback_effect);
+            assert_eq!(settings.deceleration_rate, 0.93);
+            state.cursor = gui.local_to_global(state.slider.unwrap(), Vec2::new(330., 12.));
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        20 if elapsed >= 4 => {
+            state.cursor.as_mut().unwrap().y -= 40.;
+            next = true;
+        }
+        21 if elapsed >= 4 => {
+            assert!((offset() - state.scroll_start - 65.).abs() < 0.1);
+            mouse.release(MouseButton::Left);
+            next = true;
+        }
+        22 if elapsed >= 8 => {
             for &owner in &state.owners {
                 commands.entity(owner).despawn();
             }
             next = true;
         }
-        15 if elapsed >= 4 => {
+        23 if elapsed >= 4 => {
             assert!(state.owners.iter().all(|&owner| !existing.contains(owner)));
             println!(
-                "demo smoke PASSED: real virtual slider rows, track press change with parent scrolling, grip press boundary and exclusive dragging, disabled track changes with parent scrolling, disposal"
+                "demo smoke PASSED: real virtual slider rows, track press change with parent scrolling, grip press boundary and exclusive dragging, disabled track changes with parent scrolling, live ECS wheel and touch settings, disposal"
             );
             exit.write(AppExit::Success);
             next = true;
