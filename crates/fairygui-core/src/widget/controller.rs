@@ -122,12 +122,9 @@ impl Controller {
         true
     }
 
-    /// 按名称切换页面。名称不存在时不做任何事。
+    /// 按名称切换页面。名称不存在时回到第一页，与原版 selectedPage 一致。
     pub fn set_selected_page_name(&mut self, name: &str) -> bool {
-        match self.index_of(name) {
-            Some(index) => self.set_selected_index(index as i32),
-            None => false,
-        }
+        self.set_selected_index(self.index_of(name).unwrap_or(0) as i32)
     }
 
     /// 按页面 ID 切换；ID 不存在时取消选择，与官方 selectedPageId 一致。
@@ -257,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn switching_by_name_ignores_unknown_pages() {
+    fn switching_by_name_falls_back_to_the_first_page() {
         let mut controller = controller_with_pages(&["a", "b"]);
         controller.selected_index = 0;
         assert!(!controller.set_selected_page_name("missing"));
@@ -266,6 +263,46 @@ mod tests {
         assert_eq!(controller.selected_page_id(), Some("id1"));
         assert!(controller.has_page("b"));
         assert_eq!(controller.index_of("b"), Some(1));
+        assert!(controller.set_selected_page_name("missing"));
+        assert_eq!(controller.selected_index, 0);
+        assert_eq!(controller.previous_index, 1);
+    }
+
+    #[test]
+    fn page_names_ids_and_previous_indices_match_native_selection_trace() {
+        // Executed against FairyGUI-layabox Controller.selectedPage/selectedPageId.
+        let mut controller = Controller {
+            page_ids: ["idle-id", "active-id", "other-id"]
+                .map(str::to_owned)
+                .to_vec(),
+            page_names: ["Idle", "Active", "Other"].map(str::to_owned).to_vec(),
+            selected_index: 0,
+            ..Default::default()
+        };
+        for (by_id, value, expected, previous) in [
+            (false, "Active", 1, 0),
+            (false, "missing", 0, 1),
+            (false, "missing", 0, 1),
+            (true, "other-id", 2, 0),
+            (true, "missing", -1, 2),
+            (true, "missing", -1, 2),
+            (false, "missing", 0, -1),
+            (false, "Other", 2, 0),
+            (true, "idle-id", 0, 2),
+        ] {
+            let old = controller.selected_index;
+            let changed = if by_id {
+                controller.set_selected_page_id(value)
+            } else {
+                controller.set_selected_page_name(value)
+            };
+            assert_eq!(changed, old != expected);
+            assert_eq!(
+                (controller.selected_index, controller.previous_index),
+                (expected, previous),
+                "{by_id}/{value}"
+            );
+        }
     }
 
     #[test]

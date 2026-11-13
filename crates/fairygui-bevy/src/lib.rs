@@ -278,7 +278,6 @@ impl Plugin for FairyGuiPlugin {
             (
                 runtime::sync_list_selection_components,
                 properties::sync,
-                ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 (ecs::sync_gui_transitions, animation::sync_state).chain(),
                 popup::sync_popup_state,
@@ -314,7 +313,6 @@ impl Plugin for FairyGuiPlugin {
                 runtime::spawn_pending_roots,
                 ecs::sync_gui_objects,
                 properties::sync,
-                ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 extension::construct,
             )
@@ -345,7 +343,6 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 ecs::sync_gui_objects,
                 properties::sync,
-                ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 (tree::sync_tree_state, list::sync_list_state).chain(),
                 (
@@ -377,7 +374,6 @@ impl Plugin for FairyGuiPlugin {
                     runtime::spawn_pending_objects,
                     ecs::sync_gui_objects,
                     properties::sync,
-                    ecs::sync_gui_controllers,
                     extension::construct,
                     properties::sync,
                 )
@@ -448,7 +444,6 @@ impl Plugin for FairyGuiPlugin {
                 properties::sync,
                 ecs::sync_gui_objects,
                 properties::sync,
-                ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 ecs::sync_gui_transitions,
                 runtime::emit_transition_hooks,

@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_controllers.rs"]
+mod controllers;
+pub(super) fn install_controllers(app: &mut App) {
+    controllers::install(app);
+}
 #[path = "smoke_child_order.rs"]
 mod child_order;
 pub(super) fn install_child_order(app: &mut App) {

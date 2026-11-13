@@ -7,7 +7,6 @@ use fairygui_core::object::EventKind;
 #[derive(Default, Resource)]
 pub(crate) struct PullDemo {
     root: Option<Entity>,
-    lists: [Option<Entity>; 2],
     jobs: Vec<Job>,
 }
 struct Job {
@@ -23,10 +22,12 @@ fn content(count: usize, reverse: bool) -> GuiListContent {
         row.set_text(&format!("Item {index}"));
     })
 }
-fn page(gui_edit: &mut GuiMut, target: Entity, index: i32) {
-    gui_edit.edit(target, |object: &mut GuiObjectMut| {
-        object.set_controller_page("c1", index)
-    });
+fn page(controllers: &mut Query<&mut GuiControllers>, target: Entity, index: i32) {
+    if let Ok(mut states) = controllers.get_mut(target)
+        && let Some(state) = states.get_mut("c1")
+    {
+        state.selected_index = index;
+    }
 }
 fn lock(commands: &mut Commands, target: Entity, size: f32, header: bool) {
     commands.write_message(if header {
@@ -39,10 +40,9 @@ fn lock(commands: &mut Commands, target: Entity, size: f32, header: bool) {
 pub(crate) fn update(
     mut state: ResMut<PullDemo>,
     controller: Res<demos::DemoController>,
-    gui: GuiQuery,
+    mut gui: ParamSet<(GuiQuery, Query<&mut GuiControllers>)>,
     mut releases: MessageReader<GuiPullRelease>,
     mut commands: Commands,
-    mut gui_edit: GuiMut,
     time: Res<Time>,
 ) {
     let events: Vec<_> = releases.read().cloned().collect();
@@ -53,45 +53,46 @@ pub(crate) fn update(
         return;
     }
     let root = root.unwrap();
-    if state.root != Some(root) {
-        let Some((first, second)) = gui
+    let Some((first, second, header, footer, counts)) = ({
+        let query = gui.p0();
+        query
             .child_by_name(root, "list1")
-            .zip(gui.child_by_name(root, "list2"))
-        else {
-            return;
-        };
-        let Some((header, footer)) = gui
-            .scroll(first)
-            .and_then(|scroll| scroll.header())
-            .zip(gui.scroll(second).and_then(|scroll| scroll.footer()))
-        else {
-            return;
-        };
+            .zip(query.child_by_name(root, "list2"))
+            .and_then(|(first, second)| {
+                let header = *query.scroll(first)?.header()?;
+                let footer = *query.scroll(second)?.footer()?;
+                Some((
+                    first,
+                    second,
+                    header,
+                    footer,
+                    [
+                        query.list(first).map(|l| l.item_count()),
+                        query.list(second).map(|l| l.item_count()),
+                    ],
+                ))
+            })
+    }) else {
+        return;
+    };
+    if state.root != Some(root) {
         state.root = Some(root);
-        state.lists = [Some(first), Some(second)];
         state.jobs.clear();
         for (list, reverse) in [(first, true), (second, false)] {
             commands.entity(list).insert(content(1, reverse));
         }
-        page(&mut gui_edit, header.entity, 0);
-        page(&mut gui_edit, footer.entity, 0);
+        page(&mut gui.p1(), header.entity, 0);
+        page(&mut gui.p1(), footer.entity, 0);
     }
-    let [Some(first), Some(second)] = state.lists else {
-        return;
-    };
-    let Some((header, footer)) = gui
-        .scroll(first)
-        .and_then(|scroll| scroll.header())
-        .zip(gui.scroll(second).and_then(|scroll| scroll.footer()))
-    else {
-        return;
-    };
     let mut status = gui
-        .controller(header.entity, "c1")
-        .map_or(0, |controller| controller.selected_index());
+        .p1()
+        .get(header.entity)
+        .ok()
+        .and_then(|states| states.get("c1"))
+        .map_or(0, |state| state.selected_index);
     if status != 2 && status != 3 {
         status = i32::from(header.size.y > header.source_size.y);
-        page(&mut gui_edit, header.entity, status);
+        page(&mut gui.p1(), header.entity, status);
     }
     for release in events {
         let is_header = release.event.kind == EventKind::PullDownRelease && release.entity == first;
@@ -101,10 +102,10 @@ pub(crate) fn update(
                 continue;
             }
             status = 2;
-            page(&mut gui_edit, header.entity, 2);
+            page(&mut gui.p1(), header.entity, 2);
             lock(&mut commands, first, header.source_size.y, true);
         } else if is_footer {
-            page(&mut gui_edit, footer.entity, 1);
+            page(&mut gui.p1(), footer.entity, 1);
             lock(&mut commands, second, footer.source_size.y, false);
         } else {
             continue;
@@ -117,7 +118,7 @@ pub(crate) fn update(
         });
     }
     state.jobs.retain_mut(|job| {
-        let Some(list) = gui.list(job.list) else {
+        let Some(count) = counts[usize::from(job.list == second)] else {
             return false;
         };
         if time.elapsed_secs_f64() < job.due {
@@ -126,18 +127,18 @@ pub(crate) fn update(
         if !job.completion {
             commands
                 .entity(job.list)
-                .insert(content(list.item_count() + 5, job.header));
+                .insert(content(count + 5, job.header));
             if job.header {
-                page(&mut gui_edit, header.entity, 3);
+                page(&mut gui.p1(), header.entity, 3);
                 lock(&mut commands, first, 35., true);
                 job.completion = true;
                 job.due = time.elapsed_secs_f64() + 2.;
                 return true;
             }
-            page(&mut gui_edit, footer.entity, 0);
+            page(&mut gui.p1(), footer.entity, 0);
             lock(&mut commands, second, 0., false);
         } else {
-            page(&mut gui_edit, header.entity, 0);
+            page(&mut gui.p1(), header.entity, 0);
             lock(&mut commands, first, 0., true);
         }
         false

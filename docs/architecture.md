@@ -399,9 +399,22 @@ ordinary configuration; an attached `GuiVirtualList` takes precedence. Unchanged
 components do not rerun renderers. Mark changed or replace to retry/update data.
 
 `GuiControllers` stores controller page tables, selected/previous indices and
-selected page identity, refreshed before Publish, PostLayout, and at Sync end.
-Controls without controllers omit the component. Indirect controller actions
-therefore appear through ECS before application input handlers run.
+selected page identity. `get_mut(name).selected_index` is writable; metadata and
+previous indices remain read-only. A partial `GuiControllers::new` on an owner
+initializes named controllers when its package loads; missing names are ignored
+and unspecified controllers retain exported selections. Synchronization fills the
+exported page tables. Name selection falls back to page zero for unknown names,
+while unknown page IDs deselect, matching the reference controller setters.
+
+The property baseline detects changes to each controller's selected index, then
+calls ObjectStore's page setter. Controller synchronization runs before geometry,
+text, display and values so native gears, actions and bound widgets participate
+in same-frame projection. Unedited controller fields never replay over native
+button or page-scroll changes. Feedback refreshes before Publish, PostLayout and
+at Sync end; observer/Initialize/PostLayout component edits apply before render.
+Controls without controllers omit the component and unchanged values preserve
+change ticks. The pull-refresh demo directly edits the header/footer controller
+components while retaining its own timing and lock requests.
 
 `GuiPullRelease.entity` identifies the original scroll container view. The scroll
 snapshot includes header/footer view entities, current/exported sizes, refresh

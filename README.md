@@ -751,9 +751,34 @@ commands.entity(list_entity).insert(GuiListContent::new(6, |index, row| {
 业务数据更新后可替换渲染器、替换组件或标记组件已变更；失败配置也可这样重试。
 
 `GuiControllers`（或 `gui.controller(entity, "c1")`）提供当前和上一个页面索引、
-页面 ID 及名称表；无控制器的控件不带该组件。快照在 Publish 前、PostLayout 前和
-Sync 末尾刷新，因此业务可读到本帧输入或其他控制器动作引起的页面变化，再通过
-`set_controller_page` 发送修改。
+页面 ID 及名称表。选中页可通过 ECS 组件直接修改；页面表、名称与上一个页面保持只读。
+
+```rust,ignore
+fn change_page(mut controls: Query<&mut GuiControllers>, view: Entity) {
+    if let Ok(mut controls) = controls.get_mut(view)
+        && let Some(page) = controls.get_mut("c1")
+    {
+        page.selected_index = 1;
+        // 也可使用 page.set_selected_page_id("exported-page-id")
+        // 或 page.set_selected_page_name("Settings")。
+    }
+}
+
+commands.spawn((
+    FairyGuiRoot::new(asset_server.load("ui/Basics.fui"), "Demo_Controller"),
+    GuiControllers::new([("c1", 1), ("c2", 0)]),
+));
+```
+
+拥有者上的初始页会等待资源加载，在 `Initialize` 前应用，并回填导出的页面表。
+未指定的控制器保留模板初始页，不存在的控制器名被忽略；初始按名称/ID 选择需等待
+页面表就绪。按不存在的页面名称选择时回到第一页，不存在的 ID 取消选择。
+越界索引规范化为 `-1`，表示未选中。每帧只应用业务修改的选中页，调用原生切页逻辑，
+包括齿轮、关联按钮、下拉框、列表选择、分页和控制器动作；不会直接覆盖底层字段。
+按钮或滚动带来的页面变化在 Publish 前回写，因此 observer 可读取本帧的选中页，
+再通过组件修改另一个控制器；Initialize、PostLayout 的修改也会在本帧渲染前应用。
+未变化的组件保留变更标记，无控制器的控件不带该组件。下拉刷新示例使用该方式更新
+头尾状态；`--smoke-controllers` 验证真实按钮、齿轮动画和同帧 observer 修改。
 
 下拉刷新消息 `GuiPullRelease.entity` 直接提供滚动容器实体。
 `GuiScrollState::header()`、`footer()` 提供刷新控件实体、当前尺寸和导出尺寸，

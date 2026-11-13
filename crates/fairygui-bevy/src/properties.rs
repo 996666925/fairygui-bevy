@@ -19,6 +19,9 @@ pub(crate) struct NativeValue<T: Property> {
 /// Apply only fields changed by application code, then publish the current
 /// model value. Input, animation and relation changes never replay old writes.
 pub(crate) fn sync(world: &mut World) {
+    // Controller gears can change every property below. Consume application
+    // page edits before publishing geometry, values, text and display state.
+    sync_property::<GuiControllers>(world);
     sync_property::<GuiSortingOrder>(world);
     sync_property::<GuiTransform>(world);
     sync_property::<GuiDisplay>(world);
@@ -383,3 +386,7 @@ mod tests;
 #[cfg(test)]
 #[path = "ecs_child_order_tests.rs"]
 mod child_order_tests;
+
+#[cfg(test)]
+#[path = "ecs_controller_tests.rs"]
+mod controller_tests;

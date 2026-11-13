@@ -197,8 +197,9 @@ impl GuiScrollState {
     }
 }
 
-/// Read-only controller pages in package order. Updated before input events
-/// publish, before PostLayout, and at the end of Sync.
+/// Controller pages in package order. Edit selection through `get_mut`; page
+/// metadata and the previous native index are refreshed by the runtime.
+/// Updates before input events publish, before PostLayout, and after Sync.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct GuiControllers(Vec<GuiControllerState>);
 
@@ -207,10 +208,34 @@ pub struct GuiControllerState {
     name: String,
     page_ids: Vec<String>,
     page_names: Vec<String>,
-    selected_index: i32,
+    /// Requested page index. Sync applies native gears and controller actions,
+    /// then publishes the resulting index. Out-of-range indices select no page.
+    pub selected_index: i32,
     previous_index: i32,
 }
 impl GuiControllerState {
+    /// Select by exported page name. An unknown name selects the first page.
+    pub fn set_selected_page_name(&mut self, name: &str) -> bool {
+        let index = self
+            .page_names
+            .iter()
+            .position(|page| page == name)
+            .unwrap_or(0);
+        let changed = self.selected_index != index as i32;
+        self.selected_index = index as i32;
+        changed
+    }
+    /// Select by exported page ID; an unknown ID cancels selection.
+    pub fn set_selected_page_id(&mut self, id: &str) -> bool {
+        let index = self
+            .page_ids
+            .iter()
+            .position(|page| page == id)
+            .map_or(-1, |i| i as i32);
+        let changed = self.selected_index != index;
+        self.selected_index = index;
+        changed
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -240,11 +265,32 @@ impl GuiControllerState {
     }
 }
 impl GuiControllers {
+    /// Initial page indices to apply once the owner's package becomes available.
+    /// Exported page metadata is filled during synchronization. Names that do
+    /// not exist in the template are ignored; unspecified controllers keep their
+    /// exported selections.
+    pub fn new<N: Into<String>>(pages: impl IntoIterator<Item = (N, i32)>) -> Self {
+        Self(
+            pages
+                .into_iter()
+                .map(|(name, selected_index)| GuiControllerState {
+                    name: name.into(),
+                    page_ids: Vec::new(),
+                    page_names: Vec::new(),
+                    selected_index,
+                    previous_index: -1,
+                })
+                .collect(),
+        )
+    }
     pub fn states(&self) -> &[GuiControllerState] {
         &self.0
     }
     pub fn get(&self, name: &str) -> Option<&GuiControllerState> {
         self.0.iter().find(|state| state.name == name)
+    }
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut GuiControllerState> {
+        self.0.iter_mut().find(|state| state.name == name)
     }
 }
 
@@ -856,39 +902,17 @@ pub(crate) fn sync_gui_objects(
     }
 }
 
-pub(crate) fn sync_gui_controllers(
-    mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
-    objects: Query<(Entity, &GObjectRef, Option<&GuiControllers>)>,
-) {
-    for (entity, reference, current) in &objects {
-        if runtime.entity_of(reference.0) != Some(entity) {
-            continue;
-        }
+impl crate::properties::Property for GuiControllers {
+    fn read(runtime: &GuiRuntime, object: fairygui_core::object::GObjectId) -> Option<Self> {
         let source = runtime
             .store()
-            .object(reference.0)
+            .object(object)
             .and_then(|object| object.control().component())
             .map_or(&[][..], |component| component.controllers.as_slice());
         if source.is_empty() {
-            if current.is_some() {
-                commands.entity(entity).remove::<GuiControllers>();
-            }
-            continue;
+            return None;
         }
-        if current.is_some_and(|current| {
-            current.0.len() == source.len()
-                && current.0.iter().zip(source).all(|(state, controller)| {
-                    state.name == controller.name
-                        && state.page_ids == controller.page_ids
-                        && state.page_names == controller.page_names
-                        && state.selected_index == controller.selected_index
-                        && state.previous_index == controller.previous_index
-                })
-        }) {
-            continue;
-        }
-        commands.entity(entity).insert(GuiControllers(
+        Some(Self(
             source
                 .iter()
                 .map(|controller| GuiControllerState {
@@ -899,7 +923,32 @@ pub(crate) fn sync_gui_controllers(
                     previous_index: controller.previous_index,
                 })
                 .collect(),
-        ));
+        ))
+    }
+
+    fn apply(
+        &self,
+        previous: &Self,
+        native: &Self,
+        runtime: &mut GuiRuntime,
+        object: fairygui_core::object::GObjectId,
+    ) {
+        for state in &self.0 {
+            let Some(current) = native.get(&state.name) else {
+                continue;
+            };
+            if state.selected_index != current.selected_index
+                && previous
+                    .get(&state.name)
+                    .is_none_or(|p| state.selected_index != p.selected_index)
+            {
+                runtime.store_mut().set_controller_page_index(
+                    object,
+                    &state.name,
+                    state.selected_index,
+                );
+            }
+        }
     }
 }
 
