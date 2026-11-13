@@ -46,6 +46,12 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_list_layout(&mut self, layout: crate::GuiListLayout) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiListLayout::read(self.runtime, self.object) {
+            layout.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn set_scroll_settings(&mut self, settings: crate::GuiScrollSettings) {
         use crate::properties::Property;
         if let Some(native) = crate::GuiScrollSettings::read(self.runtime, self.object) {

@@ -502,6 +502,10 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 `GuiTextFormat`、`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
 将业务系统放在 `GuiSystems::Respond`，插件在推进动画前应用修改，并在本帧 Sync 更新 Bevy UI。
 
+列表和树的 `GuiListLayout` 可直接修改布局类型、行列数、间距、对齐与自动拉伸。
+修改会重新布局普通列表及虚拟列表，并同步滚动内容范围；不合法的计数或虚拟几何会保留
+原布局。对齐量作用在列表内容容器上，行项目坐标仍保持原生局部坐标。
+
 ```rust,ignore
 fn update_label(mut labels: Query<&mut GuiText>, target: Entity) {
     if let Ok(mut text) = labels.get_mut(target) {

@@ -51,6 +51,9 @@ mod buttons;
 mod combo;
 #[path = "list_items.rs"]
 mod list_items;
+#[path = "list_layout.rs"]
+mod list_layout;
+pub use list_layout::ListLayoutSettings;
 #[path = "list_selection.rs"]
 mod list_selection;
 #[path = "tree_items.rs"]
@@ -180,6 +183,7 @@ pub struct GearTween {
 pub struct ObjectStore {
     objects: slotmap::SlotMap<GObjectId, GObject>,
     dirty_ids: HashSet<GObjectId>,
+    list_bounds: std::collections::HashMap<GObjectId, Size>,
     relation_handling: HashSet<GObjectId>,
     syncing_list_controllers: HashSet<GObjectId>,
     scroll_page_controllers: std::collections::HashMap<GObjectId, (GObjectId, usize)>,
@@ -293,6 +297,8 @@ impl ObjectStore {
         self.pull_releases
             .retain(|(owner, _)| !removed_set.contains(owner));
         self.virtual_states
+            .retain(|owner, _| !removed_set.contains(owner));
+        self.list_bounds
             .retain(|owner, _| !removed_set.contains(owner));
         self.refreshing_virtual_lists
             .retain(|owner| !removed_set.contains(owner));
@@ -1622,6 +1628,7 @@ impl ObjectStore {
         let Some(children) = self.list_items(list) else {
             return 0;
         };
+        let raw_count = children.len();
         let fold_invisible = match self.objects.get(list).map(|object| object.control()) {
             Some(crate::widget::ControlData::List(data)) => data.fold_invisible_items,
             Some(crate::widget::ControlData::Tree(data)) => data.list.fold_invisible_items,
@@ -1637,90 +1644,61 @@ impl ObjectStore {
             })
             .unzip();
 
-        let Some(view_size) = self.objects.get(list).map(|object| object.size()) else {
+        self.layout_scroll_bars(list);
+        let Some(view) = self.list_layout_view(list) else {
             return 0;
         };
-
-        // Native GTree inherits GList's auto-sized single-column cells. Resize
-        // the cell itself so its authored width relations stretch selection and
-        // text, while the indent part continues to offset only the content.
-        let tree_width = match self.objects.get(list).map(|object| object.control()) {
-            Some(crate::widget::ControlData::Tree(data))
-                if data.list.auto_resize_item
-                    && data.list.layout == crate::widget::ListLayoutType::SingleColumn =>
-            {
-                Some(
-                    data.list
-                        .component
-                        .scroll_pane
-                        .as_ref()
-                        .filter(|pane| pane.view_size().width > 0.)
-                        .map_or(
-                            view_size.width - data.list.item_margin.horizontal(),
-                            |pane| pane.view_size().width,
-                        )
-                        .max(0.),
-                )
-            }
-            _ => None,
-        };
-        if let Some(width) = tree_width {
-            for &child in &children {
-                let height = self.objects[child].height();
-                if self.objects[child].width() != width {
-                    self.set_size(child, width, height);
-                }
-            }
-        }
-
-        // 各项尺寸可能不同（例如条目自带的宽高），逐项取用。
-        let item_sizes: Vec<crate::geom::Size> = children
+        let item_sizes: Vec<_> = children.iter().map(|id| self.objects[*id].size()).collect();
+        let sources: Vec<_> = children
             .iter()
-            .map(|child| {
-                self.objects
-                    .get(*child)
-                    .map_or(crate::geom::Size::ZERO, |object| object.size())
+            .map(|id| self.objects[*id].source_size())
+            .collect();
+        let old_positions: Vec<_> = children
+            .iter()
+            .map(|id| {
+                let mut point = self.objects[*id].position();
+                // Synthetic tree cells without an indent part use logical X indentation.
+                if matches!(
+                    self.objects[list].control(),
+                    crate::widget::ControlData::Tree(_)
+                ) {
+                    point.x = 0.;
+                }
+                point
             })
             .collect();
-
-        let mut pagination = None;
-        let positions = {
-            let data = match self.objects.get(list).map(|object| object.control()) {
-                Some(crate::widget::ControlData::List(data)) => Some(&**data),
-                Some(crate::widget::ControlData::Tree(data)) => Some(&data.list),
+        let data = self.list_data(list).unwrap();
+        let flush_last = child_indices.last().is_none_or(|i| *i + 1 == raw_count);
+        let mut layout =
+            data.materialized_layout(&item_sizes, &sources, &old_positions, view, flush_last);
+        // Native demand bars reclaim the cross-axis gutter when content fits.
+        if data.auto_resize_item
+            && let Some(pane) = data.component.scroll_pane.as_ref()
+            && pane.display_in_demand
+        {
+            use crate::widget::ListLayoutType;
+            let expanded = match data.layout {
+                ListLayoutType::SingleColumn if layout.content.height <= view.height => pane
+                    .vt_bar
+                    .and_then(|id| self.object(id))
+                    .map(|bar| Size::new(view.width + bar.width(), view.height)),
+                ListLayoutType::SingleRow if layout.content.width <= view.width => pane
+                    .hz_bar
+                    .and_then(|id| self.object(id))
+                    .map(|bar| Size::new(view.width, view.height + bar.height())),
                 _ => None,
             };
-            let Some(data) = data else {
-                return 0;
-            };
-            if data.layout == crate::widget::ListLayoutType::Pagination {
-                let view = data
-                    .component
-                    .scroll_pane
-                    .as_ref()
-                    .filter(|p| p.view_size().width > 0. && p.view_size().height > 0.)
-                    .map_or(
-                        Size::new(
-                            view_size.width - data.item_margin.horizontal(),
-                            view_size.height - data.item_margin.vertical(),
-                        ),
-                        |p| p.view_size(),
-                    );
-                let sources: Vec<_> = children
-                    .iter()
-                    .map(|id| {
-                        let o = &self.objects[*id];
-                        o.source_size()
-                    })
-                    .collect();
-                let layout = data.pagination_layout(&item_sizes, &sources, view);
-                let positions = layout.positions.clone();
-                pagination = Some(layout);
-                positions
-            } else {
-                data.layout_items(&item_sizes, view_size)
+            if let Some(expanded) = expanded {
+                layout = data.materialized_layout(
+                    &item_sizes,
+                    &sources,
+                    &old_positions,
+                    expanded,
+                    flush_last,
+                );
             }
-        };
+        }
+        let positions = &layout.positions;
 
         if positions.len() != children.len() {
             return 0;
@@ -1737,13 +1715,10 @@ impl ObjectStore {
         };
 
         let mut applied = 0;
-        for (index, (child, position)) in children.iter().zip(&positions).enumerate() {
-            let mut resized = false;
-            if let Some(layout) = &pagination {
-                let size = layout.sizes[index];
-                resized = self.objects[*child].size() != size;
-                self.set_size(*child, size.width, size.height);
-            }
+        for (index, (child, position)) in children.iter().zip(positions).enumerate() {
+            let size = layout.sizes[index];
+            let resized = self.objects[*child].size() != size;
+            self.set_size(*child, size.width, size.height);
             let indent = indents.get(index).copied().unwrap_or(0.0);
             let indent_part = (!indents.is_empty())
                 .then(|| self.child_by_name(*child, "indent"))
@@ -1765,21 +1740,8 @@ impl ObjectStore {
             }
         }
 
-        // 内容尺寸决定滚动范围。
-        let content = {
-            let data = match self.objects.get(list).map(|object| &object.control) {
-                Some(crate::widget::ControlData::List(data)) => Some(&**data),
-                Some(crate::widget::ControlData::Tree(data)) => Some(&data.list),
-                _ => None,
-            };
-            pagination
-                .as_ref()
-                .map(|p| p.content)
-                .or_else(|| data.map(|data| data.content_size(&positions, &item_sizes)))
-        };
-        if let Some(content) = content {
-            self.update_scroll_content_size(list, content);
-        }
+        self.list_bounds.insert(list, layout.content);
+        self.update_scroll_content_size(list, layout.content);
 
         applied
     }

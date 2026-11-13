@@ -566,6 +566,7 @@ pub struct GuiQuery<'w, 's> {
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
     scroll_settings: Query<'w, 's, &'static crate::GuiScrollSettings>,
+    list_layouts: Query<'w, 's, &'static crate::GuiListLayout>,
     transitions: Query<'w, 's, &'static GuiTransitions>,
     animations: Query<'w, 's, &'static crate::GuiAnimationState>,
     lists: Query<'w, 's, &'static GuiListState>,
@@ -726,6 +727,9 @@ impl GuiQuery<'_, '_> {
 
     pub fn list(&self, entity: Entity) -> Option<&GuiListState> {
         self.lists.get(self.view(entity)?).ok()
+    }
+    pub fn list_layout(&self, entity: Entity) -> Option<&crate::GuiListLayout> {
+        self.list_layouts.get(self.view(entity)?).ok()
     }
     pub fn tree(&self, entity: Entity) -> Option<&crate::GuiTreeState> {
         self.trees.get(self.view(entity)?).ok()

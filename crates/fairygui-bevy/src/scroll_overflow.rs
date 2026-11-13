@@ -1,4 +1,4 @@
-//! Preserve model overscroll after Bevy clamps its layout scroll offset.
+//! Project native list offsets and preserve model overscroll after Bevy clamps it.
 use super::*;
 
 type PaneGeometry<'a> = (&'a GObjectRef, &'a ComputedNode, &'a UiGlobalTransform);
@@ -11,13 +11,18 @@ pub(crate) fn project_scroll_overflow(
 ) {
     let mut translations = Vec::new();
     for (owner, node, transform) in &geometry.p0() {
-        let Some(pane) = runtime.store().scroll_pane(owner.0) else {
+        let Some(component) = runtime
+            .store()
+            .object(owner.0)
+            .and_then(|o| o.control().component())
+        else {
             continue;
         };
-        let max = pane.max_scroll_pos();
-        let display = pane.display_pos();
+        let pane = component.scroll_pane.as_ref();
+        let max = pane.map_or(fairygui_core::geom::Point::ZERO, |p| p.max_scroll_pos());
+        let display = pane.map_or(fairygui_core::geom::Point::ZERO, |p| p.display_pos());
         let scale = node.inverse_scale_factor().recip();
-        let align = runtime.store().virtual_list_alignment(owner.0);
+        let align = runtime.store().list_alignment(owner.0);
         let offset = Vec2::new(
             if display.x < 0. || display.x > max.x {
                 node.scroll_position.x - display.x * scale
@@ -29,7 +34,10 @@ pub(crate) fn project_scroll_overflow(
             } else {
                 0.
             },
-        ) + Vec2::new(align.x, align.y) * scale;
+        ) + Vec2::new(
+            align.x + component.margin.left,
+            align.y + component.margin.top,
+        ) * scale;
         if !offset.is_finite() || offset == Vec2::ZERO {
             continue;
         }

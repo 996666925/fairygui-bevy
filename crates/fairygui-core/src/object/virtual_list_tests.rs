@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    object::ListLayoutSettings,
     package::ObjectType,
     scroll::{ScrollPane, ScrollType},
     widget::{ButtonMode, Controller, ListSelectionMode, OverflowType},
@@ -65,6 +66,51 @@ pub(super) fn button(store: &mut ObjectStore, width: f32, height: f32) -> GObjec
     d.mode = ButtonMode::Check;
     store.set_size(id, width, height);
     id
+}
+
+#[test]
+fn writable_layout_refreshes_virtual_geometry_and_rejects_invalid_live_changes() {
+    let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, false, false);
+    let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));
+    store.enable_virtual_list(list, "a", &mut create).unwrap();
+    store.set_virtual_item_count(list, 100).unwrap();
+    let previous = store.list_layout_settings(list).unwrap();
+    assert!(!store.set_list_layout_settings(
+        list,
+        ListLayoutSettings {
+            line_gap: -21,
+            ..previous
+        }
+    ));
+    assert_eq!(store.list_layout_settings(list), Some(previous));
+
+    let changed = ListLayoutSettings {
+        line_gap: 5,
+        ..previous
+    };
+    assert!(store.set_list_layout_settings(list, changed));
+    let mut provider = |_| None;
+    let mut render = |_: &mut ObjectStore, _: usize, _: GObjectId| {};
+    store
+        .refresh_virtual_list(list, &mut create, &mut provider, &mut render)
+        .unwrap();
+    let geometry = &store.virtual_states[&list].geometry;
+    assert_eq!(geometry.config.line_gap, 5);
+    assert_eq!(geometry.content_size().height, 100. * 20. + 99. * 5.);
+
+    let (mut looping, _, list) = fixture(ListLayoutType::SingleColumn, false, false);
+    let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));
+    looping
+        .enable_loop_virtual_list(list, "a", &mut create)
+        .unwrap();
+    looping.set_virtual_item_count(list, 10).unwrap();
+    assert!(!looping.set_list_layout_settings(
+        list,
+        ListLayoutSettings {
+            layout: ListLayoutType::FlowHorizontal,
+            ..looping.list_layout_settings(list).unwrap()
+        }
+    ));
 }
 
 #[test]

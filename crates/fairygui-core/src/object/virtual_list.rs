@@ -142,11 +142,6 @@ impl ObjectStore {
             .take(s.geometry.count)
             .position(|e| e.object == Some(object))
     }
-    pub fn virtual_list_alignment(&self, list: GObjectId) -> Point {
-        self.virtual_states
-            .get(&list)
-            .map_or(Point::ZERO, |s| s.alignment)
-    }
     pub fn list_num_items(&self, list: GObjectId) -> usize {
         self.virtual_states
             .get(&list)

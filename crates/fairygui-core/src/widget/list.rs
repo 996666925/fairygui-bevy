@@ -371,12 +371,14 @@ pub(crate) fn read_list(
             super::ChildrenRenderOrder::from_code(buffer.read_i8()?);
         data.component.apex_index = i32::from(buffer.read_i16()?);
 
+        data.item_margin = data.component.margin;
         if buffer.read_bool()? {
             data.item_margin.top = buffer.read_i32()? as f32;
             data.item_margin.bottom = buffer.read_i32()? as f32;
             data.item_margin.left = buffer.read_i32()? as f32;
             data.item_margin.right = buffer.read_i32()? as f32;
         }
+        data.component.margin = data.item_margin;
 
         // 列表自己也写了一份溢出方式。若为可滚动，配置同样位于块 7。
         let overflow = buffer.read_i8()?;

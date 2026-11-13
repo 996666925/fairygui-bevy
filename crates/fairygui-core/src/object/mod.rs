@@ -16,7 +16,7 @@ pub use event::{EventData, EventKind, EventQueue, UiEvent};
 pub use object::{BlendMode, GObject, GObjectId};
 pub use store::{
     AnimationCommand, AnimationPlaySettings, CoordinateTransform, DisplayLockToken, GearTween,
-    ObjectStore, VirtualItemFactory, VirtualItemProvider, VirtualItemRenderer, VirtualListError,
-    VirtualListInfo, dirty,
+    ListLayoutSettings, ObjectStore, VirtualItemFactory, VirtualItemProvider, VirtualItemRenderer,
+    VirtualListError, VirtualListInfo, dirty,
 };
 pub(crate) use store::{NestedHandle, TransitionId};

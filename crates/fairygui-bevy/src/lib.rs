@@ -72,6 +72,8 @@ pub use input_properties::GuiTextInputSettings;
 mod button_properties;
 pub use button_properties::GuiButtonSettings;
 pub mod list;
+mod list_properties;
+pub use list_properties::GuiListLayout;
 pub mod movie;
 pub mod popup;
 pub mod progress;
@@ -136,8 +138,13 @@ pub use tree::{
 };
 
 pub use fairygui_core as core;
-pub use fairygui_core::widget::{ButtonMode, ChildrenRenderOrder, FillMethod, FlipType, GraphType};
-pub use fairygui_core::{color_matrix::ColorFilterParams, object::BlendMode};
+pub use fairygui_core::widget::{
+    ButtonMode, ChildrenRenderOrder, FillMethod, FlipType, GraphType, ListLayoutType,
+};
+pub use fairygui_core::{
+    color_matrix::ColorFilterParams,
+    object::{BlendMode, ListLayoutSettings},
+};
 
 use bevy::prelude::*;
 
@@ -179,7 +186,7 @@ pub mod prelude {
         GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
         GuiGraph, GuiIcon, GuiImageFill, GuiImageFlip, GuiInputCommand, GuiInputSettings,
         GuiInputState, GuiLink, GuiListContent, GuiListContentError, GuiListContentState,
-        GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection, GuiListState,
+        GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow, GuiListSelection, GuiListState,
         GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
         GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
@@ -192,7 +199,8 @@ pub mod prelude {
         GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
         GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, GuiWorldExt, PopupMenuTemplates,
+        GuiWindowAction, GuiWindowCommand, GuiWindowState, GuiWorldExt, ListLayoutSettings,
+        ListLayoutType, PopupMenuTemplates,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }

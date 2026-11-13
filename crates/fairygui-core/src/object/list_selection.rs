@@ -7,7 +7,7 @@ use crate::widget::{ControlData, ListData, ListSelectionMode};
 mod tests;
 
 impl ObjectStore {
-    fn list_data(&self, list: GObjectId) -> Option<&ListData> {
+    pub(super) fn list_data(&self, list: GObjectId) -> Option<&ListData> {
         match self.object(list)?.control() {
             ControlData::List(data) => Some(data),
             ControlData::Tree(data) => Some(&data.list),
@@ -15,7 +15,7 @@ impl ObjectStore {
         }
     }
 
-    fn list_data_mut(&mut self, list: GObjectId) -> Option<&mut ListData> {
+    pub(super) fn list_data_mut(&mut self, list: GObjectId) -> Option<&mut ListData> {
         match &mut self.objects.get_mut(list)?.control {
             ControlData::List(data) => Some(data),
             ControlData::Tree(data) => Some(&mut data.list),

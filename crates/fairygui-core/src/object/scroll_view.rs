@@ -226,7 +226,7 @@ impl ObjectStore {
                     .scroll_pane
                     .as_ref()
                     .map_or(Point::ZERO, |p| p.display_pos());
-                let align = self.virtual_list_alignment(parent);
+                let align = self.list_alignment(parent);
                 local.tx += f64::from(component.margin.left - scroll.x + align.x);
                 local.ty += f64::from(component.margin.top - scroll.y + align.y);
             }
