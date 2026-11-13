@@ -1,6 +1,6 @@
 use super::*;
 use crate::FairyGuiPlugin;
-use crate::ecs::{GuiObjectInfo, GuiQuery, GuiTransform};
+use crate::ecs::{GuiDisplay, GuiObjectInfo, GuiQuery, GuiText, GuiTransform};
 use bevy::ecs::system::SystemState;
 
 fn app() -> (App, Handle<FuiAsset>) {
@@ -557,4 +557,241 @@ fn ecs_roots_capture_global_font_before_their_first_views_are_spawned() {
         let expected = font.map(FontSource::Handle).unwrap_or_default();
         assert!(fonts.iter().all(|font| *font == expected));
     }
+}
+
+#[test]
+fn ecs_text_is_current_before_observers_and_their_commands_sync_in_the_same_frame() {
+    use fairygui_core::object::EventKind;
+    #[derive(Component)]
+    struct CopyText {
+        input: Entity,
+        output: Entity,
+    }
+    fn copy(event: On<GuiEvent>, gui: GuiQuery, sources: Query<&CopyText>, mut commands: Commands) {
+        if event.event().event.kind != EventKind::Click {
+            return;
+        }
+        let source = sources.get(event.entity).unwrap();
+        assert!(!gui.display(source.input).unwrap().touchable());
+        commands.write_message(GuiObjectCommand::new(
+            source.output,
+            GuiObjectAction::SetText(gui.text(source.input).unwrap().to_owned()),
+        ));
+    }
+    let (mut app, asset) = app();
+    load(&mut app, &asset);
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let root = app.world().get::<GuiRootInstance>(owner).unwrap().object;
+    let (input_id, output_id, button_id) = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let input = runtime
+            .store_mut()
+            .create(fairygui_core::package::ObjectType::InputText);
+        runtime.store_mut().set_object_text(input, "Old");
+        runtime.store_mut().set_input_password(input, true);
+        runtime.store_mut().set_input_prompt(input, Some("Prompt"));
+        runtime.store_mut().set_parent(input, Some(root));
+        let output = runtime
+            .store_mut()
+            .create(fairygui_core::package::ObjectType::Text);
+        runtime.store_mut().set_parent(output, Some(root));
+        runtime.queue_subtree(input);
+        runtime.queue_subtree(output);
+        let button = runtime.store().child_by_name(root, "n1").unwrap();
+        (input, output, button)
+    };
+    app.update();
+    let (input, output, button) = {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        (
+            runtime.entity_of(input_id).unwrap(),
+            runtime.entity_of(output_id).unwrap(),
+            runtime.entity_of(button_id).unwrap(),
+        )
+    };
+    app.world_mut()
+        .entity_mut(button)
+        .insert(CopyText { input, output })
+        .observe(copy);
+    // These model edits represent the state left by Input in this frame. The
+    // observer must not see the preceding Sync's "Old" snapshot or password mask.
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        runtime
+            .store_mut()
+            .set_object_text(input_id, "本帧😀[b]raw[/b]");
+        runtime.store_mut().set_touchable(input_id, false);
+        runtime.dispatch(EventKind::Click, button_id);
+    }
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiText>(output).unwrap().value(),
+        "本帧😀[b]raw[/b]"
+    );
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object_text(output_id),
+        Some("本帧😀[b]raw[/b]")
+    );
+
+    let changed = app
+        .world()
+        .entity(input)
+        .get_ref::<GuiText>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(input)
+            .get_ref::<GuiText>()
+            .unwrap()
+            .last_changed(),
+        changed
+    );
+    send(&mut app, input, GuiObjectAction::SetText(String::new()));
+    app.update();
+    assert_eq!(app.world().get::<GuiText>(input).unwrap().value(), "");
+}
+
+#[test]
+fn ecs_display_keeps_visibility_stage_alpha_and_input_policy_independent() {
+    let (mut app, asset) = app();
+    load(&mut app, &asset);
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let group_id = {
+        let root = app.world().get::<GuiRootInstance>(owner).unwrap().object;
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let group = runtime
+            .store_mut()
+            .create(fairygui_core::package::ObjectType::Group);
+        runtime.store_mut().set_parent(group, Some(root));
+        let button = runtime.store().child_by_name(root, "n1").unwrap();
+        runtime.store_mut().set_group(button, Some(group));
+        runtime.queue_subtree(group);
+        group
+    };
+    app.update();
+    let group = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(group_id)
+        .unwrap();
+    let mut query = SystemState::<GuiQuery>::new(app.world_mut());
+    let (view, button) = {
+        let gui = query.get(app.world()).unwrap();
+        (
+            gui.view(owner).unwrap(),
+            gui.child_by_name(owner, "n1").unwrap(),
+        )
+    };
+    let title = query
+        .get(app.world())
+        .unwrap()
+        .child_by_name(button, "title")
+        .unwrap();
+    assert!(query.get(app.world()).unwrap().text(owner).is_none());
+    for (target, action) in [
+        (owner, GuiObjectAction::SetAlpha(0.5)),
+        (button, GuiObjectAction::SetAlpha(0.4)),
+        (button, GuiObjectAction::SetTouchable(false)),
+        (button, GuiObjectAction::SetGrayed(true)),
+        (owner, GuiObjectAction::SetVisible(false)),
+    ] {
+        send(&mut app, target, action);
+    }
+    app.update();
+    {
+        let gui = query.get(app.world()).unwrap();
+        let root = gui.display(owner).unwrap();
+        assert_eq!(gui.display(view), Some(root));
+        assert!(!root.visible() && !root.display_visible());
+        assert!(
+            root.on_stage(),
+            "explicit visibility does not detach the stage tree"
+        );
+        let state = gui.display(button).unwrap();
+        assert!(state.visible() && state.on_stage());
+        assert!(
+            state.display_visible(),
+            "ancestor explicit hiding is not local visibility"
+        );
+        assert_eq!(state.alpha(), 0.4);
+        assert_eq!(state.effective_alpha(), 0.2);
+        assert!(state.grayed());
+        assert!(!state.touchable());
+        assert_eq!(gui.display(title).unwrap().effective_alpha(), 0.2);
+    }
+    send(&mut app, group, GuiObjectAction::SetVisible(false));
+    app.update();
+    {
+        let gui = query.get(app.world()).unwrap();
+        let state = gui.display(button).unwrap();
+        assert!(state.visible());
+        assert!(
+            !state.display_visible(),
+            "sibling groups affect local drawing"
+        );
+        assert!(
+            state.on_stage(),
+            "explicit group hiding does not disconnect display gears"
+        );
+    }
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .active = false;
+    app.update();
+    assert!(
+        !query
+            .get(app.world())
+            .unwrap()
+            .display(button)
+            .unwrap()
+            .on_stage()
+    );
+    assert!(
+        query
+            .get(app.world())
+            .unwrap()
+            .display(button)
+            .unwrap()
+            .visible()
+    );
+    let changed = app
+        .world()
+        .entity(button)
+        .get_ref::<GuiDisplay>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(button)
+            .get_ref::<GuiDisplay>()
+            .unwrap()
+            .last_changed(),
+        changed
+    );
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .active = true;
+    send(&mut app, owner, GuiObjectAction::SetVisible(true));
+    send(&mut app, button, GuiObjectAction::SetTouchable(true));
+    send(&mut app, button, GuiObjectAction::SetGrayed(false));
+    app.update();
+    let gui = query.get(app.world()).unwrap();
+    assert!(gui.display(button).unwrap().on_stage());
+    assert!(gui.display(button).unwrap().touchable());
+    assert!(!gui.display(button).unwrap().grayed());
+    app.world_mut().despawn(owner);
+    app.update();
+    let gui = query.get(app.world()).unwrap();
+    assert!(gui.display(view).is_none());
+    assert!(gui.text(button).is_none());
 }

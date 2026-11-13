@@ -61,7 +61,7 @@ pub mod text;
 mod text_stroke;
 
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
-pub use ecs::{GuiObjectInfo, GuiQuery, GuiRootView, GuiTransform};
+pub use ecs::{GuiDisplay, GuiObjectInfo, GuiQuery, GuiRootView, GuiText, GuiTransform};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -90,11 +90,12 @@ pub enum GuiSystems {
 pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
-        GuiButtonSelected, GuiConfig, GuiEvent, GuiFont, GuiInputSettings, GuiInputState, GuiLink,
-        GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
-        GuiObjectAction, GuiObjectCommand, GuiObjectInfo, GuiProgressValue, GuiPullRelease,
-        GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiSliderValue, GuiSystems,
-        GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionHook, PopupMenuTemplates,
+        GuiButtonSelected, GuiConfig, GuiDisplay, GuiEvent, GuiFont, GuiInputSettings,
+        GuiInputState, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure,
+        GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiObjectInfo,
+        GuiProgressValue, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime,
+        GuiSliderValue, GuiSystems, GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback,
+        GuiTransitionHook, PopupMenuTemplates,
     };
 }
 
@@ -166,13 +167,17 @@ impl Plugin for FairyGuiPlugin {
         .add_systems(
             Update,
             (
-                runtime::emit_gui_events,
-                runtime::emit_link_messages,
-                runtime::emit_menu_actions,
-                runtime::emit_text_input_messages,
-                runtime::emit_list_item_messages,
-                runtime::emit_pull_release_messages,
+                ecs::sync_gui_properties,
+                (
+                    runtime::emit_gui_events,
+                    runtime::emit_link_messages,
+                    runtime::emit_menu_actions,
+                    runtime::emit_text_input_messages,
+                    runtime::emit_list_item_messages,
+                    runtime::emit_pull_release_messages,
+                ),
             )
+                .chain()
                 .in_set(GuiSystems::Publish),
         )
         .add_systems(
@@ -229,6 +234,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_list_selection_components,
                 runtime::sync_control_state_components,
                 ecs::sync_gui_objects,
+                ecs::sync_gui_properties,
             )
                 .chain()
                 .in_set(GuiSystems::Sync)

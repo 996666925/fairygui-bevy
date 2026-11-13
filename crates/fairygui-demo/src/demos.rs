@@ -14,22 +14,18 @@ use fairygui_core::object::GObjectId;
 pub fn handle_links(
     mut links: MessageReader<fairygui_bevy::GuiLink>,
     controller: Res<DemoController>,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     mut commands: MessageWriter<GuiObjectCommand>,
 ) {
     for link in links.read() {
-        let Some(root) = controller
-            .basics_page
-            .and_then(|handle| runtime.root_object(handle))
-        else {
+        let Some(root) = controller.basics_page_owner else {
             continue;
         };
         if controller.package.as_deref() == Some("Basics")
-            && runtime.store().child_by_name(root, "n12") == Some(link.event.target)
-            && let Some(target) = runtime.entity_of(link.event.target)
+            && gui.child_by_name(root, "n12") == Some(link.entity)
         {
             commands.write(GuiObjectCommand::new(
-                target,
+                link.entity,
                 GuiObjectAction::SetText(format!(
                     "[img]ui://9leh0eyft9fj5f[/img][color=#FF0000]你点击了链接[/color]：{}",
                     link.href
@@ -518,7 +514,7 @@ pub fn show_basics_menu(
 pub fn handle_menu_actions(
     mut actions: MessageReader<GuiMenuAction>,
     mut controller: ResMut<DemoController>,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     mut commands: MessageWriter<GuiObjectCommand>,
 ) {
     for action in actions.read() {
@@ -529,15 +525,10 @@ pub fn handle_menu_actions(
         {
             continue;
         }
-        let Some(page) = controller
-            .basics_page
-            .and_then(|handle| runtime.root_object(handle))
-        else {
+        let Some(page) = controller.basics_page_owner else {
             continue;
         };
-        if let Some(button) = runtime.store().child_by_name(page, "n0")
-            && let Some(target) = runtime.entity_of(button)
-        {
+        if let Some(target) = gui.child_by_name(page, "n0") {
             commands.write(GuiObjectCommand::new(
                 target,
                 GuiObjectAction::SetText(format!(
@@ -553,61 +544,51 @@ pub fn handle_menu_actions(
 
 /// 推进 Laya CooldownDemo 的两个循环进度条。
 pub fn tick(
-    runtime: &GuiRuntime,
+    gui: &GuiQuery,
     controller: &mut DemoController,
     delta: f32,
     commands: &mut MessageWriter<GuiObjectCommand>,
 ) {
     controller.elapsed += delta;
-    let Some(root) = controller.root else { return };
+    let Some(root) = controller.root_owner else {
+        return;
+    };
     if controller.package.as_deref() != Some("Cooldown") {
         return;
     }
 
-    let Some(first) = runtime.store().find_by_name(root, "b0") else {
+    let Some(first) = gui.find_by_name(root, "b0") else {
         return;
     };
-    let Some(second) = runtime.store().find_by_name(root, "b1") else {
+    let Some(second) = gui.find_by_name(root, "b1") else {
         return;
     };
     let first_value = ((controller.elapsed / 5.0) % 1.0 * 100.0) as i32;
     let second_value = (10.0 - (controller.elapsed / 10.0) % 10.0) as i32;
-    for (object, value) in [(first, first_value), (second, second_value)] {
-        if let Some(target) = runtime.entity_of(object) {
-            commands.write(GuiObjectCommand::new(
-                target,
-                GuiObjectAction::SetProgress(value),
-            ));
-        }
+    for (target, value) in [(first, first_value), (second, second_value)] {
+        commands.write(GuiObjectCommand::new(
+            target,
+            GuiObjectAction::SetProgress(value),
+        ));
     }
 }
 
 pub fn copy_basics_input(
-    runtime: &GuiRuntime,
+    gui: &GuiQuery,
     controller: &DemoController,
     commands: &mut MessageWriter<GuiObjectCommand>,
 ) {
-    let Some(page) = controller
-        .basics_page
-        .and_then(|handle| runtime.root_object(handle))
-    else {
+    let Some(page) = controller.basics_page_owner else {
         return;
     };
-    let Some(input) = runtime.store().find_by_name(page, "n22") else {
+    let Some(input) = gui.find_by_name(page, "n22") else {
         return;
     };
-    let value = runtime
-        .store()
-        .object(input)
-        .and_then(|object| object.control().as_text_field())
-        .map(|data| data.text.clone())
-        .unwrap_or_default();
-    if let Some(output) = runtime.store().find_by_name(page, "n24")
-        && let Some(target) = runtime.entity_of(output)
-    {
+    let value = gui.text(input).unwrap_or_default();
+    if let Some(target) = gui.find_by_name(page, "n24") {
         commands.write(GuiObjectCommand::new(
             target,
-            GuiObjectAction::SetText(value),
+            GuiObjectAction::SetText(value.to_owned()),
         ));
     }
 }

@@ -12,6 +12,67 @@ use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GuiRootView(pub Entity);
 
+/// Read-only native text property, before translation, markup and masking.
+///
+/// Buttons expose their base title; labels and combo boxes forward to the title
+/// child. Inputs expose committed text, excluding prompts and IME preedit.
+/// Absent on objects without a text property. Write via `GuiObjectCommand`.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct GuiText(String);
+
+impl GuiText {
+    pub fn value(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Read-only local drawing and interaction state from the FairyGUI model.
+///
+/// Explicit visibility, controller/group display visibility and stage attachment
+/// are independent. `display_visible` excludes ancestor visibility and clipping;
+/// it does not guarantee a painted pixel or an eligible input target.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct GuiDisplay {
+    visible: bool,
+    display_visible: bool,
+    on_stage: bool,
+    alpha: f32,
+    effective_alpha: f32,
+    grayed: bool,
+    touchable: bool,
+}
+
+impl GuiDisplay {
+    pub fn visible(&self) -> bool {
+        self.visible
+    }
+
+    pub fn display_visible(&self) -> bool {
+        self.display_visible
+    }
+
+    pub fn on_stage(&self) -> bool {
+        self.on_stage
+    }
+
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
+
+    /// Product of this object's alpha and all logical ancestors' alpha.
+    pub fn effective_alpha(&self) -> f32 {
+        self.effective_alpha
+    }
+
+    pub fn grayed(&self) -> bool {
+        self.grayed
+    }
+
+    pub fn touchable(&self) -> bool {
+        self.touchable
+    }
+}
+
 /// Read-only FairyGUI geometry, refreshed after `GuiSystems::Sync`.
 ///
 /// Position is relative to the logical parent, in logical pixels, and size is
@@ -103,14 +164,17 @@ impl GuiObjectInfo {
 
 /// Read FairyGUI identities and find control entities using only ECS queries.
 ///
-/// Every method accepts either a root owner or a control view entity. In
-/// `GuiSystems::Respond` this reads the preceding Sync snapshot; systems after
-/// `GuiSystems::Sync` can bind observers to controls created this frame.
+/// Every method accepts either a root owner or a control view entity. Hierarchy
+/// and geometry in `GuiSystems::Respond` read the preceding Sync snapshot.
+/// Text and display properties are also refreshed before input events publish.
+/// Systems after `GuiSystems::Sync` can bind controls created this frame.
 #[derive(SystemParam, Debug)]
 pub struct GuiQuery<'w, 's> {
     roots: Query<'w, 's, &'static GuiRootView>,
     objects: Query<'w, 's, &'static GuiObjectInfo>,
     transforms: Query<'w, 's, &'static GuiTransform>,
+    texts: Query<'w, 's, &'static GuiText>,
+    displays: Query<'w, 's, &'static GuiDisplay>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -130,6 +194,15 @@ impl GuiQuery<'_, '_> {
     /// Logical geometry of a root owner or control view entity.
     pub fn transform(&self, entity: Entity) -> Option<&GuiTransform> {
         self.transforms.get(self.view(entity)?).ok()
+    }
+
+    /// Native text of a root owner or control view, before presentation.
+    pub fn text(&self, entity: Entity) -> Option<&str> {
+        Some(self.texts.get(self.view(entity)?).ok()?.value())
+    }
+
+    pub fn display(&self, entity: Entity) -> Option<&GuiDisplay> {
+        self.displays.get(self.view(entity)?).ok()
     }
 
     /// First direct child with the exact FairyGUI object name.
@@ -164,6 +237,44 @@ impl GuiQuery<'_, '_> {
             }
         }
         Some(entity)
+    }
+}
+
+/// Refresh before publishing input events and after all model/view updates.
+pub(crate) fn sync_gui_properties(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    objects: Query<(Entity, &GObjectRef, Option<&GuiText>, Option<&GuiDisplay>)>,
+) {
+    let store = runtime.store();
+    for (entity, reference, text, display) in &objects {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let Some(object) = store.object(reference.0) else {
+            continue;
+        };
+        match (text, store.object_text(reference.0)) {
+            (current, Some(value)) if current.is_none_or(|current| current.value() != value) => {
+                commands.entity(entity).insert(GuiText(value.to_owned()));
+            }
+            (Some(_), None) => {
+                commands.entity(entity).remove::<GuiText>();
+            }
+            _ => {}
+        }
+        let next = GuiDisplay {
+            visible: object.visible(),
+            display_visible: store.display_visible(reference.0),
+            on_stage: store.is_on_stage(reference.0),
+            alpha: object.alpha(),
+            effective_alpha: store.effective_alpha(reference.0),
+            grayed: object.grayed(),
+            touchable: object.touchable(),
+        };
+        if display != Some(&next) {
+            commands.entity(entity).insert(next);
+        }
     }
 }
 

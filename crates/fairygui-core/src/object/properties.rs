@@ -3,6 +3,23 @@ use crate::color::Color;
 use crate::widget::ControlData;
 
 impl ObjectStore {
+    /// Native text property, including forwarded label and combo-box titles.
+    /// Buttons return their base title even while a selected title is displayed.
+    /// Input fields return committed text, before translation and presentation.
+    pub fn object_text(&self, mut id: GObjectId) -> Option<&str> {
+        loop {
+            match self.object(id)?.control() {
+                ControlData::Text(data) => return Some(&data.text),
+                ControlData::TextInput(data) => return Some(&data.text_field.text),
+                ControlData::Button(data) => return Some(&data.title),
+                ControlData::Label(_) | ControlData::ComboBox(_) => {
+                    id = self.child_by_name(id, "title")?;
+                }
+                _ => return None,
+            }
+        }
+    }
+
     /// Native GTextField.stroke, forwarded to compound titles. Width changes do
     /// not capture Color or FontSize gears; strokeColor has its separate setter.
     pub fn set_object_stroke(&mut self, id: GObjectId, width: f32) -> bool {
@@ -691,5 +708,50 @@ impl ObjectStore {
         if changed {
             self.update_gear_state(target, crate::widget::GearKind::Color);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_text_getters_forward_titles_but_keep_button_base_values() {
+        let mut store = ObjectStore::new();
+        let button = store.create(ObjectType::Button);
+        let button_title = store.create(ObjectType::Text);
+        store.set_name(button_title, "title");
+        store.set_parent(button_title, Some(button));
+        store.set_object_text(button, "Base");
+        if let ControlData::Button(data) = &mut store.object_mut(button).unwrap().control {
+            data.selected = true;
+            data.selected_title = Some("Selected".into());
+        }
+        store.apply_title_of(button);
+        assert_eq!(store.object_text(button), Some("Base"));
+        assert_eq!(store.object_text(button_title), Some("Selected"));
+
+        for kind in [ObjectType::Label, ObjectType::ComboBox] {
+            let owner = store.create(kind);
+            assert_eq!(store.object_text(owner), None);
+            let title = store.create(ObjectType::Label);
+            store.set_name(title, "title");
+            store.set_parent(title, Some(owner));
+            let input = store.create(ObjectType::InputText);
+            store.set_name(input, "title");
+            store.set_parent(input, Some(title));
+            store.set_input_password(input, true);
+            store.set_input_prompt(input, Some("Prompt"));
+            store.set_object_text(owner, "真实😀[b]raw[/b]");
+            assert_eq!(store.object_text(owner), Some("真实😀[b]raw[/b]"));
+            store.set_object_text(input, "Direct edit");
+            assert_eq!(store.object_text(owner), Some("Direct edit"));
+            store.remove(input);
+            assert_eq!(store.object_text(owner), None);
+        }
+        let image = store.create(ObjectType::Image);
+        assert_eq!(store.object_text(image), None);
+        store.remove(button);
+        assert_eq!(store.object_text(button), None);
     }
 }

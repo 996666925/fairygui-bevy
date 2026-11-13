@@ -146,6 +146,18 @@ fn center_root(gui: &GuiQuery, commands: &mut Commands, root: Entity, viewport: 
 可同时配置比例轴心与锚点定位。`GuiFont` 资源也在根构建前同步，首帧和后续动态
 界面会直接使用配置的字体，无需业务系统手工调用 `GuiRuntime::set_font`。
 
+`GuiText::value()` 或 `gui.text(entity)` 读取 FairyGUI 原始文本：按钮返回基础标题，
+标签和下拉框转发到标题子控件；输入框返回已提交内容，不含提示文字、密码掩码、
+IME 预编辑或翻译/UBB 渲染结果。无文本属性的控件没有 `GuiText`。
+`GuiDisplay`（也可用 `gui.display(entity)`）分别提供显式显隐、控制器/分组显示状态、
+舞台连接状态、本地/祖先累积透明度、置灰和输入开关。`display_visible()` 是本地
+显示状态，不包含祖先显隐、裁剪或遮挡；隐藏和离开舞台也是独立状态。
+
+文本和显示状态会在发布输入事件前、Sync 结束时各刷新一次，因此 observer 能读取
+本帧输入刚提交的值，再发命令在同帧更新其他控件。没有变化时保留 ECS 变更标记。
+`SetTouchable(bool)` 通过命令修改输入开关。富文本链接消息 `GuiLink.entity`
+直接提供原始目标的控件实体，可据此查询、发命令或匹配业务组件。
+
 业务系统可在 `GuiSystems::Respond` 用实体发送 `GuiObjectCommand`，本帧 Sync 会把
 修改应用到对象模型并投影到 Bevy UI 视图：
 

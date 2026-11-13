@@ -563,26 +563,21 @@ fn virtual_list_action(
 
 fn basics_text_get_input(
     event: On<GuiEvent>,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     controller: Res<demos::DemoController>,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
 ) {
     if event.event().event.kind != fairygui_core::object::EventKind::Click {
         return;
     }
-    demos::copy_basics_input(&runtime, &controller, &mut gui_commands);
+    demos::copy_basics_input(&gui, &controller, &mut gui_commands);
 }
 
 fn advance_demo_behaviors(
     time: Res<Time>,
-    runtime: NonSend<GuiRuntime>,
+    gui: GuiQuery,
     mut controller: ResMut<demos::DemoController>,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
 ) {
-    demos::tick(
-        &runtime,
-        &mut controller,
-        time.delta_secs(),
-        &mut gui_commands,
-    );
+    demos::tick(&gui, &mut controller, time.delta_secs(), &mut gui_commands);
 }

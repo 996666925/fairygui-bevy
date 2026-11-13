@@ -87,6 +87,7 @@ pub enum GuiObjectAction {
     SetPosition(Vec2),
     SetSize(Vec2),
     SetVisible(bool),
+    SetTouchable(bool),
     SetAlpha(f32),
     SetScale(Vec2),
     SetPivot { pivot: Vec2, as_anchor: bool },
@@ -265,6 +266,8 @@ pub struct GuiEvent {
 /// to handle it; the runtime never opens a browser. Core events also bubble.
 #[derive(Message, Debug, Clone)]
 pub struct GuiLink {
+    /// Bevy control entity that originally activated the link.
+    pub entity: Entity,
     pub href: String,
     pub event: fairygui_core::object::UiEvent,
 }
@@ -329,9 +332,13 @@ pub fn emit_link_messages(
     mut runtime: NonSendMut<GuiRuntime>,
     mut messages: MessageWriter<GuiLink>,
 ) {
-    for event in runtime.links.drain(..) {
-        if let fairygui_core::object::EventData::Text(href) = &event.data {
+    let links = std::mem::take(&mut runtime.links);
+    for event in links {
+        if let Some(entity) = runtime.entity_of(event.target)
+            && let fairygui_core::object::EventData::Text(href) = &event.data
+        {
             messages.write(GuiLink {
+                entity,
                 href: href.clone(),
                 event,
             });
@@ -1839,6 +1846,9 @@ pub fn apply_object_commands(
             }
             GuiObjectAction::SetVisible(visible) => {
                 runtime.store_mut().set_visible(object, *visible);
+            }
+            GuiObjectAction::SetTouchable(touchable) => {
+                runtime.store_mut().set_touchable(object, *touchable);
             }
             GuiObjectAction::SetAlpha(alpha) if alpha.is_finite() => {
                 runtime.store_mut().set_alpha(object, *alpha);

@@ -11,7 +11,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | --- | --- |
 | `fairygui-core` | Package parsing, object ownership, widget state, scrolling and animation; no Bevy dependency |
 | `asset` | Bevy asset loading and package resource paths |
-| `ecs` | Root-to-view references and read-only control identity, logical hierarchy and geometry queries |
+| `ecs` | Root-to-view references and read-only identity, logical hierarchy, geometry, text and display queries |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
@@ -38,7 +38,7 @@ Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these
 `Update` sets:
 
 1. `GuiSystems::Input`: choose a target, update capture, apply built-in behavior.
-2. `GuiSystems::Publish`: trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
+2. `GuiSystems::Publish`: refresh text/display snapshots, trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
 3. `GuiSystems::Respond`: application systems consume messages and send UI commands.
 4. `GuiSystems::Advance`: advance builds, scrolling, transitions and animations.
 5. `GuiSystems::Sync`: reconcile ECS root ownership, apply commands, spawn pending views, synchronize state components and play sounds.
@@ -62,6 +62,21 @@ include indirect updates from relations, groups, controllers and animation.
 systems can read geometry and send commands without borrowing `GuiRuntime`.
 `GuiFont` is captured before ECS root construction and view spawning, including
 the first update and resource changes before later roots are created.
+
+`GuiText` retains the native text property before translation, markup or password
+presentation. Button text is its base title; labels and combo boxes forward to
+their title children. Inputs expose committed values, excluding prompts and IME
+preedit. Unsupported controls have no text component. `GuiDisplay` separates
+explicit visibility, controller/group drawing visibility and stage attachment;
+it also reports local/effective alpha, grayed and touchable. Local drawing
+visibility excludes ancestor visibility, clipping and occlusion.
+
+Text and display refresh before input events are published as well as at the
+end of Sync. Observers can therefore copy the text committed by this frame's
+Input into another entity using `GuiObjectCommand`, without runtime borrowing
+or an extra frame of delay. Unchanged snapshots preserve change ticks.
+`GuiLink.entity` identifies the original control entity; its core payload is
+retained alongside the entity reference.
 
 ```rust
 use bevy::prelude::*;
