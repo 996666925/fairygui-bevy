@@ -2911,7 +2911,6 @@ fn spawn_object(
             is_hoverable: true,
         },
         bevy::ui::RelativeCursorPosition::default(),
-        crate::input::InteractionState,
         if store.display_visible(object) {
             Visibility::Inherited
         } else {

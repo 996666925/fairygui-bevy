@@ -75,7 +75,7 @@ pub(super) fn route_touches(
     mut commands: Commands,
     mut events: MessageReader<TouchInput>,
     settings: Res<GuiInputSettings>,
-    mut state: ResMut<GuiInputState>,
+    mut state: ResMut<InputRouter>,
     windows: Query<(Entity, &Window, Option<&bevy::window::PrimaryWindow>)>,
     targets: PointerTargets,
     rich_text: PointerText,

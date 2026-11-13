@@ -267,10 +267,7 @@ fn registered_bar_track_and_arrows_scroll_without_row_events_or_selection() {
             }
         }
         press(&mut app);
-        assert_eq!(
-            app.world().resource::<GuiInputState>().captured(),
-            Some(parts[offset])
-        );
+        assert_eq!(captured_object(&app), Some(parts[offset]));
         let after_down = app
             .world()
             .non_send::<GuiRuntime>()

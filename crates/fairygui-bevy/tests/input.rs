@@ -19,6 +19,8 @@ mod scroll_motion;
 mod scroll_pages;
 #[path = "input/scroll_wheel.rs"]
 mod scroll_wheel;
+#[path = "input/state.rs"]
+mod state;
 #[path = "input/touches.rs"]
 mod touches;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
@@ -29,6 +31,26 @@ use bevy::window::PrimaryWindow;
 use fairygui_bevy::prelude::*;
 use fairygui_core::object::{EventKind, GObjectId};
 use fairygui_core::package::ObjectType;
+
+// Native routing assertions still compare object identities; the public input
+// resource supplies entities, which these test helpers resolve through ECS.
+fn input_object(app: &App, entity: Entity) -> Option<GObjectId> {
+    app.world()
+        .get::<GObjectRef>(entity)
+        .map(|reference| reference.0)
+}
+fn captured_object(app: &App) -> Option<GObjectId> {
+    app.world()
+        .resource::<GuiInputState>()
+        .captured()
+        .and_then(|entity| input_object(app, entity))
+}
+fn captured_touch_object(app: &App, id: u64) -> Option<GObjectId> {
+    app.world()
+        .resource::<GuiInputState>()
+        .captured_touch(id)
+        .and_then(|entity| input_object(app, entity))
+}
 
 fn setup() -> (App, Entity) {
     let mut app = App::new();
@@ -220,7 +242,7 @@ fn a_display_disconnected_child_cannot_hit_until_a_valid_display_lock_connects_i
         },
     ));
     press(&mut app);
-    assert_eq!(app.world().resource::<GuiInputState>().captured(), None);
+    assert_eq!(captured_object(&app), None);
     release(&mut app);
     let token = app
         .world_mut()
@@ -229,10 +251,7 @@ fn a_display_disconnected_child_cannot_hit_until_a_valid_display_lock_connects_i
         .add_display_lock(hidden)
         .unwrap();
     press(&mut app);
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(hidden)
-    );
+    assert_eq!(captured_object(&app), Some(hidden));
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .store_mut()
@@ -289,10 +308,7 @@ fn bevy_picking_updates_hover_before_routing_and_preserves_pixel_rejection() {
     app.world_mut().write_message(hits());
     press(&mut app);
     assert!(app.world().get::<Hovered>(front_entity).unwrap().get());
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(back)
-    );
+    assert_eq!(captured_object(&app), Some(back));
     app.world_mut().write_message(hits());
     release(&mut app);
     let events = clicks(&mut app);
@@ -325,7 +341,7 @@ fn unrelated_blocking_pickable_prevents_gui_pointer_capture() {
         0.5,
     ));
     press(&mut app);
-    assert_eq!(app.world().resource::<GuiInputState>().captured(), None);
+    assert_eq!(captured_object(&app), None);
     assert!(!app.world().get::<Hovered>(gui_entity).unwrap().get());
 }
 
@@ -335,10 +351,7 @@ fn topmost_target_clicks_once_with_pointer() {
     target(&mut app, 1);
     let (_, top) = target(&mut app, 10);
     press(&mut app);
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(top)
-    );
+    assert_eq!(captured_object(&app), Some(top));
     release(&mut app);
     let events = clicks(&mut app);
     assert_eq!(events.len(), 1);
@@ -606,10 +619,7 @@ fn release_over_another_target_does_not_click_or_transfer_capture() {
     app.world_mut().entity_mut(entity).insert(Hovered(false));
     target(&mut app, 2);
     app.update();
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(first)
-    );
+    assert_eq!(captured_object(&app), Some(first));
     release(&mut app);
     assert!(clicks(&mut app).is_empty());
 }
@@ -645,7 +655,7 @@ fn removed_hidden_or_offstage_capture_is_cancelled() {
             runtime.store_mut().detach_from_stage(id);
         }
         app.update();
-        assert_eq!(app.world().resource::<GuiInputState>().captured(), None);
+        assert_eq!(captured_object(&app), None);
         release(&mut app);
         assert!(clicks(&mut app).is_empty());
     }
@@ -927,7 +937,7 @@ fn opening_modal_cancels_existing_background_capture() {
         )
         .unwrap();
     app.update();
-    assert_eq!(app.world().resource::<GuiInputState>().captured(), None);
+    assert_eq!(captured_object(&app), None);
     release(&mut app);
     assert!(clicks(&mut app).is_empty());
 }
@@ -958,10 +968,7 @@ fn right_pointer_events_bubble_without_emitting_left_click_events() {
         .set_parent(child, Some(parent));
 
     press_right(&mut app);
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(child)
-    );
+    assert_eq!(captured_object(&app), Some(child));
     release_right(&mut app);
 
     let events: Vec<_> = app
@@ -1108,9 +1115,13 @@ fn button_background_swapping_does_not_cancel_click() {
         .store_mut()
         .set_parent(old, Some(button));
     press(&mut app);
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(button)
+    // This fixture materializes only the background. The logical button still
+    // owns the press even though its view is not available to the snapshot.
+    assert_eq!(app.world().resource::<GuiInputState>().captured(), None);
+    assert!(
+        app.world()
+            .resource::<GuiInputState>()
+            .wants_pointer_input()
     );
     app.world_mut()
         .non_send_mut::<GuiRuntime>()

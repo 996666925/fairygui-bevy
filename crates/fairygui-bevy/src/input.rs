@@ -7,7 +7,10 @@ mod gestures;
 mod masks;
 #[cfg(test)]
 mod nested_scroll_tests;
+mod state;
 mod touches;
+pub(crate) use state::sync_state as sync_input_state;
+pub use state::{GuiInputState, GuiPointerCapture, GuiPointerId};
 
 use crate::runtime::{GObjectRef, GuiRuntime};
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
@@ -193,10 +196,6 @@ fn graph_hit(
     }
 }
 
-/// Compatibility marker. Pointer history now belongs to `GuiInputState`.
-#[derive(Component, Debug, Default, Clone, Copy)]
-pub struct InteractionState;
-
 /// Pointer settings. Distances use logical window pixels.
 #[derive(Resource, Debug, Clone)]
 pub struct GuiInputSettings {
@@ -213,9 +212,9 @@ impl Default for GuiInputSettings {
     }
 }
 
-/// Application view of GUI pointer ownership.
+/// Native pointer and editing history; application systems read GuiInputState.
 #[derive(Resource, Debug, Default)]
-pub struct GuiInputState {
+pub(crate) struct InputRouter {
     hovered: Option<GObjectId>,
     capture: Option<Capture>,
     right_capture: Option<RightCapture>,
@@ -225,7 +224,7 @@ pub struct GuiInputState {
     focused_entity: Option<Entity>,
     text_press: Option<(Entity, Vec2, f64, u8)>,
 }
-impl GuiInputState {
+impl InputRouter {
     fn gesture_owners(&self, runtime: &GuiRuntime) -> Vec<GObjectId> {
         self.capture
             .iter()
@@ -244,46 +243,6 @@ impl GuiInputState {
         }
         runtime.store_mut().cancel_scroll_drag(target);
     }
-    pub fn hovered(&self) -> Option<GObjectId> {
-        self.hovered
-    }
-    pub fn captured(&self) -> Option<GObjectId> {
-        self.capture
-            .as_ref()
-            .map(|c| c.target)
-            .or_else(|| self.right_capture.as_ref().map(|c| c.target))
-            .or_else(|| {
-                self.touches
-                    .iter()
-                    .min_by_key(|(id, _)| *id)
-                    .map(|(_, c)| c.target)
-            })
-    }
-    /// The target captured by a particular active finger.
-    pub fn captured_touch(&self, id: u64) -> Option<GObjectId> {
-        self.touches.get(&id).map(|capture| capture.target)
-    }
-    /// The current eligible hit for a captured finger, which may leave its target.
-    pub fn hovered_touch(&self, id: u64) -> Option<GObjectId> {
-        self.touches.get(&id).and_then(|capture| capture.hovered)
-    }
-    pub fn wants_pointer_input(&self) -> bool {
-        self.hovered.is_some()
-            || self.capture.is_some()
-            || self.right_capture.is_some()
-            || !self.touches.is_empty()
-    }
-    pub fn focused_input(&self) -> Option<GObjectId> {
-        self.focused
-    }
-    /// The actual focused input view, including when a compound label was focused.
-    pub fn focused_entity(&self) -> Option<Entity> {
-        self.focused_entity
-    }
-    pub fn wants_keyboard_input(&self) -> bool {
-        self.focused.is_some()
-    }
-
     pub(crate) fn drag_pointers(&self) -> Vec<(Option<u64>, GObjectId, Vec2, bool, bool)> {
         let mut pointers = Vec::new();
         if let Some(capture) = &self.capture {
@@ -328,6 +287,7 @@ impl GuiInputState {
 
 #[derive(Debug)]
 struct Capture {
+    window: Entity,
     target: GObjectId,
     start: Vec2,
     last: Vec2,
@@ -341,6 +301,7 @@ struct Capture {
 
 #[derive(Debug)]
 struct RightCapture {
+    window: Entity,
     target: GObjectId,
     start: Vec2,
     last: Vec2,
@@ -365,6 +326,7 @@ struct TouchCapture {
 
 pub fn register(app: &mut App) {
     app.init_resource::<GuiInputSettings>()
+        .init_resource::<InputRouter>()
         .init_resource::<GuiInputState>()
         .add_message::<bevy::input::touch::TouchInput>()
         .add_systems(
@@ -379,6 +341,7 @@ pub fn register(app: &mut App) {
                 touches::route_touches,
                 crate::runtime::ecs_drag_drop::begin_configured_drags,
                 editing::reconcile_focus,
+                sync_input_state,
             )
                 .chain()
                 .in_set(crate::GuiSystems::Input),
@@ -401,7 +364,7 @@ pub(crate) fn apply_scroll_drag_commands(
     mut cursor: ResMut<ScrollCancelCursor>,
     objects: Query<&GObjectRef>,
     roots: Query<&crate::GuiRootInstance>,
-    mut state: ResMut<GuiInputState>,
+    mut state: ResMut<InputRouter>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     for message in cursor.0.read(&messages) {
@@ -507,7 +470,7 @@ fn update_button(
     }
 }
 
-fn update_button_from_pointers(runtime: &mut GuiRuntime, state: &GuiInputState, target: GObjectId) {
+fn update_button_from_pointers(runtime: &mut GuiRuntime, state: &InputRouter, target: GObjectId) {
     let Some(button) = pointer_button(runtime, target, false) else {
         return;
     };
@@ -582,7 +545,7 @@ fn route_pointer(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
     settings: Res<GuiInputSettings>,
-    mut state: ResMut<GuiInputState>,
+    mut state: ResMut<InputRouter>,
     windows: Query<(Entity, &Window, Option<&bevy::window::PrimaryWindow>)>,
     targets: PointerTargets,
     rich_text: PointerText,
@@ -607,7 +570,8 @@ fn route_pointer(
     });
     let cursor = window
         .filter(|(_, w, _)| w.focused)
-        .and_then(|(_, w, _)| w.cursor_position());
+        .and_then(|(_, w, _)| w.cursor_position())
+        .filter(|position| position.is_finite());
     let mouse_hits = hover.hits(PointerId::Mouse);
     let raw_hit = cursor.and_then(|_| {
         targets
@@ -705,10 +669,11 @@ fn route_pointer(
             capture.moved = true;
         }
         let valid = cursor.is_some()
+            && window.is_some_and(|(entity, _, _)| entity == capture.window)
             && eligible(&runtime, capture.target)
             && capture.gesture.valid(&runtime);
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
-        if position != capture.last {
+        if valid && position != capture.last {
             capture.dragged = true;
             if runtime.store().object(capture.target).is_some() {
                 dispatch(&mut runtime, EventKind::MouseDrag, capture.target, position);
@@ -757,13 +722,19 @@ fn route_pointer(
         } else {
             capture.gesture.finish(&mut runtime, time.delta_secs());
             if runtime.store().object(capture.target).is_some() {
-                dispatch(&mut runtime, EventKind::MouseUp, capture.target, position);
+                let release_position = if valid { position } else { capture.last };
+                dispatch(
+                    &mut runtime,
+                    EventKind::MouseUp,
+                    capture.target,
+                    release_position,
+                );
                 if capture.dragged {
                     dispatch(
                         &mut runtime,
                         EventKind::MouseDragEnd,
                         capture.target,
-                        position,
+                        release_position,
                     );
                 }
                 update_button_from_pointers(&mut runtime, &state, capture.target);
@@ -799,8 +770,10 @@ fn route_pointer(
     }
     if let Some(mut capture) = state.right_capture.take() {
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
-        let valid = cursor.is_some() && eligible(&runtime, capture.target);
-        if position != capture.last {
+        let valid = cursor.is_some()
+            && window.is_some_and(|(entity, _, _)| entity == capture.window)
+            && eligible(&runtime, capture.target);
+        if valid && position != capture.last {
             capture.dragged = true;
             if runtime.store().object(capture.target).is_some() {
                 dispatch(&mut runtime, EventKind::MouseDrag, capture.target, position);
@@ -811,18 +784,19 @@ fn route_pointer(
             state.right_capture = Some(capture);
         } else {
             if runtime.store().object(capture.target).is_some() {
+                let release_position = if valid { position } else { capture.last };
                 dispatch(
                     &mut runtime,
                     EventKind::RightMouseUp,
                     capture.target,
-                    position,
+                    release_position,
                 );
                 if capture.dragged {
                     dispatch(
                         &mut runtime,
                         EventKind::MouseDragEnd,
                         capture.target,
-                        position,
+                        release_position,
                     );
                 }
             }
@@ -844,6 +818,7 @@ fn route_pointer(
     if mouse.just_pressed(MouseButton::Right)
         && cursor.is_some()
         && let Some(target) = hit
+        && let Some((window_entity, _, _)) = window
     {
         let stop = runtime.store().scroll_bar_pointer_down_stop(target);
         runtime.dispatch_event_until(
@@ -852,6 +827,7 @@ fn route_pointer(
             stop,
         );
         state.right_capture = Some(RightCapture {
+            window: window_entity,
             target,
             start: position,
             last: position,
@@ -859,7 +835,10 @@ fn route_pointer(
             dragged: false,
         });
     }
-    if mouse.just_pressed(MouseButton::Left) && cursor.is_some() {
+    if mouse.just_pressed(MouseButton::Left)
+        && cursor.is_some()
+        && let Some((window_entity, _, _)) = window
+    {
         let input = raw_hit
             .filter(|(entity, owner, ..)| {
                 editors.contains(*entity)
@@ -986,6 +965,7 @@ fn route_pointer(
                 &normalized,
             );
             state.capture = Some(Capture {
+                window: window_entity,
                 target,
                 start: position,
                 last: position,

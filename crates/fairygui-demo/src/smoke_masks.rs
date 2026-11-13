@@ -476,7 +476,7 @@ fn drive(
             state.since = state.frame;
         }
         6 if elapsed >= 6 => {
-            assert_eq!(input.hovered(), Some(state.contents[0]));
+            assert_eq!(input.hovered(), gui.entity_of(state.contents[0]));
             mouse.press(MouseButton::Left);
             state.step = 7;
             state.since = state.frame;
@@ -492,7 +492,7 @@ fn drive(
             state.since = state.frame;
         }
         8 if elapsed >= 6 => {
-            assert_eq!(input.hovered(), Some(state.backs[0]));
+            assert_eq!(input.hovered(), gui.entity_of(state.backs[0]));
             let (n, t) = nodes.get(gui.entity_of(state.owners[3]).unwrap()).unwrap();
             state.cursor = Some(
                 t.transform_point2(PROBES[0] / n.inverse_scale_factor() - n.size() * 0.5)
@@ -504,7 +504,7 @@ fn drive(
         9 if elapsed >= 6 => {
             assert_eq!(
                 input.hovered(),
-                Some(state.contents[3]),
+                gui.entity_of(state.contents[3]),
                 "an image mask without hitArea must not add a pixel-input gate"
             );
             let (n, t) = nodes.get(gui.entity_of(state.owners[5]).unwrap()).unwrap();
@@ -518,7 +518,7 @@ fn drive(
         20 if elapsed >= 6 => {
             assert_eq!(
                 input.hovered(),
-                Some(state.backs[5]),
+                gui.entity_of(state.backs[5]),
                 "reversed graphic hit gate rejects its interior"
             );
             let (n, t) = nodes.get(gui.entity_of(state.owners[5]).unwrap()).unwrap();
@@ -530,7 +530,7 @@ fn drive(
             state.since = state.frame;
         }
         21 if elapsed >= 6 => {
-            assert_eq!(input.hovered(), Some(state.contents[5]));
+            assert_eq!(input.hovered(), gui.entity_of(state.contents[5]));
             state.cursor = None;
             window.resolution.set(1120., 680.);
             state.step = 10;

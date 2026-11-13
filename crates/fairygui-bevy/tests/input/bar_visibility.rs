@@ -87,7 +87,7 @@ fn held_grip_survives_idle_time_then_fades_and_hidden_grip_cannot_capture() {
             .visible()
     );
     press(&mut app);
-    assert!(app.world().resource::<GuiInputState>().captured().is_none());
+    assert!(captured_object(&app).is_none());
     release(&mut app);
     wake(&mut app, list);
     press(&mut app);
@@ -134,7 +134,7 @@ fn held_grip_survives_idle_time_then_fades_and_hidden_grip_cannot_capture() {
     assert_eq!(gui.store().object(bar).unwrap().alpha(), 1.);
     app.world_mut().resource_mut::<Step>().0 = 0.;
     press(&mut app);
-    assert!(app.world().resource::<GuiInputState>().captured().is_none());
+    assert!(captured_object(&app).is_none());
     release(&mut app);
 }
 
@@ -144,10 +144,7 @@ fn grip_capture_cancellation_releases_visibility_on_focus_hide_detach_and_dispos
         let (mut app, window, root, list, bar, grip) = fixture();
         wake(&mut app, list);
         press(&mut app);
-        assert_eq!(
-            app.world().resource::<GuiInputState>().captured(),
-            Some(grip)
-        );
+        assert_eq!(captured_object(&app), Some(grip));
         if reason == 0 {
             app.world_mut().get_mut::<Window>(window).unwrap().focused = false;
         } else {
@@ -170,10 +167,7 @@ fn grip_capture_cancellation_releases_visibility_on_focus_hide_detach_and_dispos
             }
         }
         app.update();
-        assert!(
-            app.world().resource::<GuiInputState>().captured().is_none(),
-            "reason={reason}"
-        );
+        assert!(captured_object(&app).is_none(), "reason={reason}");
         if let Some(pane) = app
             .world()
             .non_send::<GuiRuntime>()

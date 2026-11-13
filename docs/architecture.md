@@ -877,6 +877,24 @@ primary window by default). `GuiInputState::hovered()`, `captured()`, and
 `wants_pointer_input()` let gameplay systems arbitrate pointer ownership after
 `GuiSystems::Input` without inspecting UI entities.
 
+GuiInputState is a read-only entity snapshot; InputRouter privately owns native
+capture and editor history. All public hover/capture getters return view entities.
+GuiPointerId distinguishes mouse buttons from touch IDs, and GuiPointerCapture
+exposes the source window, captured/hovered views, logical-window start/current positions, MouseDrag
+history and native click suppression (threshold or application drag claim).
+Snapshots refresh after routing, before keyboard dispatch, before PostLayout and
+at Sync end. Unchanged snapshots retain resource change ticks; dead, hidden or
+modal-blocked targets disappear immediately from the public snapshot even before
+the next Input phase routes native cancellation. Arbitration retains ownership
+for eligible native captures whose logical recipient has no materialized view.
+The standalone input router also resolves manually materialized GObjectRef views;
+normal runtime mappings take precedence. The unused InteractionState marker was
+removed; application pointer history belongs on its own ECS components.
+Mouse captures retain their source window. Changing GuiInputSettings.window
+invalidates old captures without emitting a cross-window drag; cancellation Up
+notifications use the last position in the original window. Touch snapshots also
+exclude captures from a window that is no longer selected.
+
 The adapter routes one mouse pointer plus concurrent touch pointers within the
 selected UI window. Simultaneous input across multiple windows is not implemented.
 Touch hit candidates come from Bevy's latest completed picking pass, with per-event

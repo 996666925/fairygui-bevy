@@ -5,7 +5,7 @@ use bevy::{
 };
 use fairygui_core::{Point, widget::ControlData};
 
-fn fixture() -> (App, Entity) {
+pub(super) fn fixture() -> (App, Entity) {
     let (mut app, window) = setup();
     app.init_resource::<HoverMap>();
     // Touch routing must work even if the window has no mouse cursor.
@@ -16,7 +16,7 @@ fn fixture() -> (App, Entity) {
     (app, window)
 }
 
-fn hits(app: &mut App, id: u64, entities: &[Entity]) {
+pub(super) fn hits(app: &mut App, id: u64, entities: &[Entity]) {
     let hits = entities
         .iter()
         .enumerate()
@@ -32,7 +32,7 @@ fn hits(app: &mut App, id: u64, entities: &[Entity]) {
         .insert(PointerId::Touch(id), hits);
 }
 
-fn send(app: &mut App, window: Entity, id: u64, phase: TouchPhase, position: Vec2) {
+pub(super) fn send(app: &mut App, window: Entity, id: u64, phase: TouchPhase, position: Vec2) {
     app.world_mut().write_message(TouchInput {
         id,
         phase,
@@ -76,23 +76,11 @@ fn two_fingers_capture_and_release_independently_with_bubbling_ids() {
         TouchPhase::Started,
         Vec2::splat(80.0),
     );
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(101),
-        Some(first)
-    );
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(202),
-        Some(second)
-    );
+    assert_eq!(captured_touch_object(&app, 101), Some(first));
+    assert_eq!(captured_touch_object(&app, 202), Some(second));
     send(&mut app, window, 101, TouchPhase::Ended, Vec2::splat(10.0));
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(101),
-        None
-    );
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(202),
-        Some(second)
-    );
+    assert_eq!(captured_touch_object(&app, 101), None);
+    assert_eq!(captured_touch_object(&app, 202), Some(second));
     assert!(
         app.world()
             .resource::<GuiInputState>()
@@ -226,10 +214,7 @@ fn cancellation_and_policy_changes_release_stationary_touches_without_click() {
                 app.update();
             }
         }
-        assert_eq!(
-            app.world().resource::<GuiInputState>().captured_touch(42),
-            None
-        );
+        assert_eq!(captured_touch_object(&app, 42), None);
         assert!(
             !app.world()
                 .resource::<GuiInputState>()
@@ -257,13 +242,10 @@ fn mouse_cannot_capture_an_entity_hovered_only_by_touch() {
     let (entity, id) = target(&mut app, 1);
     hits(&mut app, 5, &[entity]);
     press(&mut app);
-    assert_eq!(app.world().resource::<GuiInputState>().captured(), None);
+    assert_eq!(captured_object(&app), None);
     release(&mut app);
     send(&mut app, window, 5, TouchPhase::Started, Vec2::splat(10.0));
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(5),
-        Some(id)
-    );
+    assert_eq!(captured_touch_object(&app, 5), Some(id));
     assert!(!events(&mut app).iter().any(|e| e.kind == EventKind::Click));
 }
 
@@ -692,10 +674,7 @@ fn a_stationary_touch_emits_no_moves_and_can_tap_in_a_single_frame() {
             .count(),
         1
     );
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(1),
-        None
-    );
+    assert_eq!(captured_touch_object(&app, 1), None);
 }
 
 #[test]
@@ -725,15 +704,9 @@ fn transparent_touch_pixels_are_rejected_and_a_foreign_window_is_ignored() {
         TouchPhase::Started,
         Vec2::splat(10.0),
     );
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(3),
-        None
-    );
+    assert_eq!(captured_touch_object(&app, 3), None);
     send(&mut app, window, 3, TouchPhase::Started, Vec2::splat(10.0));
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured_touch(3),
-        Some(back)
-    );
+    assert_eq!(captured_touch_object(&app, 3), Some(back));
     // Releasing over another eligible GUI target does not transfer a click.
     hits(&mut app, 3, &[]);
     send(&mut app, window, 3, TouchPhase::Ended, Vec2::splat(10.0));

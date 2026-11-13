@@ -223,6 +223,19 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 对应视图时为 `None`）。可沿 `GuiObjectInfo::parent()` 判断点击是否来自某个子控件，
 无需借用运行时解析原生对象 ID。
 
+`GuiInputState::hovered()`、`captured()`、`captured_touch(id)` 和
+`hovered_touch(id)` 都返回控件视图 `Entity`，可直接用于 ECS 查询。`captures()`
+提供左右鼠标键及各触点的独立捕获快照，顺序为左键、右键、触摸 ID 升序；
+`capture(GuiPointerId::Mouse(MouseButton::Left))` 或 `GuiPointerId::Touch(id)`
+可查询指定指针的来源窗口、目标、当前命中实体、起始/当前位置、拖动及点击抑制状态。
+坐标单位为窗口逻辑像素；`suppresses_click()` 表示拖动阈值或业务拖拽取消了点击，
+抬起时的命中条件仍独立检查。状态在 Input 后、PostLayout 前及 Sync 末尾刷新；
+隐藏、模态阻挡或销毁的目标会从公开快照中排除，未变化时保留资源变更标记。
+`wants_pointer_input()` / `wants_keyboard_input()` 可用于游戏输入仲裁，即使逻辑
+捕获目标暂时还没有对应视图，GUI 仍会保留对该指针的占用。
+切换输入窗口会结束旧窗口的捕获，抬起通知保留旧窗口的最后位置，不会把新窗口的
+坐标作为旧控件的拖动输入。
+
 嵌套滚动在指针超过本地轴的拖动阈值后选择面板。横纵方向竞争时按主要位移方向
 处理，同方向优先最近面板；取得拖动权后保持到松手。鼠标和触摸使用相同规则。
 `GuiScrollState::is_dragging()` 提供当前状态；

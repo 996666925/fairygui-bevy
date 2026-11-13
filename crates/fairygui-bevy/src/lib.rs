@@ -74,7 +74,9 @@ pub use ecs::{
     GuiRootView, GuiScrollState, GuiSpace, GuiText, GuiTransform, GuiTransitionState,
     GuiTransitions,
 };
-pub use input::{GuiInputCommand, GuiInputSettings, GuiInputState};
+pub use input::{
+    GuiInputCommand, GuiInputSettings, GuiInputState, GuiPointerCapture, GuiPointerId,
+};
 pub use list::{
     GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListRow,
     GuiListState, GuiVirtualList, GuiVirtualListState,
@@ -137,15 +139,15 @@ pub mod prelude {
         GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,
         GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
         GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
-        GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPopupCommand,
-        GuiPopupMenu, GuiPopupState, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease,
-        GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue,
-        GuiSpace, GuiSystems, GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback,
-        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
-        GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
-        GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,
-        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
-        PopupMenuTemplates,
+        GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPointerCapture,
+        GuiPointerId, GuiPopupCommand, GuiPopupMenu, GuiPopupState, GuiProgressValue,
+        GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView,
+        GuiRuntime, GuiScrollState, GuiSliderValue, GuiSpace, GuiSystems, GuiText, GuiTextInput,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
+        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
+        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
     };
 }
 
@@ -300,7 +302,12 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 (tree::sync_tree_state, list::sync_list_state).chain(),
-                (list::sync_virtual_list_state, runtime::sync_loader_states).chain(),
+                (
+                    list::sync_virtual_list_state,
+                    runtime::sync_loader_states,
+                    input::sync_input_state,
+                )
+                    .chain(),
             )
                 .chain()
                 .in_set(SyncPhase::Prepare),
@@ -396,7 +403,12 @@ impl Plugin for FairyGuiPlugin {
                 runtime::object_drag::prepare_object_drags,
                 runtime::object_drag::sync_object_drag_state,
                 (tree::sync_tree_state, list::sync_list_state).chain(),
-                (list::sync_virtual_list_state, runtime::sync_loader_states).chain(),
+                (
+                    list::sync_virtual_list_state,
+                    runtime::sync_loader_states,
+                    input::sync_input_state,
+                )
+                    .chain(),
             )
                 .chain()
                 .in_set(SyncPhase::Project)

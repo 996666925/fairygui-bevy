@@ -1,6 +1,7 @@
 //! Entity-owned application drag-and-drop, separate from window/scroll gestures.
 use super::*;
-use crate::{GuiInputSettings, GuiInputState};
+use crate::GuiInputSettings;
+use crate::input::InputRouter;
 use bevy::window::PrimaryWindow;
 
 #[cfg(test)]
@@ -103,7 +104,7 @@ impl GuiRuntime {
 
     fn begin_ecs_drag(
         &mut self,
-        input: &mut GuiInputState,
+        input: &mut InputRouter,
         source: GObjectId,
         configuration: &GuiDragSource,
         touch_id: Option<u64>,
@@ -190,7 +191,7 @@ pub(crate) fn prepare_drag_targets(
 
 pub(crate) fn begin_configured_drags(
     sources: Query<&GuiDragSource>,
-    mut state: ResMut<GuiInputState>,
+    mut state: ResMut<InputRouter>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
     settings: Res<GuiInputSettings>,
     mut runtime: NonSendMut<GuiRuntime>,
@@ -228,7 +229,7 @@ pub(crate) fn apply_drag_commands(
     mut messages: MessageReader<GuiDragCommand>,
     objects: Query<&GObjectRef>,
     roots: Query<&GuiRootInstance>,
-    mut state: ResMut<GuiInputState>,
+    mut state: ResMut<InputRouter>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
     settings: Res<GuiInputSettings>,
     mut runtime: NonSendMut<GuiRuntime>,

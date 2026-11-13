@@ -253,7 +253,6 @@ pub(crate) fn sync_graphs(
                         is_hoverable: true,
                     },
                     bevy::ui::RelativeCursorPosition::default(),
-                    crate::input::InteractionState,
                 ))
                 .id();
             (surface, handle)

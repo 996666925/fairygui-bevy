@@ -152,7 +152,10 @@ fn drive(
     assets: Res<Assets<FuiAsset>>,
     demo: Res<Demo>,
     mut runtime: NonSendMut<GuiRuntime>,
-    nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
+    (nodes, references): (
+        Query<(&ComputedNode, &UiGlobalTransform)>,
+        Query<&GObjectRef>,
+    ),
     mut windows: Query<(Entity, &mut Window)>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut commands: Commands,
@@ -504,7 +507,8 @@ fn drive(
             assert!(
                 input
                     .captured()
-                    .and_then(|id| runtime.store().registered_scroll_bar_of(id))
+                    .and_then(|entity| references.get(entity).ok())
+                    .and_then(|reference| runtime.store().registered_scroll_bar_of(reference.0))
                     .is_none(),
                 "hidden bar cannot capture a stale pointer position"
             );

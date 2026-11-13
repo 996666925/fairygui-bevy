@@ -263,10 +263,7 @@ fn release_closing_window_rejects_same_frame_wheel_on_disposed_hit() {
     let (entity, _) = target(&mut app, 100);
     app.world_mut().entity_mut(entity).insert(GObjectRef(close));
     press(&mut app);
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(close)
-    );
+    assert_eq!(captured_object(&app), Some(close));
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .drain_events()
@@ -331,10 +328,7 @@ fn release_hiding_combo_popup_rejects_same_frame_wheel_on_retained_off_stage_pan
         .entity_mut(combo_entity)
         .insert(Hovered(false));
     press(&mut app);
-    assert_eq!(
-        app.world().resource::<GuiInputState>().captured(),
-        Some(leaf)
-    );
+    assert_eq!(captured_object(&app), Some(leaf));
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .drain_events()

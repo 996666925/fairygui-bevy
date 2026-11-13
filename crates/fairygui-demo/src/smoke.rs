@@ -1062,7 +1062,9 @@ fn drive(
                         if smoke.menu_stage == 4 {
                             assert_eq!(
                                 input_state.hovered(),
-                                runtime.popup_menu_item("disabled").map(|item| item.1),
+                                runtime
+                                    .popup_menu_item("disabled")
+                                    .and_then(|item| runtime.entity_of(item.1)),
                                 "later-created page must not intercept a popup row"
                             );
                         }

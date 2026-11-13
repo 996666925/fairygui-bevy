@@ -84,7 +84,8 @@ pub(super) fn register(app: &mut App) {
         .add_observer(keep_active_input_focus)
         .add_systems(
             PreUpdate,
-            reconcile_focus
+            (reconcile_focus, super::sync_input_state)
+                .chain()
                 .after(bevy::input::InputSystems)
                 .before(InputFocusSystems::Dispatch),
         )
@@ -122,7 +123,7 @@ fn selected_window(entity: Entity, primary: bool, settings: &GuiInputSettings) -
 /// after GUI mutations. Native input notifications are target-only, not bubbled.
 pub(crate) fn reconcile_focus(
     mut focus: ResMut<InputFocus>,
-    mut state: ResMut<GuiInputState>,
+    mut state: ResMut<InputRouter>,
     settings: Res<GuiInputSettings>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
     objects: Query<&GObjectRef>,

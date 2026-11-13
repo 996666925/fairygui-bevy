@@ -226,7 +226,7 @@ fn value(app: &App, entity: Entity) -> String {
 fn touch_press_focuses_the_native_editor_without_a_mouse_cursor() {
     use bevy::input::touch::{TouchInput, TouchPhase};
     use bevy::picking::{backend::HitData, hover::HoverMap, pointer::PointerId};
-    let (mut app, owner, entity, window) = fixture();
+    let (mut app, _, entity, window) = fixture();
     app.init_resource::<HoverMap>();
     app.world_mut().resource_mut::<HoverMap>().insert(
         PointerId::Touch(8),
@@ -246,8 +246,8 @@ fn touch_press_focuses_the_native_editor_without_a_mouse_cursor() {
     });
     app.update();
     assert_eq!(
-        app.world().resource::<GuiInputState>().focused_input(),
-        Some(owner)
+        app.world().resource::<GuiInputState>().focused_entity(),
+        Some(entity)
     );
     assert_eq!(app.world().resource::<InputFocus>().get(), Some(entity));
     key(
@@ -267,8 +267,8 @@ fn touch_press_focuses_the_native_editor_without_a_mouse_cursor() {
     });
     app.update();
     assert_eq!(
-        app.world().resource::<GuiInputState>().focused_input(),
-        Some(owner)
+        app.world().resource::<GuiInputState>().focused_entity(),
+        Some(entity)
     );
     assert_eq!(
         app.world().resource::<GuiInputState>().captured_touch(8),
