@@ -16,6 +16,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `list` | ECS virtual-list configuration, restricted synchronous row renderers and layout diagnostics |
 | `pull` | Entity-addressed refresh locks applied between Respond and Advance |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
+| `runtime::windows` | Asset-backed ECS window ownership, entity commands and native window snapshots |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
 | `core::fill`, `image_fill`, `image_fill.wesl` | Native fill polygons, image/movie UI material masks, atlas/slice mapping and retained material ownership |
@@ -107,6 +108,30 @@ Respond and before Advance so the first release tick uses the response boundary.
 They discard missing targets and invalid sizes; no asset-waiting requests are
 retained. The pull demo uses ECS for its controller pages, timed jobs, ordinary
 row growth and refresh locks.
+
+`FairyGuiWindow` is an independent owner component, separate from `FairyGuiRoot`.
+Its asset/item identify the native window object; visible/modal/draggable are live
+configuration. Construction waits for assets, recognizes native frame parts, and
+centers once by default. It also supplies an asset fallback for the synthetic
+stage when a window is the first GUI in an app. Native row preparation still runs
+at view creation so application initialization can replace authored list content.
+
+`GuiWindowCommand` targets the owner or root view with Show/Hide/BringToFront/Center.
+Pending asset requests retain template identity, and replacement, component removal
+or despawn cancels them. Object commands also resolve window owners and preserve
+pending requests. Window reconciliation runs after root reconciliation; its command
+stream follows object commands and precedes popup commands. Center refreshes the
+viewport from GuiInputSettings. There is no business-visible window slot index.
+
+`GuiWindowState` is projected on owner and view before Publish and at Sync end,
+along with GuiRootView for hierarchy/property lookup. Native close-button input
+hides ECS windows, retaining views and reflecting visible=false on the component.
+Removing the component or despawning the owner disposes its model and views.
+Modality updates the native root entry without reordering or detach/attach events.
+Drag capture retains the model object identity, so deleting another window cannot
+redirect an in-progress gesture through a compacted window array. Hiding or
+disabling drag cancels the gesture. Basics/Window uses entity observers and
+retained child owner entities for its two exported windows.
 
 ## Frame contract
 

@@ -318,6 +318,33 @@ commands.write_message(GuiPullCommand::LockHeader {
 已经构建的滚动容器视图或根拥有者；无效目标、负数及非有限尺寸会被忽略。
 下拉刷新示例的页面切换、延迟加载、增加普通行和解锁全部通过 ECS 完成。
 
+窗口用独立的 `FairyGuiWindow` 实体拥有资产和对象树：
+
+```rust,ignore
+let mut window = FairyGuiWindow::new(assets.load("ui/Basics.fui"), "WindowA");
+window.visible = false;
+window.modal = true;
+let owner = commands.spawn(window).id();
+commands.write_message(GuiWindowCommand::new(owner, GuiWindowAction::Show));
+```
+
+资产就绪后插件创建原生窗口，按约定识别 `frame`、`content`、`closeButton` 与拖动区，
+默认在 `GuiInputSettings` 选择的窗口内居中。组件的 `visible`、`modal`、`draggable`
+可动态修改；`center_on_create = false` 保留导出位置。不要在同一实体上同时挂
+`FairyGuiRoot` 和 `FairyGuiWindow`，两者分别拥有独立界面。
+
+`GuiWindowAction` 支持 `Show`、`Hide`、`BringToFront` 和 `Center`，目标接受窗口
+拥有者或根视图实体。资产等待期间的命令会保留；替换资产/条目、移除组件或销毁
+拥有者会取消旧请求。`Center` 使用当前窗口尺寸。窗口命令在 Sync 的对象命令之后
+执行，同类命令保持顺序；`GuiObjectCommand` 同样支持窗口拥有者及其等待中的资产。
+
+`GuiWindowState` 在拥有者和根视图上提供显示、模态、拖动状态及窗框/内容/关闭按钮
+实体，也可通过 `gui.window(entity)` 查询。窗口拥有者支持 `GuiQuery` 的层级和属性
+查询。原生关闭按钮会隐藏 ECS 窗口，并把组件的 `visible` 更新为 false；再次显示
+复用同一对象和实体。移除组件或销毁拥有者才会回收整个窗口，模态切换保留窗口层级。
+可将拥有者作为其他业务实体的子实体，让其销毁时一起回收。Basics/Window 的两个
+按钮使用这一套 API；`--smoke-windows` 验证真实关闭按钮、复用、拖动、居中和销毁。
+
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
 会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长和分页阈值。
 导出包显式设置的显示方式及触摸/回弹开关优先。配置在创建时捕获，修改资源影响

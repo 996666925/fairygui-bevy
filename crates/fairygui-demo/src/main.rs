@@ -16,6 +16,7 @@ mod demos;
 mod loop_list_demo;
 mod pull_refresh_demo;
 mod smoke;
+mod window_demo;
 
 /// 主菜单所在的包与界面名。
 const MENU_PACKAGE: &str = "ui/MainMenu.fui";
@@ -150,7 +151,11 @@ fn main() -> AppExit {
     );
     app.add_systems(
         Update,
-        (demos::initialize_demo_roots, bind_demo_observers)
+        (
+            demos::initialize_demo_roots,
+            bind_demo_observers,
+            window_demo::bind,
+        )
             .chain()
             .after(GuiSystems::Sync),
     );
@@ -162,7 +167,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-masks") {
+    if std::env::args().any(|arg| arg == "--smoke-windows") {
+        smoke::install_windows(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-masks") {
         smoke::install_masks(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-compositor") {
         smoke::install_compositor(&mut app);

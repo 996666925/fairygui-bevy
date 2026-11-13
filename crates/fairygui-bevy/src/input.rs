@@ -954,7 +954,12 @@ fn apply_click(
     }
     runtime.store_mut().scroll_clicked_list_item_to_view(target);
     if let Some(index) = actions::close_button_window(runtime, target) {
-        runtime.close_window(commands, index);
+        let object = runtime.window(index).unwrap().owner();
+        if runtime.is_ecs_window_object(object) {
+            runtime.hide_window(index);
+        } else {
+            runtime.close_window(commands, index);
+        }
     } else if let Some(hit) = runtime.popup_menu_hit(target) {
         if hit.is_some() {
             runtime.activate_menu_item(target, Some(Point::new(cursor.x, cursor.y)));

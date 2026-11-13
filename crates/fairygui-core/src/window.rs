@@ -132,11 +132,20 @@ impl Window {
     /// 设置是否可拖拽。
     pub fn set_draggable(&mut self, draggable: bool) {
         self.draggable = draggable;
+        if !draggable {
+            self.dragging = false;
+        }
     }
 
     /// 是否为模态窗口。
     pub fn is_modal(&self) -> bool {
         self.modal
+    }
+    pub fn set_modal(&mut self, root: &mut Root, modal: bool) {
+        self.modal = modal;
+        if self.showing {
+            root.set_popup_modal(self.owner, modal);
+        }
     }
 
     /// 是否正在显示。
@@ -162,6 +171,7 @@ impl Window {
         }
         root.detach(store, self.owner);
         self.showing = false;
+        self.dragging = false;
     }
 
     /// 切换显示状态。已显示则隐藏，否则显示。

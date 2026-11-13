@@ -19,6 +19,8 @@ use crate::ecs::GuiRootView;
 #[cfg(test)]
 #[path = "ecs_root_tests.rs"]
 mod ecs_root_tests;
+#[path = "windows.rs"]
+pub(crate) mod windows;
 
 /// 实体所镜像的核心对象。
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -479,7 +481,8 @@ pub struct GuiRuntime {
     roots: Vec<GuiRoot>,
     ecs_roots: HashMap<Entity, EcsRootBinding>,
     object_command_cursor: bevy::ecs::message::MessageCursor<GuiObjectCommand>,
-    pending_object_commands: Vec<(FairyGuiRoot, GuiObjectCommand)>,
+    pending_object_commands: Vec<(ObjectCommandSource, GuiObjectCommand)>,
+    ecs_windows: HashMap<Entity, windows::Binding>,
     /// 已派发但尚未被取走的事件。
     events: fairygui_core::object::EventQueue,
     links: Vec<fairygui_core::object::UiEvent>,
@@ -1147,7 +1150,19 @@ impl GuiRuntime {
         modal: bool,
         root_size: fairygui_core::geom::Size,
     ) -> Option<usize> {
-        let root_object = self.ensure_root(root_size);
+        self.ensure_root(root_size);
+        self.construct_window(package, item_name, modal, true, true)
+    }
+
+    fn construct_window(
+        &mut self,
+        package: &FuiPackage,
+        item_name: &str,
+        modal: bool,
+        visible: bool,
+        center: bool,
+    ) -> Option<usize> {
+        let root_object = self.root.as_ref()?.owner();
         let index = package.item_index_by_name(item_name)?;
         let owner = fairygui_core::widget::create_from_package_with_registry(
             &mut self.store,
@@ -1157,23 +1172,27 @@ impl GuiRuntime {
             &self.registry,
         )
         .ok()?;
-
         if let Some(handle) = self.package_handles.get(package.id()).cloned() {
             self.remember_asset_tree(owner, &handle);
+            // Standalone ECS windows can be the first GUI in the app. The
+            // synthetic stage needs an asset fallback before it can spawn.
+            self.object_assets.entry(root_object).or_insert(handle);
         }
         let mut window = fairygui_core::window::Window::new(owner);
         window.attach_parts(&self.store);
-        window.center_on(&mut self.store, self.root.as_ref()?);
-
-        // 显示必须走根节点，层级顺序与模态状态才是统一的。
-        window.show(&mut self.store, self.root.as_mut()?, modal);
-
+        window.set_modal(self.root.as_mut()?, modal);
+        if center {
+            window.center_on(&mut self.store, self.root.as_ref()?);
+        }
+        if visible {
+            window.show(&mut self.store, self.root.as_mut()?, modal);
+        }
         self.windows.push(window);
-        self.queue_spawn(owner);
-        // 窗口的实体要挂在根容器下，因此根也要先有实体。
+        self.queue_subtree(owner);
         self.queue_spawn(root_object);
-
-        self.dispatch(fairygui_core::object::EventKind::WindowShown, owner);
+        if visible {
+            self.dispatch(fairygui_core::object::EventKind::WindowShown, owner);
+        }
         Some(self.windows.len() - 1)
     }
 
@@ -1887,11 +1906,27 @@ pub fn emit_gui_events(
     }
 }
 
+#[derive(Clone)]
+enum ObjectCommandSource {
+    Root(FairyGuiRoot),
+    Window(windows::FairyGuiWindow),
+}
+impl ObjectCommandSource {
+    fn same_template(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Root(a), Self::Root(b)) => a.asset == b.asset && a.item_name == b.item_name,
+            (Self::Window(a), Self::Window(b)) => a.asset == b.asset && a.item_name == b.item_name,
+            _ => false,
+        }
+    }
+}
+
 pub(crate) fn discard_removed_object_commands(
     mut removed: RemovedComponents<FairyGuiRoot>,
+    mut removed_windows: RemovedComponents<windows::FairyGuiWindow>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
-    for target in removed.read() {
+    for target in removed.read().chain(removed_windows.read()) {
         runtime
             .pending_object_commands
             .retain(|(_, command)| command.target != target);
@@ -1905,6 +1940,7 @@ pub(crate) fn apply_object_commands(
     objects: Query<&GObjectRef>,
     roots: Query<&GuiRootInstance>,
     sources: Query<&FairyGuiRoot>,
+    window_sources: Query<&windows::FairyGuiWindow>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     let incoming = runtime
@@ -1918,28 +1954,43 @@ pub(crate) fn apply_object_commands(
         .map(|(source, command)| (Some(source), command))
         .chain(incoming.into_iter().map(|command| (None, command)))
     {
-        let source = sources.get(command.target).ok();
+        let source = sources
+            .get(command.target)
+            .ok()
+            .cloned()
+            .map(ObjectCommandSource::Root)
+            .or_else(|| {
+                window_sources
+                    .get(command.target)
+                    .ok()
+                    .cloned()
+                    .map(ObjectCommandSource::Window)
+            });
         if let Some(expected) = expected
-            && source.is_none_or(|current| {
-                current.asset != expected.asset || current.item_name != expected.item_name
-            })
+            && source
+                .as_ref()
+                .is_none_or(|current| !current.same_template(&expected))
         {
             continue;
         }
         let object = objects
             .get(command.target)
             .map(|reference| reference.0)
-            .or_else(|_| roots.get(command.target).map(|root| root.object));
-        let Ok(object) = object else {
+            .or_else(|_| roots.get(command.target).map(|root| root.object))
+            .ok()
+            .or_else(|| runtime.ecs_window_object(command.target));
+        let Some(object) = object else {
             if let Some(source) = source
                 && !runtime
                     .ecs_roots
                     .get(&command.target)
                     .is_some_and(|binding| binding.failed)
+                && !runtime
+                    .ecs_windows
+                    .get(&command.target)
+                    .is_some_and(|binding| binding.failed)
             {
-                runtime
-                    .pending_object_commands
-                    .push((source.clone(), command));
+                runtime.pending_object_commands.push((source, command));
             }
             continue;
         };

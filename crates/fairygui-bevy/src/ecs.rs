@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use fairygui_core::object::GObject;
 use fairygui_core::package::ObjectType;
 
+use crate::GuiWindowState;
 use crate::list::GuiListState;
 use crate::runtime::{GObjectRef, GuiRootInstance, GuiRuntime};
 
@@ -405,6 +406,7 @@ pub struct GuiQuery<'w, 's> {
     transitions: Query<'w, 's, &'static GuiTransitions>,
     lists: Query<'w, 's, &'static GuiListState>,
     controllers: Query<'w, 's, &'static GuiControllers>,
+    windows: Query<'w, 's, &'static GuiWindowState>,
 }
 
 impl GuiQuery<'_, '_> {
@@ -415,6 +417,12 @@ impl GuiQuery<'_, '_> {
         }
         let view = self.roots.get(entity).ok()?.0;
         self.objects.contains(view).then_some(view)
+    }
+    pub fn window(&self, entity: Entity) -> Option<&GuiWindowState> {
+        self.windows
+            .get(entity)
+            .ok()
+            .or_else(|| self.windows.get(self.view(entity)?).ok())
     }
 
     pub fn get(&self, entity: Entity) -> Option<&GuiObjectInfo> {

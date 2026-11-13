@@ -75,6 +75,7 @@ pub use list::{
 };
 pub use popup::{GuiPopupCommand, GuiPopupMenu, GuiPopupState};
 pub use pull::GuiPullCommand;
+pub use runtime::windows::{FairyGuiWindow, GuiWindowAction, GuiWindowCommand, GuiWindowState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
     GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
@@ -111,7 +112,7 @@ enum SyncPhase {
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
     pub use crate::{
-        FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
+        FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiAnimationComplete,
         GuiButtonSelected, GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiEvent,
         GuiFont, GuiInputSettings, GuiInputState, GuiLink, GuiListContent, GuiListContentError,
         GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection,
@@ -120,8 +121,8 @@ pub mod prelude {
         GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
         GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput,
         GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState,
-        PopupMenuTemplates,
+        GuiTransitionState, GuiTransitions, GuiVirtualList, GuiVirtualListState, GuiWindowAction,
+        GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
     };
 }
 
@@ -178,6 +179,7 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiPullCommand>()
         .add_message::<GuiObjectCommand>()
         .add_message::<GuiPopupCommand>()
+        .add_message::<GuiWindowCommand>()
         .init_resource::<GuiPopupState>()
         .init_asset::<FuiAsset>()
         .init_asset_loader::<FuiAssetLoader>()
@@ -216,6 +218,7 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_scroll_state,
                 ecs::sync_gui_transitions,
                 popup::sync_popup_state,
+                runtime::windows::sync_window_state,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -289,8 +292,10 @@ impl Plugin for FairyGuiPlugin {
             Update,
             (
                 runtime::sync_ecs_roots,
+                runtime::windows::sync_ecs_windows,
                 runtime::discard_removed_object_commands,
                 runtime::apply_object_commands,
+                runtime::windows::apply_window_commands,
                 popup::apply_popup_commands,
             )
                 .chain()
@@ -311,6 +316,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::emit_transition_callbacks,
                 runtime::emit_transition_completions,
                 popup::sync_popup_state,
+                runtime::windows::sync_window_state,
                 list::sync_list_state,
                 list::sync_virtual_list_state,
             )

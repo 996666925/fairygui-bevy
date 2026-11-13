@@ -60,6 +60,12 @@ mod text_image_colors;
 mod text_stroke;
 #[path = "smoke_virtual_list.rs"]
 mod virtual_list;
+#[path = "smoke_windows.rs"]
+mod windows;
+
+pub(super) fn install_windows(app: &mut App) {
+    windows::install(app);
+}
 
 #[derive(Resource, Default)]
 struct Smoke {

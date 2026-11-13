@@ -109,6 +109,15 @@ impl Root {
         self.popups.push((id, modal));
     }
 
+    /// Change modality without detaching or reordering an existing popup.
+    pub fn set_popup_modal(&mut self, id: GObjectId, modal: bool) -> bool {
+        let Some(entry) = self.popups.iter_mut().find(|(object, _)| *object == id) else {
+            return false;
+        };
+        entry.1 = modal;
+        true
+    }
+
     /// 关闭某一层上的界面。返回是否确实存在。
     pub fn remove(&mut self, store: &mut ObjectStore, id: GObjectId) -> bool {
         if self.detach(store, id) {

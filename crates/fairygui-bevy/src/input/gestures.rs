@@ -72,7 +72,7 @@ pub(super) enum Gesture {
         transform: PointerTransform,
     },
     Window {
-        index: usize,
+        owner: GObjectId,
         origin: Vec2,
         transform: PointerTransform,
     },
@@ -90,7 +90,7 @@ impl Gesture {
             Self::None => None,
             Self::Slider(id) => Some(*id),
             Self::Grip { container, .. } | Self::Scroll { container, .. } => Some(*container),
-            Self::Window { index, .. } => runtime.window(*index).map(|window| window.owner()),
+            Self::Window { owner, .. } => runtime.window_index(*owner).map(|_| *owner),
         }
     }
 
@@ -180,7 +180,7 @@ impl Gesture {
                 );
                 runtime.bring_window_to_front(index);
                 return Self::Window {
-                    index,
+                    owner,
                     origin,
                     transform,
                 };
@@ -236,11 +236,15 @@ impl Gesture {
                 );
             }
             Self::Window {
-                index,
+                owner,
                 origin,
                 transform,
             } if moved => {
-                if let Some(window) = runtime.window_mut(*index) {
+                if let Some(index) = runtime.window_index(*owner)
+                    && let Some(window) = runtime.window_mut(index)
+                    && window.is_showing()
+                    && window.is_draggable()
+                {
                     window.set_dragging(true);
                     let owner = window.owner();
                     let at = *origin + transform.displacement(cursor - start);
@@ -292,8 +296,10 @@ impl Gesture {
             } => {
                 runtime.store_mut().end_scroll_drag_after(*container, dt);
             }
-            Self::Window { index, .. } => {
-                if let Some(w) = runtime.window_mut(*index) {
+            Self::Window { owner, .. } => {
+                if let Some(index) = runtime.window_index(*owner)
+                    && let Some(w) = runtime.window_mut(index)
+                {
                     w.end_drag();
                 }
             }
@@ -303,6 +309,10 @@ impl Gesture {
 
     pub(super) fn valid(&self, runtime: &GuiRuntime) -> bool {
         match self {
+            Self::Window { owner, .. } => runtime
+                .window_index(*owner)
+                .and_then(|index| runtime.window(index))
+                .is_some_and(|window| window.is_showing() && window.is_draggable()),
             Self::Grip {
                 bar,
                 container,
@@ -414,5 +424,68 @@ mod tests {
             });
             assert!(PointerTransform::from_view(&transform, &node, 1.0).is_none());
         }
+    }
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+    use bevy::ecs::system::SystemState;
+    #[test]
+    fn window_drag_keeps_its_object_after_other_windows_are_disposed() {
+        let mut runtime = GuiRuntime::default();
+        let package = fairygui_core::package::FuiPackage::parse(
+            "Basics",
+            include_bytes!("../../../fairygui-demo/assets/ui/Basics.fui"),
+        )
+        .unwrap();
+        runtime.register_package(Handle::default(), &package);
+        let size = fairygui_core::Size::new(1280., 720.);
+        let first = runtime
+            .show_window(&package, "WindowA", false, size)
+            .unwrap();
+        let second = runtime
+            .show_window(&package, "WindowA", false, size)
+            .unwrap();
+        let owner = runtime.window(second).unwrap().owner();
+        let frame = runtime.window(second).unwrap().frame().unwrap();
+        let mut gesture = Gesture::begin_excluding(&mut runtime, frame, &[], &[]);
+        assert_eq!(gesture.owner(&runtime), Some(owner));
+        let initial = runtime.store().object(owner).unwrap().position();
+        let mut world = World::new();
+        let mut state = SystemState::<Commands>::new(&mut world);
+        runtime.close_window(&mut state.get_mut(&mut world).unwrap(), first);
+        state.apply(&mut world);
+        gesture.update(
+            &mut runtime,
+            Vec2::new(60., 25.),
+            Vec2::ZERO,
+            Vec2::ZERO,
+            true,
+            0.1,
+            &[],
+        );
+        assert_eq!(
+            runtime.store().object(owner).unwrap().position(),
+            Point::new(initial.x + 60., initial.y + 25.)
+        );
+        let index = runtime.window_index(owner).unwrap();
+        assert!(runtime.window(index).unwrap().is_dragging());
+        gesture.finish(&mut runtime, 0.1);
+        assert!(!runtime.window(index).unwrap().is_dragging());
+        runtime.set_window_draggable(index, false);
+        gesture.update(
+            &mut runtime,
+            Vec2::new(120., 50.),
+            Vec2::ZERO,
+            Vec2::ZERO,
+            true,
+            0.1,
+            &[],
+        );
+        assert_eq!(
+            runtime.store().object(owner).unwrap().position(),
+            Point::new(initial.x + 60., initial.y + 25.)
+        );
     }
 }
