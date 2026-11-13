@@ -416,6 +416,14 @@ if let Some(list) = gui.child_by_name(root_entity, "mailList") {
 数量和渲染器一起修改时，先更新数量，旧索引不会访问新的短数据集。
 外部共享数据更新后也可用 `Mut<GuiVirtualList>::set_changed()` 请求重绘。
 
+不同数据行可以用不同模板，通过 `.with_item_provider(|index| Some(url))` 选择。
+支持本包条目名和已注册包的 `ui://` 地址；`None` 或空字符串使用导出的默认模板。
+例如左右聊天行可返回 `ui://Chat/chatLeft` / `ui://Chat/chatRight`，无须访问运行时。
+`set_item_provider` 修改现有回调，`clear_item_provider` 恢复默认模板；模板别名先
+归一化，再按模板复用对象与视图。换模板保留逻辑选择，循环列表的 provider 同样
+只接收逻辑索引。跨包资源未就绪时报告 `MissingResource`，包注册后自动重试，
+`GuiVirtualListState::error()` 会反映当前刷新结果，恢复成功后清除旧错误。
+
 ListEffect 使用 `GuiListContent` 创建十封邮件，配置已读/领取页和时间文字；在
 `GuiSystems::PostLayout` 查询初始可见行，通过 `PlayTransitionWithOptions` 每隔
 0.2 秒播放导出的 `t0`，等待期间隐藏对应行。效果只在创建后启动一次，滚动进入的

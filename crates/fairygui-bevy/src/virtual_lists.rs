@@ -5,6 +5,7 @@ use fairygui_core::object::{VirtualItemProvider, VirtualItemRenderer, VirtualLis
 pub(super) struct VirtualCallbacks {
     renderer: Box<VirtualItemRenderer<'static>>,
     provider: Box<VirtualItemProvider<'static>>,
+    error: Option<VirtualListError>,
 }
 
 impl GuiRuntime {
@@ -37,8 +38,10 @@ impl GuiRuntime {
         let mut callbacks = VirtualCallbacks {
             renderer: Box::new(renderer),
             provider: Box::new(|_| None),
+            error: None,
         };
         let result = self.render_virtual_rows(list, &mut callbacks, Some(looping), None);
+        callbacks.error = result.as_ref().err().cloned();
         if self.store.is_virtual_list(list)
             && !matches!(result, Err(VirtualListError::LoopModeMismatch))
         {
@@ -52,13 +55,16 @@ impl GuiRuntime {
         list: GObjectId,
         count: usize,
         looping: bool,
+        provider: impl FnMut(usize) -> Option<String> + 'static,
         renderer: impl FnMut(&mut ObjectStore, usize, GObjectId) + 'static,
     ) -> Result<(), VirtualListError> {
         let mut callbacks = VirtualCallbacks {
             renderer: Box::new(renderer),
-            provider: Box::new(|_| None),
+            provider: Box::new(provider),
+            error: None,
         };
         let result = self.render_virtual_rows(list, &mut callbacks, Some(looping), Some(count));
+        callbacks.error = result.as_ref().err().cloned();
         if self.store.is_virtual_list(list)
             && !matches!(result, Err(VirtualListError::LoopModeMismatch))
         {
@@ -72,6 +78,12 @@ impl GuiRuntime {
             let _ = self.set_virtual_item_count(list, 0);
         }
         self.virtual_renderers.remove(&list);
+    }
+
+    pub(crate) fn virtual_list_error(&self, list: GObjectId) -> Option<&VirtualListError> {
+        self.virtual_renderers
+            .get(&list)
+            .and_then(|callbacks| callbacks.error.as_ref())
     }
 
     /// Provider URLs accept the same aliases and cross-package forms as normal
@@ -116,6 +128,7 @@ impl GuiRuntime {
             .remove(&list)
             .ok_or(VirtualListError::MissingPane)?;
         let result = self.render_virtual_rows(list, &mut callbacks, None, None);
+        callbacks.error = result.as_ref().err().cloned();
         if self.store.is_virtual_list(list) {
             self.virtual_renderers.insert(list, callbacks);
         }

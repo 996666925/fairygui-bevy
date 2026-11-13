@@ -202,7 +202,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-first-frame") {
+    if std::env::args().any(|arg| arg == "--smoke-item-provider") {
+        smoke::install_item_provider(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-first-frame") {
         smoke::install_first_frame(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-animation") {
         smoke::install_animation(&mut app);

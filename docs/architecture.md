@@ -5,6 +5,18 @@ Applications own interfaces through `FairyGuiRoot` components, find controls wit
 ordinary Bevy systems. The core object tree executes FairyGUI package semantics
 internally; the plugin projects its state into Bevy UI and read-only ECS components.
 
+GuiVirtualList owns an optional Send + Sync item provider alongside its renderer.
+The provider receives a logical index (also for loop records) and selects a local
+item name or registered ui:// reference. None/empty falls back to the exported
+default. Provider and renderer are installed together before the first refresh;
+changing either replaces the retained callbacks before computing visible rows.
+Native resolution normalizes aliases before comparing templates and reusing their
+per-list pools, preserving logical selection when a row changes its template.
+VirtualCallbacks retains the latest refresh error. GuiVirtualListState projects
+that outcome for retryable factory/render failures, clearing stale MissingResource
+errors when a late package becomes available while keeping rejected configuration
+errors (such as LoopModeMismatch) until the configuration is corrected.
+
 Demo root positioning and dynamic-page initialization run in GuiSystems::Initialize
 on the same frame that Materialize creates their views. Prepare consumes these
 commands before Bevy UI layout, avoiding an origin-position flash. New Guide and

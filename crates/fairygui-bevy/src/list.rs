@@ -2,6 +2,9 @@
 use crate::{GObjectRef, GuiRuntime};
 
 #[cfg(test)]
+#[path = "ecs_item_provider_tests.rs"]
+mod provider_tests;
+#[cfg(test)]
 #[path = "ecs_list_tests.rs"]
 mod tests;
 use bevy::prelude::*;
@@ -71,6 +74,7 @@ impl GuiListItem<'_> {
 }
 
 type ItemRenderer = dyn Fn(usize, &mut GuiListItem<'_>) + Send + Sync;
+type ItemProvider = dyn Fn(usize) -> Option<String> + Send + Sync;
 
 /// Configure every row of an ordinary list using its default item template.
 /// Existing leading rows keep their identity; shrinking disposes trailing rows.
@@ -239,6 +243,7 @@ pub struct GuiVirtualList {
     pub item_count: usize,
     looping: bool,
     renderer: Arc<ItemRenderer>,
+    provider: Option<Arc<ItemProvider>>,
 }
 
 impl std::fmt::Debug for GuiVirtualList {
@@ -246,6 +251,7 @@ impl std::fmt::Debug for GuiVirtualList {
         f.debug_struct("GuiVirtualList")
             .field("item_count", &self.item_count)
             .field("looping", &self.looping)
+            .field("has_item_provider", &self.provider.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -259,6 +265,7 @@ impl GuiVirtualList {
             item_count,
             looping: false,
             renderer: Arc::new(renderer),
+            provider: None,
         }
     }
     /// Configure native sixfold loop records. Apply before the list initializes.
@@ -268,6 +275,27 @@ impl GuiVirtualList {
     }
     pub fn is_looping(&self) -> bool {
         self.looping
+    }
+    /// Choose a row template per logical index, including in loop mode. Accepts
+    /// local item names and registered ui:// URLs; None/empty uses the exported
+    /// default. Rows reuse their template's pool.
+    pub fn with_item_provider(
+        mut self,
+        provider: impl Fn(usize) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.set_item_provider(provider);
+        self
+    }
+    /// Changing the provider invalidates visible rows in this frame's Prepare.
+    pub fn set_item_provider(
+        &mut self,
+        provider: impl Fn(usize) -> Option<String> + Send + Sync + 'static,
+    ) {
+        self.provider = Some(Arc::new(provider));
+    }
+    /// Restore the exported default template for all logical rows.
+    pub fn clear_item_provider(&mut self) {
+        self.provider = None;
     }
     pub fn set_renderer(
         &mut self,
@@ -334,10 +362,12 @@ pub(crate) fn sync_virtual_list_bindings(
             continue;
         }
         let renderer = config.renderer.clone();
+        let provider = config.provider.clone();
         let result = runtime.configure_ecs_virtual_list(
             reference.0,
             config.item_count,
             config.looping,
+            move |index| provider.as_ref().and_then(|provider| provider(index)),
             move |store, index, object| {
                 renderer(index, &mut GuiListItem { store, object });
             },
@@ -367,7 +397,20 @@ pub(crate) fn sync_virtual_list_state(
     for (entity, reference, binding, current) in &lists {
         let next = GuiVirtualListState {
             info: runtime.store().virtual_list_info(reference.0),
-            error: binding.error.clone(),
+            // Resource/renderer failures retain the callback and are retried
+            // by native refresh. Report its current outcome instead of keeping
+            // the initial failure after a late package becomes available.
+            error: match &binding.error {
+                Some(error)
+                    if !matches!(
+                        error,
+                        VirtualListError::MissingResource(_) | VirtualListError::UnstableRenderer
+                    ) =>
+                {
+                    Some(error.clone())
+                }
+                _ => runtime.virtual_list_error(reference.0).cloned(),
+            },
         };
         if current != Some(&next) {
             commands.entity(entity).insert(next);
