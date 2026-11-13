@@ -132,6 +132,22 @@ commands.spawn(
 命令或动画的结果。默认 `None` 保留导出值，已创建后改回 `None` 保留当前值。
 排队的 `GuiObjectCommand` 在创建配置之后执行。当前实际几何请读取 `GuiTransform`。
 
+需要根界面跟随窗口尺寸时，直接使用：
+
+```rust,ignore
+commands.spawn(
+    FairyGuiRoot::new(assets.load("ui/Chat.fui"), "Main")
+        .with_window_size()
+        .with_position(Vec2::ZERO),
+);
+```
+
+首次布局即使用窗口的逻辑尺寸，之后窗口缩放自动更新，保留根及子控件实体。
+默认跟随主窗口；设置 `GuiInputSettings.window` 后跟随指定窗口。位置独立设置，
+子控件通过编辑器配置的 relations 随根尺寸调整。启用时窗口尺寸优先于 `size`；
+没有可用窗口时保留当前尺寸（创建时使用 `size` 或导出值）。修改
+`follow_window_size = false` 可停止跟随，并恢复配置的 `size`（为 `None` 则保留当前尺寸）。
+
 运行时会在所有者实体上添加 `GuiRootView`，指向根视图实体。
 `GuiQuery` 只读取 ECS 组件，可按名称或路径找到控件实体并直接挂载业务组件和 observer：
 

@@ -77,6 +77,9 @@ pub struct FairyGuiRoot {
     /// Requested unscaled size in logical pixels. None keeps exported/current
     /// size. Changes update the retained root and its relations without rebuilding.
     pub size: Option<Vec2>,
+    /// Keep the root sized to the input window's logical dimensions (primary
+    /// window by default). Takes precedence over `size` while a window exists.
+    pub follow_window_size: bool,
 }
 
 impl FairyGuiRoot {
@@ -87,6 +90,7 @@ impl FairyGuiRoot {
             active: true,
             position: None,
             size: None,
+            follow_window_size: false,
         }
     }
 
@@ -97,6 +101,14 @@ impl FairyGuiRoot {
 
     pub fn with_size(mut self, size: Vec2) -> Self {
         self.size = Some(size);
+        self
+    }
+
+    /// Size to the window before the first view and follow subsequent resizes.
+    /// Uses [`crate::GuiInputSettings::window`], or the primary window by default.
+    /// Position is independent; use `with_position(Vec2::ZERO)` to fill the window.
+    pub fn with_window_size(mut self) -> Self {
+        self.follow_window_size = true;
         self
     }
 }
@@ -244,6 +256,7 @@ struct EcsRootBinding {
     failed: bool,
     position: Option<Vec2>,
     size: Option<Vec2>,
+    follow_window_size: bool,
 }
 
 #[derive(Component, Debug)]
@@ -2526,6 +2539,7 @@ pub fn spawn_pending_roots(
 ///
 /// Unavailable assets remain pending without creating partial model objects.
 /// Component removal/despawn reclaims the root and all generated views.
+#[allow(clippy::too_many_arguments)]
 pub fn sync_ecs_roots(
     mut commands: Commands,
     changed: Query<(Entity, &FairyGuiRoot), Changed<FairyGuiRoot>>,
@@ -2533,6 +2547,8 @@ pub fn sync_ecs_roots(
     entities: Query<()>,
     mut removed: RemovedComponents<FairyGuiRoot>,
     assets: Res<Assets<FuiAsset>>,
+    windows: Query<(Entity, &Window, Has<bevy::window::PrimaryWindow>)>,
+    settings: Res<crate::GuiInputSettings>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     for owner in removed.read() {
@@ -2560,13 +2576,15 @@ pub fn sync_ecs_roots(
                     let position = (binding.position != source.position)
                         .then_some(source.position)
                         .flatten();
-                    let size = (binding.size != source.size)
+                    let size = (binding.size != source.size
+                        || binding.follow_window_size != source.follow_window_size)
                         .then_some(source.size)
                         .flatten();
                     apply_root_geometry(&mut runtime, object, position, size);
                     let binding = runtime.ecs_roots.get_mut(&owner).unwrap();
                     binding.position = source.position;
                     binding.size = source.size;
+                    binding.follow_window_size = source.follow_window_size;
                     let active = runtime.ecs_roots[&owner].active;
                     if active != source.active {
                         runtime.set_root_attached(handle, source.active);
@@ -2602,6 +2620,7 @@ pub fn sync_ecs_roots(
                 failed: false,
                 position: source.position,
                 size: source.size,
+                follow_window_size: source.follow_window_size,
             },
         );
     }
@@ -2659,9 +2678,35 @@ pub fn sync_ecs_roots(
         binding.active = source.active;
         binding.position = source.position;
         binding.size = source.size;
+        binding.follow_window_size = source.follow_window_size;
         commands
             .entity(owner)
             .insert(GuiRootInstance { handle, object });
+    }
+
+    // Resolve the current window even when the root component has not changed.
+    // Apply before materialization so initial layout and child relations see the
+    // window size on the first frame, including after asynchronous asset loading.
+    if let Some((_, window, _)) = windows
+        .iter()
+        .find(|(entity, _, primary)| settings.window.map_or(*primary, |chosen| chosen == *entity))
+    {
+        let size = Vec2::new(window.width(), window.height());
+        let following: Vec<_> = runtime
+            .ecs_roots
+            .iter()
+            .filter_map(|(owner, binding)| {
+                roots
+                    .get(*owner)
+                    .ok()
+                    .filter(|source| source.follow_window_size)
+                    .and(binding.handle)
+                    .and_then(|handle| runtime.root_object(handle))
+            })
+            .collect();
+        for object in following {
+            apply_root_geometry(&mut runtime, object, None, Some(size));
+        }
     }
 }
 

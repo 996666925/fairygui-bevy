@@ -94,6 +94,152 @@ fn startup_root_commands_apply_before_the_first_view_is_spawned() {
 }
 
 #[test]
+fn window_sized_root_uses_latest_logical_size_before_initialize_and_retains_views() {
+    #[derive(Resource, Default)]
+    struct Initial(Option<Vec2>);
+    fn inspect(
+        roots: Query<&GuiRootView, Added<GuiRootView>>,
+        gui: GuiQuery,
+        nodes: Query<&Node>,
+        mut initial: ResMut<Initial>,
+    ) {
+        for view in &roots {
+            let size = gui.transform(view.0).unwrap().size();
+            let node = nodes.get(view.0).unwrap();
+            assert_eq!(node.width, Val::Px(size.x));
+            assert_eq!(node.height, Val::Px(size.y));
+            initial.0 = Some(size);
+        }
+    }
+    let (mut app, asset) = app();
+    app.init_resource::<Initial>()
+        .add_systems(Update, inspect.in_set(crate::GuiSystems::Initialize));
+    let window = app
+        .world_mut()
+        .spawn((
+            Window {
+                resolution: bevy::window::WindowResolution::new(1600, 1200)
+                    .with_scale_factor_override(2.),
+                ..default()
+            },
+            bevy::window::PrimaryWindow,
+        ))
+        .id();
+    let owner = app
+        .world_mut()
+        .spawn(
+            FairyGuiRoot::new(asset.clone(), "Main")
+                .with_window_size()
+                .with_size(Vec2::new(500., 400.))
+                .with_position(Vec2::new(10., 20.)),
+        )
+        .id();
+    app.update();
+    assert!(app.world().get::<GuiRootView>(owner).is_none());
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .resolution
+        .set_physical_resolution(1800, 1400);
+    load(&mut app, &asset);
+    app.update();
+    assert_eq!(
+        app.world().resource::<Initial>().0,
+        Some(Vec2::new(900., 700.))
+    );
+    let root = assert_position(&app, owner, Vec2::new(10., 20.));
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    let children = app
+        .world()
+        .get::<GuiObjectInfo>(view)
+        .unwrap()
+        .children()
+        .to_vec();
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .resolution
+        .set_physical_resolution(2000, 1600);
+    app.update();
+    assert_eq!(assert_position(&app, owner, Vec2::new(10., 20.)), root);
+    assert_eq!(app.world().get::<GuiRootView>(owner).unwrap().0, view);
+    assert_eq!(
+        app.world().get::<GuiObjectInfo>(view).unwrap().children(),
+        children
+    );
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        Vec2::new(1000., 800.)
+    );
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .follow_window_size = false;
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        Vec2::new(500., 400.)
+    );
+}
+
+#[test]
+fn window_sized_roots_follow_selected_window_and_keep_size_when_it_is_unavailable() {
+    let (mut app, asset) = app();
+    load(&mut app, &asset);
+    app.world_mut()
+        .spawn((Window::default(), bevy::window::PrimaryWindow));
+    let selected = app
+        .world_mut()
+        .spawn(Window {
+            resolution: bevy::window::WindowResolution::new(720, 480),
+            ..default()
+        })
+        .id();
+    app.world_mut()
+        .resource_mut::<crate::GuiInputSettings>()
+        .window = Some(selected);
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "Main").with_window_size())
+        .id();
+    app.update();
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        Vec2::new(720., 480.)
+    );
+    app.world_mut().despawn(selected);
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        Vec2::new(720., 480.)
+    );
+    app.world_mut()
+        .resource_mut::<crate::GuiInputSettings>()
+        .window = None;
+    app.update();
+    let window_size = app
+        .world_mut()
+        .query_filtered::<&Window, With<bevy::window::PrimaryWindow>>()
+        .single(app.world())
+        .unwrap()
+        .size();
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        window_size
+    );
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .follow_window_size = false;
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        window_size
+    );
+}
+
+#[test]
 fn root_geometry_builders_wait_for_assets_apply_before_initialize_and_edit_without_rebuilding() {
     #[derive(Resource, Default)]
     struct Initial(Vec<(Vec2, Vec2)>);
