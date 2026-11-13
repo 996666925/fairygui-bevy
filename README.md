@@ -416,6 +416,15 @@ if let Some(list) = gui.child_by_name(root_entity, "mailList") {
 数量和渲染器一起修改时，先更新数量，旧索引不会访问新的短数据集。
 外部共享数据更新后也可用 `Mut<GuiVirtualList>::set_changed()` 请求重绘。
 
+行内文字可在 `set_text` 后调用 `ensure_size_correct()`，使用 Bevy 的文本排版引擎
+同步测量 Both/Height 自动尺寸，立即更新气泡等关联对象，再由列表计算行高。
+普通字体支持富文本样式、内联图片及导出的最大宽度换行，并按目标窗口与
+`UiScale` 的实际倍率测量；位图字体复用原生测量器。
+普通 ECS 系统也可发送 `GuiObjectAction::EnsureTextSize`。这些字段后续文字、字体
+或资源变化会重新测量，字体未就绪时保留尺寸并重试；固定尺寸、缩小和省略模式
+保持原有策略。`--smoke-item-provider` 覆盖混合模板、长文本、内联图片、右对齐
+和行高关联，以及滚动复用、事件索引和回收。
+
 不同数据行可以用不同模板，通过 `.with_item_provider(|index| Some(url))` 选择。
 支持本包条目名和已注册包的 `ui://` 地址；`None` 或空字符串使用导出的默认模板。
 例如左右聊天行可返回 `ui://Chat/chatLeft` / `ui://Chat/chatRight`，无须访问运行时。

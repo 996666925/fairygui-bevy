@@ -25,6 +25,8 @@ mod ecs_root_tests;
 pub(crate) mod global_wait;
 #[path = "object_drag.rs"]
 pub(crate) mod object_drag;
+#[path = "text_measure.rs"]
+pub(crate) mod text_measure;
 #[path = "tree_content.rs"]
 mod tree_content;
 #[path = "windows.rs"]
@@ -113,6 +115,9 @@ pub enum GuiObjectAction {
     },
     SetRotation(f32),
     SetText(String),
+    /// Resolve the current text's auto size synchronously, including relations.
+    /// Subsequent text/font changes keep this field measured before projection.
+    EnsureTextSize,
     /// Set the native Loader/button/label/combo icon URL; empty clears it.
     SetIcon(String),
     SetColor(fairygui_core::color::Color),
@@ -636,6 +641,7 @@ pub struct GuiRuntime {
     /// 由 `sync_gui_font` 在构建 ECS 根之前从 [`GuiFont`] 同步进来：`create_root`
     /// 这类不在系统里跑的路径拿不到资源，只能从这里取。
     font: Option<Handle<Font>>,
+    pub(crate) text_measurer: std::rc::Rc<std::cell::RefCell<text_measure::TextMeasurer>>,
     /// 登记为虚拟化的列表。
     virtual_lists: Vec<GObjectId>,
     /// 滚动过、等待使用方处理的虚拟列表。
@@ -2220,6 +2226,10 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetText(text) => {
                 runtime.store_mut().set_object_text(object, text);
+            }
+            GuiObjectAction::EnsureTextSize => {
+                let measurer = runtime.text_measurer.clone();
+                measurer.borrow_mut().ensure(&mut runtime.store, object);
             }
             GuiObjectAction::SetIcon(icon) => {
                 runtime.store_mut().apply_icon_to(object, icon);
@@ -3840,7 +3850,7 @@ pub(crate) fn sync_dirty(
             if text.is_some() {
                 commands
                     .entity(entity)
-                    .insert(backend::text_layout_for(data));
+                    .insert(backend::text_layout_for_object(gobject, data));
                 if data.underline {
                     commands.entity(entity).insert(Underline);
                 } else {
@@ -4061,6 +4071,9 @@ pub fn sync_text_sizes(
     query: Query<(&GObjectRef, &ComputedNode, Option<&BitmapTextMetrics>)>,
 ) {
     for (object_ref, node, bitmap) in &query {
+        if runtime.text_measurer.borrow().contains(object_ref.0) {
+            continue;
+        }
         let Some(object) = runtime.store().object(object_ref.0) else {
             continue;
         };

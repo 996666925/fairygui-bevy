@@ -243,7 +243,7 @@ pub(crate) fn sync_rich_text(
                 font: raster.clone(),
                 ..backend::text_font_for(gobject, data, font)
             },
-            backend::text_layout_for(data),
+            backend::text_layout_for_object(gobject, data),
             backend::text_line_height_for(data, None),
             backend::text_letter_spacing_for(data),
         ));
@@ -365,7 +365,7 @@ impl RichTextBlock {
     }
 }
 
-fn image_source<'a>(
+pub(super) fn image_source<'a>(
     own: &'a FuiAsset,
     assets: &'a Assets<FuiAsset>,
     source: &str,

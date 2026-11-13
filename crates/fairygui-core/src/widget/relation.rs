@@ -36,6 +36,8 @@ pub struct RelationDef {
 pub struct RelationItem {
     /// 目标是否为父节点（描述里目标编号为 `-1`）。
     pub to_parent: bool,
+    /// Component-level relations address the owner's children, rather than siblings.
+    pub to_child: bool,
     /// 目标在容器内的位置。目标是父节点时为 `None`。
     ///
     /// 相对兄弟对象的关联用它匹配发生尺寸变化的目标。
@@ -157,12 +159,14 @@ impl Relations {
             let item = if target_index == -1 {
                 RelationItem {
                     to_parent: true,
+                    to_child: false,
                     target_index: None,
                     defs: Vec::new(),
                 }
             } else {
                 RelationItem {
                     to_parent: false,
+                    to_child: parent_to_child,
                     // 目标编号的含义取决于是谁的关联，这里只记录编号，
                     // 由调用方结合 `parent_to_child` 解释。
                     target_index: Some(target_index.max(0) as usize),
@@ -181,7 +185,6 @@ impl Relations {
             self.items.push(item);
         }
 
-        let _ = parent_to_child;
         Ok(())
     }
 
@@ -580,6 +583,7 @@ mod tests {
         let relations = Relations {
             items: vec![RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: defs(0),
             }],
@@ -595,6 +599,7 @@ mod tests {
         let relations = Relations {
             items: vec![RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: defs(6),
             }],
@@ -610,6 +615,7 @@ mod tests {
         let relations = Relations {
             items: vec![RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: defs(WIDTH),
             }],
@@ -626,6 +632,7 @@ mod tests {
         let horizontal = Relations {
             items: vec![RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: defs(3),
             }],
@@ -638,6 +645,7 @@ mod tests {
         let vertical = Relations {
             items: vec![RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: defs(10),
             }],
@@ -663,6 +671,7 @@ mod tests {
             let relations = Relations {
                 items: vec![RelationItem {
                     to_parent: true,
+                    to_child: false,
                     target_index: None,
                     defs: vec![RelationDef {
                         relation_type: kind,
@@ -701,6 +710,7 @@ mod tests {
             let relations = Relations {
                 items: vec![RelationItem {
                     to_parent: true,
+                    to_child: false,
                     target_index: None,
                     defs: vec![RelationDef {
                         relation_type,
@@ -739,6 +749,7 @@ mod tests {
         let relations = Relations {
             items: vec![RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(0),
                 defs: vec![RelationDef {
                     relation_type: 0,
@@ -774,6 +785,7 @@ mod tests {
             let relations = Relations {
                 items: vec![RelationItem {
                     to_parent: false,
+                    to_child: false,
                     target_index: Some(0),
                     defs: vec![RelationDef {
                         relation_type: kind,
@@ -810,6 +822,7 @@ mod tests {
         let relations = Relations {
             items: vec![RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(0),
                 defs: vec![RelationDef {
                     relation_type: 17,

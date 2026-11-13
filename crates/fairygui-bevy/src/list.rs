@@ -17,6 +17,7 @@ use std::{collections::HashMap, sync::Arc};
 pub struct GuiListItem<'a> {
     store: &'a mut ObjectStore,
     object: GObjectId,
+    measurer: &'a std::rc::Rc<std::cell::RefCell<crate::runtime::text_measure::TextMeasurer>>,
 }
 
 impl std::fmt::Debug for GuiListItem<'_> {
@@ -26,6 +27,11 @@ impl std::fmt::Debug for GuiListItem<'_> {
 }
 
 impl GuiListItem<'_> {
+    /// Measure text immediately, applying Both/Height auto-size and relations
+    /// before the list reads this row's dimensions. Pending fonts retry later.
+    pub fn ensure_size_correct(&mut self) -> bool {
+        self.measurer.borrow_mut().ensure(self.store, self.object)
+    }
     /// Reset a retained nested scroll pane when its virtual row is rebound.
     pub fn set_scroll_position(&mut self, position: Vec2) {
         if position.is_finite() {
@@ -69,6 +75,7 @@ impl GuiListItem<'_> {
         Some(GuiListItem {
             store: self.store,
             object,
+            measurer: self.measurer,
         })
     }
 }
@@ -169,11 +176,19 @@ pub(crate) fn sync_list_content(
         let result = if conflict {
             Err(GuiListContentError::VirtualList)
         } else {
+            let measurer = runtime.text_measurer.clone();
             runtime.configure_list_content(
                 reference.0,
                 config.item_count,
                 |store, index, object| {
-                    (config.renderer)(index, &mut GuiListItem { store, object });
+                    (config.renderer)(
+                        index,
+                        &mut GuiListItem {
+                            store,
+                            object,
+                            measurer: &measurer,
+                        },
+                    );
                 },
             )
         };
@@ -363,13 +378,21 @@ pub(crate) fn sync_virtual_list_bindings(
         }
         let renderer = config.renderer.clone();
         let provider = config.provider.clone();
+        let measurer = runtime.text_measurer.clone();
         let result = runtime.configure_ecs_virtual_list(
             reference.0,
             config.item_count,
             config.looping,
             move |index| provider.as_ref().and_then(|provider| provider(index)),
             move |store, index, object| {
-                renderer(index, &mut GuiListItem { store, object });
+                renderer(
+                    index,
+                    &mut GuiListItem {
+                        store,
+                        object,
+                        measurer: &measurer,
+                    },
+                );
             },
         );
         applied.insert(entity, reference.0);

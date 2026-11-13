@@ -368,6 +368,11 @@ impl GObject {
         &self.children
     }
 
+    /// Exported size restrictions. Zero means that axis has no upper bound.
+    pub fn max_size(&self) -> Size {
+        Size::new(self.max_width, self.max_height)
+    }
+
     /// 所属的组。
     pub fn group(&self) -> Option<GObjectId> {
         self.group

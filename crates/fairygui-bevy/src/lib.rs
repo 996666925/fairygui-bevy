@@ -239,6 +239,7 @@ impl Plugin for FairyGuiPlugin {
             (
                 runtime::sync_ui_config,
                 runtime::sync_gui_font,
+                runtime::text_measure::sync_assets,
                 runtime::advance_async_builds,
                 runtime::advance_scrolls,
                 runtime::advance_transitions,
@@ -301,6 +302,7 @@ impl Plugin for FairyGuiPlugin {
             (
                 input::apply_scroll_drag_commands,
                 runtime::apply_object_commands,
+                runtime::text_measure::sync_sizes,
                 (
                     list::sync_list_content,
                     tree::sync_tree_content,
@@ -345,6 +347,7 @@ impl Plugin for FairyGuiPlugin {
                 )
                     .chain(),
                 runtime::sync_text_inputs,
+                runtime::text_measure::sync_sizes,
                 runtime::content::sync_content_layout,
                 (
                     runtime::sync_component_scroll_content,
@@ -362,6 +365,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_bitmap_rich_text,
                 graph::sync_graphs,
                 runtime::sync_rich_text,
+                runtime::text_measure::sync_padding,
                 runtime::sync_appearance,
                 image_fill::sync_image_fills,
                 (

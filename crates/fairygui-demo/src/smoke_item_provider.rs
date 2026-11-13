@@ -52,7 +52,8 @@ fn swapped(
 fn content() -> GuiVirtualList {
     GuiVirtualList::new(80, |index, row| {
         if let Some(mut text) = row.child_by_path("msg") {
-            text.set_text(&format!("Message {index}"));
+            text.set_text(&message(index));
+            text.ensure_size_correct();
         }
         if let Some(mut name) = row.child_by_path("name") {
             name.set_text("FairyGUI");
@@ -62,7 +63,6 @@ fn content() -> GuiVirtualList {
         } else {
             "ui://Chat/r0"
         });
-        row.set_size(Vec2::new(900., 100.));
     })
     .with_item_provider(|index| {
         Some(
@@ -74,6 +74,13 @@ fn content() -> GuiVirtualList {
             .into(),
         )
     })
+}
+fn message(index: usize) -> String {
+    match index {
+        1 => "Long message with CJK 中文 and wrapping. ".repeat(9),
+        2 => "<img src='ui://Chat/1f600'/>".into(),
+        _ => format!("Message {index}"),
+    }
 }
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>()
@@ -120,8 +127,17 @@ fn verify(gui: &GuiQuery, list: Entity, rows: &Query<&GuiListRow>, reversed: boo
         );
         assert_eq!(
             gui.text(gui.child_by_name(row, "msg").unwrap()),
-            Some(format!("Message {index}").as_str())
+            Some(message(index).as_str())
         );
+        let msg = gui.child_by_name(row, "msg").unwrap();
+        let size = gui.transform(msg).unwrap().size();
+        assert!(size.x > 10. && size.x <= 663.);
+        if gui.child_by_name(row, "name").is_none() {
+            assert!((gui.transform(msg).unwrap().position().x + size.x - 785.).abs() < 0.1);
+        }
+        if index == 1 {
+            assert!(size.y > 80. && gui.transform(row).unwrap().size().y > 100.);
+        }
     }
 }
 
@@ -133,6 +149,11 @@ fn drive(
     gui: GuiQuery,
     rows: Query<&GuiListRow>,
     status: Query<&GuiVirtualListState>,
+    layouts: Query<(
+        &bevy::text::ComputedTextBlock,
+        &bevy::text::TextLayoutInfo,
+        &ComputedNode,
+    )>,
     existing: Query<()>,
     assets: Res<AssetServer>,
     mut windows: Query<(Entity, &mut Window)>,
@@ -178,6 +199,32 @@ fn drive(
             assert!(status.get(list).unwrap().error().is_none());
             state.list = Some(list);
             state.rows = gui.list(list).unwrap().items().to_vec();
+            for &row in &state.rows {
+                let text = gui.child_by_name(row, "msg").unwrap();
+                let (block, info, node) = layouts.get(text).expect("rendered row text");
+                let size = gui.transform(text).unwrap().size();
+                assert!(info.scale_factor > 0.);
+                assert!(
+                    info.size.y / info.scale_factor <= size.y - 4. + 1.,
+                    "rendered paragraph {:?} exceeds measured {:?} at scale {}",
+                    info.size,
+                    size,
+                    info.scale_factor
+                );
+                assert!(
+                    (node.size() * node.inverse_scale_factor() - size)
+                        .abs()
+                        .max_element()
+                        < 1.
+                );
+                if rows.get(row).unwrap().index() == 0 {
+                    assert_eq!(
+                        block.buffer().lines().count(),
+                        1,
+                        "short text must fit without a DPI-induced extra line"
+                    );
+                }
+            }
             let row = state.rows[1];
             state.clicked = Some(rows.get(row).unwrap().index());
             state.cursor = gui.local_to_global(row, Vec2::new(450., 50.));
@@ -265,7 +312,7 @@ fn drive(
         15 if elapsed >= 8 => {
             assert!(state.rows.iter().all(|&row| !existing.contains(row)));
             println!(
-                "demo smoke PASSED: ECS mixed-template virtual rows, left/right Chat templates, row click observer, button-driven provider replacement, long scroll/reuse, rebound row clicks and pool disposal"
+                "demo smoke PASSED: ECS mixed-template virtual rows, synchronous wrapped/inline-image text sizing and right-edge/row-height relations, row click observer, button-driven provider replacement, long scroll/reuse, rebound row clicks and pool disposal"
             );
             exit.write(AppExit::Success);
             next = true;

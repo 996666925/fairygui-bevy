@@ -35,6 +35,17 @@ fn raster_font(
     fonts: Option<&Assets<Font>>,
     default: Option<&Handle<Font>>,
 ) -> (bevy::text::FontSource, Option<Handle<Font>>) {
+    raster_font_with_presence(name, server, default, |handle| {
+        fonts.is_some_and(|fonts| fonts.contains(handle))
+    })
+}
+
+pub(super) fn raster_font_with_presence(
+    name: Option<&str>,
+    server: &AssetServer,
+    default: Option<&Handle<Font>>,
+    is_loaded: impl Fn(&Handle<Font>) -> bool,
+) -> (bevy::text::FontSource, Option<Handle<Font>>) {
     use bevy::text::FontSource;
     let fallback = default.cloned().map(FontSource::Handle).unwrap_or_default();
     let Some(name) = name.filter(|name| !name.is_empty() && !name.starts_with("ui://")) else {
@@ -48,7 +59,7 @@ fn raster_font(
         let handle = server
             .get_handle::<Font>(path.clone())
             .unwrap_or_else(|| server.load(path));
-        let source = if fonts.is_some_and(|fonts| fonts.contains(&handle)) {
+        let source = if is_loaded(&handle) {
             FontSource::Handle(handle.clone())
         } else {
             fallback
@@ -252,7 +263,7 @@ pub(super) fn spawn_text(
             font: selected.raster.clone(),
             ..backend::text_font_for(object, data, font)
         },
-        backend::text_layout_for(data),
+        backend::text_layout_for_object(object, data),
         backend::text_line_height_for(data, None),
         backend::text_letter_spacing_for(data),
     ));

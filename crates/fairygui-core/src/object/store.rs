@@ -656,7 +656,7 @@ impl ObjectStore {
         let Some(target_index) = self.child_index(target) else {
             return;
         };
-        let Some(siblings) = self
+        let Some(mut siblings) = self
             .objects
             .get(parent)
             .map(|object| object.children.clone())
@@ -664,6 +664,7 @@ impl ObjectStore {
             return;
         };
 
+        siblings.push(parent);
         for owner in siblings {
             if owner == target || self.relation_handling.contains(&owner) {
                 continue;
@@ -683,9 +684,11 @@ impl ObjectStore {
             else {
                 continue;
             };
-            relations
-                .items
-                .retain(|item| !item.to_parent && item.target_index == Some(target_index));
+            relations.items.retain(|item| {
+                !item.to_parent
+                    && item.to_child == (owner == parent)
+                    && item.target_index == Some(target_index)
+            });
             if relations.is_empty() {
                 continue;
             }
@@ -715,7 +718,9 @@ impl ObjectStore {
                     next_x - x,
                     next_y - y,
                 );
-                self.update_transition_relations(parent, owner, next_x - x, next_y - y);
+                if let Some(container) = self.objects.get(owner).and_then(|object| object.parent) {
+                    self.update_transition_relations(container, owner, next_x - x, next_y - y);
+                }
             }
             if next_width != width || next_height != height {
                 self.set_size(owner, next_width, next_height);
@@ -752,6 +757,43 @@ impl ObjectStore {
         self.touch(id, dirty::SIZE);
 
         let (d_width, d_height) = (width - old_width, height - old_height);
+        // Keep the owner's related right/center/bottom edge fixed when its own
+        // intrinsic size changes (native RelationItem.applyOnSelfResized).
+        if let Some(object) = self
+            .objects
+            .get(id)
+            .filter(|object| object.parent.is_some())
+        {
+            let (old_x, old_y) = (object.x, object.y);
+            let (mut x, mut y) = (old_x, old_y);
+            let pivot = if object.pivot_as_anchor {
+                Point::new(object.pivot_x, object.pivot_y)
+            } else {
+                Point::ZERO
+            };
+            for item in &object.relations.items {
+                for def in &item.defs {
+                    match def.relation_type {
+                        3 => x -= (0.5 - pivot.x) * d_width,
+                        4..=6 => x -= (1. - pivot.x) * d_width,
+                        10 => y -= (0.5 - pivot.y) * d_height,
+                        11..=13 => y -= (1. - pivot.y) * d_height,
+                        _ => {}
+                    }
+                }
+            }
+            if (x, y) != (old_x, old_y) {
+                let was_handling = !self.relation_handling.insert(id);
+                self.set_xy(id, x, y);
+                self.update_gear_relations(id, crate::widget::GearKind::Xy, x - old_x, y - old_y);
+                if let Some(parent) = self.objects[id].parent {
+                    self.update_transition_relations(parent, id, x - old_x, y - old_y);
+                }
+                if !was_handling {
+                    self.relation_handling.remove(&id);
+                }
+            }
+        }
         // 自己的尺寸变化会同时影响两批对象：挂在子对象上的「相对父节点」关联，
         // 以及挂在兄弟对象上的「以自己为目标」关联。
         self.apply_child_relations(id, d_width, d_height);
@@ -859,7 +901,7 @@ impl ObjectStore {
         let Some(changed_index) = self.child_index(changed) else {
             return;
         };
-        let Some(siblings) = self
+        let Some(mut siblings) = self
             .objects
             .get(parent)
             .map(|object| object.children.clone())
@@ -867,6 +909,7 @@ impl ObjectStore {
             return;
         };
 
+        siblings.push(parent);
         for sibling in siblings {
             if sibling == changed || self.relation_handling.contains(&sibling) {
                 continue;
@@ -889,9 +932,11 @@ impl ObjectStore {
             };
 
             // 只保留「目标正是发生变化的那位兄弟」的关联。
-            relations
-                .items
-                .retain(|item| !item.to_parent && item.target_index == Some(changed_index));
+            relations.items.retain(|item| {
+                !item.to_parent
+                    && item.to_child == (sibling == parent)
+                    && item.target_index == Some(changed_index)
+            });
             if relations.is_empty() {
                 continue;
             }
@@ -927,7 +972,10 @@ impl ObjectStore {
                     new_x - x,
                     new_y - y,
                 );
-                self.update_transition_relations(parent, sibling, new_x - x, new_y - y);
+                if let Some(container) = self.objects.get(sibling).and_then(|object| object.parent)
+                {
+                    self.update_transition_relations(container, sibling, new_x - x, new_y - y);
+                }
             }
             if new_width != width || new_height != height {
                 self.relation_handling.insert(sibling);
@@ -3709,6 +3757,7 @@ mod tests {
         store.objects.get_mut(child).unwrap().relations.items = vec![
             crate::widget::relation::RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 3,
@@ -3718,6 +3767,7 @@ mod tests {
             },
             crate::widget::relation::RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 14,
@@ -3730,7 +3780,9 @@ mod tests {
         store.set_size(parent, 200.0, 200.0);
 
         let child = store.object(child).unwrap();
-        assert_eq!(child.x(), 30.0, "the child center keeps its parent ratio");
+        // Native RelationItem first scales the center to x=30, then its Width
+        // setter invokes applyOnSelfResized and preserves that center at x=20.
+        assert_eq!(child.x(), 20.0, "the child center keeps its parent ratio");
         assert_eq!(child.width(), 40.0, "relative width scales with the parent");
         assert_eq!(child.y(), 20.0, "unrelated axes stay unchanged");
         assert_eq!(child.height(), 10.0);
@@ -3751,6 +3803,7 @@ mod tests {
         store.objects.get_mut(owner).unwrap().relations.items = vec![
             crate::widget::relation::RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(0),
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
@@ -3760,6 +3813,7 @@ mod tests {
             },
             crate::widget::relation::RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(0),
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 14,
@@ -3791,6 +3845,7 @@ mod tests {
         store.objects.get_mut(child).unwrap().relations.items =
             vec![crate::widget::relation::RelationItem {
                 to_parent: true,
+                to_child: false,
                 target_index: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 14,
@@ -3823,6 +3878,7 @@ mod tests {
         store.objects.get_mut(aligned).unwrap().relations.items =
             vec![crate::widget::relation::RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(0),
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
@@ -3833,6 +3889,7 @@ mod tests {
         store.objects.get_mut(extended).unwrap().relations.items =
             vec![crate::widget::relation::RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(0),
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 17,
@@ -3860,6 +3917,7 @@ mod tests {
         store.objects.get_mut(first).unwrap().relations.items =
             vec![crate::widget::relation::RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(1),
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
@@ -3870,6 +3928,7 @@ mod tests {
         store.objects.get_mut(second).unwrap().relations.items =
             vec![crate::widget::relation::RelationItem {
                 to_parent: false,
+                to_child: false,
                 target_index: Some(0),
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
@@ -4497,5 +4556,73 @@ mod tests {
         assert_eq!(store.object(id).unwrap().alpha(), 1.0);
         store.set_alpha(id, -1.0);
         assert_eq!(store.object(id).unwrap().alpha(), 0.0);
+    }
+
+    #[test]
+    fn component_child_height_relations_do_not_resolve_against_sibling_indices() {
+        use crate::widget::relation::{RelationDef, RelationItem};
+        let mut store = ObjectStore::new();
+        let scene = store.create(ObjectType::Component);
+        let other = store.create(ObjectType::Component);
+        let row = store.create(ObjectType::Component);
+        let bubble = store.create(ObjectType::Image);
+        store.set_parent(other, Some(scene));
+        store.set_parent(row, Some(scene));
+        store.set_parent(bubble, Some(row));
+        store.set_size(other, 900., 90.);
+        store.set_size(row, 900., 100.);
+        store.set_size(bubble, 47., 61.);
+        store.objects[row].relations.items.push(RelationItem {
+            to_parent: false,
+            to_child: true,
+            target_index: Some(0),
+            defs: vec![RelationDef {
+                relation_type: 15,
+                percent: false,
+                axis: 1,
+            }],
+        });
+        store.set_size(bubble, 47., 121.);
+        assert_eq!(store.object(row).unwrap().height(), 160.);
+        assert_eq!(store.object(other).unwrap().height(), 90.);
+        store.set_size(other, 900., 211.);
+        assert_eq!(store.object(row).unwrap().height(), 160.);
+        store.set_size(bubble, 47., 61.);
+        assert_eq!(store.object(row).unwrap().height(), 100.);
+    }
+
+    #[test]
+    fn intrinsic_size_changes_preserve_related_owner_edges_and_centers() {
+        use crate::widget::relation::{RelationDef, RelationItem};
+        for (kind, expected) in [
+            (3, Point::new(80., 120.)),
+            (6, Point::new(60., 120.)),
+            (10, Point::new(100., 110.)),
+            (13, Point::new(100., 100.)),
+        ] {
+            let mut store = ObjectStore::new();
+            let parent = store.create(ObjectType::Component);
+            let owner = store.create(ObjectType::Text);
+            store.set_parent(owner, Some(parent));
+            store.set_xy(owner, 100., 120.);
+            store.set_size(owner, 40., 30.);
+            store.objects[owner].relations.items.push(RelationItem {
+                to_parent: true,
+                to_child: false,
+                target_index: None,
+                defs: vec![RelationDef {
+                    relation_type: kind,
+                    percent: false,
+                    axis: u8::from(kind > 6),
+                }],
+            });
+            store.set_size(owner, 80., 50.);
+            assert_eq!(store.object(owner).unwrap().position(), expected);
+            store.set_size(owner, 40., 30.);
+            assert_eq!(
+                store.object(owner).unwrap().position(),
+                Point::new(100., 120.)
+            );
+        }
     }
 }

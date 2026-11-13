@@ -282,6 +282,17 @@ pub fn text_layout_for(data: &fairygui_core::widget::TextFieldData) -> TextLayou
     TextLayout::new(justify, linebreak)
 }
 
+pub(crate) fn text_layout_for_object(
+    object: &GObject,
+    data: &fairygui_core::widget::TextFieldData,
+) -> TextLayout {
+    let mut layout = text_layout_for(data);
+    if data.auto_size == 1 && !data.single_line && object.max_size().width > 0. {
+        layout.linebreak = LineBreak::WordOrCharacter;
+    }
+    layout
+}
+
 /// Align the measured text block inside its FairyGUI rectangle. With NoWrap,
 /// Bevy's Justify only aligns lines inside the block, not inside the UI node.
 /// Padding offsets the content without moving the object or its hit rectangle.
@@ -313,7 +324,14 @@ pub fn align_text(
             1.0
         };
         let text_size = layout.size / scale;
-        let available = (Vec2::new(object.width(), object.height()) - text_size).max(Vec2::ZERO);
+        let gutter = if runtime.text_measurer.borrow().contains(reference.0) {
+            2.
+        } else {
+            0.
+        };
+        let available =
+            (Vec2::new(object.width(), object.height()) - text_size - Vec2::splat(gutter * 2.))
+                .max(Vec2::ZERO);
         let factor = |alignment| match alignment {
             1 => 0.5,
             2 => 1.0,
@@ -323,14 +341,17 @@ pub fn align_text(
             // Wrapped text is already justified by Parley inside its width.
             // Feeding that measured remainder back as padding changes the next
             // frame's wrapping constraint and can trip Parley's line breaker.
-            left: Val::Px(if text_layout.linebreak == LineBreak::NoWrap {
-                available.x * factor(data.align)
-            } else {
-                0.0
-            }),
-            top: Val::Px(available.y * factor(data.vertical_align)),
-            right: Val::ZERO,
-            bottom: Val::ZERO,
+            left: Val::Px(
+                gutter
+                    + if text_layout.linebreak == LineBreak::NoWrap {
+                        available.x * factor(data.align)
+                    } else {
+                        0.0
+                    },
+            ),
+            top: Val::Px(gutter + available.y * factor(data.vertical_align)),
+            right: Val::Px(gutter),
+            bottom: Val::Px(gutter),
         };
         if node.padding != padding {
             node.padding = padding;
@@ -350,9 +371,10 @@ pub fn align_text(
             scale
         };
         let min = Vec2::new(left, top) * scale;
-        if computed.padding.min_inset != min || computed.padding.max_inset != Vec2::ZERO {
+        let max = Vec2::splat(gutter * scale);
+        if computed.padding.min_inset != min || computed.padding.max_inset != max {
             computed.padding.min_inset = min;
-            computed.padding.max_inset = Vec2::ZERO;
+            computed.padding.max_inset = max;
         }
     }
 }

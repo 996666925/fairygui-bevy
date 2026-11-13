@@ -704,6 +704,7 @@ fn parent_resize_shifts_all_absolute_relation_pages_and_default_before_current_r
         .items
         .push(RelationItem {
             to_parent: true,
+            to_child: false,
             target_index: None,
             defs: vec![RelationDef {
                 relation_type: 6,
