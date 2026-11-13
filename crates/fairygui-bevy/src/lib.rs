@@ -67,6 +67,7 @@ pub mod progress;
 pub mod pull;
 pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;
+pub use runtime::root_mount::GuiRootMountState;
 pub mod slider;
 pub use slider::GuiSliderState;
 pub mod text;
@@ -160,14 +161,14 @@ pub mod prelude {
         GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPointerCapture,
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
         GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
-        GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState,
-        GuiSliderState, GuiSliderValue, GuiSpace, GuiSystems, GuiText, GuiTextInput,
-        GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTransform,
-        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
-        GuiTransitions, GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem,
-        GuiTreeNode, GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
-        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand,
-        GuiWindowState, PopupMenuTemplates,
+        GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
+        GuiScrollState, GuiSliderState, GuiSliderValue, GuiSpace, GuiSystems, GuiText,
+        GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
+        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
+        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
     };
 }
 
@@ -431,8 +432,10 @@ impl Plugin for FairyGuiPlugin {
         app.add_systems(
             Update,
             (
+                runtime::root_mount::prepare_mounts,
                 runtime::sync_ecs_roots,
                 runtime::windows::sync_ecs_windows,
+                runtime::root_mount::sync_mounts,
                 runtime::discard_removed_object_commands,
                 input::apply_scroll_drag_commands,
                 runtime::apply_object_commands,

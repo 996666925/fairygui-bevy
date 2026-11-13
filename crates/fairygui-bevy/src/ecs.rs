@@ -470,6 +470,7 @@ impl GuiObjectInfo {
 /// Systems after `GuiSystems::Sync` can bind controls created this frame.
 #[derive(SystemParam, Debug)]
 pub struct GuiQuery<'w, 's> {
+    mounts: Query<'w, 's, &'static crate::GuiRootMountState>,
     roots: Query<'w, 's, &'static GuiRootView>,
     objects: Query<'w, 's, &'static GuiObjectInfo>,
     transforms: Query<'w, 's, &'static GuiTransform>,
@@ -491,6 +492,9 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn root_mount(&self, owner: Entity) -> Option<&crate::GuiRootMountState> {
+        self.mounts.get(owner).ok()
+    }
     /// Resolve a root owner to its view; control entities resolve to themselves.
     pub fn view(&self, entity: Entity) -> Option<Entity> {
         if self.objects.contains(entity) {

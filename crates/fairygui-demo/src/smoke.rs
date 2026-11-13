@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_root_mount.rs"]
+mod root_mount;
+pub(super) fn install_root_mount(app: &mut App) {
+    root_mount::install(app);
+}
 #[path = "smoke_observer_events.rs"]
 mod observer_events;
 pub(super) fn install_observer_events(app: &mut App) {

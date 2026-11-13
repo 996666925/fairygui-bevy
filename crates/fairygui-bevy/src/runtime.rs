@@ -25,6 +25,8 @@ mod ecs_root_tests;
 pub(crate) mod global_wait;
 #[path = "object_drag.rs"]
 pub(crate) mod object_drag;
+#[path = "root_mount.rs"]
+pub(crate) mod root_mount;
 #[path = "text_measure.rs"]
 pub(crate) mod text_measure;
 #[path = "tooltip.rs"]
@@ -82,6 +84,9 @@ pub struct FairyGuiRoot {
     /// Keep the root sized to the input window's logical dimensions (primary
     /// window by default). Takes precedence over `size` while a window exists.
     pub follow_window_size: bool,
+    /// Logical FairyGUI parent: a root/window owner or a control view entity.
+    /// An unavailable parent keeps this instance off stage until it resolves.
+    pub parent: Option<Entity>,
 }
 
 impl FairyGuiRoot {
@@ -93,6 +98,7 @@ impl FairyGuiRoot {
             position: None,
             size: None,
             follow_window_size: false,
+            parent: None,
         }
     }
 
@@ -103,6 +109,13 @@ impl FairyGuiRoot {
 
     pub fn with_size(mut self, size: Vec2) -> Self {
         self.size = Some(size);
+        self
+    }
+
+    /// Mount inside a FairyGUI component. Position is local to this parent.
+    /// Changing the parent preserves the model and view while both are alive.
+    pub fn with_parent(mut self, parent: Entity) -> Self {
+        self.parent = Some(parent);
         self
     }
 
@@ -293,6 +306,7 @@ struct EcsRootBinding {
     position: Option<Vec2>,
     size: Option<Vec2>,
     follow_window_size: bool,
+    parent: Option<Entity>,
 }
 
 #[derive(Component, Debug)]
@@ -2565,6 +2579,9 @@ pub fn spawn_pending_roots(
             runtime.roots[index].spawned = true;
             continue;
         }
+        if root_mount::waiting_for_parent(&runtime, object) {
+            continue;
+        }
         // A pending root can already have been adopted by a retained popup or
         // another model parent. Wait for that parent's view rather than spawning
         // it as an unrelated UI root and briefly detaching its stage subtree.
@@ -2635,7 +2652,7 @@ pub fn sync_ecs_roots(
         if entities.get(owner).is_ok() {
             commands
                 .entity(owner)
-                .remove::<(GuiRootInstance, GuiRootView)>();
+                .remove::<(GuiRootInstance, GuiRootView, root_mount::GuiRootMountState)>();
         }
     }
 
@@ -2662,7 +2679,9 @@ pub fn sync_ecs_roots(
                     binding.follow_window_size = source.follow_window_size;
                     let active = runtime.ecs_roots[&owner].active;
                     if active != source.active {
-                        runtime.set_root_attached(handle, source.active);
+                        if source.parent.is_none() {
+                            runtime.set_root_attached(handle, source.active);
+                        }
                         runtime.ecs_roots.get_mut(&owner).unwrap().active = source.active;
                     }
                     continue;
@@ -2696,6 +2715,7 @@ pub fn sync_ecs_roots(
                 position: source.position,
                 size: source.size,
                 follow_window_size: source.follow_window_size,
+                parent: None,
             },
         );
     }
@@ -2745,7 +2765,7 @@ pub fn sync_ecs_roots(
             runtime.ecs_roots.get_mut(&owner).unwrap().failed = true;
             continue;
         };
-        runtime.set_root_attached(handle, source.active);
+        runtime.set_root_attached(handle, source.active && source.parent.is_none());
         let object = runtime.root_object(handle).unwrap();
         apply_root_geometry(&mut runtime, object, source.position, source.size);
         let binding = runtime.ecs_roots.get_mut(&owner).unwrap();

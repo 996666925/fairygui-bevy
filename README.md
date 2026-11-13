@@ -148,6 +148,31 @@ commands.spawn(
 没有可用窗口时保留当前尺寸（创建时使用 `size` 或导出值）。修改
 `follow_window_size = false` 可停止跟随，并恢复配置的 `size`（为 `None` 则保留当前尺寸）。
 
+动态创建的组件可通过父实体直接挂进现有 FairyGUI 容器：
+
+```rust,ignore
+let child = commands.spawn(
+    FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Slider_HZ")
+        .with_parent(container_entity)
+        .with_position(Vec2::new(20., 60.))
+        .with_size(Vec2::new(240., 30.)),
+).id();
+```
+
+`parent` 接受 `FairyGuiRoot` / `FairyGuiWindow` 拥有者或带 `GObjectRef` 的容器视图。
+位置在父节点局部坐标中；父变换、透明度、裁剪、舞台状态与输入规则自然作用于子树，
+事件沿同一逻辑层级冒泡。父资产或父视图尚未就绪时等待，期间不会生成独立可见界面。
+`GuiRootMountState`（或 `gui.root_mount(owner)`）提供等待资产、等待父目标、已挂载、
+主动撤下、无效父节点、循环挂载与创建失败状态；叶对象不能作父节点。
+
+修改 `FairyGuiRoot.parent` 可保留现有模型、视图及业务组件换父，设为 `None` 可提升为
+独立界面；`active=false` 撤下子树，恢复后挂回配置的父节点。删除子拥有者或移除根组件
+只回收该子树；删除父界面会一并回收仍挂载的子树，留下的子拥有者等待父目标。
+父拥有者替换模板后，子实例会重建并重新挂载；直接引用旧父视图时需改为新的视图实体。
+若要保留子实例，应在删除旧父的同帧先修改子根的 `parent` 或将其设为 inactive。
+这不会自动给根拥有者添加 Bevy `ChildOf`；拥有者的业务生命周期由应用管理。
+`--smoke-root-mount` 验证实际窗口中的局部坐标、换父、裁剪、隐藏恢复、冒泡与销毁。
+
 运行时会在所有者实体上添加 `GuiRootView`，指向根视图实体。
 `GuiQuery` 只读取 ECS 组件，可按名称或路径找到控件实体并直接挂载业务组件和 observer：
 
