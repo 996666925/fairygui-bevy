@@ -425,6 +425,7 @@ impl GuiTransform {
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct GuiObjectInfo {
     name: String,
+    tooltips: Option<String>,
     kind: ObjectType,
     parent: Option<Entity>,
     children: Vec<Entity>,
@@ -432,6 +433,10 @@ pub struct GuiObjectInfo {
 }
 
 impl GuiObjectInfo {
+    pub fn tooltips(&self) -> Option<&str> {
+        self.tooltips.as_deref()
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -533,6 +538,10 @@ impl GuiQuery<'_, '_> {
     /// Native text of a root owner or control view, before presentation.
     pub fn text(&self, entity: Entity) -> Option<&str> {
         Some(self.texts.get(self.view(entity)?).ok()?.value())
+    }
+
+    pub fn tooltips(&self, entity: Entity) -> Option<&str> {
+        self.get(entity)?.tooltips()
     }
 
     pub fn icon(&self, entity: Entity) -> Option<&str> {
@@ -829,6 +838,9 @@ pub(crate) fn sync_gui_objects(
                 .collect::<Vec<_>>()
         });
         if let Some(mut current) = current {
+            if current.tooltips.as_deref() != object.tooltips() {
+                current.tooltips = object.tooltips().map(str::to_owned);
+            }
             if current.name != object.name() {
                 current.name = object.name().to_owned();
             }
@@ -847,6 +859,7 @@ pub(crate) fn sync_gui_objects(
         } else {
             commands.entity(entity).insert(GuiObjectInfo {
                 name: object.name().to_owned(),
+                tooltips: object.tooltips().map(str::to_owned),
                 kind: object.kind(),
                 parent,
                 children: children.collect(),

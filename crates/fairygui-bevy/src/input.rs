@@ -385,6 +385,9 @@ pub(crate) fn apply_scroll_drag_commands(
 
 /// Shared policy for clicks, wheel input, capture and drop targets.
 pub(crate) fn eligible(runtime: &GuiRuntime, target: GObjectId) -> bool {
+    if runtime.is_tooltip_part(target) {
+        return false;
+    }
     // Plain GTextField keeps mouseEnabled=false. A picked button title can
     // still delegate to its logical control; standalone titles must pass through.
     // Markup fields retain the existing vector/bitmap link interaction path.
@@ -814,6 +817,9 @@ fn route_pointer(
                 );
             }
         }
+    }
+    if cursor.is_some() && mouse.get_just_pressed().next().is_some() {
+        runtime.hide_tooltip();
     }
     if mouse.just_pressed(MouseButton::Right)
         && cursor.is_some()

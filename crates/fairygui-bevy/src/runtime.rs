@@ -27,6 +27,8 @@ pub(crate) mod global_wait;
 pub(crate) mod object_drag;
 #[path = "text_measure.rs"]
 pub(crate) mod text_measure;
+#[path = "tooltip.rs"]
+pub(crate) mod tooltip;
 #[path = "tree_content.rs"]
 mod tree_content;
 #[path = "windows.rs"]
@@ -145,6 +147,7 @@ pub enum GuiObjectAction {
     },
     SetRotation(f32),
     SetText(String),
+    SetTooltips(Option<String>),
     /// Resolve the current text's auto size synchronously, including relations.
     /// Subsequent text/font changes keep this field measured before projection.
     EnsureTextSize,
@@ -620,6 +623,7 @@ pub struct GuiRuntime {
     pending_object_commands: Vec<(ObjectCommandSource, GuiObjectCommand)>,
     ecs_windows: HashMap<Entity, windows::Binding>,
     global_wait: global_wait::GlobalWait,
+    tooltip: tooltip::Tooltip,
     /// 已派发但尚未被取走的事件。
     events: fairygui_core::object::EventQueue,
     links: Vec<fairygui_core::object::UiEvent>,
@@ -2261,6 +2265,9 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetText(text) => {
                 runtime.store_mut().set_object_text(object, text);
+            }
+            GuiObjectAction::SetTooltips(text) => {
+                runtime.store_mut().set_tooltips(object, text.clone());
             }
             GuiObjectAction::EnsureTextSize => {
                 let measurer = runtime.text_measurer.clone();

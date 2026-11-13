@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_tooltip.rs"]
+mod tooltip;
+pub(super) fn install_tooltip(app: &mut App) {
+    tooltip::install(app);
+}
 #[path = "smoke_chat.rs"]
 mod chat;
 pub(super) fn install_chat(app: &mut App) {

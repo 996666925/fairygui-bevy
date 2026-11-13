@@ -93,6 +93,9 @@ pub use runtime::global_wait::{
     GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
 };
 pub use runtime::object_drag::{GuiDragBounds, GuiDraggable, GuiObjectDragState};
+pub use runtime::tooltip::{
+    GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
+};
 pub use runtime::windows::{FairyGuiWindow, GuiWindowAction, GuiWindowCommand, GuiWindowState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -152,8 +155,9 @@ pub mod prelude {
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
         GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
         GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSpace, GuiSystems, GuiText,
-        GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
         GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
         GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
@@ -223,10 +227,13 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiPopupCommand>()
         .add_message::<GuiWindowCommand>()
         .add_message::<GuiGlobalWaitCommand>()
+        .add_message::<GuiTooltipCommand>()
         .add_message::<GuiDragCommand>()
         .init_resource::<GuiDragState>()
         .init_resource::<GuiGlobalWaitSettings>()
         .init_resource::<GuiGlobalWaitState>()
+        .init_resource::<GuiTooltipSettings>()
+        .init_resource::<GuiTooltipState>()
         .init_resource::<GuiPopupState>()
         .init_asset::<FuiAsset>()
         .init_asset_loader::<FuiAssetLoader>()
@@ -267,7 +274,11 @@ impl Plugin for FairyGuiPlugin {
                 (ecs::sync_gui_transitions, animation::sync_state).chain(),
                 popup::sync_popup_state,
                 runtime::windows::sync_window_state,
-                runtime::global_wait::sync_global_wait_state,
+                (
+                    runtime::global_wait::sync_global_wait_state,
+                    runtime::tooltip::sync_tooltip_state,
+                )
+                    .chain(),
                 runtime::ecs_drag_drop::sync_drag_state,
                 runtime::object_drag::sync_object_drag_state,
                 tree::sync_tree_state,
@@ -354,6 +365,7 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 (
                     runtime::sync_virtual_lists,
+                    runtime::tooltip::sync_tooltips,
                     runtime::spawn_pending_objects,
                     ecs::sync_gui_objects,
                     ecs::sync_gui_properties,
@@ -365,7 +377,11 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 runtime::sync_text_inputs,
                 runtime::text_measure::sync_sizes,
-                runtime::content::sync_content_layout,
+                (
+                    runtime::content::sync_content_layout,
+                    runtime::tooltip::reconcile_tooltips,
+                )
+                    .chain(),
                 (
                     runtime::sync_component_scroll_content,
                     runtime::sync_dirty,
@@ -411,6 +427,7 @@ impl Plugin for FairyGuiPlugin {
                 popup::apply_popup_commands,
                 runtime::ecs_drag_drop::apply_drag_commands,
                 runtime::global_wait::sync_global_wait,
+                runtime::tooltip::sync_tooltips,
             )
                 .chain()
                 .in_set(SyncPhase::Materialize)
@@ -438,7 +455,11 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 popup::sync_popup_state,
                 runtime::windows::sync_window_state,
-                runtime::global_wait::sync_global_wait_state,
+                (
+                    runtime::global_wait::sync_global_wait_state,
+                    runtime::tooltip::sync_tooltip_state,
+                )
+                    .chain(),
                 runtime::ecs_drag_drop::prepare_drag_targets,
                 runtime::ecs_drag_drop::sync_drag_state,
                 runtime::object_drag::prepare_object_drags,

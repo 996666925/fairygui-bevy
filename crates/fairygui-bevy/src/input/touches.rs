@@ -245,6 +245,7 @@ pub(super) fn route_touches(
                 focus.clear();
                 state.text_press = None;
             }
+            runtime.hide_tooltip();
             runtime.check_popups(raw_hit.map(|(_, owner, ..)| owner.0));
             let Some(target) = hit.filter(|id| eligible(&runtime, *id)) else {
                 continue;

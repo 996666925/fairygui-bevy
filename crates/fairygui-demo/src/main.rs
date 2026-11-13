@@ -215,7 +215,9 @@ fn main() -> AppExit {
     app.insert_resource(GuiFont(Some(font)));
     startup::install(&mut app);
 
-    if std::env::args().any(|arg| arg == "--smoke-chat") {
+    if std::env::args().any(|arg| arg == "--smoke-tooltip") {
+        smoke::install_tooltip(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-chat") {
         smoke::install_chat(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-item-provider") {
         smoke::install_item_provider(&mut app);
