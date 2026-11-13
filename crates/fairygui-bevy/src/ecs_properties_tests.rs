@@ -1,6 +1,112 @@
 use crate::prelude::*;
 use bevy::prelude::*;
 
+#[test]
+fn property_queries_follow_new_archetypes_rebound_objects_and_entity_generations() {
+    use crate::{
+        core::package::ObjectType,
+        properties::{NativeValue, sync_property},
+    };
+    #[derive(Component)]
+    struct ApplicationChild;
+    let mut world = World::new();
+    world.init_non_send::<GuiRuntime>();
+    let (first, second, image) = {
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        let first = runtime.store_mut().create(ObjectType::Text);
+        let second = runtime.store_mut().create(ObjectType::Text);
+        let image = runtime.store_mut().create(ObjectType::Image);
+        runtime.store_mut().set_object_text(first, "First");
+        runtime.store_mut().set_object_text(second, "Second");
+        (first, second, image)
+    };
+    // Warm the cache before any matching archetype exists.
+    sync_property::<GuiText>(&mut world);
+    let entity = world.spawn(GObjectRef(first)).id();
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(world.get::<GuiText>(entity).unwrap().value(), "First");
+    world.entity_mut(entity).insert(ApplicationChild);
+    world.get_mut::<GuiText>(entity).unwrap().set("Edited");
+    let later = world.spawn((GObjectRef(second), ApplicationChild)).id();
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(
+        world.non_send::<GuiRuntime>().store().object_text(first),
+        Some("Edited")
+    );
+    assert_eq!(world.get::<GuiText>(later).unwrap().value(), "Second");
+    // Rebinding discards the old object's baseline and writes only explicit
+    // application fields; unsupported objects reclaim both projected values.
+    world.entity_mut(entity).insert(GObjectRef(second));
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(
+        world.non_send::<GuiRuntime>().store().object_text(second),
+        Some("Edited")
+    );
+    world.entity_mut(entity).insert(GObjectRef(image));
+    sync_property::<GuiText>(&mut world);
+    assert!(world.get::<GuiText>(entity).is_none());
+    assert!(world.get::<NativeValue<GuiText>>(entity).is_none());
+    world.despawn(entity);
+    let replacement = world.spawn(GObjectRef(first)).id();
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(first, "Reused");
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(world.get::<GuiText>(replacement).unwrap().value(), "Reused");
+    assert!(world.get_entity(entity).is_err());
+}
+
+#[test]
+fn insert_observers_can_edit_or_dispose_later_candidates_in_the_same_pass() {
+    use crate::{core::package::ObjectType, properties::sync_property};
+    let mut world = World::new();
+    world.init_non_send::<GuiRuntime>();
+    let objects = {
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        ["Source", "Target", "Disposed"].map(|text| {
+            let object = runtime.store_mut().create(ObjectType::Text);
+            runtime.store_mut().set_object_text(object, text);
+            object
+        })
+    };
+    let [source, target, disposed] = objects.map(|object| world.spawn(GObjectRef(object)).id());
+    sync_property::<GuiText>(&mut world);
+    world.entity_mut(source).observe(
+        move |event: On<Insert<GuiText>>,
+              mut texts: Query<&mut GuiText>,
+              mut commands: Commands| {
+            if event.entity == source {
+                texts.get_mut(target).unwrap().set("From observer");
+                commands.entity(disposed).despawn();
+            }
+        },
+    );
+    world.flush();
+    {
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        runtime
+            .store_mut()
+            .set_object_text(objects[0], "Refresh source");
+        runtime
+            .store_mut()
+            .set_object_text(objects[2], "Refresh disposed");
+    }
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(
+        world
+            .non_send::<GuiRuntime>()
+            .store()
+            .object_text(objects[1]),
+        Some("From observer")
+    );
+    assert_eq!(
+        world.get::<GuiText>(target).unwrap().value(),
+        "From observer"
+    );
+    assert!(world.get_entity(disposed).is_err());
+}
+
 fn fixture(item: &str, loaded: bool) -> (App, Entity, Handle<FuiAsset>) {
     let mut app = App::new();
     app.add_plugins((

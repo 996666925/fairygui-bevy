@@ -1,5 +1,6 @@
 //! Writable ECS properties with native-value baselines to prevent feedback.
 use crate::{prelude::*, runtime::GuiRuntime};
+use bevy::ecs::query::QueryState;
 use bevy::prelude::*;
 use fairygui_core::{object::GObjectId, widget::ControlData};
 
@@ -16,6 +17,28 @@ pub(crate) trait Property:
 pub(crate) struct NativeValue<T: Property> {
     object: GObjectId,
     value: T,
+}
+
+type PropertyEntities<T> = QueryState<Entity, Or<(With<GObjectRef>, With<T>)>>;
+type PropertyValues<T> = QueryState<(
+    Option<&'static GObjectRef>,
+    Option<&'static T>,
+    Option<&'static NativeValue<T>>,
+)>;
+
+#[derive(Resource)]
+struct PropertyQuery<T: Property> {
+    entities: PropertyEntities<T>,
+    values: PropertyValues<T>,
+}
+
+impl<T: Property> FromWorld for PropertyQuery<T> {
+    fn from_world(world: &mut World) -> Self {
+        Self {
+            entities: world.query_filtered(),
+            values: world.query(),
+        }
+    }
 }
 
 /// Apply only fields changed by application code, then publish the current
@@ -51,52 +74,64 @@ fn snapshot<T: Property>(world: &World, object: GObjectId) -> Option<T> {
 }
 
 pub(crate) fn sync_property<T: Property>(world: &mut World) {
-    let entities: Vec<_> = world
-        .query_filtered::<Entity, Or<(With<GObjectRef>, With<T>)>>()
-        .iter(world)
-        .collect();
-    for entity in entities {
-        let runtime = world.get_non_send::<GuiRuntime>().unwrap();
-        let object = world
-            .get::<GObjectRef>(entity)
-            .map(|r| r.0)
-            .or_else(|| runtime.ecs_root_object(entity))
-            .or_else(|| runtime.ecs_window_object(entity));
-        let Some(object) = object else { continue };
-        let Some(native) = snapshot::<T>(world, object) else {
-            world.entity_mut(entity).remove::<(T, NativeValue<T>)>();
-            continue;
-        };
-        let value = world.get::<T>(entity).cloned();
-        let baseline = world
-            .get::<NativeValue<T>>(entity)
-            .filter(|p| p.object == object)
-            .map_or_else(|| native.clone(), |p| p.value.clone());
-        if let Some(value) = &value
-            && *value != native
-            && *value != baseline
-        {
-            value.apply(
-                &baseline,
-                &native,
-                &mut world.get_non_send_mut::<GuiRuntime>().unwrap(),
-                object,
-            );
+    world.init_resource::<PropertyQuery<T>>();
+    world.resource_scope(|world, mut query: Mut<PropertyQuery<T>>| {
+        // Keep archetype matches across passes, but release the iterator before
+        // projecting components. Insert observers may move or despawn entities.
+        let entities: Vec<_> = query.entities.iter(world).collect();
+        for entity in entities {
+            let Ok((reference, value, stored)) = query.values.get(world, entity) else {
+                continue;
+            };
+            // Read each candidate now: an earlier projection's observer may have
+            // changed its components since we collected the candidate entities.
+            let reference = reference.map(|r| r.0);
+            let value = value.cloned();
+            let stored = stored.map(|p| (p.object, p.value.clone()));
+            let runtime = world.get_non_send::<GuiRuntime>().unwrap();
+            let object = reference
+                .or_else(|| runtime.ecs_root_object(entity))
+                .or_else(|| runtime.ecs_window_object(entity));
+            let Some(object) = object else { continue };
+            let Some(native) = snapshot::<T>(world, object) else {
+                if value.is_some() || stored.is_some() {
+                    world.entity_mut(entity).remove::<(T, NativeValue<T>)>();
+                }
+                continue;
+            };
+            let baseline = stored
+                .as_ref()
+                .filter(|(id, _)| *id == object)
+                .map_or(&native, |(_, value)| value);
+            let next = if let Some(value) = &value
+                && *value != native
+                && value != baseline
+            {
+                value.apply(
+                    baseline,
+                    &native,
+                    &mut world.get_non_send_mut::<GuiRuntime>().unwrap(),
+                    object,
+                );
+                // Setters may clamp values or update read-only player metadata.
+                snapshot::<T>(world, object).unwrap_or(native)
+            } else {
+                native
+            };
+            if value.as_ref() != Some(&next) {
+                world.entity_mut(entity).insert(next.clone());
+            }
+            if stored
+                .as_ref()
+                .is_none_or(|(id, value)| *id != object || *value != next)
+            {
+                world.entity_mut(entity).insert(NativeValue {
+                    object,
+                    value: next,
+                });
+            }
         }
-        let next = snapshot::<T>(world, object).unwrap_or(native);
-        if value.as_ref() != Some(&next) {
-            world.entity_mut(entity).insert(next.clone());
-        }
-        if world
-            .get::<NativeValue<T>>(entity)
-            .is_none_or(|p| p.object != object || p.value != next)
-        {
-            world.entity_mut(entity).insert(NativeValue {
-                object,
-                value: next,
-            });
-        }
-    }
+    });
 }
 
 macro_rules! field {
