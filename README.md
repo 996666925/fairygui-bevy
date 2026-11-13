@@ -596,11 +596,31 @@ runtime.store_mut().play_transition_with_options(owner, "t0", TransitionPlayOpti
 起点之前的属性会直接还原，历史音效与起始标签会跳过；已完成补间的结束标签仍可触发。
 正向跳转同时补偿序列帧。`end_time: None` 表示不截断，`reversed: true` 使用反向时间轴。
 
-序列帧可通过 `ObjectStore::set_animation_play_settings(movie, settings)` 配置
-`AnimationPlaySettings { start, end, times, end_at }`：`end/end_at` 为 `-1` 时
-使用末帧，`times <= 0` 无限循环。配置不改变 Playing 或速度；到达指定结束帧后，
-下一次满足该帧计时条件的更新定位到 `end_at`，发布一次 `GuiAnimationComplete`。`rewind_animation`
-只重置位置和计时，重新配置播放才会清除已结束状态。
+序列帧和 Loader 的动画通过 `GuiObjectCommand` 控制：
+
+```rust,ignore
+commands.write_message(GuiObjectCommand::new(movie, GuiObjectAction::SetAnimationPlaySettings(
+    GuiAnimationPlaySettings { start: 1, end: 3, times: 2, end_at: 2 },
+)));
+commands.entity(movie).observe(|event: On<GuiAnimationComplete>, gui: GuiQuery| {
+    let state = gui.animation(event.entity).unwrap();
+    assert!(state.is_ended());
+});
+```
+
+`SetAnimationPlaying`、`SetAnimationFrame`、`SetAnimationTimeScale`、
+`SetAnimationPlaySettings`、`AdvanceAnimation` 和 `RewindAnimation` 在 Sync 同帧
+更新播放器、纹理及 `GuiAnimationState`；可在 `PostLayout` 中继续发命令，不会重复
+推进帧时间。`gui.animation(entity)` 同时接受根拥有者与控件视图，提供当前帧、帧数、
+播放开关、速度和结束标志，未变化时保留组件变更标记。静态或未就绪 Loader 的帧数为 0。
+
+`end/end_at` 为 `-1` 时使用末帧，`times <= 0` 无限循环。配置不改变 Playing 或速度；
+到达结束帧后，下一次满足帧计时条件的更新定位到 `end_at`，在 Sync 刷新最终快照后
+向控件视图实体发送一次 `GuiAnimationComplete { entity }`，也可用 `MessageReader`
+读取。完成保留 Playing 开关；`RewindAnimation` 只重置位置和计时，重新配置播放才会
+清除已结束状态。新播放、资源替换或销毁会取消尚未发布的旧完成通知。
+`AdvanceAnimation(seconds)` 按原版 DeltaTime 补偿帧数，不受 Playing 和速度影响。
+负数或非有限时长/速度、非法播放区间会忽略，帧号按资源范围夹取。
 
 过渡支持运行中按标签编辑：`set_transition_value` 使用类型化的
 `TransitionEditValue`，`set_transition_target` 修改同名起点的目标，

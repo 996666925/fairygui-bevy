@@ -48,7 +48,9 @@
 //! the component is removed. `GuiRootInstance` exposes a stable entity-owned
 //! root reference when advanced package operations need it.
 
+pub mod animation;
 pub mod asset;
+pub use animation::{GuiAnimationPlaySettings, GuiAnimationState};
 pub mod backend;
 mod compositor;
 pub mod ecs;
@@ -128,21 +130,22 @@ enum SyncPhase {
 pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiAnimationComplete,
-        GuiButtonSelected, GuiConfig, GuiControllerState, GuiControllers, GuiDisplay,
-        GuiDragBounds, GuiDragCommand, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop,
-        GuiDropTarget, GuiEvent, GuiFont, GuiGlobalWaitCommand, GuiGlobalWaitError,
-        GuiGlobalWaitSettings, GuiGlobalWaitState, GuiIcon, GuiInputCommand, GuiInputSettings,
-        GuiInputState, GuiLink, GuiListContent, GuiListContentError, GuiListContentState,
-        GuiListItem, GuiListItemClick, GuiListRow, GuiListSelection, GuiListState,
-        GuiLoaderFailure, GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand,
-        GuiObjectDragState, GuiObjectInfo, GuiPopupCommand, GuiPopupMenu, GuiPopupState,
-        GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
-        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSpace, GuiSystems, GuiText,
-        GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
-        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
-        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
+        GuiAnimationPlaySettings, GuiAnimationState, GuiButtonSelected, GuiConfig,
+        GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
+        GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
+        GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
+        GuiIcon, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink, GuiListContent,
+        GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick, GuiListRow,
+        GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
+        GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPopupCommand,
+        GuiPopupMenu, GuiPopupState, GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease,
+        GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue,
+        GuiSpace, GuiSystems, GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback,
+        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
+        GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
+        GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,
+        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
+        PopupMenuTemplates,
     };
 }
 
@@ -236,7 +239,6 @@ impl Plugin for FairyGuiPlugin {
                 movie::advance_movie_clips,
                 runtime::advance_inline_movie_clips,
                 movie::discard_unused_animation_commands,
-                runtime::emit_animation_completions,
             )
                 .chain()
                 .in_set(GuiSystems::Advance),
@@ -248,7 +250,7 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_icons,
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
-                ecs::sync_gui_transitions,
+                (ecs::sync_gui_transitions, animation::sync_state).chain(),
                 popup::sync_popup_state,
                 runtime::windows::sync_window_state,
                 runtime::global_wait::sync_global_wait_state,
@@ -285,6 +287,13 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 runtime::spawn_pending_roots,
                 runtime::spawn_pending_objects,
+                (
+                    runtime::sync_movie_sources,
+                    movie::sync_movie_controls,
+                    movie::discard_unused_animation_commands,
+                    animation::sync_state,
+                )
+                    .chain(),
                 ecs::sync_gui_objects,
                 ecs::sync_gui_properties,
                 ecs::sync_gui_icons,
@@ -301,6 +310,12 @@ impl Plugin for FairyGuiPlugin {
             (
                 input::apply_scroll_drag_commands,
                 runtime::apply_object_commands,
+                (
+                    runtime::sync_movie_sources,
+                    movie::sync_movie_controls,
+                    movie::discard_unused_animation_commands,
+                )
+                    .chain(),
                 runtime::sync_text_inputs,
                 runtime::content::sync_content_layout,
                 (
@@ -369,6 +384,8 @@ impl Plugin for FairyGuiPlugin {
                 (
                     runtime::emit_transition_completions,
                     tween::emit_completions,
+                    animation::sync_state,
+                    runtime::emit_animation_completions,
                 )
                     .chain(),
                 popup::sync_popup_state,

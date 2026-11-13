@@ -120,6 +120,15 @@ pub enum GuiObjectAction {
     SetButtonSelected(bool),
     /// Let application observers own selection instead of native click toggles.
     SetButtonChangeStateOnClick(bool),
+    SetAnimationPlaying(bool),
+    SetAnimationFrame(i32),
+    SetAnimationTimeScale(f32),
+    /// Configure a range and seek to its start, preserving Playing and speed.
+    SetAnimationPlaySettings(crate::GuiAnimationPlaySettings),
+    /// Native DeltaTime catch-up in seconds, independent of Playing and speed.
+    AdvanceAnimation(f32),
+    /// Rewind without restarting an ended finite playback.
+    RewindAnimation,
     SetSliderValue(i32),
     SetControllerPage {
         name: String,
@@ -513,16 +522,29 @@ pub fn emit_transition_completions(
     }
 }
 
-/// 有限次数序列帧播放到达结束帧后的完成通知，在 Advance 阶段发布一次。
-#[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GuiAnimationComplete(pub GObjectId);
+/// Finite movie playback completion on the control view, after Sync refreshes
+/// its final frame and state. Available to per-entity observers and readers.
+#[derive(Message, EntityEvent, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuiAnimationComplete {
+    pub entity: Entity,
+}
 
 pub fn emit_animation_completions(
     mut runtime: NonSendMut<GuiRuntime>,
     mut completed: MessageWriter<GuiAnimationComplete>,
+    players: Query<&crate::movie::MovieClipPlayer>,
+    mut commands: Commands,
 ) {
     for object in runtime.store_mut().take_animation_completions() {
-        completed.write(GuiAnimationComplete(object));
+        if let Some(entity) = runtime.entity_of(object)
+            && players
+                .get(entity)
+                .is_ok_and(crate::movie::MovieClipPlayer::is_ended)
+        {
+            let event = GuiAnimationComplete { entity };
+            completed.write(event);
+            commands.trigger(event);
+        }
     }
 }
 
@@ -2140,6 +2162,26 @@ pub(crate) fn apply_object_commands(
             continue;
         };
         match &command.action {
+            GuiObjectAction::SetAnimationPlaying(playing) => {
+                runtime.store_mut().set_animation_playing(object, *playing);
+            }
+            GuiObjectAction::SetAnimationFrame(frame) => {
+                runtime.store_mut().set_animation_frame(object, *frame);
+            }
+            GuiObjectAction::SetAnimationTimeScale(scale) => {
+                runtime.store_mut().set_animation_time_scale(object, *scale);
+            }
+            GuiObjectAction::SetAnimationPlaySettings(settings) => {
+                runtime
+                    .store_mut()
+                    .set_animation_play_settings(object, *settings);
+            }
+            GuiObjectAction::AdvanceAnimation(seconds) => {
+                runtime.store_mut().advance_animation(object, *seconds);
+            }
+            GuiObjectAction::RewindAnimation => {
+                runtime.store_mut().rewind_animation(object);
+            }
             GuiObjectAction::Tween {
                 target,
                 duration,

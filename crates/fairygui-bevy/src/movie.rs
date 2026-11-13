@@ -365,45 +365,8 @@ pub fn advance_movie_clips(
     let dt = time.delta_secs();
 
     for (object, mut player, image) in &mut query {
-        let Some((playing, frame)) = runtime.store().animation_state(object.0) else {
+        if !apply_controls(runtime.store_mut(), object.0, &mut player) {
             continue;
-        };
-        if let Some(scale) = runtime.store().animation_time_scale(object.0)
-            && player.time_scale() != scale
-        {
-            player.set_time_scale(scale);
-        }
-        if playing {
-            player.play();
-        } else {
-            player.stop();
-        }
-        let commands = runtime.store_mut().take_animation_commands(object.0);
-        if !commands.iter().any(|command| {
-            matches!(
-                command,
-                AnimationCommand::SetFrame(_)
-                    | AnimationCommand::SetPlaySettings(_)
-                    | AnimationCommand::Rewind
-            )
-        }) && frame != player.frame() as i32
-        {
-            player.goto(frame);
-        }
-        for command in commands {
-            match command {
-                AnimationCommand::SetFrame(frame) if frame != player.frame() as i32 => {
-                    player.goto(frame)
-                }
-                AnimationCommand::SetFrame(_) => {}
-                AnimationCommand::Advance(seconds) => {
-                    player.advance_time(seconds);
-                }
-                AnimationCommand::SetPlaySettings(settings) => {
-                    player.set_play_settings(settings);
-                }
-                AnimationCommand::Rewind => player.rewind(),
-            }
         }
         if runtime.store().is_on_stage(object.0) {
             player.advance(dt);
@@ -418,6 +381,72 @@ pub fn advance_movie_clips(
             .store_mut()
             .report_animation_frame(object.0, player.frame() as i32);
     }
+}
+
+/// Apply commands at both Sync command boundaries without advancing time a
+/// second time. Fresh sources consume queued controls before content projection.
+pub(crate) fn sync_movie_controls(
+    mut query: Query<(
+        &crate::GObjectRef,
+        &mut MovieClipPlayer,
+        Option<&mut ImageNode>,
+    )>,
+    mut runtime: NonSendMut<crate::GuiRuntime>,
+) {
+    for (object, mut player, image) in &mut query {
+        if !apply_controls(runtime.store_mut(), object.0, &mut player) {
+            continue;
+        }
+        if let Some(mut image) = image {
+            player.apply_frame(&mut image);
+        }
+        runtime
+            .store_mut()
+            .report_animation_frame(object.0, player.frame() as i32);
+    }
+}
+
+fn apply_controls(
+    store: &mut fairygui_core::object::ObjectStore,
+    object: fairygui_core::GObjectId,
+    player: &mut MovieClipPlayer,
+) -> bool {
+    let Some((playing, frame)) = store.animation_state(object) else {
+        return false;
+    };
+    if let Some(scale) = store.animation_time_scale(object) {
+        player.set_time_scale(scale);
+    }
+    if playing {
+        player.play();
+    } else {
+        player.stop();
+    }
+    let commands = store.take_animation_commands(object);
+    if !commands.iter().any(|command| {
+        matches!(
+            command,
+            AnimationCommand::SetFrame(_)
+                | AnimationCommand::SetPlaySettings(_)
+                | AnimationCommand::Rewind
+        )
+    }) && frame != player.frame() as i32
+    {
+        player.goto(frame);
+    }
+    for command in commands {
+        match command {
+            AnimationCommand::SetFrame(frame) => player.goto(frame),
+            AnimationCommand::Advance(seconds) => {
+                player.advance_time(seconds);
+            }
+            AnimationCommand::SetPlaySettings(settings) => {
+                player.set_play_settings(settings);
+            }
+            AnimationCommand::Rewind => player.rewind(),
+        }
+    }
+    true
 }
 
 /// Sources that resolved to a static image have no player to consume commands.

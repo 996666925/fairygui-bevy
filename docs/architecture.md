@@ -632,11 +632,24 @@ elapsed time and overrides the underlying swing step. DeltaTime bypasses these
 range states, matching the reference's separate advance method.
 `AnimationPlaySettings` reaches the player through ordered commands. Finite ranges
 hold their end until the next frame-timing threshold, then position at end_at and publish one
-`GuiAnimationComplete` in Advance. Completion leaves Playing unchanged; frame,
+`GuiAnimationComplete { entity }` after Sync. Completion leaves Playing unchanged; frame,
 Playing and rewind do not rearm an ended range. New settings rearm it without
 changing speed/direction/repetition history. Endpoints are clamped to valid clip
 indices. `rewind_animation` resets frame/timing/direction/repetition, while the
 adapter's `sync_status` copies only timing state from another player.
+
+Applications control movies through entity-addressed GuiObjectAction animation
+variants. Source reconciliation and control consumption run at both Sync command
+boundaries, after view spawning and before content projection, without advancing
+elapsed time. This preserves pending root commands and applies PostLayout edits
+to native state, the player and the rendered sprite in the same frame. Advance
+remains the only phase that advances ordinary playback time.
+GuiAnimationState snapshots native Playing/Frame/timeScale plus resolved frame
+count and ended state; unresolved/static/component Loaders have zero frames.
+GuiQuery::animation resolves owners and views, and equal snapshots keep their
+change ticks. Completion publishes both a message and an entity event only after
+the final snapshot; new settings clear unconsumed old completions, source changes
+discard them when the active player is replaced, and disposal removes them.
 
 Shake tasks are created even beyond the selected end. Their nonnegative breakpoint
 is end_time minus the item's original time, including during reverse scheduling;

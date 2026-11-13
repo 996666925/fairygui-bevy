@@ -566,6 +566,7 @@ impl ObjectStore {
         if !settings.is_valid() || self.animation_state(id).is_none() {
             return false;
         }
+        self.completed_animations.retain(|owner| *owner != id);
         self.animation_commands
             .entry(id)
             .or_default()

@@ -270,15 +270,7 @@ fn model_play_settings_reach_delayed_player_and_completion_is_published_once() {
     let mut app = App::new();
     app.insert_non_send(gui)
         .init_resource::<Time>()
-        .add_message::<crate::GuiAnimationComplete>()
-        .add_systems(
-            Update,
-            (
-                advance_movie_clips,
-                crate::runtime::emit_animation_completions,
-            )
-                .chain(),
-        );
+        .add_systems(Update, advance_movie_clips);
     app.update(); // no source yet; the range command must survive
     let entity = app
         .world_mut()
@@ -300,9 +292,10 @@ fn model_play_settings_reach_delayed_player_and_completion_is_published_once() {
     );
     assert_eq!(
         app.world_mut()
-            .resource_mut::<Messages<crate::GuiAnimationComplete>>()
-            .drain()
-            .count(),
+            .non_send_mut::<crate::GuiRuntime>()
+            .store_mut()
+            .take_animation_completions()
+            .len(),
         0
     );
     app.update();
@@ -312,17 +305,18 @@ fn model_play_settings_reach_delayed_player_and_completion_is_published_once() {
     );
     assert_eq!(
         app.world_mut()
-            .resource_mut::<Messages<crate::GuiAnimationComplete>>()
-            .drain()
-            .collect::<Vec<_>>(),
-        vec![crate::GuiAnimationComplete(movie)]
+            .non_send_mut::<crate::GuiRuntime>()
+            .store_mut()
+            .take_animation_completions(),
+        vec![movie]
     );
     app.update();
     assert_eq!(
         app.world_mut()
-            .resource_mut::<Messages<crate::GuiAnimationComplete>>()
-            .drain()
-            .count(),
+            .non_send_mut::<crate::GuiRuntime>()
+            .store_mut()
+            .take_animation_completions()
+            .len(),
         0
     );
     app.world_mut()
