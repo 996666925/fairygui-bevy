@@ -65,12 +65,18 @@ pub struct GuiConfig {
 /// ECS-owned FairyGUI root. Add this component to any entity to create the
 /// named component from an already requested `.fui` asset when it is ready.
 /// Removing the component removes the generated UI tree and its Bevy views.
-#[derive(Component, Debug, Clone, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, PartialEq)]
 pub struct FairyGuiRoot {
     pub asset: Handle<FuiAsset>,
     pub item_name: String,
     /// Detach the root from the stage while keeping its model and views alive.
     pub active: bool,
+    /// Requested logical position. Applied before the first view and when this
+    /// value changes; None leaves native/current geometry unchanged.
+    pub position: Option<Vec2>,
+    /// Requested unscaled size in logical pixels. None keeps exported/current
+    /// size. Changes update the retained root and its relations without rebuilding.
+    pub size: Option<Vec2>,
 }
 
 impl FairyGuiRoot {
@@ -79,7 +85,19 @@ impl FairyGuiRoot {
             asset,
             item_name: item_name.into(),
             active: true,
+            position: None,
+            size: None,
         }
+    }
+
+    pub fn with_position(mut self, position: Vec2) -> Self {
+        self.position = Some(position);
+        self
+    }
+
+    pub fn with_size(mut self, size: Vec2) -> Self {
+        self.size = Some(size);
+        self
     }
 }
 
@@ -224,6 +242,8 @@ struct EcsRootBinding {
     handle: Option<usize>,
     active: bool,
     failed: bool,
+    position: Option<Vec2>,
+    size: Option<Vec2>,
 }
 
 #[derive(Component, Debug)]
@@ -2535,7 +2555,18 @@ pub fn sync_ecs_roots(
         if unchanged {
             let handle = runtime.ecs_roots[&owner].handle;
             if let Some(handle) = handle {
-                if runtime.root_object(handle).is_some() {
+                if let Some(object) = runtime.root_object(handle) {
+                    let binding = &runtime.ecs_roots[&owner];
+                    let position = (binding.position != source.position)
+                        .then_some(source.position)
+                        .flatten();
+                    let size = (binding.size != source.size)
+                        .then_some(source.size)
+                        .flatten();
+                    apply_root_geometry(&mut runtime, object, position, size);
+                    let binding = runtime.ecs_roots.get_mut(&owner).unwrap();
+                    binding.position = source.position;
+                    binding.size = source.size;
                     let active = runtime.ecs_roots[&owner].active;
                     if active != source.active {
                         runtime.set_root_attached(handle, source.active);
@@ -2569,6 +2600,8 @@ pub fn sync_ecs_roots(
                 handle: None,
                 active: source.active,
                 failed: false,
+                position: source.position,
+                size: source.size,
             },
         );
     }
@@ -2620,12 +2653,29 @@ pub fn sync_ecs_roots(
         };
         runtime.set_root_attached(handle, source.active);
         let object = runtime.root_object(handle).unwrap();
+        apply_root_geometry(&mut runtime, object, source.position, source.size);
         let binding = runtime.ecs_roots.get_mut(&owner).unwrap();
         binding.handle = Some(handle);
         binding.active = source.active;
+        binding.position = source.position;
+        binding.size = source.size;
         commands
             .entity(owner)
             .insert(GuiRootInstance { handle, object });
+    }
+}
+
+fn apply_root_geometry(
+    runtime: &mut GuiRuntime,
+    object: GObjectId,
+    position: Option<Vec2>,
+    size: Option<Vec2>,
+) {
+    if let Some(size) = size.filter(|size| size.is_finite() && size.min_element() >= 0.) {
+        runtime.store.set_size(object, size.x, size.y);
+    }
+    if let Some(position) = position.filter(|position| position.is_finite()) {
+        runtime.store.set_xy(object, position.x, position.y);
     }
 }
 

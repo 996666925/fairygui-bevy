@@ -94,6 +94,164 @@ fn startup_root_commands_apply_before_the_first_view_is_spawned() {
 }
 
 #[test]
+fn root_geometry_builders_wait_for_assets_apply_before_initialize_and_edit_without_rebuilding() {
+    #[derive(Resource, Default)]
+    struct Initial(Vec<(Vec2, Vec2)>);
+    fn inspect(
+        roots: Query<&GuiRootView, Added<GuiRootView>>,
+        nodes: Query<&Node>,
+        gui: GuiQuery,
+        mut initial: ResMut<Initial>,
+    ) {
+        for view in &roots {
+            let transform = gui.transform(view.0).unwrap();
+            let node = nodes.get(view.0).unwrap();
+            assert_eq!(node.left, Val::Px(transform.position().x));
+            assert_eq!(node.top, Val::Px(transform.position().y));
+            assert_eq!(node.width, Val::Px(transform.size().x));
+            assert_eq!(node.height, Val::Px(transform.size().y));
+            initial.0.push((transform.position(), transform.size()));
+        }
+    }
+    let (mut app, asset) = app();
+    app.init_resource::<Initial>()
+        .add_systems(Update, inspect.in_set(crate::GuiSystems::Initialize));
+    let owner = app
+        .world_mut()
+        .spawn(
+            FairyGuiRoot::new(asset.clone(), "Main")
+                .with_position(Vec2::new(12., 34.))
+                .with_size(Vec2::new(800., 600.)),
+        )
+        .id();
+    for _ in 0..4 {
+        app.update();
+    }
+    assert!(app.world().resource::<Initial>().0.is_empty());
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .position = Some(Vec2::new(25., 35.));
+    load(&mut app, &asset);
+    app.update();
+    assert_eq!(
+        app.world().resource::<Initial>().0,
+        [(Vec2::new(25., 35.), Vec2::new(800., 600.))]
+    );
+    let root = assert_position(&app, owner, Vec2::new(25., 35.));
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    let children = app
+        .world()
+        .get::<GuiObjectInfo>(view)
+        .unwrap()
+        .children()
+        .to_vec();
+    {
+        let mut source = app.world_mut().get_mut::<FairyGuiRoot>(owner).unwrap();
+        source.position = Some(Vec2::new(77., 88.));
+        source.size = Some(Vec2::new(900., 700.));
+    }
+    app.update();
+    assert_eq!(assert_position(&app, owner, Vec2::new(77., 88.)), root);
+    assert_eq!(app.world().get::<GuiRootView>(owner).unwrap().0, view);
+    assert_eq!(
+        app.world().get::<GuiObjectInfo>(view).unwrap().children(),
+        children
+    );
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        Vec2::new(900., 700.)
+    );
+    // Unchanged creation settings must not overwrite later commands or tweens.
+    send(
+        &mut app,
+        owner,
+        GuiObjectAction::SetPosition(Vec2::new(200., 300.)),
+    );
+    send(
+        &mut app,
+        owner,
+        GuiObjectAction::SetSize(Vec2::new(1000., 800.)),
+    );
+    app.update();
+    for active in [false, true] {
+        app.world_mut()
+            .get_mut::<FairyGuiRoot>(owner)
+            .unwrap()
+            .active = active;
+        app.update();
+        assert_position(&app, owner, Vec2::new(200., 300.));
+        assert_eq!(
+            app.world().get::<GuiTransform>(view).unwrap().size(),
+            Vec2::new(1000., 800.)
+        );
+    }
+    {
+        let mut source = app.world_mut().get_mut::<FairyGuiRoot>(owner).unwrap();
+        source.position = None;
+        source.size = None;
+    }
+    app.update();
+    assert_position(&app, owner, Vec2::new(200., 300.));
+    assert_eq!(app.world().resource::<Initial>().0.len(), 1);
+}
+
+#[test]
+fn root_geometry_validation_and_queued_command_precedence_preserve_native_geometry() {
+    let (mut app, asset) = app();
+    let owner = app
+        .world_mut()
+        .spawn(
+            FairyGuiRoot::new(asset.clone(), "Main")
+                .with_position(Vec2::new(30., 40.))
+                .with_size(Vec2::new(800., 600.)),
+        )
+        .id();
+    send(
+        &mut app,
+        owner,
+        GuiObjectAction::SetPosition(Vec2::new(60., 70.)),
+    );
+    send(
+        &mut app,
+        owner,
+        GuiObjectAction::SetSize(Vec2::new(900., 700.)),
+    );
+    app.update();
+    // Changing geometry does not change source identity or cancel queued commands.
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .position = Some(Vec2::new(33., 44.));
+    load(&mut app, &asset);
+    app.update();
+    let root = assert_position(&app, owner, Vec2::new(60., 70.));
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    for size in [Vec2::new(-1., 100.), Vec2::splat(f32::INFINITY)] {
+        let mut source = app.world_mut().get_mut::<FairyGuiRoot>(owner).unwrap();
+        source.size = Some(size);
+        source.position = Some(Vec2::splat(f32::NAN));
+        app.update();
+        assert_position(&app, owner, Vec2::new(60., 70.));
+        assert_eq!(
+            app.world().get::<GuiTransform>(view).unwrap().size(),
+            Vec2::new(900., 700.)
+        );
+    }
+    {
+        let mut source = app.world_mut().get_mut::<FairyGuiRoot>(owner).unwrap();
+        source.position = Some(Vec2::new(10., 20.));
+        source.size = Some(Vec2::ZERO);
+    }
+    app.update();
+    assert_eq!(assert_position(&app, owner, Vec2::new(10., 20.)), root);
+    assert_eq!(
+        app.world().get::<GuiTransform>(view).unwrap().size(),
+        Vec2::ZERO
+    );
+}
+
+#[test]
 fn delayed_root_commands_outlive_message_retention_preserve_order_and_apply_once() {
     let (mut app, asset) = app();
     let owner = app

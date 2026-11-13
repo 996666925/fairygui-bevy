@@ -117,6 +117,21 @@ fn spawn_menu(mut commands: Commands, assets: Res<AssetServer>) {
 }
 ```
 
+创建时可直接设置尺寸和位置，资产就绪后会在首次布局与视图生成前应用：
+
+```rust,ignore
+commands.spawn(
+    FairyGuiRoot::new(assets.load("ui/Chat.fui"), "Main")
+        .with_size(Vec2::new(800., 600.))
+        .with_position(Vec2::new(100., 50.)),
+);
+```
+
+尺寸和位置使用逻辑像素。之后也可修改根组件上的 `size` / `position`
+（类型均为 `Option<Vec2>`），保留当前实体并更新关联布局；未改变的配置不会覆盖
+命令或动画的结果。默认 `None` 保留导出值，已创建后改回 `None` 保留当前值。
+排队的 `GuiObjectCommand` 在创建配置之后执行。当前实际几何请读取 `GuiTransform`。
+
 运行时会在所有者实体上添加 `GuiRootView`，指向根视图实体。
 `GuiQuery` 只读取 ECS 组件，可按名称或路径找到控件实体并直接挂载业务组件和 observer：
 
