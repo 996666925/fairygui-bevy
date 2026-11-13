@@ -7,9 +7,11 @@ use fairygui_core::{
 };
 
 use crate::{
-    FairyGuiRoot, FuiAsset, GObjectRef, GuiInputSettings, GuiRootInstance, GuiRuntime,
-    PopupMenuTemplates,
+    FairyGuiRoot, FairyGuiWindow, FuiAsset, GObjectRef, GuiInputSettings, GuiRootInstance,
+    GuiRuntime, PopupMenuTemplates,
 };
+
+use crate::runtime::ObjectCommandSource;
 
 #[cfg(test)]
 #[path = "ecs_popup_tests.rs"]
@@ -99,14 +101,16 @@ pub(crate) fn apply_popup_commands(
     objects: Query<&GObjectRef>,
     roots: Query<&GuiRootInstance>,
     sources: Query<&FairyGuiRoot>,
+    window_sources: Query<&FairyGuiWindow>,
     mut removed: RemovedComponents<FairyGuiRoot>,
-    mut pending: Local<Vec<(FairyGuiRoot, GuiPopupCommand)>>,
+    mut removed_windows: RemovedComponents<FairyGuiWindow>,
+    mut pending: Local<Vec<(ObjectCommandSource, GuiPopupCommand)>>,
     assets: Res<Assets<FuiAsset>>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
     settings: Res<GuiInputSettings>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
-    for owner in removed.read() {
+    for owner in removed.read().chain(removed_windows.read()) {
         pending.retain(|(_, command)| command.target() != Some(owner));
     }
     let waiting = std::mem::take(&mut *pending);
@@ -141,11 +145,22 @@ pub(crate) fn apply_popup_commands(
             continue;
         }
         let object = if let Some(target) = command.target() {
-            let source = sources.get(target).ok();
+            let source = sources
+                .get(target)
+                .ok()
+                .cloned()
+                .map(ObjectCommandSource::Root)
+                .or_else(|| {
+                    window_sources
+                        .get(target)
+                        .ok()
+                        .cloned()
+                        .map(ObjectCommandSource::Window)
+                });
             if let Some(expected) = expected
-                && source.is_none_or(|source| {
-                    source.asset != expected.asset || source.item_name != expected.item_name
-                })
+                && source
+                    .as_ref()
+                    .is_none_or(|source| !source.same_template(&expected))
             {
                 continue;
             }
@@ -153,13 +168,14 @@ pub(crate) fn apply_popup_commands(
                 .get(target)
                 .map(|reference| reference.0)
                 .or_else(|_| roots.get(target).map(|root| root.object))
-                .ok();
+                .ok()
+                .or_else(|| runtime.ecs_window_object(target));
             if object.is_none() {
                 if !matches!(command, GuiPopupCommand::Hide { .. })
                     && let Some(source) = source
-                    && runtime.ecs_root_pending(target)
+                    && (runtime.ecs_root_pending(target) || runtime.ecs_window_pending(target))
                 {
-                    pending.push((source.clone(), command));
+                    pending.push((source, command));
                 }
                 continue;
             }
@@ -178,9 +194,17 @@ pub(crate) fn apply_popup_commands(
         }
         match command {
             GuiPopupCommand::Show { position, .. } => {
+                if runtime.window_index(object.unwrap()).is_some() {
+                    tracing::warn!("use GuiWindowCommand to show a native window");
+                    continue;
+                }
                 runtime.show_popup(object.unwrap(), Point::new(position.x, position.y));
             }
             GuiPopupCommand::Hide { .. } => {
+                if object.is_some_and(|object| runtime.window_index(object).is_some()) {
+                    tracing::warn!("use GuiWindowCommand to hide a native window");
+                    continue;
+                }
                 runtime.hide_popup(object);
             }
             GuiPopupCommand::ShowMenu { menu, position, .. } => {

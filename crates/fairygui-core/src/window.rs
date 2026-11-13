@@ -22,6 +22,7 @@ pub struct Window {
     owner: GObjectId,
     /// 内容组件。
     content: Option<GObjectId>,
+    content_area: Option<GObjectId>,
     /// 窗框组件。
     frame: Option<GObjectId>,
     /// 关闭按钮。
@@ -52,6 +53,7 @@ impl Window {
         Self {
             owner,
             content: None,
+            content_area: None,
             frame: None,
             close_button: None,
             drag_area: None,
@@ -74,6 +76,9 @@ impl Window {
     /// 内容组件。
     pub fn content(&self) -> Option<GObjectId> {
         self.content
+    }
+    pub fn content_area(&self) -> Option<GObjectId> {
+        self.content_area
     }
 
     /// 窗框组件。
@@ -108,12 +113,29 @@ impl Window {
     /// 编辑器里的约定是：窗框组件叫 `frame`，内容组件叫 `content`，关闭按钮
     /// 在窗框里叫 `closeButton`，而拖拽区域就是窗框本身（也就是标题栏所在）。
     /// 认不出来的部分留空，窗口依然可用，只是少了对应的行为。
-    pub fn attach_parts(&mut self, store: &ObjectStore) {
+    pub fn attach_parts(&mut self, store: &mut ObjectStore) {
         let owner = self.owner;
 
         if let Some(frame) = store.child_by_name(owner, FRAME_NAME) {
             self.frame = Some(frame);
-            self.drag_area = Some(frame);
+            self.drag_area = store.child_by_name(frame, "dragArea").or(Some(frame));
+            if let Some(area) = self.drag_area
+                && store
+                    .object(area)
+                    .is_some_and(|object| object.kind() == crate::package::ObjectType::Graph)
+            {
+                // Native Window.dragArea draws an invisible rectangle so an
+                // otherwise empty GGraph can receive the drag-start gesture.
+                store.set_graph(
+                    area,
+                    crate::widget::GraphData {
+                        graph_type: 1,
+                        fill_color: crate::color::Color::new(0., 0., 0., 0.),
+                        ..Default::default()
+                    },
+                );
+            }
+            self.content_area = store.child_by_name(frame, "contentArea");
             if let Some(button) = store.child_by_name(frame, CLOSE_BUTTON_NAME) {
                 self.close_button = Some(button);
             }
@@ -304,6 +326,16 @@ impl Window {
         self.modal_wait_pane
     }
 
+    /// Remove the retained pane binding after closing any current request.
+    pub fn clear_modal_wait_pane(&mut self, store: &mut ObjectStore) -> Option<GObjectId> {
+        self.close_modal_wait(store, 0);
+        self.modal_wait_pane.take()
+    }
+
+    pub fn modal_wait_request(&self) -> u32 {
+        self.requesting_cmd
+    }
+
     /// 是否正在模态等待。
     pub fn is_modal_waiting(&self) -> bool {
         self.modal_waiting
@@ -322,11 +354,25 @@ impl Window {
         };
 
         // 面板盖住内容区；没有内容区时盖住整个窗口。
-        match self.content.and_then(|id| {
-            store
-                .object(id)
-                .map(|object| (object.position(), object.size()))
-        }) {
+        let area = self
+            .content_area
+            .and_then(|id| {
+                let area = store.object(id)?;
+                let origin =
+                    store.scroll_relative_rect(self.frame?, self.owner, crate::geom::Rect::ZERO)?;
+                Some((
+                    Point::new(origin.x + area.x(), origin.y + area.y()),
+                    area.size(),
+                ))
+            })
+            .or_else(|| {
+                self.content.and_then(|id| {
+                    store
+                        .object(id)
+                        .map(|object| (object.position(), object.size()))
+                })
+            });
+        match area {
             Some((pos, size)) => {
                 store.set_xy(pane, pos.x, pos.y);
                 store.set_size(pane, size.width, size.height);
@@ -339,7 +385,10 @@ impl Window {
             }
         }
 
-        store.set_parent(pane, Some(self.owner));
+        let count = store
+            .object(self.owner)
+            .map_or(0, |owner| owner.children().len());
+        store.add_child_at(self.owner, pane, count);
         store.set_visible(pane, true);
     }
 

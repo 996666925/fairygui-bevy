@@ -60,8 +60,14 @@ mod text_image_colors;
 mod text_stroke;
 #[path = "smoke_virtual_list.rs"]
 mod virtual_list;
+#[path = "smoke_window_wait.rs"]
+mod window_wait;
 #[path = "smoke_windows.rs"]
 mod windows;
+
+pub(super) fn install_window_wait(app: &mut App) {
+    window_wait::install(app);
+}
 
 pub(super) fn install_windows(app: &mut App) {
     windows::install(app);

@@ -140,7 +140,7 @@ impl ObjectStore {
         self.scroll_object_to_view(list, item, true, false)
     }
 
-    pub(super) fn scroll_relative_rect(
+    pub(crate) fn scroll_relative_rect(
         &self,
         source: GObjectId,
         owner: GObjectId,

@@ -322,6 +322,19 @@ pub fn register(app: &mut App) {
 
 /// Shared policy for clicks, wheel input, capture and drop targets.
 pub(crate) fn eligible(runtime: &GuiRuntime, target: GObjectId) -> bool {
+    // Plain GTextField keeps mouseEnabled=false. A picked button title can
+    // still delegate to its logical control; standalone titles must pass through.
+    // Markup fields retain the existing vector/bitmap link interaction path.
+    if runtime.store().object(target).is_some_and(|object| {
+        object.kind() == fairygui_core::package::ObjectType::Text
+            && stable_target(runtime, target) == target
+            && object
+                .control()
+                .as_text_field()
+                .is_none_or(|text| !text.ubb_enabled && !text.html_enabled)
+    }) {
+        return false;
+    }
     if !runtime.store().is_on_stage(target) {
         return false;
     }

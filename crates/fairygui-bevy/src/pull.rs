@@ -31,8 +31,10 @@ pub(crate) fn apply_pull_commands(
         let object = objects
             .get(target)
             .map(|reference| reference.0)
-            .or_else(|_| roots.get(target).map(|root| root.object));
-        let Ok(object) = object else {
+            .or_else(|_| roots.get(target).map(|root| root.object))
+            .ok()
+            .or_else(|| runtime.ecs_window_object(target));
+        let Some(object) = object else {
             continue;
         };
         if header {

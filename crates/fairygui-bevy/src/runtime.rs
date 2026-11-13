@@ -1179,7 +1179,7 @@ impl GuiRuntime {
             self.object_assets.entry(root_object).or_insert(handle);
         }
         let mut window = fairygui_core::window::Window::new(owner);
-        window.attach_parts(&self.store);
+        window.attach_parts(&mut self.store);
         window.set_modal(self.root.as_mut()?, modal);
         if center {
             window.center_on(&mut self.store, self.root.as_ref()?);
@@ -1210,6 +1210,7 @@ impl GuiRuntime {
 
         let mut window = window;
         let owner = window.owner();
+        window.close_modal_wait(&mut self.store, 0);
         window.hide(&mut self.store, root);
         self.windows[index] = window;
 
@@ -1249,6 +1250,15 @@ impl GuiRuntime {
         let mut removed = vec![owner];
         self.store
             .for_each_descendant(owner, &mut |id| removed.push(id));
+        let retained_wait = window
+            .modal_wait_pane()
+            .filter(|&pane| !removed.contains(&pane));
+        if let Some(pane) = retained_wait {
+            removed.push(pane);
+            self.store
+                .for_each_descendant(pane, &mut |id| removed.push(id));
+            self.store.remove(pane);
+        }
 
         // 事件要在销毁之前派发：派发会沿对象树冒泡，对象没了就无处可派。
         self.dispatch(fairygui_core::object::EventKind::WindowHide, owner);
@@ -1907,12 +1917,12 @@ pub fn emit_gui_events(
 }
 
 #[derive(Clone)]
-enum ObjectCommandSource {
+pub(crate) enum ObjectCommandSource {
     Root(FairyGuiRoot),
     Window(windows::FairyGuiWindow),
 }
 impl ObjectCommandSource {
-    fn same_template(&self, other: &Self) -> bool {
+    pub(crate) fn same_template(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Root(a), Self::Root(b)) => a.asset == b.asset && a.item_name == b.item_name,
             (Self::Window(a), Self::Window(b)) => a.asset == b.asset && a.item_name == b.item_name,

@@ -448,7 +448,7 @@ mod window_tests {
             .show_window(&package, "WindowA", false, size)
             .unwrap();
         let owner = runtime.window(second).unwrap().owner();
-        let frame = runtime.window(second).unwrap().frame().unwrap();
+        let frame = runtime.window(second).unwrap().drag_area().unwrap();
         let mut gesture = Gesture::begin_excluding(&mut runtime, frame, &[], &[]);
         assert_eq!(gesture.owner(&runtime), Some(owner));
         let initial = runtime.store().object(owner).unwrap().position();

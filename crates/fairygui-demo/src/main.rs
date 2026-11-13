@@ -14,6 +14,7 @@ use fairygui_core::object::GObjectId;
 mod catalog;
 mod demos;
 mod loop_list_demo;
+mod modal_wait_demo;
 mod pull_refresh_demo;
 mod smoke;
 mod window_demo;
@@ -131,6 +132,7 @@ fn main() -> AppExit {
             .after(advance_demo_behaviors),
     )
     .add_systems(Startup, setup_camera)
+    .add_systems(Update, modal_wait_demo::advance.in_set(GuiSystems::Respond))
     .add_systems(
         Update,
         loop_list_demo::update.in_set(GuiSystems::PostLayout),
@@ -155,6 +157,7 @@ fn main() -> AppExit {
             demos::initialize_demo_roots,
             bind_demo_observers,
             window_demo::bind,
+            modal_wait_demo::bind,
         )
             .chain()
             .after(GuiSystems::Sync),
@@ -167,7 +170,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-windows") {
+    if std::env::args().any(|arg| arg == "--smoke-window-wait") {
+        smoke::install_window_wait(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-windows") {
         smoke::install_windows(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-masks") {
         smoke::install_masks(&mut app);

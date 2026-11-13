@@ -345,6 +345,23 @@ commands.write_message(GuiWindowCommand::new(owner, GuiWindowAction::Show));
 可将拥有者作为其他业务实体的子实体，让其销毁时一起回收。Basics/Window 的两个
 按钮使用这一套 API；`--smoke-windows` 验证真实关闭按钮、复用、拖动、居中和销毁。
 
+窗口可用 `modal_wait: Some("WindowModalWaiting".into())` 配置等待面板模板，也支持
+已登记包的 `ui://` 地址。第一次 `ShowModalWait { request }` 才创建，
+`CloseModalWait { request }` 只关闭匹配的非零请求；传零可结束当前任何请求。
+等待面板在 `frame/contentArea` 内覆盖内容，标题栏和关闭按钮仍可使用；存在显式
+`frame/dragArea` 时窗口优先使用它。没有内容区域时使用窗口的内容组件或整个窗口。
+
+`GuiWindowState` 提供 `is_modal_waiting()`、`modal_wait_request()`、
+`modal_wait_pane()` 和 `modal_wait_error()`。模板解析失败仍保留逻辑等待请求，
+不会生成遮挡面板；登记依赖后重新发送 Show 可重试。未配置模板时也仅记录请求。
+关闭等待会撤下面板并保留对象和实体，再次等待复用它；隐藏窗口会同时结束等待。
+替换面板模板回收旧面板，销毁窗口也会回收已经撤下的面板。菜单的 `ShowMenu.source`
+现在同样接受窗口拥有者，并按窗口资产来源解析模板、保留资产等待请求；普通弹层的
+Show/Hide 使用 `GuiPopupCommand`，原生窗口的显示仍使用 `GuiWindowCommand`。
+ModalWaiting 示例中的 Open Window / Refresh 按钮通过 ECS 驱动三秒等待，专项窗口
+回归可运行 `--smoke-window-wait`。普通文字按原版不作为鼠标命中目标，父控件仍可
+接收点击；富文本链接与输入框继续使用各自的交互路径。
+
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
 会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长和分页阈值。
 导出包显式设置的显示方式及触摸/回弹开关优先。配置在创建时捕获，修改资源影响

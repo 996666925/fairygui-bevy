@@ -133,6 +133,35 @@ redirect an in-progress gesture through a compacted window array. Hiding or
 disabling drag cancels the gesture. Basics/Window uses entity observers and
 retained child owner entities for its two exported windows.
 
+Window modal waiting uses `FairyGuiWindow.modal_wait` as a lazy local/cross-package
+template. ShowModalWait records a request token; CloseModalWait with a nonzero
+token only closes that request, while zero is unrestricted. GuiWindowState exposes
+waiting status, token, pane entity and the unresolved/failed template reference.
+Failed template construction retains the logical request without a blocking view;
+another Show retries after dependencies are registered. With no template only the
+request is recorded. Native source: `Window.ts` lays out the wait pane within the
+frame's contentArea, appends it above content, and closes waiting on UNDISPLAY.
+
+Explicit frame/dragArea takes precedence; assigning an empty GGraph drag area
+creates the native invisible rectangle hit surface. Wait layout converts the
+frame origin to window coordinates and adds the contentArea offset, retaining
+the native unscaled content dimensions. The title and close button stay outside
+the wait pane. Close detaches and hides the retained view, Hide also closes the
+request, and window disposal includes detached wait panes and their descendants.
+Changing the template clears and disposes the previous pane. ModalWaiting's
+window buttons and delayed completion use only ECS observers, components and
+commands; `--smoke-window-wait` verifies actual input blocking, title dragging,
+timed completion, pane reuse, close-during-wait and disposal.
+
+Popup menu template sources and pull-lock targets also resolve window owners.
+Window-backed pending menu requests retain asset/item identity and cancel on
+replacement/removal/despawn just like root requests. Plain popup Show/Hide rejects
+native window objects to preserve their distinct visibility and modality state.
+Plain GTextField nodes are excluded from pointer hit candidates, matching native
+mouseEnabled=false even if their logical touchable flag is true. Ancestor controls
+remain candidates; rich text links and input fields keep separate hit/edit paths.
+This prevents title text above a sibling dragArea from stealing the window drag.
+
 ## Frame contract
 
 Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these ordered
