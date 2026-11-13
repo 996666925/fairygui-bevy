@@ -25,7 +25,11 @@ impl ScrollPane {
         if !step.is_finite() {
             return false;
         }
-        let step = if step == 0. { super::SCROLL_STEP } else { step };
+        let step = if step == 0. {
+            self.motion.default_scroll_step
+        } else {
+            step
+        };
         let changed = self.scroll_step != step;
         self.scroll_step = step;
         changed

@@ -14,6 +14,6 @@ pub use bar::{
 };
 pub(crate) use pane::snapping_position;
 pub use pane::{
-    PullRelease, RefreshBarLayout, SCROLL_STEP, ScrollBarDisplayType, ScrollLoop, ScrollPane,
-    ScrollPhysics, ScrollType,
+    PullRelease, RefreshBarLayout, SCROLL_STEP, ScrollBarDisplayType, ScrollDefaults, ScrollLoop,
+    ScrollPane, ScrollPhysics, ScrollType,
 };

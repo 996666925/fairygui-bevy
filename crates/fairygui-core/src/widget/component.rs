@@ -269,7 +269,7 @@ fn build_component(
         let saved = buffer.position();
         if buffer.seek(0, 7)? {
             let mut pane = crate::scroll::ScrollPane::default();
-            pane.setup(&mut buffer, package.string_table())?;
+            pane.setup_with_defaults(&mut buffer, package.string_table(), ctx.scroll_defaults)?;
             pane.set_view_size(crate::geom::Size::new(source_width, source_height));
             component.scroll_pane = Some(pane);
         }
@@ -341,7 +341,7 @@ fn build_component(
         let child = if let Some((owner, source_index)) = source {
             let owner_ctx = LoadContext {
                 branch_index: owner.branch_index_of(&construction.branch),
-                content_scale_level: ctx.content_scale_level,
+                ..*ctx
             };
             create_with_context(store, owner, source_index, &owner_ctx, construction)?
         } else {
@@ -431,10 +431,23 @@ fn build_component(
                     super::extend::setup_slider(data, &mut buffer, table, child_pos, kind)?;
                 }
                 ControlData::List(data) => {
-                    super::list::read_list(data, &mut buffer, table, child_pos, true)?;
+                    super::list::read_list(
+                        data,
+                        &mut buffer,
+                        table,
+                        child_pos,
+                        true,
+                        ctx.scroll_defaults,
+                    )?;
                 }
                 ControlData::Tree(data) => {
-                    super::tree::read_tree(data, &mut buffer, table, child_pos)?;
+                    super::tree::read_tree(
+                        data,
+                        &mut buffer,
+                        table,
+                        child_pos,
+                        ctx.scroll_defaults,
+                    )?;
                 }
                 ControlData::ComboBox(data) => {
                     super::combo::read_combo(data, &mut buffer, table, child_pos)?;

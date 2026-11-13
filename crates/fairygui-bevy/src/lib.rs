@@ -62,11 +62,11 @@ mod text_stroke;
 pub use asset::{FuiAsset, FuiAssetLoader, FuiLoadError};
 pub use input::{GuiInputSettings, GuiInputState};
 pub use runtime::{
-    FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiEvent, GuiFont, GuiLink,
-    GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
-    GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease, GuiRootInstance,
-    GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback, GuiTransitionHook,
-    PopupMenuTemplates,
+    FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
+    GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
+    GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease,
+    GuiRootInstance, GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback,
+    GuiTransitionHook, PopupMenuTemplates,
 };
 
 pub use fairygui_core as core;
@@ -88,7 +88,7 @@ pub enum GuiSystems {
 pub mod prelude {
     pub use crate::{
         FairyGuiPlugin, FairyGuiRoot, FuiAsset, GObjectRef, GuiAnimationComplete,
-        GuiButtonSelected, GuiEvent, GuiFont, GuiInputSettings, GuiInputState, GuiLink,
+        GuiButtonSelected, GuiConfig, GuiEvent, GuiFont, GuiInputSettings, GuiInputState, GuiLink,
         GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
         GuiObjectAction, GuiObjectCommand, GuiProgressValue, GuiPullRelease, GuiRootInstance,
         GuiRuntime, GuiSliderValue, GuiSystems, GuiTextInput, GuiTransitionCallback,
@@ -138,10 +138,12 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiObjectCommand>()
         .init_asset::<FuiAsset>()
         .init_asset_loader::<FuiAssetLoader>()
+        .init_resource::<GuiConfig>()
         .init_non_send::<GuiRuntime>()
         .add_systems(
             Update,
             (
+                runtime::sync_ui_config,
                 runtime::advance_async_builds,
                 runtime::advance_scrolls,
                 runtime::advance_transitions,

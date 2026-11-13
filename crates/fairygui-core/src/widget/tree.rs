@@ -189,9 +189,17 @@ pub(crate) fn read_tree(
     buffer: &mut ByteBuffer<'_>,
     table: &StringTable,
     begin_pos: usize,
+    scroll_defaults: crate::scroll::ScrollDefaults,
 ) -> Result<()> {
     // 布局部分与列表一致，但项表结构不同，因此交给下面的分支单独处理。
-    super::list::read_list(&mut data.list, buffer, table, begin_pos, false)?;
+    super::list::read_list(
+        &mut data.list,
+        buffer,
+        table,
+        begin_pos,
+        false,
+        scroll_defaults,
+    )?;
 
     // ---- 块 9：树自己的设置 ----
     if buffer.seek(begin_pos, 9)? {

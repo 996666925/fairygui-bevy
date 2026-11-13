@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     binary::{ByteBuffer, StringTable},
     geom::Size,
-    scroll::{SCROLL_STEP, ScrollBarDisplayType, ScrollType},
+    scroll::{SCROLL_STEP, ScrollBarDisplayType, ScrollDefaults, ScrollType},
 };
 
 pub(crate) fn pane(
@@ -120,4 +120,82 @@ fn smooth_pixels_keep_precision_with_horizontal_fallback_and_native_page_policy(
     );
     assert_eq!(p.scroll_type, ScrollType::Horizontal);
     assert_eq!(p.bar_display, ScrollBarDisplayType::Visible);
+}
+
+#[test]
+fn scroll_setup_uses_global_defaults_only_when_the_export_keeps_defaults() {
+    for default_display in [ScrollBarDisplayType::Auto, ScrollBarDisplayType::Hidden] {
+        for exported_display in 0..=3 {
+            for flags in [0_i32, 16 | 64, 32 | 128, 16 | 32 | 64 | 128] {
+                for effects in [false, true] {
+                    let defaults = ScrollDefaults {
+                        bar_display: default_display,
+                        touch_effect: effects,
+                        bounceback_effect: effects,
+                        scroll_step: 12.5,
+                        paging_threshold: 0.45,
+                    };
+                    let mut bytes = vec![1, exported_display];
+                    bytes.extend_from_slice(&flags.to_be_bytes());
+                    bytes.push(0);
+                    for _ in 0..4 {
+                        bytes.extend_from_slice(&65534_u16.to_be_bytes());
+                    }
+                    let mut pane = ScrollPane::default();
+                    pane.setup_with_defaults(
+                        &mut ByteBuffer::new(&bytes),
+                        &StringTable::default(),
+                        defaults,
+                    )
+                    .unwrap();
+                    let display = if exported_display == 0 {
+                        default_display
+                    } else {
+                        ScrollBarDisplayType::from_code(exported_display as i8)
+                    };
+                    assert_eq!(pane.bar_display, display);
+                    assert_eq!(
+                        pane.mouse_wheel_enabled(),
+                        display != ScrollBarDisplayType::Hidden
+                    );
+                    assert_eq!(
+                        pane.touch_effect,
+                        flags & 16 != 0 || (flags & 32 == 0 && effects)
+                    );
+                    assert_eq!(
+                        pane.bounceback_effect,
+                        flags & 64 != 0 || (flags & 128 == 0 && effects)
+                    );
+                    assert_eq!(pane.scroll_step(), 12.5);
+                    assert_eq!(pane.paging_threshold(), 0.45);
+                    assert!(pane.set_scroll_step(50.));
+                    assert!(pane.set_scroll_step(0.));
+                    assert_eq!(pane.scroll_step(), 12.5);
+                    pane.set_view_size(Size::new(100., 80.));
+                    pane.set_content_size(Size::new(100., 480.));
+                    let moved = display != ScrollBarDisplayType::Hidden;
+                    assert_eq!(pane.mouse_wheel(1.), moved);
+                    assert_eq!(pane.pos().y, if moved { 25. } else { 0. });
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn global_paging_threshold_changes_short_drag_page_snapping() {
+    let mut pane = ScrollPane {
+        page_mode: true,
+        scroll_type: ScrollType::Both,
+        ..ScrollPane::default()
+    };
+    pane.set_paging_threshold(0.45);
+    pane.set_view_size(Size::new(100., 100.));
+    pane.set_content_size(Size::new(300., 300.));
+    assert!(pane.set_pos_animated(0., 40., false));
+    assert_eq!(pane.pos().y, 0.);
+
+    pane.set_paging_threshold(0.3);
+    assert!(pane.set_pos_animated(0., 40., false));
+    assert_eq!(pane.pos().y, 100.);
 }

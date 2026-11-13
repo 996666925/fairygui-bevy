@@ -360,6 +360,7 @@ pub(crate) fn read_list(
     table: &StringTable,
     begin_pos: usize,
     with_items: bool,
+    scroll_defaults: crate::scroll::ScrollDefaults,
 ) -> Result<()> {
     // ---- 块 5：布局 ----
     if buffer.seek(begin_pos, 5)? {
@@ -389,7 +390,7 @@ pub(crate) fn read_list(
             let saved = buffer.position();
             if buffer.seek(begin_pos, 7)? {
                 let mut pane = crate::scroll::ScrollPane::default();
-                pane.setup(buffer, table)?;
+                pane.setup_with_defaults(buffer, table, scroll_defaults)?;
                 data.component.scroll_pane = Some(pane);
             }
             buffer.set_position(saved);
@@ -514,7 +515,15 @@ mod tests {
             let mut data = ListData::default();
             let mut buffer = ByteBuffer::new(&bytes);
             buffer.set_position(3);
-            read_list(&mut data, &mut buffer, &StringTable::new(), 0, true).unwrap();
+            read_list(
+                &mut data,
+                &mut buffer,
+                &StringTable::new(),
+                0,
+                true,
+                crate::scroll::ScrollDefaults::default(),
+            )
+            .unwrap();
             assert_eq!(data.selection_controller, i32::from(controller));
             bytes.pop();
             assert!(
@@ -523,7 +532,8 @@ mod tests {
                     &mut ByteBuffer::new(&bytes),
                     &StringTable::new(),
                     0,
-                    true
+                    true,
+                    crate::scroll::ScrollDefaults::default(),
                 )
                 .is_err()
             );

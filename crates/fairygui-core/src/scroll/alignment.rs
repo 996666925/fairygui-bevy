@@ -91,6 +91,7 @@ impl ScrollPane {
                     self.view_size.width,
                     self.content_size.width,
                     max.x,
+                    self.motion.paging_threshold,
                 ),
                 align_page(
                     value.y,
@@ -98,6 +99,7 @@ impl ScrollPane {
                     self.view_size.height,
                     self.content_size.height,
                     max.y,
+                    self.motion.paging_threshold,
                 ),
             )
         } else if self.snap_to_item {
@@ -187,9 +189,9 @@ impl ScrollPane {
                     let threshold = if change.abs() > view {
                         0.5
                     } else if change < 0. {
-                        0.3
+                        self.motion.paging_threshold
                     } else {
-                        1. - 0.3
+                        1. - self.motion.paging_threshold
                     };
                     if -target[i] - page * view > size * threshold {
                         page += 1.;
@@ -226,7 +228,14 @@ impl ScrollPane {
     }
 }
 
-fn align_page(value: f32, displayed: f32, view: f32, content: f32, overlap: f32) -> f32 {
+fn align_page(
+    value: f32,
+    displayed: f32,
+    view: f32,
+    content: f32,
+    overlap: f32,
+    paging_threshold: f64,
+) -> f32 {
     if !view.is_finite() || view <= 0. || value < 0. || value > overlap {
         return value;
     }
@@ -244,9 +253,9 @@ fn align_page(value: f32, displayed: f32, view: f32, content: f32, overlap: f32)
     let threshold = if change.abs() > view {
         0.5
     } else if change < 0. {
-        0.3
+        paging_threshold
     } else {
-        1. - 0.3
+        1. - paging_threshold
     };
     if delta > page_size * threshold {
         page += 1.;

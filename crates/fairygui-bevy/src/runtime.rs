@@ -38,6 +38,13 @@ pub struct GuiSliderValue(pub i32);
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct GuiButtonSelected(pub bool);
 
+/// Global FairyGUI defaults captured by the next package construction pass.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+pub struct GuiConfig {
+    /// Global scroll-pane defaults used while loading `.fui` components.
+    pub scroll: fairygui_core::scroll::ScrollDefaults,
+}
+
 /// ECS-owned FairyGUI root. Add this component to any entity to create the
 /// named component from an already requested `.fui` asset when it is ready.
 /// Removing the component removes the generated UI tree and its Bevy views.
@@ -1441,6 +1448,11 @@ impl GuiRuntime {
     /// 已登记的包。
     pub fn registry(&self) -> &fairygui_core::package::PackageRegistry {
         &self.registry
+    }
+
+    /// Apply global scroll defaults to roots created after this call.
+    pub fn set_scroll_defaults(&mut self, defaults: fairygui_core::scroll::ScrollDefaults) {
+        self.registry.set_scroll_defaults(defaults);
     }
 
     /// 把音效地址解析成包内记录的文件名。
@@ -3528,6 +3540,12 @@ pub(crate) fn sync_dirty(
 /// 每帧推进分帧构建。已完成的构建会转成正式界面并在下一帧生成实体。
 pub fn advance_async_builds(mut runtime: NonSendMut<GuiRuntime>, assets: Res<Assets<FuiAsset>>) {
     runtime.advance_builds(&assets);
+}
+
+pub fn sync_ui_config(config: Res<GuiConfig>, mut runtime: NonSendMut<GuiRuntime>) {
+    if config.is_changed() {
+        runtime.set_scroll_defaults(config.scroll);
+    }
 }
 
 /// 把引擎算出的文本尺寸回填到核心层，驱动自动尺寸策略。

@@ -23,6 +23,7 @@ use crate::geom::{Point, Rect};
 use crate::package::item::{
     AtlasSprite, ObjectType, PackageItem, PackageItemType, PixelHitTestData,
 };
+use crate::scroll::ScrollDefaults;
 
 /// 包体魔数，字节序列为 `F G U I`。
 const PACKAGE_MAGIC: u32 = 0x46475549;
@@ -40,12 +41,14 @@ mod block {
 /// 加载上下文。
 ///
 /// 分支与内容缩放等级会影响资源的实际取用，因此解析依赖资源的接口都要带上它。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct LoadContext {
     /// 当前分支编号，`-1` 表示未启用分支。
     pub branch_index: i32,
     /// 内容缩放等级，`0` 表示标准分辨率。
     pub content_scale_level: i32,
+    /// FairyGUI global fallbacks used by scroll panes with no exported override.
+    pub scroll_defaults: ScrollDefaults,
 }
 
 impl LoadContext {
@@ -54,6 +57,7 @@ impl LoadContext {
         Self {
             branch_index: -1,
             content_scale_level: 0,
+            scroll_defaults: ScrollDefaults::new(),
         }
     }
 }

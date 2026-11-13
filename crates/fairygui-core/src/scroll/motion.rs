@@ -24,9 +24,11 @@ impl Default for ScrollPhysics {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub(super) struct Motion {
     pub scroll_revision: u64,
+    pub paging_threshold: f64,
+    pub default_scroll_step: f32,
     pub looping: super::looping::LoopState,
     pub virtual_snap: Option<std::sync::Arc<crate::widget::VirtualGeometry>>,
     pub refresh: super::refresh::RefreshState,
@@ -39,6 +41,28 @@ pub(super) struct Motion {
     velocity_scale: f64,
     idle: f64,
     moved: bool,
+}
+
+impl Default for Motion {
+    fn default() -> Self {
+        Self {
+            scroll_revision: 0,
+            paging_threshold: 0.3,
+            default_scroll_step: super::SCROLL_STEP,
+            looping: Default::default(),
+            virtual_snap: None,
+            refresh: Default::default(),
+            physics: ScrollPhysics::default(),
+            tween: None,
+            pending_release: None,
+            origin: [0.0; 2],
+            delta: [0.0; 2],
+            velocity: [0.0; 2],
+            velocity_scale: 0.0,
+            idle: 0.0,
+            moved: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

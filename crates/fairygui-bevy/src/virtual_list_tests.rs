@@ -362,6 +362,84 @@ fn ecs_commands_set_progress_by_entity() {
 }
 
 #[test]
+fn gui_config_is_captured_by_ecs_roots_without_rebuilding_existing_panes() {
+    let package = FuiPackage::parse(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+    )
+    .unwrap();
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+        .init_asset::<FuiAsset>()
+        .init_resource::<GuiConfig>()
+        .insert_non_send(GuiRuntime::default())
+        .add_systems(Update, (sync_ui_config, sync_ecs_roots).chain());
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package,
+            res_key: "ui/VirtualList".into(),
+        });
+    let first = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset.clone(), "Main"))
+        .id();
+    app.world_mut().resource_mut::<GuiConfig>().scroll = fairygui_core::scroll::ScrollDefaults {
+        bar_display: fairygui_core::scroll::ScrollBarDisplayType::Auto,
+        touch_effect: false,
+        bounceback_effect: false,
+        scroll_step: 14.0,
+        paging_threshold: 0.4,
+    };
+
+    app.update();
+    let first_root = app.world().get::<GuiRootInstance>(first).unwrap().object;
+    let first_list = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .child_by_name(first_root, "mailList")
+        .unwrap();
+    {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        let pane = runtime.store().scroll_pane(first_list).unwrap();
+        assert_eq!(pane.scroll_step(), 14.0);
+        assert_eq!(pane.paging_threshold(), 0.4);
+    }
+
+    app.world_mut()
+        .resource_mut::<GuiConfig>()
+        .scroll
+        .scroll_step = 21.0;
+    let second = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let second_root = app.world().get::<GuiRootInstance>(second).unwrap().object;
+    let runtime = app.world().non_send::<GuiRuntime>();
+    let second_list = runtime
+        .store()
+        .child_by_name(second_root, "mailList")
+        .unwrap();
+    assert_eq!(
+        runtime
+            .store()
+            .scroll_pane(second_list)
+            .unwrap()
+            .scroll_step(),
+        21.0
+    );
+    assert_eq!(
+        runtime
+            .store()
+            .scroll_pane(first_list)
+            .unwrap()
+            .scroll_step(),
+        14.0
+    );
+    assert_eq!(runtime.ecs_root_object(first), Some(first_root));
+}
+
+#[test]
 fn renderer_mutations_are_reconciled_before_bevy_row_views_are_spawned() {
     use std::cell::Cell;
 

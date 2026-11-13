@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::package::{FuiPackage, LoadContext};
+use crate::scroll::ScrollDefaults;
 
 /// 包注册表。
 #[derive(Debug, Default)]
@@ -23,6 +24,8 @@ pub struct PackageRegistry {
     vars: HashMap<String, String>,
     /// 内容缩放等级，决定是否取用高清替代资源。
     content_scale_level: i32,
+    /// Global UIConfig fallbacks for scroll panes.
+    scroll_defaults: ScrollDefaults,
 }
 
 impl PackageRegistry {
@@ -122,6 +125,14 @@ impl PackageRegistry {
         self.content_scale_level = level.max(0);
     }
 
+    pub fn scroll_defaults(&self) -> ScrollDefaults {
+        self.scroll_defaults
+    }
+
+    pub fn set_scroll_defaults(&mut self, defaults: ScrollDefaults) {
+        self.scroll_defaults = defaults.sanitized();
+    }
+
     /// 读取全局变量。
     pub fn get_var(&self, key: &str) -> Option<&str> {
         self.vars.get(key).map(String::as_str)
@@ -139,6 +150,7 @@ impl PackageRegistry {
         LoadContext {
             branch_index: package.branch_index_of(&self.branch),
             content_scale_level: self.content_scale_level,
+            scroll_defaults: self.scroll_defaults,
         }
     }
 

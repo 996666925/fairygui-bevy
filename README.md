@@ -102,6 +102,10 @@ ECS 组件和消息驱动。`GuiObjectAction` 覆盖位置、尺寸、显隐、�
 列表、进度条、滑动条和按钮实体分别带有 `GuiListSelection`、`GuiProgressValue`、
 `GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在同帧 Sync 后反映最新的控件状态；
 状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
+全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
+会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长和分页阈值。
+导出包显式设置的显示方式及触摸/回弹开关优先。配置在创建时捕获，修改资源影响
+后续创建的界面，已有界面保持当前设置。
 
 Windows MSVC 示例构建自动使用 8 KiB PDB 页，容纳完整 Bevy 调试符号，避免默认页容量
 触发 `LNK1318 LIMIT`；其他目标保持原有链接配置。

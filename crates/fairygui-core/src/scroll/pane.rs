@@ -89,6 +89,58 @@ impl ScrollBarDisplayType {
     }
 }
 
+/// Global fallbacks used when a component's scroll block does not override them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScrollDefaults {
+    /// Fallback when the exported scroll block uses the Default bar mode.
+    pub bar_display: ScrollBarDisplayType,
+    /// Fallback when neither touch-effect flag is set in the export.
+    pub touch_effect: bool,
+    /// Fallback when neither bounce-effect flag is set in the export.
+    pub bounceback_effect: bool,
+    /// Non-page wheel step in logical pixels.
+    pub scroll_step: f32,
+    /// Page snap fraction used for short drags and programmatic alignment.
+    pub paging_threshold: f64,
+}
+
+impl Default for ScrollDefaults {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ScrollDefaults {
+    /// Native UIConfig defaults.
+    pub const fn new() -> Self {
+        Self {
+            bar_display: ScrollBarDisplayType::Visible,
+            touch_effect: true,
+            bounceback_effect: true,
+            scroll_step: SCROLL_STEP,
+            paging_threshold: 0.3,
+        }
+    }
+
+    /// Replace nonfinite numbers with defaults and clamp the page fraction.
+    pub fn sanitized(self) -> Self {
+        let fallback = Self::default();
+        Self {
+            scroll_step: if self.scroll_step.is_finite() {
+                self.scroll_step
+            } else {
+                fallback.scroll_step
+            },
+            paging_threshold: if self.paging_threshold.is_finite() {
+                self.paging_threshold.clamp(0.0, 1.0)
+            } else {
+                fallback.paging_threshold
+            },
+            ..self
+        }
+    }
+}
+
 /// 滚动容器。
 #[derive(Debug, Clone)]
 pub struct ScrollPane {
@@ -211,6 +263,22 @@ const BOUNCE_RATE: f32 = 0.5;
 pub const SCROLL_STEP: f32 = 25.0;
 
 impl ScrollPane {
+    /// Captured page snap fraction for programmatic commands and drag release.
+    pub fn paging_threshold(&self) -> f64 {
+        self.motion.paging_threshold
+    }
+
+    /// Update the fraction without changing an already planned animation.
+    pub fn set_paging_threshold(&mut self, threshold: f64) -> bool {
+        if !threshold.is_finite() {
+            return false;
+        }
+        let threshold = threshold.clamp(0.0, 1.0);
+        let changed = self.motion.paging_threshold != threshold;
+        self.motion.paging_threshold = threshold;
+        changed
+    }
+
     pub(crate) fn scroll_revision(&self) -> u64 {
         self.motion.scroll_revision
     }
@@ -220,8 +288,29 @@ impl ScrollPane {
     }
     /// 读取滚动配置。`buffer` 的位置应当是块 7 的起点。
     pub fn setup(&mut self, buffer: &mut ByteBuffer<'_>, table: &StringTable) -> Result<()> {
+        self.setup_with_defaults(buffer, table, ScrollDefaults::default())
+    }
+
+    /// Read a scroll block using the current global UIConfig fallbacks.
+    pub fn setup_with_defaults(
+        &mut self,
+        buffer: &mut ByteBuffer<'_>,
+        table: &StringTable,
+        defaults: ScrollDefaults,
+    ) -> Result<()> {
+        let defaults = defaults.sanitized();
+        self.bar_display = defaults.bar_display;
+        self.touch_effect = defaults.touch_effect;
+        self.bounceback_effect = defaults.bounceback_effect;
+        self.scroll_step = defaults.scroll_step;
+        self.motion.default_scroll_step = defaults.scroll_step;
+        self.set_paging_threshold(defaults.paging_threshold);
+
         self.scroll_type = ScrollType::from_code(buffer.read_i8()?);
-        self.bar_display = ScrollBarDisplayType::from_code(buffer.read_i8()?);
+        let exported_bar_display = ScrollBarDisplayType::from_code(buffer.read_i8()?);
+        if exported_bar_display != ScrollBarDisplayType::Default {
+            self.bar_display = exported_bar_display;
+        }
         self.mouse_wheel_enabled = self.bar_display != ScrollBarDisplayType::Hidden;
 
         let flags = buffer.read_i32()? as u32;

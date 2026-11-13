@@ -2,8 +2,10 @@
 
 use fairygui_core::GObjectId;
 use fairygui_core::object::ObjectStore;
-use fairygui_core::package::{FuiPackage, LoadContext, PackageItemType};
-use fairygui_core::widget::create_from_package;
+use fairygui_core::package::{FuiPackage, LoadContext, PackageItemType, PackageRegistry};
+use fairygui_core::scroll::{ScrollBarDisplayType, ScrollDefaults};
+use fairygui_core::widget::{create_from_package, create_from_package_with_registry};
+use std::sync::Arc;
 
 const BASICS: &[u8] = include_bytes!("fixtures/Basics.fui");
 
@@ -44,6 +46,52 @@ fn sample_package_contains_scrollable_containers() {
     assert!(
         find_scrollable(&package).is_some(),
         "官方示例包中应当包含可滚动容器"
+    );
+}
+
+#[test]
+fn package_registry_scroll_defaults_reach_nested_component_and_list_panes() {
+    let package = FuiPackage::parse("Basics", BASICS).expect("parse basics package");
+    let mut registry = PackageRegistry::default();
+    registry.add(Arc::new(package.clone()), "ui/Basics");
+    registry.set_scroll_defaults(ScrollDefaults {
+        bar_display: ScrollBarDisplayType::Auto,
+        touch_effect: false,
+        bounceback_effect: false,
+        scroll_step: 12.5,
+        paging_threshold: 0.45,
+    });
+
+    let mut list_panes = 0;
+    let mut component_panes = 0;
+    for name in ["Demo_List", "Demo_Clip&Scroll"] {
+        let index = package.item_index_by_name(name).unwrap();
+        let mut store = ObjectStore::new();
+        let context = registry.load_context(&package);
+        let root =
+            create_from_package_with_registry(&mut store, &package, index, &context, &registry)
+                .unwrap();
+        let mut objects = vec![root];
+        store.for_each_descendant(root, &mut |id| objects.push(id));
+        for object in objects {
+            if let Some(pane) = store.scroll_pane(object) {
+                assert_eq!(pane.scroll_step(), 12.5);
+                assert_eq!(pane.paging_threshold(), 0.45);
+                if matches!(
+                    store.object(object).unwrap().control(),
+                    fairygui_core::widget::ControlData::List(_)
+                ) {
+                    list_panes += 1;
+                } else {
+                    component_panes += 1;
+                }
+            }
+        }
+    }
+    assert!(list_panes > 0, "inline lists receive the configuration");
+    assert!(
+        component_panes > 0,
+        "nested component resources receive the configuration"
     );
 }
 
