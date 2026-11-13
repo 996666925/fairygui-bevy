@@ -400,8 +400,8 @@ fn drive(
             assert_eq!(state.clicks.len(), 1);
             let click = &state.clicks[0];
             assert_eq!(
-                (click.event.target, click.item, click.index),
-                (state.list.unwrap(), state.rows[2], 2)
+                (click.event.target, Some(click.item), click.index),
+                (state.list.unwrap(), runtime.entity_of(state.rows[2]), 2)
             );
             assert!(
                 (point(

@@ -41,10 +41,74 @@ fn fixture() -> (App, FuiPackage, GObjectId) {
             content::sync_content_layout,
             sync_dirty,
             sync_stage_hierarchy,
+            loader_status::sync_loader_states,
         )
             .chain(),
     );
     (app, package, loader)
+}
+
+#[test]
+fn loader_state_component_tracks_failure_pending_ready_empty_and_keeps_unchanged_ticks() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, _, loader) = fixture();
+    app.update();
+    let view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(loader)
+        .unwrap();
+    assert_eq!(
+        app.world().get::<GuiLoaderState>(view),
+        Some(&GuiLoaderState::Failed(GuiLoaderFailure::MissingResource))
+    );
+    let tick = app
+        .world()
+        .entity(view)
+        .get_ref::<GuiLoaderState>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(view)
+            .get_ref::<GuiLoaderState>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store
+        .apply_icon_to(loader, "ui://Basics/PopupMenuItem");
+    app.world_mut()
+        .run_system_once(loader_status::sync_loader_states)
+        .unwrap();
+    assert_eq!(
+        app.world().get::<GuiLoaderState>(view),
+        Some(&GuiLoaderState::Loading),
+        "URL changes must not expose the previous failure"
+    );
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiLoaderState>(view),
+        Some(&GuiLoaderState::Ready)
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store
+        .apply_icon_to(loader, "");
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiLoaderState>(view),
+        Some(&GuiLoaderState::Empty)
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store
+        .remove(loader);
+    app.update();
+    assert!(app.world().get_entity(view).is_err());
 }
 
 #[test]

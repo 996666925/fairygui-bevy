@@ -8,6 +8,12 @@ use bevy::picking::{
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
 
+#[path = "smoke_bag.rs"]
+mod bag;
+pub(super) fn install_bag(app: &mut App) {
+    bag::install(app);
+}
+
 #[path = "smoke_bitmap_rich_text.rs"]
 mod bitmap_rich_text;
 #[path = "smoke_bitmap_text.rs"]

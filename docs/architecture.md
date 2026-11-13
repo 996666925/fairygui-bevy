@@ -210,10 +210,35 @@ The binding lifetime follows its tree view, so root disposal reclaims everything
 GuiTreeState node snapshots expose optional content keys; exported unconfigured
 nodes have no key. node_by_key resolves the current logical index and entity.
 CLICK_ITEM also enters the ordinary GuiEvent entity observer path once on its
-list/tree, without logical bubbling. Existing message consumers still receive the
-full typed list payload. Observers read freshly synchronized selection/hierarchy.
+list/tree, without logical bubbling. GuiListItemClick is both an EntityEvent and
+a buffered Message. It targets the list/tree view and carries the clicked row
+entity and logical data index, Shift/Ctrl and native pointer/touch payload. View
+identities are captured when materialized input emits the notification, so later
+pool reuse cannot retarget the event. The index is an input-time snapshot; the row
+may have a different virtual binding in later frames. Notifications without view
+identities are resolved from GObjectRef views before publication or discarded.
+Each path publishes once after native selection, including selection-disabled
+and deselection clicks. Observers can query the actual clicked item without
+deriving it from selection and send object commands for the same Sync phase.
+Observers read freshly synchronized selection/hierarchy.
 The TreeView demo builds the second tree from ECS data with nested folders, file
 icons and the native movie icon, and observes each tree entity for item clicks.
+
+The Bag demo owns a hidden FairyGuiWindow as a ChildOf its page, configures 45
+virtual pagination rows and binds a GuiListItemClick observer to that list. Each
+opening creates an inventory snapshot shared by the renderer, keeping values
+stable while rows are recycled. Item icons use the official external PNG assets;
+clicking copies the row's icon into a preview Loader and label. Native page dots
+and scroll/controller bindings remain responsible for navigation. Closing retains
+the window, and page disposal reclaims the window owner, views and pooled rows.
+
+GuiLoaderState is also a read-only component on Loader views, available through
+GuiQuery::loader. Projection runs before Publish, before PostLayout and at Sync
+end, preserving change ticks when equal. Pending URL changes immediately project
+Empty/Loading rather than a preceding URL's Ready/Failed result. The normal load
+status reconciler provides decoded-image, component and movie results and error
+causes on its following pass. The Bag smoke checks the actual external PNG reaches
+Ready through this ECS snapshot before taking its screenshot.
 
 `GuiSystems::PostLayout` is nested inside Sync, between native list refresh/view
 spawning and final property projection. Fresh hierarchy, geometry, text, display,

@@ -56,16 +56,6 @@ pub fn bind(
         commands.entity(owner).insert(Bound);
     }
 }
-fn click_node(event: On<GuiEvent>, gui: GuiQuery) {
-    if event.event.kind != fairygui_bevy::core::object::EventKind::ClickItem {
-        return;
-    }
-    let Some(tree) = gui.tree(event.entity) else {
-        return;
-    };
-    if let Some(index) = tree.selected_nodes().first()
-        && let Some(row) = tree.node(*index).and_then(|node| node.view())
-    {
-        info!("tree node: {}", gui.text(row).unwrap_or_default());
-    }
+fn click_node(event: On<GuiListItemClick>, gui: GuiQuery) {
+    info!("tree node: {}", gui.text(event.item).unwrap_or_default());
 }

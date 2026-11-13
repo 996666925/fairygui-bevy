@@ -187,6 +187,26 @@ IME 预编辑或翻译/UBB 渲染结果。无文本属性的控件没有 `GuiTex
 `SetTouchable(bool)` 通过命令修改输入开关。富文本链接消息 `GuiLink.entity`
 直接提供原始目标的控件实体，可据此查询、发命令或匹配业务组件。
 
+列表和树可在控件实体上直接监听 `GuiListItemClick`，无需扫描全局消息或读取选择：
+
+```rust,ignore
+commands.entity(list).observe(on_item);
+
+fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
+    info!("item {}: {:?}", event.index, gui.text(event.item));
+}
+```
+
+`entity` 是列表/树视图，`item` 是实际点击的行实体，`index` 是点击时的逻辑数据索引，
+循环列表也不暴露内部记录索引。事件在选择处理后发布一次，不冒泡；禁用选择或
+点击取消选中也会发布，保留 Shift/Ctrl、指针位置和触摸 ID。也可通过
+`MessageReader<GuiListItemClick>` 消费同一通知。虚拟行可能在后续帧复用，保存数据
+身份时使用本次 `index`，不要从稍后的行状态反推。
+
+`GuiLoaderState` 是 Loader 视图上的只读组件，也可通过 `gui.loader(entity)` 查询
+`Empty`、`Loading`、`Ready` 或具体失败原因。URL 改变时不会继续暴露旧 URL 的失败
+结果；状态在 Publish 前、PostLayout 前和 Sync 末尾投影，未变化时保留变更标记。
+
 输入框通过 `GuiInputCommand::Focus(entity)` 获取焦点，`Blur` 释放 GUI 输入焦点；
 `GuiInputState::focused_entity()` 返回实际输入框视图实体。`GuiTextInput.entity`
 也指向该输入框，可在 Respond 中响应 Enter 并保留编辑会话：
@@ -448,6 +468,12 @@ commands.write_message(GuiWindowCommand::new(owner, GuiWindowAction::Show));
 复用同一对象和实体。移除组件或销毁拥有者才会回收整个窗口，模态切换保留窗口层级。
 可将拥有者作为其他业务实体的子实体，让其销毁时一起回收。Basics/Window 的两个
 按钮使用这一套 API；`--smoke-windows` 验证真实关闭按钮、复用、拖动、居中和销毁。
+
+Bag 示例也通过子实体拥有 `BagWin` 窗口，每次打开生成 45 条物品数据，由
+`GuiVirtualList` 渲染当前分页。点击行的 `GuiListItemClick` observer 直接读取该行图标，
+更新预览 Loader 和地址文字；使用官方示例的十张外部 PNG。关闭窗口保留视图，
+关闭所属页面则连同物品行和窗口一起回收。`--smoke-bag` 验证真实按钮/行点击、
+外部图片解码、第三页与页控制器联动、关闭重开和页面销毁。
 
 窗口可用 `modal_wait: Some("WindowModalWaiting".into())` 配置等待面板模板，也支持
 已登记包的 `ui://` 地址。第一次 `ShowModalWait { request }` 才创建，

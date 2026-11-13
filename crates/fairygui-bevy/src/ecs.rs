@@ -412,6 +412,7 @@ pub struct GuiQuery<'w, 's> {
     transforms: Query<'w, 's, &'static GuiTransform>,
     texts: Query<'w, 's, &'static GuiText>,
     icons: Query<'w, 's, &'static GuiIcon>,
+    loaders: Query<'w, 's, &'static crate::GuiLoaderState>,
     displays: Query<'w, 's, &'static GuiDisplay>,
     scrolls: Query<'w, 's, &'static GuiScrollState>,
     transitions: Query<'w, 's, &'static GuiTransitions>,
@@ -453,6 +454,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn icon(&self, entity: Entity) -> Option<&str> {
         Some(self.icons.get(self.view(entity)?).ok()?.value())
+    }
+
+    pub fn loader(&self, entity: Entity) -> Option<&crate::GuiLoaderState> {
+        self.loaders.get(self.view(entity)?).ok()
     }
 
     pub fn display(&self, entity: Entity) -> Option<&GuiDisplay> {

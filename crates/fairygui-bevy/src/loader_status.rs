@@ -12,12 +12,49 @@ pub enum GuiLoaderFailure {
 
 /// Current adapter load state, updated during Sync. Missing ui:// packages fail
 /// immediately, as native lookup does, and may recover when registered/loaded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Projected onto Loader views before Publish, PostLayout and at Sync end.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuiLoaderState {
     Empty,
     Loading,
     Ready,
     Failed(GuiLoaderFailure),
+}
+
+pub(crate) fn sync_loader_states(
+    mut commands: Commands,
+    runtime: NonSend<GuiRuntime>,
+    views: Query<(Entity, &GObjectRef, Option<&GuiLoaderState>)>,
+) {
+    for (entity, reference, current) in &views {
+        if runtime.entity_of(reference.0) != Some(entity) {
+            continue;
+        }
+        let next = runtime.store.object(reference.0).and_then(|object| {
+            let ControlData::Loader(data) = object.control() else {
+                return None;
+            };
+            let url = data.url.as_deref().unwrap_or_default();
+            Some(if url.is_empty() {
+                GuiLoaderState::Empty
+            } else {
+                runtime
+                    .loader_status
+                    .get(&reference.0)
+                    .filter(|status| status.url == url)
+                    .map_or(GuiLoaderState::Loading, |status| status.state)
+            })
+        });
+        match next {
+            Some(next) if current != Some(&next) => {
+                commands.entity(entity).insert(next);
+            }
+            None if current.is_some() => {
+                commands.entity(entity).remove::<GuiLoaderState>();
+            }
+            _ => {}
+        }
+    }
 }
 
 pub(super) struct LoaderStatus {

@@ -305,6 +305,7 @@ mod templates;
 pub(crate) use loader_components::sync_loader_components;
 #[path = "loader_status.rs"]
 mod loader_status;
+pub(crate) use loader_status::sync_loader_states;
 pub(crate) use loader_status::sync_loader_status;
 pub use loader_status::{GuiLoaderFailure, GuiLoaderState};
 pub(crate) use popup_widgets::cleanup_retained_popups;
@@ -357,13 +358,27 @@ pub struct GuiTextInput {
 /// One completed click on a list row, published after selection. Virtual rows
 /// report their logical item index, independent of the current physical child.
 /// Native CLICK_ITEM is emitted on the list even when selection did not change.
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Message, Debug, Clone)]
 pub struct GuiListItemClick {
+    /// List/tree view receiving this target-only event.
+    pub entity: Entity,
     pub event: fairygui_core::object::UiEvent,
-    pub item: GObjectId,
+    /// Clicked row view. Use this directly even when selection is disabled or
+    /// the click toggled the row out of a multiple selection.
+    pub item: Entity,
     pub index: usize,
     pub shift: bool,
     pub ctrl: bool,
+}
+
+#[derive(Debug, Clone)]
+struct PendingListItemClick {
+    event: fairygui_core::object::UiEvent,
+    item: GObjectId,
+    index: usize,
+    shift: bool,
+    ctrl: bool,
+    views: Option<(Entity, Entity)>,
 }
 
 /// Native target-only pull release, published before application Respond.
@@ -397,11 +412,36 @@ pub fn emit_pull_release_messages(
 }
 
 pub fn emit_list_item_messages(
+    mut commands: Commands,
     mut runtime: NonSendMut<GuiRuntime>,
     mut messages: MessageWriter<GuiListItemClick>,
+    entities: Query<(Entity, &GObjectRef)>,
 ) {
-    for event in runtime.list_clicks.drain(..) {
-        messages.write(event);
+    let clicks = std::mem::take(&mut runtime.list_clicks);
+    let resolve = |object| {
+        runtime.entity_of(object).or_else(|| {
+            entities
+                .iter()
+                .find_map(|(entity, reference)| (reference.0 == object).then_some(entity))
+        })
+    };
+    for pending in clicks {
+        let Some((entity, item)) = pending
+            .views
+            .or_else(|| resolve(pending.event.target).zip(resolve(pending.item)))
+        else {
+            continue;
+        };
+        let event = GuiListItemClick {
+            entity,
+            item,
+            event: pending.event,
+            index: pending.index,
+            shift: pending.shift,
+            ctrl: pending.ctrl,
+        };
+        messages.write(event.clone());
+        commands.trigger(event);
     }
 }
 
@@ -512,7 +552,7 @@ pub struct GuiRuntime {
     events: fairygui_core::object::EventQueue,
     links: Vec<fairygui_core::object::UiEvent>,
     input_events: Vec<GuiTextInput>,
-    list_clicks: Vec<GuiListItemClick>,
+    list_clicks: Vec<PendingListItemClick>,
     pub(crate) focused_input: Option<GObjectId>,
     pub(crate) input_focus_request: Option<Option<GObjectId>>,
     pub(crate) input_submit: Option<(GObjectId, bool)>,
@@ -1945,12 +1985,13 @@ impl GuiRuntime {
         event.touch_id = touch_id;
         self.events.push(event.clone());
         self.gui_events.push(event.clone());
-        self.list_clicks.push(GuiListItemClick {
+        self.list_clicks.push(PendingListItemClick {
             event,
             item,
             index,
             shift,
             ctrl,
+            views: self.entity_of(list).zip(self.entity_of(item)),
         });
     }
 }

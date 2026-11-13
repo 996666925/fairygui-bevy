@@ -36,6 +36,7 @@ pub(super) fn fixture() -> (App, GObjectId, Vec<GObjectId>, Vec<Entity>) {
         (list, rows)
     };
     let mut entities = Vec::new();
+    app.world_mut().spawn(GObjectRef(list));
     for &row in &rows {
         let (entity, _) = target(&mut app, 20);
         app.world_mut()
@@ -193,6 +194,7 @@ fn registered_bar_track_and_arrows_scroll_without_row_events_or_selection() {
         (source, parts)
     };
     let (source, parts) = parts;
+    app.world_mut().spawn(GObjectRef(source));
     assert_eq!(
         app.world()
             .non_send::<GuiRuntime>()
@@ -224,7 +226,7 @@ fn registered_bar_track_and_arrows_scroll_without_row_events_or_selection() {
             messages[0].item,
             messages[0].index
         ),
-        (source, rows[2], 2)
+        (source, entities[2], 2)
     );
     for (offset, direction) in [
         (0, 1.),
@@ -419,7 +421,7 @@ fn actual_pointer_router_applies_modifiers_and_emits_one_targeted_item_message_a
             .drain()
             .collect();
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].item, rows[index]);
+        assert_eq!(messages[0].item, entities[index]);
         assert_eq!(messages[0].index, index);
         assert_eq!((messages[0].shift, messages[0].ctrl), (shift, ctrl));
     }

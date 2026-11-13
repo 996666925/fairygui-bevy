@@ -44,6 +44,92 @@ fn config(count: usize) -> GuiVirtualList {
     })
 }
 
+#[derive(Resource, Default)]
+struct ItemEvents(Vec<crate::GuiListItemClick>);
+
+fn observe_item(
+    event: On<crate::GuiListItemClick>,
+    rows: Query<&GuiListRow>,
+    selection: Query<&crate::GuiListSelection>,
+    mut log: ResMut<ItemEvents>,
+    mut commands: Commands,
+) {
+    let row = rows.get(event.item).unwrap();
+    assert_eq!((row.list(), row.index()), (event.entity, event.index));
+    assert!(selection.get(event.entity).unwrap().0.is_empty());
+    log.0.push(event.event().clone());
+    commands.write_message(GuiObjectCommand::new(
+        event.item,
+        GuiObjectAction::SetAlpha(0.42),
+    ));
+}
+
+#[test]
+fn virtual_item_entity_observer_gets_the_clicked_row_without_selection_and_applies_same_frame_commands()
+ {
+    let (mut app, owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.init_resource::<ItemEvents>();
+    app.world_mut()
+        .entity_mut(view)
+        .insert(config(1000))
+        .observe(observe_item);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_list_selection_mode(list, fairygui_core::widget::ListSelectionMode::None);
+    app.update();
+    app.world_mut().write_message(GuiObjectCommand::new(
+        view,
+        GuiObjectAction::ScrollTo {
+            position: Vec2::new(0., 3000.),
+            animated: false,
+        },
+    ));
+    app.update();
+    let row = app.world().get::<GuiListState>(view).unwrap().items()[1];
+    let index = app.world().get::<GuiListRow>(row).unwrap().index();
+    assert!(index > 20, "must report a virtual logical index");
+    let object = app.world().get::<crate::GObjectRef>(row).unwrap().0;
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .emit_list_item_click(
+            object,
+            fairygui_core::Point::new(10., 20.),
+            true,
+            true,
+            Some(7),
+        );
+    app.update();
+    let events = &app.world().resource::<ItemEvents>().0;
+    assert_eq!(events.len(), 1);
+    let event = &events[0];
+    assert_eq!((event.entity, event.item, event.index), (view, row, index));
+    assert!(event.shift && event.ctrl);
+    assert_eq!(event.event.touch_id, Some(7));
+    assert!(!event.event.bubbling);
+    assert_eq!(
+        app.world().get::<crate::GuiDisplay>(row).unwrap().alpha(),
+        0.42
+    );
+    let messages: Vec<_> = app
+        .world_mut()
+        .resource_mut::<Messages<crate::GuiListItemClick>>()
+        .drain()
+        .collect();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(
+        (messages[0].entity, messages[0].item, messages[0].index),
+        (view, row, index)
+    );
+    app.world_mut().despawn(owner);
+    app.update();
+    assert_eq!(app.world().resource::<ItemEvents>().0.len(), 1);
+}
+
 fn assert_list_snapshot(app: &App, list: GObjectId, view: Entity) {
     let runtime = app.world().non_send::<GuiRuntime>();
     let store = runtime.store();

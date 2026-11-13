@@ -246,6 +246,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::ecs_drag_drop::sync_drag_state,
                 runtime::object_drag::sync_object_drag_state,
                 tree::sync_tree_state,
+                runtime::sync_loader_states,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -280,7 +281,7 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_controllers,
                 ecs::sync_gui_scroll_state,
                 (tree::sync_tree_state, list::sync_list_state).chain(),
-                list::sync_virtual_list_state,
+                (list::sync_virtual_list_state, runtime::sync_loader_states).chain(),
             )
                 .chain()
                 .in_set(SyncPhase::Prepare),
@@ -357,7 +358,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::object_drag::prepare_object_drags,
                 runtime::object_drag::sync_object_drag_state,
                 (tree::sync_tree_state, list::sync_list_state).chain(),
-                list::sync_virtual_list_state,
+                (list::sync_virtual_list_state, runtime::sync_loader_states).chain(),
             )
                 .chain()
                 .in_set(SyncPhase::Project)

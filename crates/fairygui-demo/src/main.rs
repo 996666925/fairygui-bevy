@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 use fairygui_core::object::GObjectId;
 
+mod bag_demo;
 mod catalog;
 mod demos;
 mod drag_drop_demo;
@@ -163,6 +164,7 @@ fn main() -> AppExit {
             modal_wait_demo::bind,
             drag_drop_demo::bind,
             tree_demo::bind,
+            bag_demo::bind,
         )
             .chain()
             .after(GuiSystems::Sync),
@@ -175,7 +177,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-tree") {
+    if std::env::args().any(|arg| arg == "--smoke-bag") {
+        smoke::install_bag(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-tree") {
         smoke::install_tree(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-drag-drop") {
         smoke::install_drag_drop(&mut app);

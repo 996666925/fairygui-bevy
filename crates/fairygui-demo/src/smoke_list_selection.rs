@@ -204,7 +204,7 @@ pub(super) fn drive(
             let (message, selections) = log.0.last().unwrap();
             assert_eq!(message.event.kind, EventKind::ClickItem);
             assert_eq!(message.event.target, list);
-            assert_eq!(message.item, state.rows[index]);
+            assert_eq!(Some(message.item), runtime.entity_of(state.rows[index]));
             assert_eq!((message.shift, message.ctrl), (shift, ctrl));
             assert_eq!(
                 selections, &expected,
