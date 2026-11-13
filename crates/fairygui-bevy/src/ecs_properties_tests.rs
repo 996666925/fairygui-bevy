@@ -329,3 +329,188 @@ fn observers_can_write_components_in_the_current_frame_and_editors_are_immediate
     app.update();
     assert!(app.world_mut().gui_mut(view).is_none());
 }
+
+fn range_fixture(item: &str) -> (App, Entity) {
+    let (mut app, owner, _) = fixture(item, true);
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    set_native_range(&mut app, view, 0., 100.);
+    if let Some(mut slider) = app.world_mut().get_mut::<GuiSliderValue>(view) {
+        slider.0 = 25.;
+    } else {
+        app.world_mut().get_mut::<GuiProgressValue>(view).unwrap().0 = 25.;
+    }
+    app.update();
+    (app, view)
+}
+fn set_native_range(app: &mut App, view: Entity, min: f64, max: f64) {
+    let slider = app.world().get::<GuiSliderState>(view).is_some();
+    let mut object = app.world_mut().gui_mut(view).unwrap();
+    if slider {
+        object.set_slider_range(min, max);
+    } else {
+        object.set_progress_range(min, max);
+    }
+}
+fn edit_range(app: &mut App, view: Entity, min: Option<f64>, max: Option<f64>) {
+    if let Some(mut state) = app.world_mut().get_mut::<GuiSliderState>(view) {
+        if let Some(min) = min {
+            state.min = min;
+        }
+        if let Some(max) = max {
+            state.max = max;
+        }
+    } else {
+        let mut state = app.world_mut().get_mut::<GuiProgressState>(view).unwrap();
+        if let Some(min) = min {
+            state.min = min;
+        }
+        if let Some(max) = max {
+            state.max = max;
+        }
+    }
+}
+fn range(app: &App, view: Entity) -> (f64, f64) {
+    if let Some(state) = app.world().get::<GuiSliderState>(view) {
+        (state.min, state.max)
+    } else {
+        let state = app.world().get::<GuiProgressState>(view).unwrap();
+        (state.min, state.max)
+    }
+}
+
+#[test]
+fn range_bounds_merge_native_edits_per_field_and_validate_the_merged_pair() {
+    for item in ["Slider_HZ", "ProgressBar"] {
+        for (native, min, max, expected) in [
+            ((0., 200.), Some(10.), None, (10., 200.)),
+            ((-20., 100.), None, Some(300.), (-20., 300.)),
+            ((20., 200.), Some(50.), Some(250.), (50., 250.)),
+            // Valid only after taking the untouched maximum from native state.
+            ((0., 200.), Some(150.), None, (150., 200.)),
+            // A stale snapshot would incorrectly accept this maximum.
+            ((80., 100.), None, Some(70.), (80., 100.)),
+        ] {
+            let (mut app, view) = range_fixture(item);
+            set_native_range(&mut app, view, native.0, native.1);
+            edit_range(&mut app, view, min, max);
+            app.update();
+            assert_eq!(
+                range(&app, view),
+                expected,
+                "{item}: native={native:?}, edits={min:?}/{max:?}"
+            );
+            let property_tick = if item == "Slider_HZ" {
+                app.world()
+                    .entity(view)
+                    .get_ref::<GuiSliderState>()
+                    .unwrap()
+                    .last_changed()
+            } else {
+                app.world()
+                    .entity(view)
+                    .get_ref::<GuiProgressState>()
+                    .unwrap()
+                    .last_changed()
+            };
+            app.update();
+            assert_eq!(range(&app, view), expected);
+            let next_tick = if item == "Slider_HZ" {
+                app.world()
+                    .entity(view)
+                    .get_ref::<GuiSliderState>()
+                    .unwrap()
+                    .last_changed()
+            } else {
+                app.world()
+                    .entity(view)
+                    .get_ref::<GuiProgressState>()
+                    .unwrap()
+                    .last_changed()
+            };
+            assert_eq!(next_tick, property_tick);
+        }
+    }
+}
+
+#[test]
+fn range_merging_preserves_f64_precision_and_rejects_invalid_pairs_without_losing_value_edits() {
+    for item in ["Slider_HZ", "ProgressBar"] {
+        let (mut app, view) = range_fixture(item);
+        set_native_range(&mut app, view, 0., 16_777_216.875);
+        edit_range(&mut app, view, Some(16_777_216.125), None);
+        if item == "Slider_HZ" {
+            app.world_mut().get_mut::<GuiSliderValue>(view).unwrap().0 = 16_777_216.5;
+        } else {
+            app.world_mut().get_mut::<GuiProgressValue>(view).unwrap().0 = 16_777_216.5;
+        }
+        app.update();
+        assert_eq!(range(&app, view), (16_777_216.125, 16_777_216.875));
+        let value = if item == "Slider_HZ" {
+            app.world().get::<GuiSliderValue>(view).unwrap().0
+        } else {
+            app.world().get::<GuiProgressValue>(view).unwrap().0
+        };
+        assert_eq!(value, 16_777_216.5);
+        for (min, max) in [(f64::NAN, 250.), (10., f64::INFINITY), (210., 200.)] {
+            set_native_range(&mut app, view, 10., 200.);
+            app.update();
+            edit_range(&mut app, view, Some(min), Some(max));
+            if let Some(mut state) = app.world_mut().get_mut::<GuiSliderState>(view) {
+                state.value = 45.;
+                state.title_type = 2;
+            } else {
+                let mut state = app.world_mut().get_mut::<GuiProgressState>(view).unwrap();
+                state.value = 45.;
+                state.title_type = 2;
+            }
+            app.update();
+            assert_eq!(range(&app, view), (10., 200.));
+            if let Some(state) = app.world().get::<GuiSliderState>(view) {
+                assert_eq!((state.value, state.title_type), (45., 2));
+            } else {
+                let state = app.world().get::<GuiProgressState>(view).unwrap();
+                assert_eq!((state.value, state.title_type), (45., 2));
+            }
+        }
+    }
+}
+
+#[test]
+fn progress_range_merge_keeps_tween_samples_target_and_single_completion() {
+    #[derive(Resource, Default)]
+    struct Completed(Vec<f64>);
+    let (mut app, view) = range_fixture("ProgressBar");
+    app.init_resource::<Completed>();
+    app.world_mut().entity_mut(view).observe(
+        |event: On<GuiProgressTweenComplete>, gui: GuiQuery, mut completed: ResMut<Completed>| {
+            let state = gui.progress(event.entity).unwrap();
+            assert_eq!((state.min, state.max), (10., 200.));
+            assert_eq!(state.displayed_value(), 80.);
+            completed.0.push(event.value);
+        },
+    );
+    app.world_mut()
+        .gui_mut(view)
+        .unwrap()
+        .tween_progress(80., 1.);
+    app.update();
+    let first = app
+        .world()
+        .get::<GuiProgressState>(view)
+        .unwrap()
+        .displayed_value();
+    set_native_range(&mut app, view, 0., 200.);
+    edit_range(&mut app, view, Some(10.), None);
+    app.update();
+    let state = app.world().get::<GuiProgressState>(view).unwrap();
+    assert_eq!((state.min, state.max, state.value), (10., 200., 80.));
+    assert!(
+        state.is_tweening() && state.displayed_value() > first && state.displayed_value() < 80.
+    );
+    assert!(app.world().resource::<Completed>().0.is_empty());
+    for _ in 0..12 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<Completed>().0, vec![80.]);
+    assert_eq!(range(&app, view), (10., 200.));
+}

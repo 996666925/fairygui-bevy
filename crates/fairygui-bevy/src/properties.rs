@@ -325,12 +325,18 @@ impl Property for GuiSliderState {
         })
     }
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
-        if (self.min, self.max) != (previous.min, previous.max)
-            && (self.min, self.max) != (native.min, native.max)
-        {
-            runtime
-                .store_mut()
-                .set_slider_range(object, self.min, self.max);
+        let min = if self.min != previous.min {
+            self.min
+        } else {
+            native.min
+        };
+        let max = if self.max != previous.max {
+            self.max
+        } else {
+            native.max
+        };
+        if (min, max) != (native.min, native.max) {
+            runtime.store_mut().set_slider_range(object, min, max);
         }
         field!(self, previous, native, whole_numbers, {
             runtime
@@ -373,12 +379,18 @@ impl Property for GuiProgressState {
         })
     }
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
-        if (self.min, self.max) != (previous.min, previous.max)
-            && (self.min, self.max) != (native.min, native.max)
-        {
-            runtime
-                .store_mut()
-                .set_progress_range(object, self.min, self.max);
+        let min = if self.min != previous.min {
+            self.min
+        } else {
+            native.min
+        };
+        let max = if self.max != previous.max {
+            self.max
+        } else {
+            native.max
+        };
+        if (min, max) != (native.min, native.max) {
+            runtime.store_mut().set_progress_range(object, min, max);
         }
         field!(self, previous, native, title_type, {
             runtime

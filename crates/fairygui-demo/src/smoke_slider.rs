@@ -1,4 +1,4 @@
-//! Exported sliders through ECS commands and real Bevy picking/layout.
+//! Exported sliders through writable ECS properties and real Bevy picking/layout.
 use super::*;
 
 #[derive(Resource, Default)]
@@ -242,15 +242,37 @@ fn drive(
             next = true;
         }
         19 if elapsed >= 8 => {
+            let first = state.owners[0];
+            let second = state.owners[1];
+            let mut horizontal = *gui.slider(first).unwrap();
+            horizontal.min = 2.;
+            let mut vertical = *gui.slider(second).unwrap();
+            vertical.max = 1.5;
+            // Direct/native edits happen after the published snapshot. Each ECS
+            // edit must retain the untouched opposite bound at Sync.
+            gui_edit.get_mut(first).unwrap().set_slider_range(0., 20.);
+            gui_edit.get_mut(second).unwrap().set_slider_range(-0.5, 1.);
+            commands.entity(gui.view(first).unwrap()).insert(horizontal);
+            commands.entity(gui.view(second).unwrap()).insert(vertical);
+            next = true;
+        }
+        20 if elapsed >= 8 => {
+            let first = gui.slider(state.owners[0]).unwrap();
+            let second = gui.slider(state.owners[1]).unwrap();
+            assert_eq!((first.min, first.max), (2., 20.));
+            assert_eq!((second.min, second.max), (-0.5, 1.5));
+            verify(&gui, state.owners[0], false, 4., 32.);
+            verify(&gui, state.owners[1], true, 0.375, 126.);
+            assert_eq!(events.0.len(), 3, "range edits do not emit input changes");
             for &owner in &state.owners {
                 commands.entity(owner).despawn();
             }
             next = true;
         }
-        20 if elapsed >= 5 => {
+        21 if elapsed >= 5 => {
             assert!(state.owners.iter().all(|&owner| !existing.contains(owner)));
             println!(
-                "demo smoke PASSED: ECS slider ranges, scaled horizontal/vertical grip drags, no press jump, fractional setters, input rounding, drag/click switches, current observer snapshots and disposal"
+                "demo smoke PASSED: ECS slider ranges with concurrent per-bound native edits, scaled horizontal/vertical grip drags, no press jump, fractional setters, input rounding, drag/click switches, current observer snapshots and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

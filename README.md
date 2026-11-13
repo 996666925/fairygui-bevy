@@ -811,6 +811,10 @@ if let Ok(mut state) = sliders.get_mut(slider) { // Query<&mut GuiSliderState>
 `set_slider_can_drag(false)` 暂停当前拖动，同原版，新一次 grip 按下会重新启用拖动。
 `set_slider_title_type` 使用 0=百分比、1=值/最大值、2=值、3=最大值。
 范围必须有限且 min <= max；初始属性组件可在资产就绪前挂载，首个视图即应用最终值和几何。
+滑动条与进度条的 `min`、`max` 分别合并业务修改：只改其中一端时，另一端保留本帧
+原生/直接 setter 的最新值。合并后的整对范围必须合法，否则保留当前原生范围；
+同一组件中合法的数值、标题或输入策略修改仍会应用。两端保留 `f64` 精度，进度范围
+更新不取消正在运行的补间，也不额外触发完成或 StateChanged。
 输入导致值改变才触发 `StateChanged`，控件 observer 内可读取当前滑动条状态；
 程序赋值不触发该事件。`--smoke-slider` 验证实际布局与 picking 下的缩放拖动、
 小数、取整、输入开关和销毁。

@@ -152,17 +152,57 @@ fn drive(
             next = true;
         }
         5 if elapsed >= 6 && events.0.len() == 2 => {
-            for &owner in &state.owners {
+            for (index, &owner) in state.owners.iter().enumerate() {
                 assert!(events.0.contains(&gui.view(owner).unwrap()));
                 assert_eq!(gui.progress(owner).unwrap().displayed_value(), 0.25);
-                commands.entity(owner).despawn();
+                let mut progress = *gui.progress(owner).unwrap();
+                if index == 0 {
+                    gui_edit.get_mut(owner).unwrap().set_progress_range(0., 2.);
+                    progress.min = 0.125;
+                } else {
+                    gui_edit
+                        .get_mut(owner)
+                        .unwrap()
+                        .set_progress_range(-0.5, 1.);
+                    progress.max = 1.5;
+                }
+                commands.entity(gui.view(owner).unwrap()).insert(progress);
             }
             next = true;
         }
-        6 if elapsed >= 4 => {
+        6 if elapsed >= 8 => {
+            for (index, &owner) in state.owners.iter().enumerate() {
+                let progress = gui.progress(owner).unwrap();
+                assert_eq!(
+                    (progress.min, progress.max),
+                    if index == 0 { (0.125, 2.) } else { (-0.5, 1.5) }
+                );
+                assert_eq!((progress.value(), progress.displayed_value()), (0.25, 0.25));
+                assert!(!progress.is_tweening());
+                let bar = gui.child_by_name(owner, "bar").unwrap();
+                if index == 0 {
+                    assert_eq!(gui.transform(bar).unwrap().size().x, 33.);
+                    let node = nodes.get(bar).unwrap();
+                    assert!(
+                        (node.size().x * node.inverse_scale_factor() - 33.).abs()
+                            <= node.inverse_scale_factor()
+                    );
+                } else {
+                    assert_eq!(gui.image_fill(bar).unwrap().amount, 0.375);
+                }
+                commands.entity(owner).despawn();
+            }
+            assert_eq!(
+                events.0.len(),
+                2,
+                "range edits must not complete the old tween again"
+            );
+            next = true;
+        }
+        7 if elapsed >= 4 => {
             assert!(state.owners.iter().all(|&owner| !existing.contains(owner)));
             println!(
-                "demo smoke PASSED: ECS fractional progress targets, animated display, rendered bar dimensions, radial fill, frozen display, completion observers and disposal"
+                "demo smoke PASSED: ECS fractional progress targets, concurrent per-bound native ranges, animated display, rendered bar dimensions, radial fill, frozen display, completion observers and disposal"
             );
             exit.write(AppExit::Success);
             next = true;
