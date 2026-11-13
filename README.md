@@ -439,6 +439,33 @@ Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐�
 `GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在同帧 Sync 后反映最新的控件状态；
 状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
 
+进度条的 `GuiProgressValue` 使用 `f64`，`GuiProgressState` 或 `gui.progress(entity)`
+可读取范围、目标值、当前显示值、显示比例、标题类型、反向配置及补间是否运行。
+
+```rust,ignore
+commands.write_message(GuiObjectCommand::new(progress,
+    GuiObjectAction::SetProgressRange { min: 0., max: 1. }));
+commands.write_message(GuiObjectCommand::new(progress,
+    GuiObjectAction::SetProgress(0.25)));
+commands.write_message(GuiObjectCommand::new(progress,
+    GuiObjectAction::TweenProgress { value: 0.75, duration: 1. }));
+```
+
+`TweenProgress` 对应原版 `tweenValue`：立即更新 `value()`，按线性补间推进
+`displayed_value()`；替换时从旧补间当前采样值续接。`StopProgressTween` 冻结显示，
+保留目标值。直接 `SetProgress` 设置不同值会取消补间，设置相同目标则保持运行。
+原值允许小数和越界，条带比例夹在 0..1；数值标题按原版向下取整，图片填充模式
+保持条带尺寸。范围与尺寸变化会立即重绘目标，但不停止补间，下一采样继续动画。
+`SetProgressTitleType` 使用 0..3，含义与滑动条相同；沿用参考库 setter 的即时重绘行为，
+将类型编号作为显示值，下一次数值、范围、尺寸或补间更新会恢复对应显示。
+
+自然结束会在控件视图实体上触发 `GuiProgressTweenComplete`，可用
+`commands.entity(view).observe(...)` 接收；observer 执行前已发布本帧状态与几何。
+停止、替换、不同值赋值和销毁会取消未发布的完成通知；程序赋值和补间均不触发
+`StateChanged`。零时长命令立即到达目标并通知一次，非有限值和负时长丢弃。
+资产等待期间可排队设置范围、值和补间，`--smoke-progress` 验证实际窗口中的条带
+伸缩、径向填充、冻结显示、完成 observer 和销毁。
+
 滑动条的 `GuiSliderValue` 使用 `f64`，完整状态可通过 `GuiSliderState` 或
 `gui.slider(entity)` 查询。范围、小数值和输入策略通过实体命令设置：
 

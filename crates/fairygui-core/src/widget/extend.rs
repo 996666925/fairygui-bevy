@@ -177,11 +177,11 @@ pub struct ProgressData {
     /// 容器部分的数据。
     pub component: ComponentData,
     /// 当前值。
-    pub value: i32,
+    pub value: f64,
     /// 最大值。
-    pub max: i32,
+    pub max: f64,
     /// 最小值（格式 2 及以上才有）。
-    pub min: i32,
+    pub min: f64,
     /// 标题显示方式。
     pub title_type: i32,
     /// 是否反向。
@@ -192,9 +192,9 @@ impl Default for ProgressData {
     fn default() -> Self {
         Self {
             component: ComponentData::default(),
-            value: 50,
-            max: 100,
-            min: 0,
+            value: 50.,
+            max: 100.,
+            min: 0.,
             title_type: 0,
             reverse: false,
         }
@@ -374,10 +374,10 @@ pub(crate) fn setup_progress(
         return Ok(());
     }
 
-    data.value = buffer.read_i32()?;
-    data.max = buffer.read_i32()?;
+    data.value = f64::from(buffer.read_i32()?);
+    data.max = f64::from(buffer.read_i32()?);
     if buffer.version() >= 2 {
-        data.min = buffer.read_i32()?;
+        data.min = f64::from(buffer.read_i32()?);
     }
 
     let _ = table;

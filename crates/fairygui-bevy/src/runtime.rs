@@ -46,8 +46,8 @@ pub struct GObjectRef(pub GObjectId);
 pub struct GuiListSelection(pub Vec<usize>);
 
 /// Current value projected from a FairyGUI progress bar.
-#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct GuiProgressValue(pub i32);
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq)]
+pub struct GuiProgressValue(pub f64);
 
 /// Current value projected from a FairyGUI slider.
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq)]
@@ -192,7 +192,20 @@ pub enum GuiObjectAction {
         name: String,
         index: i32,
     },
-    SetProgress(i32),
+    SetProgress(f64),
+    SetProgressRange {
+        min: f64,
+        max: f64,
+    },
+    /// 0=Percent, 1=ValueAndMax, 2=Value, 3=Max.
+    SetProgressTitleType(i32),
+    /// Linear tweenValue: update the target immediately and animate the display.
+    TweenProgress {
+        value: f64,
+        duration: f32,
+    },
+    /// Freeze the display, retaining the target returned by the value getter.
+    StopProgressTween,
     SetScrollPosition {
         position: Vec2,
         allow_bounce: bool,
@@ -2379,6 +2392,22 @@ pub(crate) fn apply_object_commands(
             }
             GuiObjectAction::SetProgress(value) => {
                 runtime.store_mut().set_progress(object, *value);
+            }
+            GuiObjectAction::SetProgressRange { min, max } => {
+                runtime.store_mut().set_progress_range(object, *min, *max);
+            }
+            GuiObjectAction::SetProgressTitleType(title_type) => {
+                runtime
+                    .store_mut()
+                    .set_progress_title_type(object, *title_type);
+            }
+            GuiObjectAction::TweenProgress { value, duration } => {
+                runtime
+                    .store_mut()
+                    .tween_progress(object, *value, *duration);
+            }
+            GuiObjectAction::StopProgressTween => {
+                runtime.store_mut().stop_progress_tween(object);
             }
             GuiObjectAction::SetListSelection(index) => {
                 runtime.store_mut().set_list_selection(object, *index);

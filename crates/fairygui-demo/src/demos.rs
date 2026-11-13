@@ -523,8 +523,8 @@ pub fn tick(
     let Some(second) = gui.find_by_name(root, "b1") else {
         return;
     };
-    let first_value = ((controller.elapsed / 5.0) % 1.0 * 100.0) as i32;
-    let second_value = (10.0 - (controller.elapsed / 10.0) % 10.0) as i32;
+    let first_value = f64::from((controller.elapsed / 5.0) % 1.0 * 100.0);
+    let second_value = f64::from(10.0 - (controller.elapsed / 10.0) % 10.0);
     for (target, value) in [(first, first_value), (second, second_value)] {
         commands.write(GuiObjectCommand::new(
             target,

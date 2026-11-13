@@ -48,7 +48,7 @@ fn find_widget(
 }
 
 #[test]
-fn progress_value_is_clamped_and_reports_changes() {
+fn progress_value_preserves_raw_assignments_and_reports_changes() {
     let package = FuiPackage::parse("Basics", BASICS).expect("parse basics package");
     let Some((mut store, id)) = find_widget(&package, |control| {
         matches!(control, ControlData::ProgressBar(_))
@@ -61,18 +61,20 @@ fn progress_value_is_clamped_and_reports_changes() {
     };
     let (min, max) = (data.min, data.max);
 
-    // 越界值应当被夹到边界上。
-    assert!(store.set_progress(id, max + 10_000));
-    assert_eq!(store.progress_value(id), Some(max));
+    // 原值保留，只有显示比例夹到边界上。
+    assert!(store.set_progress(id, max + 10_000.));
+    assert_eq!(store.progress_value(id), Some(max + 10_000.));
 
-    assert!(store.set_progress(id, min - 10_000));
-    assert_eq!(store.progress_value(id), Some(min));
+    assert!(store.set_progress(id, min - 10_000.));
+    assert_eq!(store.progress_value(id), Some(min - 10_000.));
+
+    store.set_progress(id, min);
 
     // 设成同一个值不应再报告变化。
     assert!(!store.set_progress(id, min));
 
     // 中间值应当生效。
-    let middle = (min + max) / 2;
+    let middle = (min + max) / 2.;
     if middle != min {
         assert!(store.set_progress(id, middle));
         assert_eq!(store.progress_value(id), Some(middle));

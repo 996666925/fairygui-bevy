@@ -484,6 +484,7 @@ pub struct GuiQuery<'w, 's> {
     lists: Query<'w, 's, &'static GuiListState>,
     combos: Query<'w, 's, &'static crate::GuiComboBoxState>,
     sliders: Query<'w, 's, &'static crate::GuiSliderState>,
+    progress: Query<'w, 's, &'static crate::GuiProgressState>,
     controllers: Query<'w, 's, &'static GuiControllers>,
     windows: Query<'w, 's, &'static GuiWindowState>,
     trees: Query<'w, 's, &'static crate::GuiTreeState>,
@@ -548,6 +549,9 @@ impl GuiQuery<'_, '_> {
     }
     pub fn slider(&self, entity: Entity) -> Option<&crate::GuiSliderState> {
         self.sliders.get(self.view(entity)?).ok()
+    }
+    pub fn progress(&self, entity: Entity) -> Option<&crate::GuiProgressState> {
+        self.progress.get(self.view(entity)?).ok()
     }
 
     pub fn tooltips(&self, entity: Entity) -> Option<&str> {
@@ -775,16 +779,35 @@ pub(crate) fn sync_gui_properties(
         Option<&GuiDisplay>,
         Option<&crate::GuiComboBoxState>,
         Option<&crate::GuiSliderState>,
+        Option<&crate::GuiProgressState>,
     )>,
 ) {
     let store = runtime.store();
-    for (entity, reference, text, display, combo, slider) in &objects {
+    for (entity, reference, text, display, combo, slider, progress) in &objects {
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
         let Some(object) = store.object(reference.0) else {
             continue;
         };
+        if let ControlData::ProgressBar(data) = object.control() {
+            let next = crate::GuiProgressState {
+                min: data.min,
+                max: data.max,
+                value: data.value,
+                displayed_value: store
+                    .progress_display_value(reference.0)
+                    .unwrap_or(data.value),
+                title_type: data.title_type,
+                reverse: data.reverse,
+                tweening: store.progress_is_tweening(reference.0),
+            };
+            if progress != Some(&next) {
+                commands.entity(entity).insert(next);
+            }
+        } else if progress.is_some() {
+            commands.entity(entity).remove::<crate::GuiProgressState>();
+        }
         if let ControlData::Slider(data) = object.control() {
             let next = crate::GuiSliderState {
                 min: data.min,

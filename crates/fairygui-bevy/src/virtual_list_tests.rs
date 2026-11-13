@@ -344,7 +344,7 @@ fn ecs_commands_set_progress_by_entity() {
         .resource_mut::<Messages<GuiObjectCommand>>()
         .write(GuiObjectCommand::new(
             target,
-            GuiObjectAction::SetProgress(37),
+            GuiObjectAction::SetProgress(37.),
         ));
 
     app.update();
@@ -353,11 +353,11 @@ fn ecs_commands_set_progress_by_entity() {
             .non_send::<GuiRuntime>()
             .store()
             .progress_value(progress),
-        Some(37)
+        Some(37.)
     );
     assert_eq!(
         app.world().get::<GuiProgressValue>(target),
-        Some(&GuiProgressValue(37))
+        Some(&GuiProgressValue(37.))
     );
 }
 

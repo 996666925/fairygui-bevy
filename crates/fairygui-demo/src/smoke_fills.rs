@@ -32,7 +32,7 @@ pub(super) fn hold_progress(smoke: Res<Smoke>, mut runtime: NonSendMut<GuiRuntim
         else {
             continue;
         };
-        let value = data.min + ((data.max - data.min) as f32 * ratio) as i32;
+        let value = data.min + (data.max - data.min) * ratio;
         runtime.store_mut().set_progress(id, value);
     }
 }

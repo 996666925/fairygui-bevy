@@ -19,11 +19,11 @@ fn native_progress_updates_match_both_axes_fill_reverse_resize_ani_and_titles() 
             let id = store.create(ObjectType::ProgressBar);
             store.set_size(id, 300.0, 180.0);
             if let ControlData::ProgressBar(data) = &mut store.object_mut(id).unwrap().control {
-                data.min = 10;
-                data.max = 110;
+                data.min = 10.;
+                data.max = 110.;
                 data.reverse = input[1] != 0;
                 data.title_type = input[2];
-                data.value = 50;
+                data.value = 50.;
             }
             let kind = match input[0] {
                 0 => ObjectType::Graph,
@@ -136,7 +136,7 @@ fn official_cooldown_initial_values_and_changes_drive_fill_without_resizing_the_
                 unreachable!()
             };
             let ratio =
-                f64::from(progress.value - progress.min) / f64::from(progress.max - progress.min);
+                ((progress.value - progress.min) / (progress.max - progress.min)).clamp(0., 1.);
             assert!(
                 (data.fill_amount - if progress.reverse { 1.0 - ratio } else { ratio }).abs()
                     < 0.00001

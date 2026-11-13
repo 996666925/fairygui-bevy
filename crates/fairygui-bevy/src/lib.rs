@@ -63,7 +63,9 @@ pub mod input;
 pub mod list;
 pub mod movie;
 pub mod popup;
+pub mod progress;
 pub mod pull;
+pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;
 pub mod slider;
 pub use slider::GuiSliderState;
@@ -157,14 +159,15 @@ pub mod prelude {
         GuiListSelection, GuiListState, GuiLoaderFailure, GuiLoaderState, GuiMenuAction,
         GuiObjectAction, GuiObjectCommand, GuiObjectDragState, GuiObjectInfo, GuiPointerCapture,
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
-        GuiProgressValue, GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRootInstance,
-        GuiRootView, GuiRuntime, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSpace,
-        GuiSystems, GuiText, GuiTextInput, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
-        GuiTooltipState, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
-        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
-        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, PopupMenuTemplates,
+        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
+        GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState,
+        GuiSliderState, GuiSliderValue, GuiSpace, GuiSystems, GuiText, GuiTextInput,
+        GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTransform,
+        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
+        GuiTransitions, GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem,
+        GuiTreeNode, GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
+        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand,
+        GuiWindowState, PopupMenuTemplates,
     };
 }
 
@@ -454,6 +457,7 @@ impl Plugin for FairyGuiPlugin {
                 (
                     runtime::emit_transition_completions,
                     tween::emit_completions,
+                    progress::emit_completions,
                     animation::sync_state,
                     runtime::emit_animation_completions,
                 )

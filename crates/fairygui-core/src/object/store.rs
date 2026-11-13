@@ -208,6 +208,7 @@ pub struct ObjectStore {
     button_feedback_time: f64,
     button_feedback: Vec<buttons::ButtonFeedback>,
     progress_bars: std::collections::HashMap<GObjectId, progress::ProgressBars>,
+    completed_progress_tweens: Vec<(GObjectId, f64)>,
     slider_bars: std::collections::HashMap<GObjectId, slider::SliderBars>,
     virtual_states: std::collections::HashMap<GObjectId, virtual_list::VirtualState>,
 }
@@ -339,6 +340,8 @@ impl ObjectStore {
         }
         self.completed_animations
             .retain(|id| !removed_set.contains(id));
+        self.completed_progress_tweens
+            .retain(|(id, _)| !removed_set.contains(id));
         self.queued_transition_completions
             .retain(|completed| !removed_set.contains(&completed.owner));
         self.stage_order.retain(|id| !removed_set.contains(id));
@@ -2243,6 +2246,7 @@ impl ObjectStore {
         let mut tweens = std::mem::take(&mut self.tweens);
         tweens.advance(self, dt);
         self.tweens = tweens;
+        self.advance_progress_tweens(dt);
     }
 
     /// 当前活跃的补间数量。
@@ -2307,82 +2311,6 @@ impl ObjectStore {
             return self.apply_button_visual_state(button, crate::widget::ButtonState::Down);
         }
         self.refresh_button_state(button)
-    }
-
-    // ---- 取值控件 ----
-
-    /// 设置进度条的值，并刷新它的显示。返回是否发生了变化。
-    ///
-    /// 值会被夹在最小与最大之间。进度由名为 `bar` 的子对象表示，
-    /// 标题由名为 `title` 的子对象表示。
-    pub fn set_progress(&mut self, object: GObjectId, value: i32) -> bool {
-        let Some((min, max, old)) = self.progress_state(object) else {
-            return false;
-        };
-
-        let value = value.clamp(min, max);
-        if value == old {
-            return false;
-        }
-
-        if let Some(crate::widget::ControlData::ProgressBar(data)) = self
-            .objects
-            .get_mut(object)
-            .map(|target| &mut target.control)
-        {
-            data.value = value;
-        }
-
-        self.refresh_progress(object, value, min, max);
-        true
-    }
-
-    /// 读取进度条的值。
-    pub fn progress_value(&self, object: GObjectId) -> Option<i32> {
-        match self.objects.get(object).map(|target| &target.control) {
-            Some(crate::widget::ControlData::ProgressBar(data)) => Some(data.value),
-            _ => None,
-        }
-    }
-
-    fn progress_state(&self, object: GObjectId) -> Option<(i32, i32, i32)> {
-        match self.objects.get(object).map(|target| &target.control) {
-            Some(crate::widget::ControlData::ProgressBar(data)) => {
-                Some((data.min, data.max, data.value))
-            }
-            _ => None,
-        }
-    }
-
-    /// 按当前值刷新进度条的显示。
-    ///
-    /// 基准尺寸取编辑器里的原始尺寸，这样反复刷新不会因累计缩放而失真。
-    fn refresh_progress(&mut self, object: GObjectId, value: i32, min: i32, max: i32) {
-        let span = f64::from(max) - f64::from(min);
-        let percent = if span == 0.0 {
-            0.0
-        } else {
-            ((f64::from(value) - f64::from(min)) / span).clamp(0.0, 1.0)
-        };
-
-        self.refresh_progress_bars(object, percent);
-
-        let Some(title) = self.child_by_name(object, "title") else {
-            return;
-        };
-        let title_type = match self.objects.get(object).map(|target| &target.control) {
-            Some(crate::widget::ControlData::ProgressBar(data)) => data.title_type,
-            _ => return,
-        };
-
-        let text = match title_type {
-            0 => format!("{}%", (percent * 100.0).floor() as i32),
-            1 => format!("{value}/{max}"),
-            2 => format!("{value}"),
-            3 => format!("{max}"),
-            _ => return,
-        };
-        self.apply_text(title, &text);
     }
 
     /// 设置对象显示的文本，覆盖到各类带文本的控件上。
