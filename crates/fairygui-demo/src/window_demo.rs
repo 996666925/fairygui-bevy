@@ -101,14 +101,13 @@ mod tests {
                     .is_showing()
             );
             let object = app.world().get::<GObjectRef>(button).unwrap().0;
-            app.world_mut().trigger(GuiEvent {
-                target: Some(button),
-                entity: button,
-                event: fairygui_bevy::core::object::UiEvent::new(
+            app.world_mut().trigger(GuiEvent::new(
+                button,
+                fairygui_bevy::core::object::UiEvent::new(
                     fairygui_bevy::core::object::EventKind::Click,
                     object,
                 ),
-            });
+            ));
             app.update();
             let state = app.world().get::<GuiWindowState>(owner).unwrap();
             assert!(state.is_showing());

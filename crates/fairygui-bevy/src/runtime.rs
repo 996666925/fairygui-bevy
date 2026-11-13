@@ -413,20 +413,10 @@ pub(crate) mod content;
 #[path = "resource_tests.rs"]
 mod resource_tests;
 
-/// FairyGUI object event delivered to the matching Bevy UI entity observer.
-///
-/// The event is triggered once for its original object and then once per logical
-/// ancestor with `event.bubbling` set. Attach an observer directly to an entity:
-/// `commands.entity(entity).observe(on_gui_event)`.
-#[derive(EntityEvent, Debug, Clone)]
-pub struct GuiEvent {
-    pub entity: Entity,
-    /// Original control view, independent of the current bubbling recipient.
-    /// None for native notifications whose original object has no view.
-    pub target: Option<Entity>,
-    /// Original target, current logical bubbling recipient and pointer payload.
-    pub event: fairygui_core::object::UiEvent,
-}
+#[path = "events.rs"]
+mod events;
+use events::PendingGuiEvent;
+pub use events::{GuiEvent, GuiEventTraversal, emit_gui_events};
 
 /// One rich-text link activation, published before `GuiSystems::Respond`.
 /// The href is preserved verbatim (including `event:`). Applications decide how
@@ -666,7 +656,7 @@ pub struct GuiRuntime {
     pub(crate) input_focus_request: Option<Option<GObjectId>>,
     pub(crate) input_submit: Option<(GObjectId, bool)>,
     /// Bevy entity events waiting for `GuiSystems::Publish`.
-    gui_events: Vec<fairygui_core::object::UiEvent>,
+    gui_events: Vec<PendingGuiEvent>,
     /// 进行中的分帧构建。
     pending_builds: Vec<PendingBuild>,
     /// 多语言翻译表。文本在转成实体时按它改写。
@@ -1999,30 +1989,27 @@ impl GuiRuntime {
             self.links.push(base.clone());
         }
         self.events.push(base.clone());
-        self.gui_events.push(base.clone());
-
+        let mut route = vec![target];
         let mut current = target;
-        if Some(current) == stop {
-            return;
-        }
-        while let Some(parent) = self
-            .store
-            .object(current)
-            .and_then(|object| object.parent())
-        {
+        while Some(current) != stop {
+            let Some(parent) = self
+                .store
+                .object(current)
+                .and_then(|object| object.parent())
+            else {
+                break;
+            };
             let mut event = base.clone();
             event.current_target = parent;
             event.bubbling = true;
-            self.gui_events.push(event.clone());
             self.events.push(event);
+            route.push(parent);
             current = parent;
-            if Some(current) == stop {
-                break;
-            }
         }
+        self.gui_events.push(PendingGuiEvent { event: base, route });
     }
 
-    pub(crate) fn take_gui_events(&mut self) -> Vec<fairygui_core::object::UiEvent> {
+    pub(crate) fn take_gui_events(&mut self) -> Vec<PendingGuiEvent> {
         std::mem::take(&mut self.gui_events)
     }
 
@@ -2100,7 +2087,7 @@ impl GuiRuntime {
                 .with_data(fairygui_core::object::EventData::Item(index.to_string()));
         event.touch_id = touch_id;
         self.events.push(event.clone());
-        self.gui_events.push(event.clone());
+        self.gui_events.push(PendingGuiEvent::direct(event.clone()));
         self.list_clicks.push(PendingListItemClick {
             event,
             item,
@@ -2126,33 +2113,6 @@ pub(crate) fn emit_text_input_messages(
         }
         commands.trigger(event.clone());
         messages.write(event);
-    }
-}
-
-/// 把运行时已经路由好的点击转成 Bevy 消息。
-pub fn emit_gui_events(
-    mut commands: Commands,
-    mut runtime: NonSendMut<GuiRuntime>,
-    entities: Query<(Entity, &GObjectRef)>,
-) {
-    for event in runtime.take_gui_events() {
-        let Some(entity) = runtime.entity_of(event.current_target).or_else(|| {
-            entities
-                .iter()
-                .find_map(|(entity, object)| (object.0 == event.current_target).then_some(entity))
-        }) else {
-            continue;
-        };
-        let target = runtime.entity_of(event.target).or_else(|| {
-            entities
-                .iter()
-                .find_map(|(entity, object)| (object.0 == event.target).then_some(entity))
-        });
-        commands.trigger(GuiEvent {
-            entity,
-            target,
-            event,
-        });
     }
 }
 

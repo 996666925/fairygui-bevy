@@ -552,10 +552,21 @@ fn attach_observer(commands: &mut Commands, gui: &GuiQuery, root: Entity) {
 ```
 
 Attach observers to control entities returned by `GuiQuery`. Click events
-trigger once on the original target and again on each logical ancestor while
-bubbling; each observer receives its current entity in `GuiEvent::entity` and the
-complete FairyGUI payload in `GuiEvent::event`. `dispatch_event` accepts a full
-event and preserves its pointer/data payload while bubbling.
+use Bevy's `PropagateEntityTrigger` to visit the captured FairyGUI logical path.
+Each observer receives its current entity in `GuiEvent::entity` and matching
+native `current_target`/`bubbling` metadata in `GuiEvent::event`. The original view
+remains in `target`. `On<GuiEvent>::propagate(false)` prevents later ancestor
+delivery; other observers on the same entity still run, and payload changes are
+shared with later recipients. Native grip/arrow stops bound the path even if an
+observer enables propagation. Render-only `ChildOf` links are never traversed.
+Missing views are skipped, and reparenting after input does not reroute a queued
+notification. `GuiEvent::new` constructs a direct single-entity notification.
+
+Button/list selection and control values refresh before Publish as well as
+after Sync. Observer propagation controls notification delivery: built-in input
+actions have already run, and separate typed list/input/link notifications keep
+their own delivery. `dispatch_event` accepts the complete native payload and
+captures its logical recipients once per dispatch.
 
 Movie players read Playing/Frame commands before advancing and report their live
 frame back to the core store. Empty texture frames retain their timing and index;

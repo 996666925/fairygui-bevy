@@ -56,11 +56,10 @@ fn child(app: &mut App, owner: Entity, name: &str) -> Entity {
 }
 fn click(app: &mut App, entity: Entity) {
     let object = app.world().get::<GObjectRef>(entity).unwrap().0;
-    app.world_mut().trigger(GuiEvent {
+    app.world_mut().trigger(GuiEvent::new(
         entity,
-        target: Some(entity),
-        event: fairygui_bevy::core::object::UiEvent::new(EventKind::Click, object),
-    });
+        fairygui_bevy::core::object::UiEvent::new(EventKind::Click, object),
+    ));
     app.update();
 }
 fn set_input(app: &mut App, page: Entity, text: &str) {

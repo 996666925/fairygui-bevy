@@ -268,6 +268,25 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 对应视图时为 `None`）。可沿 `GuiObjectInfo::parent()` 判断点击是否来自某个子控件，
 无需借用运行时解析原生对象 ID。
 
+冒泡使用 Bevy 的同一次事件传播，业务 observer 可停止后续祖先投递：
+
+```rust,ignore
+fn on_child(mut event: On<GuiEvent>) {
+    if event.event.kind == fairygui_bevy::core::object::EventKind::Click {
+        event.propagate(false);
+    }
+}
+```
+
+当前实体上的其他 observer 仍会执行；载荷修改会被后续祖先看到。每次派发独立，
+相同事件重复触发也互不影响。路径在输入时按 FairyGUI 逻辑树保存，保留 grip/箭头的
+原生截断位置，之后换父节点或渲染辅助节点不会改变这条路径；没有视图的接收者跳过。
+这是对通知传播的控制，不会撤销输入阶段已完成的按钮/列表选择，也不会取消另行发布的
+`GuiListItemClick`、`GuiTextInput` 或 `GuiLink`。按钮选择、列表选择和控件值在发布通知前
+刷新，observer 发出的对象命令仍在同帧 Sync 生效。
+`GuiEvent::new(entity, event)` 可构造只投递给一个实体的直接通知。
+`--smoke-observer-events` 验证实际复选框点击、停止/继续冒泡、共享载荷和同帧文字更新。
+
 `GuiInputState::hovered()`、`captured()`、`captured_touch(id)` 和
 `hovered_touch(id)` 都返回控件视图 `Entity`，可直接用于 ECS 查询。`captures()`
 提供左右鼠标键及各触点的独立捕获快照，顺序为左键、右键、触摸 ID 升序；
@@ -436,7 +455,7 @@ Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐�
 过渡命令还支持暂停/恢复、速度、反向播放和停止。临时界面也用 `FairyGuiRoot`
 实体管理；销毁所有者实体会自动回收对应 FairyGUI 对象树。
 列表、进度条、滑动条和按钮实体分别带有 `GuiListSelection`、`GuiProgressValue`、
-`GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在同帧 Sync 后反映最新的控件状态；
+`GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在事件发布前和同帧 Sync 后反映最新的控件状态；
 状态写入统一通过 `GuiObjectCommand`，可以直接用 ECS 查询驱动其他业务系统。
 
 进度条的 `GuiProgressValue` 使用 `f64`，`GuiProgressState` 或 `gui.progress(entity)`

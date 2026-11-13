@@ -274,6 +274,11 @@ impl Plugin for FairyGuiPlugin {
         .add_systems(
             Update,
             (
+                (
+                    runtime::sync_list_selection_components,
+                    runtime::sync_control_state_components,
+                )
+                    .chain(),
                 ecs::sync_gui_properties,
                 ecs::sync_gui_icons,
                 ecs::sync_gui_controllers,

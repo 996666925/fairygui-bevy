@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_observer_events.rs"]
+mod observer_events;
+pub(super) fn install_observer_events(app: &mut App) {
+    observer_events::install(app);
+}
 #[path = "smoke_slider_scroll.rs"]
 mod slider_scroll;
 pub(super) fn install_slider_scroll(app: &mut App) {

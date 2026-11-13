@@ -132,14 +132,13 @@ fn extensions_are_ready_for_initialize_and_post_layout_keep_bound_children_on_po
         .unwrap()
         .last_changed();
     let object = app.world().get::<GObjectRef>(first[0]).unwrap().0;
-    app.world_mut().trigger(GuiEvent {
-        entity: first[0],
-        target: Some(first[0]),
-        event: fairygui_bevy::core::object::UiEvent::new(
+    app.world_mut().trigger(GuiEvent::new(
+        first[0],
+        fairygui_bevy::core::object::UiEvent::new(
             fairygui_bevy::core::object::EventKind::Click,
             object,
         ),
-    });
+    ));
     app.update();
     assert_eq!(app.world().get::<Mail>(first[0]).unwrap().clicks, 1);
     assert_eq!(
