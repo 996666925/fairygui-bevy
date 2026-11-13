@@ -28,6 +28,35 @@ entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输
 弹出菜单可用 `show_popup_menu_items` 配置稳定名称、动作编号、图标、勾选状态和
 分隔项模板；业务系统读取 `GuiMenuAction`，消息在点击 100 ms 后、菜单关闭后发布。
 支持按名称动态编辑与增删、保留对象复用，详见 [菜单生命周期](docs/popup-lifecycle.md)。
+
+业务系统也可用 `GuiPopupCommand` 消息管理弹出层，无需借用运行时：
+
+```rust,ignore
+use fairygui_bevy::core::popup::MenuItem;
+
+commands.write_message(GuiPopupCommand::ShowMenu {
+    source: page_entity,
+    menu: GuiPopupMenu::new("PopupMenu", "PopupMenuItem", vec![
+        MenuItem::action("save", "保存", 1),
+    ]),
+    position: Vec2::new(100., 200.),
+});
+```
+
+`source` 接受根拥有者或控件视图实体，模板名在其来源包内解析；模板也可以使用
+已登记包的 `ui://` 地址。`Show` 显示已有的根/控件；`Hide` 收起该弹出层及其上层，
+`HideAll` 收起全部弹出层，隐藏后保留对象和视图。运行时保留一个菜单配置；
+`ReopenMenu` 保留勾选与动态编辑，`DisposeMenu` 回收菜单及其视图。
+`GuiPopupState` 资源提供从底到顶的控件实体 `stack()` 和当前菜单 `menu()`，
+在输入事件发布前与 Sync 结束时更新，业务可据此查询控件或挂载 observer。
+
+位置采用舞台逻辑像素，视口使用 `GuiInputSettings` 选择的窗口；无窗口应用默认
+1280×720，已有舞台则沿用其尺寸。等待 `.fui` 的根拥有者可提前接收显示请求，
+资产就绪后执行；根被替换、移除或销毁会取消等待请求。`HideAll` 同时取消全部
+等待显示，`Hide` 取消对应目标的等待显示，`DisposeMenu` 取消等待中的菜单显示。
+两类命令在 Sync 中按 `GuiObjectCommand`、`GuiPopupCommand` 的顺序执行；
+同一类消息保持顺序。
+
 下拉框及菜单的组件、列表项和分隔项模板可使用其他已登记包的 `ui://` 地址，
 嵌套子组件也按声明的源包构造并使用各自图集；依赖通过 `register_package` 登记。
 

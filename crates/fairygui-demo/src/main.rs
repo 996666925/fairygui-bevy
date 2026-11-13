@@ -438,14 +438,13 @@ fn close_demo(
     event: On<GuiEvent>,
     mut commands: Commands,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
-    mut runtime: NonSendMut<GuiRuntime>,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
     if event.event().event.kind != fairygui_core::object::EventKind::Click {
         return;
     }
-    runtime.hide_popup(None);
+    commands.write_message(GuiPopupCommand::HideAll);
     demos::dispose_dynamic_roots(&mut commands, &mut controller);
     // 销毁演示界面，收起关闭按钮，把菜单放回来。
     if let Some((owner, _, _)) = demo.open.take() {
@@ -501,7 +500,7 @@ fn navigate_basics_action(
     event: On<GuiEvent>,
     actions: Query<&DemoAction>,
     mut commands: Commands,
-    mut runtime: NonSendMut<GuiRuntime>,
+    gui: GuiQuery,
     mut gui_commands: MessageWriter<GuiObjectCommand>,
     demo: Res<Demo>,
     mut controller: ResMut<demos::DemoController>,
@@ -517,7 +516,7 @@ fn navigate_basics_action(
     };
     demos::navigate_basics(
         &mut commands,
-        &mut runtime,
+        &gui,
         &mut controller,
         handle.clone(),
         action.0,

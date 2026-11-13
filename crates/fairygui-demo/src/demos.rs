@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use fairygui_bevy::{
-    FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiQuery, GuiRootInstance,
-    GuiRuntime, GuiTransitionComplete, GuiTransitionHook,
+    FairyGuiRoot, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiPopupCommand, GuiPopupMenu,
+    GuiQuery, GuiRootInstance, GuiRuntime, GuiTransitionComplete, GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -379,7 +379,7 @@ pub fn advance_transition_demo(
 /// The Basics package contains a menu and separate Demo_* components.
 pub fn navigate_basics(
     commands: &mut Commands,
-    runtime: &mut GuiRuntime,
+    gui: &GuiQuery,
     controller: &mut DemoController,
     handle: Handle<fairygui_bevy::FuiAsset>,
     listener: u64,
@@ -388,7 +388,7 @@ pub fn navigate_basics(
     if controller.package.as_deref() != Some("Basics") {
         return false;
     }
-    let Some(root) = controller.root else {
+    let Some(root) = controller.root_owner else {
         return false;
     };
     let page = listener
@@ -397,21 +397,19 @@ pub fn navigate_basics(
     if listener != BASICS_BACK && page.is_none() {
         return false;
     }
-    runtime.hide_popup(None);
+    commands.write_message(GuiPopupCommand::HideAll);
     controller.last_menu_action = None;
     if let Some(owner) = controller.basics_page_owner.take() {
         commands.entity(owner).despawn();
     }
     controller.basics_page = None;
-    if let Some(target) = runtime.entity_of(root) {
-        gui_commands.write(GuiObjectCommand::new(
-            target,
-            GuiObjectAction::SetControllerPage {
-                name: "c1".into(),
-                index: i32::from(page.is_some()),
-            },
-        ));
-    }
+    gui_commands.write(GuiObjectCommand::new(
+        root,
+        GuiObjectAction::SetControllerPage {
+            name: "c1".into(),
+            index: i32::from(page.is_some()),
+        },
+    ));
     if let Some(page) = page {
         let owner = commands
             .spawn((
@@ -422,18 +420,14 @@ pub fn navigate_basics(
         controller.basics_page_owner = Some(owner);
     }
     for name in BASICS_PAGES {
-        if let Some(button) = runtime.store().find_by_name(root, &format!("btn_{name}"))
-            && let Some(target) = runtime.entity_of(button)
-        {
+        if let Some(target) = gui.find_by_name(root, &format!("btn_{name}")) {
             gui_commands.write(GuiObjectCommand::new(
                 target,
                 GuiObjectAction::SetVisible(page.is_none()),
             ));
         }
     }
-    if let Some(back) = runtime.store().find_by_name(root, "btn_Back")
-        && let Some(target) = runtime.entity_of(back)
-    {
+    if let Some(target) = gui.find_by_name(root, "btn_Back") {
         gui_commands.write(GuiObjectCommand::new(
             target,
             GuiObjectAction::SetVisible(page.is_some()),
@@ -448,73 +442,45 @@ pub fn show_basics_menu(
     event: On<fairygui_bevy::GuiEvent>,
     mut commands: Commands,
     controller: Res<DemoController>,
-    mut runtime: NonSendMut<GuiRuntime>,
-    assets: Res<Assets<fairygui_bevy::FuiAsset>>,
-    windows: Query<&Window>,
+    gui: GuiQuery,
 ) {
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
-    use fairygui_core::{
-        geom::{Point, Size},
-        popup::MenuItem,
-    };
+    use fairygui_core::popup::MenuItem;
+    if event.event().event.kind != fairygui_core::object::EventKind::Click
+        || controller.package.as_deref() != Some("Basics")
     {
-        let Some(page) = controller
-            .basics_page
-            .and_then(|handle| runtime.root_object(handle))
-        else {
-            return;
-        };
-        if controller.package.as_deref() != Some("Basics") {
-            return;
-        }
-        let Some(handle) = runtime.asset_handle_for(page) else {
-            return;
-        };
-        let Some(asset) = assets.get(&handle) else {
-            return;
-        };
-        let Some(button) = runtime.store().object(event.event().event.current_target) else {
-            return;
-        };
-        let mut at = Point::new(button.x(), button.y() + button.height());
-        let mut parent = button.parent();
-        while let Some(object) = parent.and_then(|id| runtime.store().object(id)) {
-            at.x += object.x();
-            at.y += object.y();
-            parent = object.parent();
-        }
-        if let Some(window) = windows.iter().next() {
-            runtime.ensure_root(Size::new(window.width(), window.height()));
-        }
-        let items = [
-            MenuItem::action("first", "Item 1", BASICS_MENU_ACTION),
-            MenuItem {
-                checkable: true,
-                ..MenuItem::action("toggle", "Item 2", BASICS_MENU_ACTION + 1)
-            },
-            MenuItem {
-                enabled: false,
-                ..MenuItem::action("disabled", "Item 3 (disabled)", BASICS_MENU_ACTION + 2)
-            },
-            MenuItem::action("last", "Item 4", BASICS_MENU_ACTION + 3),
-        ];
-        runtime.show_popup_menu_items(
-            &mut commands,
-            &asset.package,
-            fairygui_bevy::PopupMenuTemplates {
-                content: "PopupMenu",
-                item: "PopupMenuItem",
-                separator: None,
-            },
-            &items,
-            at,
-        );
+        return;
     }
+    let Some(page) = controller.basics_page_owner else {
+        return;
+    };
+    let Some(button) = gui.transform(event.entity) else {
+        return;
+    };
+    let mut position = button.position() + Vec2::new(0., button.size().y);
+    let mut parent = gui.get(event.entity).and_then(|object| object.parent());
+    while let Some(entity) = parent {
+        if let Some(transform) = gui.transform(entity) {
+            position += transform.position();
+        }
+        parent = gui.get(entity).and_then(|object| object.parent());
+    }
+    let items = vec![
+        MenuItem::action("first", "Item 1", BASICS_MENU_ACTION),
+        MenuItem {
+            checkable: true,
+            ..MenuItem::action("toggle", "Item 2", BASICS_MENU_ACTION + 1)
+        },
+        MenuItem {
+            enabled: false,
+            ..MenuItem::action("disabled", "Item 3 (disabled)", BASICS_MENU_ACTION + 2)
+        },
+        MenuItem::action("last", "Item 4", BASICS_MENU_ACTION + 3),
+    ];
+    commands.write_message(GuiPopupCommand::ShowMenu {
+        source: page,
+        menu: GuiPopupMenu::new("PopupMenu", "PopupMenuItem", items),
+        position,
+    });
 }
 
 pub fn handle_menu_actions(

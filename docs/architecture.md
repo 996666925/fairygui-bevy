@@ -12,6 +12,7 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 | `fairygui-core` | Package parsing, object ownership, widget state, scrolling and animation; no Bevy dependency |
 | `asset` | Bevy asset loading and package resource paths |
 | `ecs` | Root-to-view references and read-only identity, hierarchy, geometry, text, display and scroll queries |
+| `popup` | Entity-addressed popup/menu commands, pending asset requests and popup stack snapshots |
 | `runtime` | Application facade, object/entity lifecycle, event bubbling and view synchronization |
 | `backend`, `text`, `movie` | Render representation, text layout and movie playback |
 | `core::graph`, `graph`, `polygon.wesl` | Native polygon points/stroke geometry, retained Bevy UI material surfaces, coverage and contour hit validation |
@@ -31,6 +32,21 @@ internally; the plugin projects its state into Bevy UI and read-only ECS compone
 The Bevy integration exposes FairyGUI events as Bevy entity events. Applications
 attach observers to the entities they own; there is no numeric click-listener
 registry or compatibility layer for an older API.
+
+`GuiPopupCommand` accepts root owners or view entities for existing popups and
+menu template sources. Commands run after root reconciliation and object commands
+in Sync. Requests for roots awaiting assets retain the source component identity;
+replacement, removal and disposal cancel them. Hide cancels that target's pending
+shows, HideAll clears all pending shows, and DisposeMenu clears pending menu shows.
+Within the popup message stream, operations keep their order. The runtime retains
+one menu configuration, with checked state and edits preserved on reopen.
+
+`GuiPopupState` exposes popup views from bottom to top and the open menu view,
+refreshed before Publish and at the end of Sync. Windows are tracked separately.
+Positions use stage logical pixels. Commands refresh the stage viewport from the
+window selected by `GuiInputSettings`; renderer-free apps preserve an existing
+stage or default to 1280x720. Template resolution starts with the source object's
+declared package, with registered cross-package URLs following normal rules.
 
 ## Frame contract
 

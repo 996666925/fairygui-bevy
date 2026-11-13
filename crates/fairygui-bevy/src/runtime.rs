@@ -713,6 +713,12 @@ impl GuiRuntime {
         self.root_object(handle).map(|_| handle)
     }
 
+    pub(crate) fn ecs_root_pending(&self, owner: Entity) -> bool {
+        self.ecs_roots
+            .get(&owner)
+            .is_some_and(|binding| binding.handle.is_none() && !binding.failed)
+    }
+
     /// 撤下/重新挂载顶层界面，保留对象、实体及资源编号。
     pub fn set_root_attached(&mut self, handle: usize, attached: bool) -> bool {
         let Some(root) = self.roots.get_mut(handle) else {

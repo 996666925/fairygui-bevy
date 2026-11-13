@@ -56,6 +56,7 @@ mod graph;
 mod image_fill;
 pub mod input;
 pub mod movie;
+pub mod popup;
 pub mod runtime;
 pub mod text;
 mod text_stroke;
@@ -66,6 +67,7 @@ pub use ecs::{
     GuiTransitionState, GuiTransitions,
 };
 pub use input::{GuiInputSettings, GuiInputState};
+pub use popup::{GuiPopupCommand, GuiPopupMenu, GuiPopupState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
     GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
@@ -96,10 +98,10 @@ pub mod prelude {
         GuiButtonSelected, GuiConfig, GuiDisplay, GuiEvent, GuiFont, GuiInputSettings,
         GuiInputState, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure,
         GuiLoaderState, GuiMenuAction, GuiObjectAction, GuiObjectCommand, GuiObjectInfo,
-        GuiProgressValue, GuiPullRelease, GuiQuery, GuiRootInstance, GuiRootView, GuiRuntime,
-        GuiScrollState, GuiSliderValue, GuiSystems, GuiText, GuiTextInput, GuiTransform,
-        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
-        GuiTransitions, PopupMenuTemplates,
+        GuiPopupCommand, GuiPopupMenu, GuiPopupState, GuiProgressValue, GuiPullRelease, GuiQuery,
+        GuiRootInstance, GuiRootView, GuiRuntime, GuiScrollState, GuiSliderValue, GuiSystems,
+        GuiText, GuiTextInput, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, PopupMenuTemplates,
     };
 }
 
@@ -144,6 +146,8 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiListItemClick>()
         .add_message::<GuiPullRelease>()
         .add_message::<GuiObjectCommand>()
+        .add_message::<GuiPopupCommand>()
+        .init_resource::<GuiPopupState>()
         .init_asset::<FuiAsset>()
         .init_asset_loader::<FuiAssetLoader>()
         .init_resource::<GuiConfig>()
@@ -173,6 +177,7 @@ impl Plugin for FairyGuiPlugin {
                 ecs::sync_gui_properties,
                 ecs::sync_gui_scroll_state,
                 ecs::sync_gui_transitions,
+                popup::sync_popup_state,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -228,7 +233,11 @@ impl Plugin for FairyGuiPlugin {
         );
         app.add_systems(
             Update,
-            (runtime::sync_ecs_roots, runtime::apply_object_commands)
+            (
+                runtime::sync_ecs_roots,
+                runtime::apply_object_commands,
+                popup::apply_popup_commands,
+            )
                 .chain()
                 .in_set(GuiSystems::Sync)
                 .before(runtime::sync_loader_components),
@@ -245,6 +254,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::emit_transition_hooks,
                 runtime::emit_transition_callbacks,
                 runtime::emit_transition_completions,
+                popup::sync_popup_state,
             )
                 .chain()
                 .in_set(GuiSystems::Sync)
