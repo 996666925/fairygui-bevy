@@ -74,6 +74,8 @@ pub use button_properties::GuiButtonSettings;
 pub mod list;
 mod list_properties;
 pub use list_properties::GuiListLayout;
+mod list_settings;
+pub use list_settings::GuiListSettings;
 pub mod movie;
 pub mod popup;
 pub mod progress;
@@ -143,7 +145,7 @@ pub use fairygui_core::widget::{
 };
 pub use fairygui_core::{
     color_matrix::ColorFilterParams,
-    object::{BlendMode, ListLayoutSettings},
+    object::{BlendMode, ListInteractionSettings, ListLayoutSettings},
 };
 
 use bevy::prelude::*;
@@ -186,21 +188,22 @@ pub mod prelude {
         GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
         GuiGraph, GuiIcon, GuiImageFill, GuiImageFlip, GuiInputCommand, GuiInputSettings,
         GuiInputState, GuiLink, GuiListContent, GuiListContentError, GuiListContentState,
-        GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow, GuiListSelection, GuiListState,
-        GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
-        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
-        GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
-        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
-        GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
-        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue,
-        GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput,
-        GuiTextInputSettings, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
-        GuiTooltipState, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
-        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeState,
-        GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState,
-        GuiWindowAction, GuiWindowCommand, GuiWindowState, GuiWorldExt, ListLayoutSettings,
-        ListLayoutType, PopupMenuTemplates,
+        GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow, GuiListSelection,
+        GuiListSettings, GuiListState, GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState,
+        GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque,
+        GuiPointerCapture, GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu,
+        GuiPopupState, GuiProgressState, GuiProgressTweenComplete, GuiProgressValue,
+        GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance,
+        GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollSettings, GuiScrollState,
+        GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText,
+        GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTooltipCommand, GuiTooltipError,
+        GuiTooltipSettings, GuiTooltipState, GuiTransform, GuiTransitionCallback,
+        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
+        GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
+        GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,
+        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
+        GuiWorldExt, ListInteractionSettings, ListLayoutSettings, ListLayoutType,
+        PopupMenuTemplates,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }

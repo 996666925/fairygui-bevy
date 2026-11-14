@@ -56,6 +56,9 @@ mod list_layout;
 pub use list_layout::ListLayoutSettings;
 #[path = "list_selection.rs"]
 mod list_selection;
+#[path = "list_settings.rs"]
+mod list_settings;
+pub use list_settings::ListInteractionSettings;
 #[path = "tree_items.rs"]
 mod tree_items;
 #[path = "virtual_list.rs"]

@@ -46,6 +46,12 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    pub fn set_list_settings(&mut self, settings: crate::GuiListSettings) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiListSettings::read(self.runtime, self.object) {
+            settings.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn set_list_layout(&mut self, layout: crate::GuiListLayout) {
         use crate::properties::Property;
         if let Some(native) = crate::GuiListLayout::read(self.runtime, self.object) {

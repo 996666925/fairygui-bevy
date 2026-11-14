@@ -505,6 +505,8 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 列表和树的 `GuiListLayout` 可直接修改布局类型、行列数、间距、对齐与自动拉伸。
 修改会重新布局普通列表及虚拟列表，并同步滚动内容范围；不合法的计数或虚拟几何会保留
 原布局。对齐量作用在列表内容容器上，行项目坐标仍保持原生局部坐标。
+`GuiListSettings` 控制点击列表项时滚入视口，以及不可见行是否折叠布局；折叠只改变位置和内容范围，
+不改变项目顺序、索引或选择状态。
 
 ```rust,ignore
 fn update_label(mut labels: Query<&mut GuiText>, target: Entity) {

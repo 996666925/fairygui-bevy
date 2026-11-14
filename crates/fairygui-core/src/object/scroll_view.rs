@@ -153,16 +153,11 @@ impl ObjectStore {
         list: GObjectId,
         enabled: bool,
     ) -> bool {
-        let data = match self.objects.get_mut(list).map(|o| &mut o.control) {
-            Some(ControlData::List(data)) => data.as_mut(),
-            Some(ControlData::Tree(data)) => &mut data.list,
-            _ => return false,
-        };
-        if data.scroll_item_to_view_on_click == enabled {
+        let Some(mut settings) = self.list_interaction_settings(list) else {
             return false;
-        }
-        data.scroll_item_to_view_on_click = enabled;
-        true
+        };
+        settings.scroll_item_to_view_on_click = enabled;
+        self.set_list_interaction_settings(list, settings)
     }
 
     /// __clickItem scrolls only its own pane, even in None mode/non-button rows.
