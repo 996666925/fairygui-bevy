@@ -468,6 +468,9 @@ fn configure_scroll(mut panes: Query<&mut GuiScrollSettings>) {
 负数反转滚轮方向，行滚轮移动两倍步长；减速率必须是 0～1 之间的有限值（不含端点）。
 配置修改不主动移动视口或重启补间；位置与播放状态仍从只读 `GuiScrollState` 查询。
 也可在 `FairyGuiRoot` 加载前附加设置组件，或使用直接方法 `set_scroll_settings`。
+`page_controller` 设置当前父对象上的分页控制器名称，`None` 解绑；无效名称保留旧绑定。
+绑定本身不移动视口、不切换控制器页；后续控制器切页驱动分页，滚动也会更新控制器。
+移动容器会保留原控制器身份，修改其他滚动设置不会误绑新父节点的同名控制器。
 
 滚动容器上的只读 `GuiScrollState`（或 `gui.scroll(entity)`）提供逻辑目标位置、
 动画当前显示位置、视口/内容尺寸、最大位置、两种位置对应的进度比例及当前页。

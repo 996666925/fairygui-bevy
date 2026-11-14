@@ -130,6 +130,7 @@ fn drive(
     mut runtime: NonSendMut<GuiRuntime>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     scrolls: Query<&ScrollPosition>,
+    mut settings: Query<&mut GuiScrollSettings>,
     mut windows: Query<(Entity, &mut Window)>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut commands: Commands,
@@ -350,14 +351,33 @@ fn drive(
         }
         10 if elapsed >= 8 => {
             let list = state.list.unwrap();
-            runtime.store_mut().set_scroll_page_controller(list, None);
+            settings
+                .get_mut(runtime.entity_of(list).unwrap())
+                .unwrap()
+                .page_controller = None;
+            state.step = 25;
+            state.since = state.frames;
+        }
+        25 if elapsed >= 4 => {
+            let list = state.list.unwrap();
+            assert!(runtime.store().scroll_page_controller(list).is_none());
             runtime
                 .store_mut()
                 .set_controller_page_index(state.owner.unwrap(), &state.name, 0);
             assert_eq!(runtime.store().scroll_current_page_x(list), Some(1));
-            runtime
-                .store_mut()
-                .set_scroll_page_controller(list, Some((state.owner.unwrap(), 0)));
+            settings
+                .get_mut(runtime.entity_of(list).unwrap())
+                .unwrap()
+                .page_controller = Some(state.name.clone());
+            state.step = 26;
+            state.since = state.frames;
+        }
+        26 if elapsed >= 4 => {
+            let list = state.list.unwrap();
+            assert_eq!(
+                runtime.store().scroll_page_controller(list),
+                Some((state.owner.unwrap(), 0))
+            );
             assert_eq!(
                 runtime.store().scroll_current_page_x(list),
                 Some(1),
@@ -495,10 +515,10 @@ fn drive(
         24 if elapsed >= 4 => {
             assert!(state.views.iter().all(|(id, view)| runtime.entity_of(*id).is_none() && nodes.get(*view).is_err()));
             println!(
-                "demo smoke PASSED: Bag pager animation, wheel/controller/indicator feedback, directional fractional page alignment, actual content drag/release page snap, inert unbind/rebind, retained views and disposal"
+                "demo smoke PASSED: Bag pager animation, wheel/controller/indicator feedback, directional fractional page alignment, actual content drag/release page snap, inert ECS unbind/rebind, retained views and disposal"
             );
             exit.write(AppExit::Success);
-            state.step = 25;
+            state.step = 27;
         }
         _ => {}
     }

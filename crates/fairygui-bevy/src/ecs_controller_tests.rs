@@ -499,6 +499,183 @@ fn list_settings_bind_selection_controllers_without_reselecting_and_merge_native
 }
 
 #[test]
+fn ecs_scroll_page_binding_is_inert_and_applies_before_same_frame_pager_selection() {
+    let (mut app, owner, asset) = fixture("BagWin", false);
+    load(&mut app, &asset, "Bag");
+    let other = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "BagWin"))
+        .id();
+    app.update();
+    let root = app.world().get::<GuiRootView>(owner).unwrap().0;
+    let other_root = app.world().get::<GuiRootView>(other).unwrap().0;
+    let list = child(&mut app, owner, "list");
+    let pager = child(&mut app, owner, "n25");
+    app.world_mut()
+        .entity_mut(list)
+        .insert(GuiListContent::new(45, |i, row| {
+            row.set_text(&i.to_string())
+        }));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiScrollSettings>(list)
+            .unwrap()
+            .page_controller
+            .as_deref(),
+        Some("page")
+    );
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(list)
+        .unwrap()
+        .page_controller = None;
+    app.world_mut()
+        .get_mut::<GuiListSelection>(pager)
+        .unwrap()
+        .0 = vec![2];
+    app.update();
+    assert_eq!(index(&app, root, "page"), 2);
+    assert_eq!(
+        app.world()
+            .get::<GuiScrollState>(list)
+            .unwrap()
+            .position()
+            .x,
+        0.,
+        "unbind must precede same-frame pager selection"
+    );
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(list)
+        .unwrap()
+        .page_controller = Some("page".into());
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiScrollState>(list)
+            .unwrap()
+            .position()
+            .x,
+        0.,
+        "binding alone does not move to the controller's current page"
+    );
+    app.world_mut()
+        .get_mut::<GuiListSelection>(pager)
+        .unwrap()
+        .0 = vec![1];
+    app.update();
+    let state = *app.world().get::<GuiScrollState>(list).unwrap();
+    assert_eq!(state.position().x, state.view_size().x);
+    let native = app.world().get::<GObjectRef>(list).unwrap().0;
+    let before = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .scroll_pane(native)
+        .unwrap()
+        .display_pos();
+    {
+        let mut settings = app.world_mut().get_mut::<GuiScrollSettings>(list).unwrap();
+        settings.page_controller = Some("missing".into());
+        settings.scroll_step = 12.5;
+    }
+    crate::properties::sync(app.world_mut());
+    let runtime = app.world().non_send::<GuiRuntime>();
+    assert_eq!(
+        runtime.store().scroll_pane(native).unwrap().display_pos(),
+        before
+    );
+    assert!(runtime.store().scroll_pane(native).unwrap().is_animating());
+    assert_eq!(
+        app.world()
+            .get::<GuiScrollSettings>(list)
+            .unwrap()
+            .page_controller
+            .as_deref(),
+        Some("page")
+    );
+    assert_eq!(
+        app.world()
+            .get::<GuiScrollSettings>(list)
+            .unwrap()
+            .scroll_step,
+        12.5
+    );
+    let parent = app.world().get::<GObjectRef>(other_root).unwrap().0;
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(native, Some(parent));
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(list)
+        .unwrap()
+        .touch_effect = false;
+    app.world_mut()
+        .gui_mut(list)
+        .unwrap()
+        .scroll_to(Vec2::ZERO, false);
+    app.update();
+    assert_eq!(index(&app, root, "page"), 0);
+    assert_eq!(index(&app, other_root, "page"), 0);
+    app.world_mut()
+        .gui_mut(list)
+        .unwrap()
+        .scroll_to(Vec2::new(state.view_size().x * 2., 0.), false);
+    app.update();
+    assert_eq!(
+        index(&app, root, "page"),
+        2,
+        "a retained binding keeps the original owner"
+    );
+    assert_eq!(index(&app, other_root, "page"), 0);
+    app.world_mut().despawn(owner);
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiScrollSettings>(list)
+            .unwrap()
+            .page_controller,
+        None
+    );
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(list)
+        .unwrap()
+        .page_controller = Some("page".into());
+    app.update();
+    assert_eq!(index(&app, other_root, "page"), 0);
+    assert_eq!(
+        app.world()
+            .get::<GuiScrollState>(list)
+            .unwrap()
+            .position()
+            .x,
+        state.view_size().x * 2.
+    );
+    app.world_mut()
+        .gui_mut(list)
+        .unwrap()
+        .scroll_to(Vec2::ZERO, false);
+    app.update();
+    let tick = app
+        .world()
+        .entity(list)
+        .get_ref::<GuiScrollSettings>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(list)
+            .get_ref::<GuiScrollSettings>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    app.world_mut().despawn(other);
+    app.update();
+    assert!(app.world().get_entity(list).is_err());
+}
+
+#[test]
 fn controller_components_drive_scroll_pages_and_selection_then_follow_native_scroll_back() {
     let (mut app, owner, asset) = fixture("BagWin", false);
     load(&mut app, &asset, "Bag");

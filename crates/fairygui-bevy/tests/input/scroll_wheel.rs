@@ -60,7 +60,11 @@ fn ecs_scroll_settings_affect_the_current_wheel_and_do_not_replay_position() {
     let (entity, _) = target(&mut app, 50);
     app.world_mut().entity_mut(entity).insert(GObjectRef(pane));
     app.update();
-    let initial = *app.world().get::<GuiScrollSettings>(entity).unwrap();
+    let initial = app
+        .world()
+        .get::<GuiScrollSettings>(entity)
+        .unwrap()
+        .clone();
     {
         let mut settings = app
             .world_mut()

@@ -64,7 +64,7 @@ fn pending_scroll_settings_apply_before_initialize_and_project_only_on_scroll_pa
         deceleration_rate: 0.925_000_000_000_000_2,
         ..default()
     };
-    app.world_mut().entity_mut(owner).insert(settings);
+    app.world_mut().entity_mut(owner).insert(settings.clone());
     app.init_resource::<Seen>()
         .add_systems(Update, inspect.in_set(GuiSystems::Initialize));
     for _ in 0..3 {
@@ -134,7 +134,7 @@ fn field_edits_keep_fresh_native_settings_physics_environment_and_running_tween(
         settings.mouse_wheel_enabled = true;
     }
     crate::properties::sync(app.world_mut());
-    let current = *app.world().get::<GuiScrollSettings>(view).unwrap();
+    let current = app.world().get::<GuiScrollSettings>(view).unwrap().clone();
     assert_eq!(current.scroll_step, -9.25);
     assert!(current.snap_to_item);
     assert_eq!(current.deceleration_rate, 0.91);
@@ -161,7 +161,7 @@ fn field_edits_keep_fresh_native_settings_physics_environment_and_running_tween(
 fn invalid_numbers_restore_native_values_zero_resets_default_and_direct_edits_stay_stable() {
     let (mut app, owner, _) = fixture(true);
     let view = app.world().get::<GuiRootView>(owner).unwrap().0;
-    let initial = *app.world().get::<GuiScrollSettings>(view).unwrap();
+    let initial = app.world().get::<GuiScrollSettings>(view).unwrap().clone();
     for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0., 1., -0.5, 2.] {
         {
             let mut settings = app.world_mut().get_mut::<GuiScrollSettings>(view).unwrap();
@@ -181,7 +181,7 @@ fn invalid_numbers_restore_native_values_zero_resets_default_and_direct_edits_st
         .set_scroll_settings(GuiScrollSettings {
             scroll_step: -8.5,
             deceleration_rate: 0.93,
-            ..initial
+            ..initial.clone()
         });
     app.update();
     assert_eq!(

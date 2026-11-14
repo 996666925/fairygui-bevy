@@ -7,6 +7,43 @@ use crate::scroll::{ScrollPane, ScrollType};
 mod tests;
 
 impl ObjectStore {
+    /// Resolve a controller on the current parent. A missing name leaves the
+    /// existing reference intact. Assignment alone does not move either side.
+    pub fn set_scroll_page_controller_by_name(
+        &mut self,
+        container: GObjectId,
+        name: Option<&str>,
+    ) -> bool {
+        let binding = if let Some(name) = name {
+            let Some(parent) = self.object(container).and_then(|o| o.parent()) else {
+                return false;
+            };
+            let Some(index) = self
+                .object(parent)
+                .and_then(|o| o.control().component())
+                .and_then(|c| c.controller_index_of(name))
+            else {
+                return false;
+            };
+            Some((parent, index))
+        } else {
+            None
+        };
+        self.set_scroll_page_controller(container, binding)
+    }
+
+    pub fn scroll_page_controller_name(&self, container: GObjectId) -> Option<&str> {
+        let (owner, index) = self.scroll_page_controller(container)?;
+        Some(
+            &self
+                .object(owner)?
+                .control()
+                .component()?
+                .controller_at(index)?
+                .name,
+        )
+    }
+
     /// Retains the controller's owner identity across reparenting, as native
     /// pageController does. Assigning a binding alone does not move either side.
     pub fn set_scroll_page_controller(

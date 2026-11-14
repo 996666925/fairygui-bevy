@@ -195,7 +195,7 @@ fn drive(
         }
         14 if elapsed >= 8 => {
             state.scroll_start = offset();
-            let mut settings = *gui.scroll_settings(state.list.unwrap()).unwrap();
+            let mut settings = gui.scroll_settings(state.list.unwrap()).unwrap().clone();
             settings.mouse_wheel_enabled = false;
             settings.touch_effect = false;
             settings.snap_to_item = false;
@@ -225,7 +225,7 @@ fn drive(
         18 if elapsed >= 4 => {
             assert!((offset() - state.scroll_start).abs() < 0.1);
             mouse.release(MouseButton::Left);
-            let mut settings = *gui.scroll_settings(state.list.unwrap()).unwrap();
+            let mut settings = gui.scroll_settings(state.list.unwrap()).unwrap().clone();
             settings.mouse_wheel_enabled = true;
             settings.scroll_step = 12.5;
             settings.touch_effect = true;
