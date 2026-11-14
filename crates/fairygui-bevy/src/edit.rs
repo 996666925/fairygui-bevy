@@ -342,6 +342,11 @@ impl GuiObjectMut<'_> {
         let object = self.object;
         runtime.store_mut().set_tooltips(object, text);
     }
+    pub fn set_data(&mut self, data: Option<String>) {
+        let runtime = &mut *self.runtime;
+        let object = self.object;
+        runtime.store_mut().set_data(object, data);
+    }
     pub fn ensure_text_size(&mut self) {
         let runtime = &mut *self.runtime;
         let object = self.object;

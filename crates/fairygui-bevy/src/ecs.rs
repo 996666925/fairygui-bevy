@@ -550,6 +550,7 @@ pub struct GuiQuery<'w, 's> {
     texts: Query<'w, 's, &'static GuiText>,
     text_formats: Query<'w, 's, &'static crate::GuiTextFormat>,
     input_settings: Query<'w, 's, &'static crate::GuiTextInputSettings>,
+    data: Query<'w, 's, &'static crate::GuiData>,
     button_settings: Query<'w, 's, &'static crate::GuiButtonSettings>,
     graphs: Query<'w, 's, &'static crate::GuiGraph>,
     blend_modes: Query<'w, 's, &'static crate::GuiBlendMode>,
@@ -704,6 +705,10 @@ impl GuiQuery<'_, '_> {
 
     pub fn tooltips(&self, entity: Entity) -> Option<&str> {
         self.get(entity)?.tooltips()
+    }
+
+    pub fn data(&self, entity: Entity) -> Option<&str> {
+        self.data.get(self.view(entity)?).ok()?.0.as_deref()
     }
 
     pub fn icon(&self, entity: Entity) -> Option<&str> {

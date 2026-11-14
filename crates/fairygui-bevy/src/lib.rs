@@ -55,6 +55,8 @@ pub use animation::{GuiAnimationPlaySettings, GuiAnimationState};
 pub mod backend;
 pub mod combo;
 pub use combo::GuiComboBoxState;
+mod data_property;
+pub use data_property::GuiData;
 mod component_properties;
 mod compositor;
 pub use component_properties::GuiOpaque;
@@ -185,16 +187,16 @@ pub mod prelude {
         FairyGuiRoot, FairyGuiWindow, FillMethod, FlipType, FuiAsset, GObjectRef, GraphType,
         GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState, GuiBlendMode,
         GuiButtonSelected, GuiButtonSettings, GuiColor, GuiColorFilter, GuiComboBoxState,
-        GuiConfig, GuiControllerState, GuiControllers, GuiDisplay, GuiDragBounds, GuiDragCommand,
-        GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
-        GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
-        GuiGraph, GuiIcon, GuiImageFill, GuiImageFlip, GuiInputCommand, GuiInputSettings,
-        GuiInputState, GuiLink, GuiListContent, GuiListContentError, GuiListContentState,
-        GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow, GuiListSelection,
-        GuiListSettings, GuiListState, GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState,
-        GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque,
-        GuiPointerCapture, GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu,
-        GuiPopupState, GuiProgressState, GuiProgressTweenComplete, GuiProgressValue,
+        GuiConfig, GuiControllerState, GuiControllers, GuiData, GuiDisplay, GuiDragBounds,
+        GuiDragCommand, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget,
+        GuiEvent, GuiFont, GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings,
+        GuiGlobalWaitState, GuiGraph, GuiIcon, GuiImageFill, GuiImageFlip, GuiInputCommand,
+        GuiInputSettings, GuiInputState, GuiLink, GuiListContent, GuiListContentError,
+        GuiListContentState, GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow,
+        GuiListSelection, GuiListSettings, GuiListState, GuiLoaderFailure, GuiLoaderSettings,
+        GuiLoaderState, GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut,
+        GuiOpaque, GuiPointerCapture, GuiPointerId, GuiPopupCommand, GuiPopupDirection,
+        GuiPopupMenu, GuiPopupState, GuiProgressState, GuiProgressTweenComplete, GuiProgressValue,
         GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance,
         GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollSettings, GuiScrollState,
         GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText,
