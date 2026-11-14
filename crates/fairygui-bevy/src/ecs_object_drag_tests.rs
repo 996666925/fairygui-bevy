@@ -255,7 +255,8 @@ fn draggable_hidden_offstage_modal_and_reparented_sources_stop_without_resuming(
                 app.world_mut()
                     .insert_resource(crate::GuiGlobalWaitSettings::new(handle, "WindowA"));
                 app.world_mut()
-                    .write_message(crate::GuiGlobalWaitCommand::Show { message: None });
+                    .resource_mut::<crate::GuiGlobalWaitSettings>()
+                    .visible = true;
             }
             _ => {
                 let id = app.world().get::<GObjectRef>(control).unwrap().0;

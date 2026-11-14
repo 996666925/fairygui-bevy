@@ -45,11 +45,9 @@ pub fn bind(
         let owner = commands.spawn((window, DemoWindow, ChildOf(page))).id();
         commands.entity(button).insert(Show(owner)).observe(show);
         commands.entity(page).insert(PageBound);
-        commands.insert_resource(GuiGlobalWaitSettings::new(
-            source.asset.clone(),
-            "GlobalModalWaiting",
-        ));
-        commands.write_message(GuiGlobalWaitCommand::Show { message: None });
+        let mut settings = GuiGlobalWaitSettings::new(source.asset.clone(), "GlobalModalWaiting");
+        settings.visible = true;
+        commands.insert_resource(settings);
         global.page = Some(page);
         global.timer = Some(Timer::from_seconds(3., TimerMode::Once));
     }
@@ -101,10 +99,13 @@ pub fn advance(
     mut windows: Query<&mut FairyGuiWindow>,
     time: Res<Time>,
     mut global: ResMut<GlobalDemo>,
+    mut settings: Option<ResMut<GuiGlobalWaitSettings>>,
     existing: Query<()>,
 ) {
     if global.page.is_some_and(|page| !existing.contains(page)) {
-        commands.write_message(GuiGlobalWaitCommand::Hide);
+        if let Some(settings) = settings.as_deref_mut() {
+            settings.visible = false;
+        }
         global.page = None;
         global.timer = None;
     } else if global
@@ -112,7 +113,9 @@ pub fn advance(
         .as_mut()
         .is_some_and(|timer| timer.tick(time.delta()).just_finished())
     {
-        commands.write_message(GuiGlobalWaitCommand::Hide);
+        if let Some(settings) = settings.as_deref_mut() {
+            settings.visible = false;
+        }
         global.timer = None;
     }
     for (owner, mut job) in &mut jobs {

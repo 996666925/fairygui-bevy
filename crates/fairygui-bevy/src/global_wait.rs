@@ -7,31 +7,30 @@ use bevy::window::PrimaryWindow;
 #[path = "ecs_global_wait_tests.rs"]
 mod tests;
 
-/// Template for the single stage-wide wait pane. The asset is the local template
-/// context; item_name also accepts registered ui:// URLs. Changing or clearing
-/// the template disposes its previous pane. An active request retries on asset arrival.
+/// Writable configuration for the single stage-wide wait pane. The asset is the
+/// local template context; item_name also accepts registered ui:// URLs. Hiding
+/// retains the pane. Changing/clearing the template or removing this resource
+/// disposes it. A visible request retries on asset/dependency arrival.
 #[derive(Resource, Debug, Default, Clone, PartialEq, Eq)]
 pub struct GuiGlobalWaitSettings {
     pub asset: Option<Handle<FuiAsset>>,
     pub item_name: String,
+    /// Desired visibility, retained while the template is loading.
+    pub visible: bool,
+    /// Native text on templates that expose a text property.
+    pub message: Option<String>,
 }
 impl GuiGlobalWaitSettings {
     pub fn new(asset: Handle<FuiAsset>, item_name: impl Into<String>) -> Self {
         Self {
             asset: Some(asset),
             item_name: item_name.into(),
+            ..default()
         }
     }
-}
-#[derive(Message, Debug, Clone)]
-pub enum GuiGlobalWaitCommand {
-    Show {
-        message: Option<String>,
-    },
-    /// Detach the pane and retain its model/view for reuse; cancel a pending Show.
-    Hide,
-    /// Cancel the request and dispose the retained pane, including hidden views.
-    Dispose,
+    fn same_template(&self, other: &Self) -> bool {
+        self.asset == other.asset && self.item_name == other.item_name
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GuiGlobalWaitError {
@@ -66,15 +65,13 @@ impl GuiGlobalWaitState {
 pub(super) struct GlobalWait {
     settings: GuiGlobalWaitSettings,
     pane: Option<GObjectId>,
-    requested: bool,
-    message: Option<String>,
     error: Option<GuiGlobalWaitError>,
 }
 impl GuiRuntime {
     /// Global waiting is separate from window modality and the popup stack.
     pub(crate) fn global_wait_pane(&self) -> Option<GObjectId> {
         self.global_wait.pane.filter(|&pane| {
-            self.global_wait.requested
+            self.global_wait.settings.visible
                 && self.store.is_on_stage(pane)
                 && self.store.display_visible(pane)
         })
@@ -88,36 +85,23 @@ impl GuiRuntime {
 }
 
 pub(crate) fn sync_global_wait(
-    mut messages: MessageReader<GuiGlobalWaitCommand>,
-    settings: Res<GuiGlobalWaitSettings>,
+    settings: Option<Res<GuiGlobalWaitSettings>>,
     assets: Res<Assets<FuiAsset>>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
     input: Res<GuiInputSettings>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
-    if runtime.global_wait.settings != *settings {
+    let Some(settings) = settings else {
         runtime.dispose_global_wait();
-        runtime.global_wait.settings = settings.clone();
+        runtime.global_wait.settings = GuiGlobalWaitSettings::default();
+        return;
+    };
+    let mut refresh_message = runtime.global_wait.settings.message != settings.message
+        || (!runtime.global_wait.settings.visible && settings.visible);
+    if !runtime.global_wait.settings.same_template(&settings) {
+        runtime.dispose_global_wait();
     }
-    let mut refresh_message = false;
-    for command in messages.read() {
-        match command {
-            GuiGlobalWaitCommand::Show { message } => {
-                runtime.global_wait.requested = true;
-                runtime.global_wait.message = message.clone();
-                runtime.global_wait.error = None;
-                refresh_message = true;
-            }
-            GuiGlobalWaitCommand::Hide => {
-                runtime.global_wait.requested = false;
-                runtime.global_wait.error = None;
-            }
-            GuiGlobalWaitCommand::Dispose => {
-                runtime.global_wait.requested = false;
-                runtime.dispose_global_wait();
-            }
-        }
-    }
+    runtime.global_wait.settings = settings.clone();
     if runtime
         .global_wait
         .pane
@@ -125,7 +109,8 @@ pub(crate) fn sync_global_wait(
     {
         runtime.global_wait.pane = None;
     }
-    if !runtime.global_wait.requested {
+    if !settings.visible {
+        runtime.global_wait.error = None;
         if let Some(pane) = runtime.global_wait.pane {
             runtime.store.detach_from_parent(pane);
             runtime.store.set_visible(pane, false);
@@ -179,8 +164,8 @@ pub(crate) fn sync_global_wait(
     runtime.store.set_size(pane, size.width, size.height);
     runtime.store.set_visible(pane, true);
     if refresh_message {
-        let message = runtime.global_wait.message.clone().unwrap_or_default();
-        runtime.store.set_object_text(pane, &message);
+        let message = settings.message.as_deref().unwrap_or_default();
+        runtime.store.set_object_text(pane, message);
     }
     runtime.queue_subtree(pane);
 }
@@ -205,7 +190,7 @@ pub(crate) fn sync_global_wait_state(
         commands.entity(view).insert(GlobalZIndex(i32::MAX));
     }
     let next = GuiGlobalWaitState {
-        requested: runtime.global_wait.requested,
+        requested: runtime.global_wait.settings.visible,
         waiting: runtime.global_wait_pane().is_some() && view.is_some(),
         view,
         error: runtime.global_wait.error.clone(),

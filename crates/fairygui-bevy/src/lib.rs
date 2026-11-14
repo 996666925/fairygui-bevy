@@ -126,9 +126,7 @@ pub use pull::GuiPullCommand;
 pub use runtime::ecs_drag_drop::{
     GuiDragCommand, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget,
 };
-pub use runtime::global_wait::{
-    GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState,
-};
+pub use runtime::global_wait::{GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState};
 pub use runtime::object_drag::{GuiDragBounds, GuiDraggable, GuiObjectDragState};
 pub use runtime::tooltip::{
     GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
@@ -193,25 +191,24 @@ pub mod prelude {
         GuiButtonSelected, GuiButtonSettings, GuiColor, GuiColorFilter, GuiComboBoxState,
         GuiConfig, GuiControllerState, GuiControllers, GuiData, GuiDisplay, GuiDragBounds,
         GuiDragCommand, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget,
-        GuiEvent, GuiFont, GuiGlobalWaitCommand, GuiGlobalWaitError, GuiGlobalWaitSettings,
-        GuiGlobalWaitState, GuiGraph, GuiIcon, GuiImageFill, GuiImageFlip, GuiInputCommand,
-        GuiInputSettings, GuiInputState, GuiLink, GuiListContent, GuiListContentError,
-        GuiListContentState, GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow,
-        GuiListSelection, GuiListSettings, GuiListState, GuiLoaderFailure, GuiLoaderSettings,
-        GuiLoaderState, GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut,
-        GuiOpaque, GuiPointerCapture, GuiPointerId, GuiPopupCommand, GuiPopupDirection,
-        GuiPopupMenu, GuiPopupState, GuiProgressState, GuiProgressTweenComplete, GuiProgressValue,
-        GuiPullCommand, GuiPullPart, GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance,
-        GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollSettings, GuiScrollState,
-        GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText,
-        GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTooltipCommand, GuiTooltipError,
-        GuiTooltipSettings, GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback,
-        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
-        GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
-        GuiTreeNodeState, GuiTreeSettings, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
-        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowState, GuiWorldExt,
-        ListInteractionSettings, ListLayoutSettings, ListLayoutType, ListSelectionMode,
-        PopupMenuTemplates, TreeSettings,
+        GuiEvent, GuiFont, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState, GuiGraph,
+        GuiIcon, GuiImageFill, GuiImageFlip, GuiInputCommand, GuiInputSettings, GuiInputState,
+        GuiLink, GuiListContent, GuiListContentError, GuiListContentState, GuiListItem,
+        GuiListItemClick, GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings,
+        GuiListState, GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
+        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
+        GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
+        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
+        GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
+        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue,
+        GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput,
+        GuiTextInputSettings, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
+        GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
+        GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
+        GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
+        ListLayoutSettings, ListLayoutType, ListSelectionMode, PopupMenuTemplates, TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }
@@ -276,7 +273,6 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiPullRelease>()
         .add_message::<GuiPullCommand>()
         .add_message::<GuiPopupCommand>()
-        .add_message::<GuiGlobalWaitCommand>()
         .add_message::<GuiTooltipCommand>()
         .add_message::<GuiDragCommand>()
         .init_resource::<GuiDragState>()

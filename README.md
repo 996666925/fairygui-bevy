@@ -1165,27 +1165,33 @@ ModalWaiting 示例中的 Open Window / Refresh 按钮通过 ECS 驱动三秒等
 回归可运行 `--smoke-window-wait`。普通文字按原版不作为鼠标命中目标，父控件仍可
 接收点击；富文本链接与输入框继续使用各自的交互路径。
 
-全局等待使用独立资源和命令，覆盖整个舞台：
+全局等待使用独立的可写资源，覆盖整个舞台：
 
 ```rust,ignore
-commands.insert_resource(GuiGlobalWaitSettings::new(
+let mut wait = GuiGlobalWaitSettings::new(
     assets.load("ui/ModalWaiting.fui"), "GlobalModalWaiting",
-));
-commands.write_message(GuiGlobalWaitCommand::Show { message: None });
+);
+wait.visible = true;
+wait.message = Some("Loading".into());
+commands.insert_resource(wait);
+// 后续业务系统通过 ResMut<GuiGlobalWaitSettings> 直接修改：
+wait_settings.visible = false;
 ```
 
-任务结束后发送 `GuiGlobalWaitCommand::Hide` 撤下遮罩，保留对象和视图供下次复用。
+任务结束后设置 `visible = false` 撤下遮罩，保留对象和视图供下次复用。
 
-`Show.message` 写入模板自身的原生文本属性；无文本属性的组件会忽略它。
+`message` 写入模板自身的原生文本属性；无文本属性的组件会忽略它。
+修改文字不会重建面板，设为 `None` 会清空文字；隐藏期间也可更新配置。
 模板可用本包名称或已登记包的 `ui://` 地址。请求会等待资产，解析失败可从
 `GuiGlobalWaitState::error()` 查询；未创建成功的请求不会拦截输入。状态资源还提供
 `is_requested()`、`is_waiting()` 和 `view()`，隐藏后仍可查询保留的实体。
 
 遮罩按输入设置选择的窗口持续调整尺寸，位于原生窗口、菜单和普通界面上方，
 鼠标、触摸、滚轮和文本焦点沿统一输入规则拒绝下层目标。全局等待独立于窗口的
-模态状态及弹出栈。`Hide` 取消等待中的请求并保留已创建面板；`Dispose` 同时回收
-隐藏的面板。更改或清空配置会回收旧模板，仍在请求时会尝试新的配置。命令按
-发送顺序在窗口、弹层命令后执行。无 Bevy 窗口时沿用舞台尺寸，首次默认 1280×720。
+模态状态及弹出栈。`visible = false` 取消等待中的请求并保留已创建面板；
+移除 `GuiGlobalWaitSettings` 资源同时回收隐藏的面板。更改或清空模板会回收旧面板，
+`visible = true` 时会尝试新的配置。资源在窗口和弹层同步后应用。
+无 Bevy 窗口时沿用舞台尺寸，首次默认 1280×720。
 
 ModalWaiting 示例进入时显示三秒全局等待，随后可以打开窗口并执行局部等待；页面
 提前销毁会取消示例计时并撤下全局遮罩。`--smoke-window-wait` 同时验证全局遮挡、

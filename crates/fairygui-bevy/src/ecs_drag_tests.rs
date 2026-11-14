@@ -237,7 +237,8 @@ fn ecs_drag_cancellation_source_disposal_and_hidden_source_never_deliver_or_rest
                 app.world_mut()
                     .insert_resource(crate::GuiGlobalWaitSettings::new(handle, "WindowA"));
                 app.world_mut()
-                    .write_message(crate::GuiGlobalWaitCommand::Show { message: None });
+                    .resource_mut::<crate::GuiGlobalWaitSettings>()
+                    .visible = true;
             }
         }
         app.update();
