@@ -2,7 +2,7 @@ use super::*;
 use crate::core::{package::FuiPackage, widget::ControlData};
 use crate::{
     FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiControllers, GuiDisplay, GuiQuery, GuiRootInstance,
-    GuiText, GuiTransform, GuiWorldExt,
+    GuiText, GuiTransform, GuiTreeSettings, GuiWorldExt,
 };
 use bevy::ecs::system::SystemState;
 use bevy::picking::hover::Hovered;
@@ -186,6 +186,230 @@ fn tree_row_expanded_field_reflows_and_tracks_native_expansion_changes() {
             .unwrap()
             .visible_nodes(),
         [0, 1, 2, 3, 4, 5, 6]
+    );
+}
+
+#[test]
+fn tree_settings_update_indent_and_folder_click_policy_through_ecs() {
+    let (mut app, _, owner) = fixture(true);
+    let mut window = Window {
+        focused: true,
+        ..default()
+    };
+    window.set_cursor_position(Some(Vec2::splat(10.)));
+    app.world_mut().spawn((window, PrimaryWindow));
+    app.update();
+    app.update();
+    let tree = tree(&mut app, owner);
+    let rows: Vec<_> = app
+        .world()
+        .get::<GuiTreeState>(tree)
+        .unwrap()
+        .nodes()
+        .iter()
+        .map(|node| node.view().unwrap())
+        .collect();
+    let members: Vec<_> = app
+        .world_mut()
+        .query::<(Entity, &GuiTreeNode)>()
+        .iter(app.world())
+        .map(|(entity, _)| entity)
+        .collect();
+    assert_eq!(
+        members.len(),
+        rows.len(),
+        "decorative descendants must not acquire tree membership"
+    );
+    let runtime = app.world().non_send::<GuiRuntime>();
+    let indent = runtime
+        .store()
+        .child_by_name(app.world().get::<GObjectRef>(rows[1]).unwrap().0, "indent")
+        .unwrap();
+    assert_eq!(runtime.store().object(indent).unwrap().width(), 15.);
+
+    {
+        let mut settings = app.world_mut().get_mut::<GuiTreeSettings>(tree).unwrap();
+        settings.indent = 27;
+        settings.click_to_expand = 0;
+    }
+    app.update();
+    let runtime = app.world().non_send::<GuiRuntime>();
+    let row = app.world().get::<GObjectRef>(rows[1]).unwrap().0;
+    let indent = runtime.store().child_by_name(row, "indent").unwrap();
+    assert_eq!(runtime.store().object(indent).unwrap().width(), 15.);
+    assert_eq!(app.world().get::<GuiTreeState>(tree).unwrap().indent(), 27);
+
+    click(&mut app, rows[0]);
+    assert!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .node(0)
+            .unwrap()
+            .is_expanded()
+    );
+    app.world_mut()
+        .get_mut::<GuiTreeSettings>(tree)
+        .unwrap()
+        .click_to_expand = 1;
+    app.update();
+    click(&mut app, rows[0]);
+    assert!(
+        !app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .node(0)
+            .unwrap()
+            .is_expanded()
+    );
+    let runtime = app.world().non_send::<GuiRuntime>();
+    assert_eq!(
+        runtime.store().object(indent).unwrap().width(),
+        15.,
+        "clicks do not rebuild retained cells"
+    );
+    app.world_mut()
+        .get_mut::<GuiTreeSettings>(tree)
+        .unwrap()
+        .click_to_expand = 2;
+    app.update();
+    click(&mut app, rows[0]);
+    assert!(
+        !app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .node(0)
+            .unwrap()
+            .is_expanded()
+    );
+}
+
+#[test]
+fn tree_settings_merge_native_fields_and_apply_to_new_content_without_rebuilding_rows() {
+    let (mut app, _, owner) = fixture(true);
+    app.update();
+    let tree = tree(&mut app, owner);
+    let id = app.world().get::<GObjectRef>(tree).unwrap().0;
+    app.world_mut()
+        .get_mut::<GuiTreeSettings>(tree)
+        .unwrap()
+        .click_to_expand = 0;
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_tree_settings(
+            id,
+            crate::TreeSettings {
+                indent: 29,
+                click_to_expand: 1,
+            },
+        );
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiTreeSettings>(tree),
+        Some(&GuiTreeSettings {
+            indent: 29,
+            click_to_expand: 0
+        })
+    );
+    let mut query = SystemState::<GuiQuery>::new(app.world_mut());
+    assert_eq!(
+        query
+            .get(app.world())
+            .unwrap()
+            .tree_settings(tree)
+            .unwrap()
+            .indent,
+        29
+    );
+
+    let dynamic = query
+        .get(app.world())
+        .unwrap()
+        .child_by_name(owner, "tree2")
+        .unwrap();
+    app.world_mut().entity_mut(dynamic).insert((
+        GuiTreeSettings {
+            indent: 31,
+            click_to_expand: 2,
+        },
+        crate::GuiTreeContent::new(vec![crate::GuiTreeItem::folder(
+            "folder",
+            "Folder",
+            vec![crate::GuiTreeItem::leaf("retained", "Retained")],
+        )]),
+    ));
+    app.update();
+    let retained = app
+        .world()
+        .get::<GuiTreeState>(dynamic)
+        .unwrap()
+        .node_by_key("retained")
+        .unwrap()
+        .view()
+        .unwrap();
+    let part = query
+        .get(app.world())
+        .unwrap()
+        .child_by_name(retained, "indent")
+        .unwrap();
+    assert_eq!(app.world().get::<GuiTransform>(part).unwrap().size.x, 31.);
+    app.world_mut()
+        .get_mut::<GuiTreeSettings>(dynamic)
+        .unwrap()
+        .indent = 42;
+    app.world_mut()
+        .get_mut::<crate::GuiTreeContent>(dynamic)
+        .unwrap()
+        .items[0]
+        .children
+        .push(crate::GuiTreeItem::leaf("added", "Added"));
+    app.update();
+    let state = app.world().get::<GuiTreeState>(dynamic).unwrap();
+    assert_eq!(
+        state.node_by_key("retained").unwrap().view(),
+        Some(retained)
+    );
+    let added = state.node_by_key("added").unwrap().view().unwrap();
+    let added_part = query
+        .get(app.world())
+        .unwrap()
+        .child_by_name(added, "indent")
+        .unwrap();
+    assert_eq!(app.world().get::<GuiTransform>(part).unwrap().size.x, 31.);
+    assert_eq!(
+        app.world().get::<GuiTransform>(added_part).unwrap().size.x,
+        42.
+    );
+    app.world_mut()
+        .gui_mut(dynamic)
+        .unwrap()
+        .set_tree_settings(GuiTreeSettings {
+            indent: 18,
+            click_to_expand: 1,
+        });
+    app.update();
+    let tick = app
+        .world()
+        .entity(dynamic)
+        .get_ref::<GuiTreeSettings>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiTreeSettings>(dynamic),
+        Some(&GuiTreeSettings {
+            indent: 18,
+            click_to_expand: 1
+        })
+    );
+    assert_eq!(
+        app.world()
+            .entity(dynamic)
+            .get_ref::<GuiTreeSettings>()
+            .unwrap()
+            .last_changed(),
+        tick
     );
 }
 

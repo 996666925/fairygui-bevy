@@ -28,6 +28,12 @@ Windows smoke 直接加载 Host/Theme 夹具并共用官方 Basics 图集，不�
 `Int16`/`Uint16`/`Int32` 混用的偏移字段与两段式字符串编码，只有真实数据才能
 覆盖这些分支。
 
+`tree-settings-reference.txt` runs the unchanged GTree indent/clickToExpand
+setters, createCell and dispatchItemEvent methods with scalar cell/event hosts.
+Its source hash covers all extracted methods. The 27 indent cases distinguish
+retained cells from newly constructed cells; 20 click cases cover policies
+0, 1, 2 and other nonzero values on folders and leaves.
+
 ## Executable GButton reference
 
 `button-reference.txt` executes the unchanged GButton class extracted from

@@ -236,7 +236,10 @@ impl GuiTreeNode {
 
 impl Property for GuiTreeNode {
     fn read(runtime: &GuiRuntime, object: crate::core::GObjectId) -> Option<Self> {
-        let (tree, _, index) = runtime.store().list_item_of(object)?;
+        let (tree, row, index) = runtime.store().list_item_of(object)?;
+        if row != object {
+            return None;
+        }
         let crate::core::widget::ControlData::Tree(data) = runtime.store().object(tree)?.control()
         else {
             return None;

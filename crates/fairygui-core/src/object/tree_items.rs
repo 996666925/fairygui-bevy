@@ -3,6 +3,29 @@ use super::*;
 use crate::widget::ControlData;
 
 impl ObjectStore {
+    /// GTree.createCell samples indent once. Keyed reparenting to a new level
+    /// represents a new native cell binding; ordinary layout/collapse retains it.
+    pub(super) fn prepare_tree_indents(&mut self, tree: GObjectId) {
+        let Some(ControlData::Tree(data)) = self.object(tree).map(|o| o.control()) else {
+            return;
+        };
+        let indent = data.indent;
+        let levels: Vec<_> = data.nodes.iter().map(|n| n.level).collect();
+        for (index, level) in levels.into_iter().enumerate() {
+            let Some(row) = self.list_item_at(tree, index) else {
+                continue;
+            };
+            let Some(part) = self.child_by_name(row, "indent") else {
+                continue;
+            };
+            if self.tree_cell_indents.get(&row) == Some(&(tree, level)) {
+                continue;
+            }
+            let height = self.objects[part].height();
+            self.set_size(part, f32::from(level) * indent as f32, height);
+            self.tree_cell_indents.insert(row, (tree, level));
+        }
+    }
     /// Replace the logical preorder description after the adapter has prepared
     /// its cells. Validate all metadata before mutating the tree.
     pub fn replace_tree_nodes(

@@ -59,6 +59,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiListLayout>(world);
     sync_property::<GuiListSettings>(world);
     sync_property::<GuiTreeNode>(world);
+    sync_property::<GuiTreeSettings>(world);
     sync_property::<GuiBlendMode>(world);
     sync_property::<GuiColorFilter>(world);
     sync_property::<GuiOpaque>(world);

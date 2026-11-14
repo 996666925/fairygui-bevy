@@ -1,0 +1,52 @@
+# Extracted unchanged GTree indent/clickToExpand setters, createCell, dispatchItemEvent.
+# Scalar cell/controller/event hosts; no native renderer or OS.
+# SHA256 8b9ce1f6c95852cbf8c00aa06199588c188b90de48f80be85f62ca08ebe5927d
+# indent old new level existing_width new_cell_width
+# click policy folder before after
+indent 0 0 0 0 0
+indent 0 0 1 0 0
+indent 0 0 2 0 0
+indent 0 27 0 0 0
+indent 0 27 1 0 27
+indent 0 27 2 0 54
+indent 0 4 0 0 0
+indent 0 4 1 0 4
+indent 0 4 2 0 8
+indent 15 0 0 0 0
+indent 15 0 1 15 0
+indent 15 0 2 30 0
+indent 15 27 0 0 0
+indent 15 27 1 15 27
+indent 15 27 2 30 54
+indent 15 4 0 0 0
+indent 15 4 1 15 4
+indent 15 4 2 30 8
+indent 23 0 0 0 0
+indent 23 0 1 23 0
+indent 23 0 2 46 0
+indent 23 27 0 0 0
+indent 23 27 1 23 27
+indent 23 27 2 46 54
+indent 23 4 0 0 0
+indent 23 4 1 23 4
+indent 23 4 2 46 8
+click 0 0 0 0
+click 0 0 1 1
+click 0 1 0 0
+click 0 1 1 1
+click 1 0 0 0
+click 1 0 1 1
+click 1 1 0 1
+click 1 1 1 0
+click 2 0 0 0
+click 2 0 1 1
+click 2 1 0 0
+click 2 1 1 1
+click -1 0 0 0
+click -1 0 1 1
+click -1 1 0 1
+click -1 1 1 0
+click 3 0 0 0
+click 3 0 1 1
+click 3 1 0 1
+click 3 1 1 0

@@ -214,6 +214,9 @@ fn drive(
                 .children
                 .push(GuiTreeItem::leaf("new", "Added through ECS"));
             commands.entity(state.dynamic.unwrap()).insert(updated);
+            let mut settings = *gui.tree_settings(state.dynamic.unwrap()).unwrap();
+            settings.indent = 27;
+            commands.entity(state.dynamic.unwrap()).insert(settings);
             next = true;
         }
         17 if elapsed >= 8 => {
@@ -226,6 +229,17 @@ fn drive(
             );
             assert_eq!(gui.text(state.dynamic_rows[1]), Some("Updated through ECS"));
             let new = tree.node_by_key("new").unwrap().view().unwrap();
+            let old_indent = gui.child_by_name(state.dynamic_rows[1], "indent").unwrap();
+            let new_indent = gui.child_by_name(new, "indent").unwrap();
+            assert_eq!(gui.transform(old_indent).unwrap().size.x, 15.);
+            assert_eq!(gui.transform(new_indent).unwrap().size.x, 27.);
+            assert!(
+                (nodes.get(new_indent).unwrap().0.size().x
+                    / nodes.get(old_indent).unwrap().0.size().x
+                    - 1.8)
+                    .abs()
+                    < 0.01
+            );
             state.dynamic_rows.push(new);
             commands
                 .entity(state.dynamic.unwrap())
@@ -246,7 +260,7 @@ fn drive(
         19 if elapsed >= 8 => {
             assert!(state.rows.iter().all(|&row| !existing.contains(row)));
             println!(
-                "demo smoke PASSED: exported and keyed dynamic trees, actual row/arrow clicks, native collapse defaults, folder/file icons, keyed row reuse, data updates, growth and disposal"
+                "demo smoke PASSED: exported and keyed dynamic trees, actual row/arrow clicks, native collapse defaults, folder/file icons, keyed row reuse, live ECS indent with retained/new cells, data updates, growth and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

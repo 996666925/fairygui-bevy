@@ -100,6 +100,8 @@ mod text_format;
 pub use text_format::GuiTextFormat;
 mod text_stroke;
 pub mod tree;
+mod tree_settings;
+pub use tree_settings::GuiTreeSettings;
 pub mod tween;
 pub use tween::{GuiTweenComplete, GuiTweenProperty, GuiTweenTarget};
 
@@ -149,7 +151,7 @@ pub use fairygui_core::widget::{
 };
 pub use fairygui_core::{
     color_matrix::ColorFilterParams,
-    object::{BlendMode, ListInteractionSettings, ListLayoutSettings},
+    object::{BlendMode, ListInteractionSettings, ListLayoutSettings, TreeSettings},
 };
 
 use bevy::prelude::*;
@@ -204,10 +206,10 @@ pub mod prelude {
         GuiTooltipSettings, GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback,
         GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
         GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
-        GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,
-        GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand, GuiWindowState,
-        GuiWorldExt, ListInteractionSettings, ListLayoutSettings, ListLayoutType,
-        PopupMenuTemplates,
+        GuiTreeNodeState, GuiTreeSettings, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
+        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand,
+        GuiWindowState, GuiWorldExt, ListInteractionSettings, ListLayoutSettings, ListLayoutType,
+        PopupMenuTemplates, TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }

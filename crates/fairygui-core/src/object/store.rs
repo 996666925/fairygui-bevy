@@ -61,6 +61,9 @@ mod list_settings;
 pub use list_settings::ListInteractionSettings;
 #[path = "tree_items.rs"]
 mod tree_items;
+#[path = "tree_settings.rs"]
+mod tree_settings;
+pub use tree_settings::TreeSettings;
 #[path = "virtual_list.rs"]
 mod virtual_list;
 pub use virtual_list::{
@@ -187,6 +190,7 @@ pub struct ObjectStore {
     objects: slotmap::SlotMap<GObjectId, GObject>,
     dirty_ids: HashSet<GObjectId>,
     list_bounds: std::collections::HashMap<GObjectId, Size>,
+    tree_cell_indents: std::collections::HashMap<GObjectId, (GObjectId, u8)>,
     relation_handling: HashSet<GObjectId>,
     syncing_list_controllers: HashSet<GObjectId>,
     scroll_page_controllers: std::collections::HashMap<GObjectId, (GObjectId, usize)>,
@@ -303,6 +307,8 @@ impl ObjectStore {
             .retain(|owner, _| !removed_set.contains(owner));
         self.list_bounds
             .retain(|owner, _| !removed_set.contains(owner));
+        self.tree_cell_indents
+            .retain(|row, (tree, _)| !removed_set.contains(row) && !removed_set.contains(tree));
         self.refreshing_virtual_lists
             .retain(|owner| !removed_set.contains(owner));
         self.scroll_page_controllers
@@ -1397,8 +1403,7 @@ impl ObjectStore {
 
     /// 点击树项时按其策略切换展开状态。
     ///
-    /// 只有 `clickToExpand` 为 `1` 且被点的确实是文件夹时才生效；
-    /// 其它取值下由使用方自行处理（官方对 `2` 也没有实现）。
+    /// `0` 与原版未实现的 `2` 不切换；其它非零值点击文件夹时切换。
     /// 返回展开状态是否变化。
     pub fn toggle_clicked_tree_node(&mut self, item: GObjectId) -> bool {
         let Some(parent) = self.objects.get(item).and_then(|object| object.parent) else {
@@ -1417,7 +1422,7 @@ impl ObjectStore {
                 _ => return false,
             };
 
-        if click_to_expand != 1 || !is_folder {
+        if click_to_expand == 0 || click_to_expand == 2 || !is_folder {
             return false;
         }
 
@@ -1625,6 +1630,7 @@ impl ObjectStore {
 
     /// 按布局摆放单个列表的项。
     pub fn layout_list(&mut self, list: GObjectId) -> usize {
+        self.prepare_tree_indents(list);
         if self.is_virtual_list(list) {
             return 0;
         }
@@ -1726,10 +1732,6 @@ impl ObjectStore {
             let indent_part = (!indents.is_empty())
                 .then(|| self.child_by_name(*child, "indent"))
                 .flatten();
-            if let Some(part) = indent_part {
-                let height = self.objects[part].height();
-                self.set_size(part, indent, height);
-            }
             let target_x = position.x + if indent_part.is_some() { 0. } else { indent };
             let moved = self
                 .objects

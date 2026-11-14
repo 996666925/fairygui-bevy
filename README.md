@@ -974,6 +974,9 @@ fn register(app: &mut App) {
 状态、展开状态、可见节点和选中节点；行上的 `GuiTreeNode` 提供所属树与逻辑索引。
 `GuiTreeNode.expanded` 可直接写入；叶节点保持原生恒展开，文件夹修改后立即更新后代可见性与布局，
 原生点击或控制器改变展开状态也会同步回字段。
+树控件的可写 `GuiTreeSettings` 提供 `indent` 和 `click_to_expand`，可用 `gui.tree_settings(entity)` 查询。
+按原版赋值规则，缩进在创建单元格时读取；修改后已有行的 `indent` 子控件保留尺寸，新增行使用新值。
+点击策略 `0` 只允许箭头展开，`1` 点击文件夹切换，`2` 保留原版未实现双击切换的行为。
 索引在展开/收起间保持稳定，收起的行保留实体但隐藏并从布局中折叠。
 
 ```rust,ignore
