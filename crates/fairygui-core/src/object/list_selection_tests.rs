@@ -287,7 +287,7 @@ fn disposed_selection_controller_owner_never_retargets_a_new_parent_or_reused_sl
         6
     );
     store.remove(list);
-    assert!(store.list_selection_controllers.is_empty());
+    assert!(store.selection_controllers.is_empty());
 }
 
 #[test]

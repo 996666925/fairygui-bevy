@@ -475,11 +475,19 @@ impl Property for GuiComboBoxState {
                 .store_mut()
                 .set_combo_icons(object, self.icons.clone());
         });
-        field!(self, previous, native, selected_index, {
+        // Bind the requested controller before selecting an item, so a combined
+        // component edit updates the new reference. Items may have clamped the
+        // native index above even if it matched this request before application.
+        field!(self, previous, native, selection_controller, {
+            runtime
+                .store_mut()
+                .set_combo_selection_controller(object, self.selection_controller.as_deref());
+        });
+        if self.selected_index != previous.selected_index {
             runtime
                 .store_mut()
                 .select_combo_index(object, self.selected_index);
-        });
+        }
         field!(self, previous, native, visible_item_count, {
             runtime
                 .store_mut()
@@ -494,11 +502,6 @@ impl Property for GuiComboBoxState {
                     GuiPopupDirection::Down => 2,
                 },
             );
-        });
-        field!(self, previous, native, selection_controller, {
-            runtime
-                .store_mut()
-                .set_combo_selection_controller(object, self.selection_controller.as_deref());
         });
     }
 }

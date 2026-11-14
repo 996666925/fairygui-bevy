@@ -87,6 +87,70 @@ fn native_null_empty_and_short_icon_arrays_preserve_or_clear_the_displayed_icon(
 }
 
 #[test]
+fn combo_controller_keeps_its_owner_after_reparenting_and_can_rebind_the_same_name() {
+    let mut store = ObjectStore::new();
+    let controller = Controller {
+        name: "selection".into(),
+        selected_index: 0,
+        page_ids: strings(&["0", "1", "2"]),
+        page_names: strings(&["A", "B", "C"]),
+        ..Controller::default()
+    };
+    let parents = [
+        store.create(ObjectType::Component),
+        store.create(ObjectType::Component),
+    ];
+    for parent in parents {
+        store.objects[parent]
+            .control
+            .component_mut()
+            .unwrap()
+            .controllers
+            .push(controller.clone());
+    }
+    let combo = store.create(ObjectType::ComboBox);
+    store.set_parent(combo, Some(parents[0]));
+    store.set_combo_items(combo, strings(&["A", "B", "C"]));
+    store.set_combo_selection_controller(combo, Some("selection"));
+    store.set_parent(combo, Some(parents[1]));
+    store.select_combo_index(combo, 2);
+    let page = |store: &ObjectStore, owner| {
+        store
+            .object(owner)
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controllers[0]
+            .selected_index
+    };
+    assert_eq!(page(&store, parents[0]), 2);
+    assert_eq!(page(&store, parents[1]), 0);
+    store.set_controller_page_index(parents[1], "selection", 1);
+    assert_eq!(data(&store, combo).selected_index, 2);
+    store.set_controller_page_index(parents[0], "selection", 0);
+    assert_eq!(data(&store, combo).selected_index, 2);
+    store.remove(parents[0]);
+    assert_eq!(store.combo_selection_controller(combo), None);
+    store.select_combo_index(combo, 0);
+    assert_eq!(
+        page(&store, parents[1]),
+        1,
+        "an expired owner must not retarget a same-name controller"
+    );
+    assert!(store.set_combo_selection_controller(combo, Some("selection")));
+    store.select_combo_index(combo, -2);
+    assert_eq!(
+        data(&store, combo).selected_index,
+        -2,
+        "controller normalization must not rewrite the source combo"
+    );
+    assert_eq!(page(&store, parents[1]), -1);
+    store.remove(combo);
+    assert!(store.selection_controllers.is_empty());
+}
+
+#[test]
 fn combo_selection_controller_is_bidirectional_without_rewriting_the_source_or_reentering() {
     let mut store = ObjectStore::new();
     let parent = store.create(ObjectType::Component);

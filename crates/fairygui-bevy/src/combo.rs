@@ -16,6 +16,8 @@ pub struct GuiComboBoxState {
     pub selected_index: i32,
     pub visible_item_count: i32,
     pub direction: GuiPopupDirection,
+    /// New bindings resolve on the current parent; the resolved owner survives
+    /// reparenting. Applied before a same-frame selected_index edit.
     pub selection_controller: Option<String>,
     pub(crate) dropdown: Option<Entity>,
     pub(crate) list: Option<Entity>,

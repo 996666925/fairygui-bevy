@@ -887,7 +887,9 @@ if let Ok(mut state) = combos.get_mut(combo) { // Query<&mut GuiComboBoxState>
 items、values 和 icons 独立，不要求等长。更新 items 会保留或收拢当前索引，空表取消
 选择；`set_combo_icons(None)` 移除图标数组并保留当前显示图标，短数组不覆盖其范围外
 的有效选项图标。`set_combo_visible_item_count`、`set_combo_popup_direction` 调整下次展开，
-`set_combo_selection_controller` 按名称绑定逻辑父组件上的控制器，`None` 解除绑定。
+`GuiComboBoxState.selection_controller` 按名称绑定当前逻辑父组件上的控制器，`None` 解除绑定。
+移动下拉框会保留原控制器身份；原拥有者销毁后，可设置新绑定。同帧修改绑定和选中索引时，
+先应用新绑定，再更新选择；items 修改引起的索引收拢也会先于明确修改的 `selected_index` 生效。
 选中索引与控制器双向联动，超出控制器页面数的索引不会改变控制器。
 
 同原版，programmatic setters 不发出 `StateChanged`；真实选择或重选都会触发控件的

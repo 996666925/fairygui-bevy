@@ -57,6 +57,146 @@ fn snapshot(app: &mut App, owner: Entity) -> GuiComboBoxState {
         .unwrap()
         .clone()
 }
+
+#[test]
+fn combo_component_binds_before_selection_and_retains_controller_identity_when_moved() {
+    use crate::core::package::ObjectType;
+    use crate::properties::sync_property;
+    let mut world = World::new();
+    world.init_non_send::<GuiRuntime>();
+    let (parents, combo) = {
+        let package = FuiPackage::parse(
+            "Bag",
+            include_bytes!("../../fairygui-demo/assets/ui/Bag.fui"),
+        )
+        .unwrap();
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        let first = runtime
+            .create_root(Handle::default(), &package, "BagWin")
+            .unwrap();
+        let second = runtime
+            .create_root(Handle::default(), &package, "BagWin")
+            .unwrap();
+        let parents = [
+            runtime.root_object(first).unwrap(),
+            runtime.root_object(second).unwrap(),
+        ];
+        let combo = runtime.store_mut().create(ObjectType::ComboBox);
+        runtime.store_mut().set_parent(combo, Some(parents[0]));
+        runtime
+            .store_mut()
+            .set_combo_items(combo, vec!["A".into(), "B".into(), "C".into()]);
+        (parents, combo)
+    };
+    let entity = world.spawn(GObjectRef(combo)).id();
+    let page = |world: &World, parent| {
+        world
+            .non_send::<GuiRuntime>()
+            .store()
+            .object(parent)
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controller("page")
+            .unwrap()
+            .selected_index
+    };
+    sync_property::<GuiComboBoxState>(&mut world);
+    {
+        let mut state = world.get_mut::<GuiComboBoxState>(entity).unwrap();
+        state.selection_controller = Some("page".into());
+        state.selected_index = 2;
+    }
+    sync_property::<GuiComboBoxState>(&mut world);
+    assert_eq!(
+        page(&world, parents[0]),
+        2,
+        "binding must precede the same component's selected index"
+    );
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(combo, Some(parents[1]));
+    {
+        let mut state = world.get_mut::<GuiComboBoxState>(entity).unwrap();
+        state.visible_item_count = 7;
+        state.selected_index = 1;
+    }
+    sync_property::<GuiComboBoxState>(&mut world);
+    assert_eq!(page(&world, parents[0]), 1);
+    assert_eq!(page(&world, parents[1]), 0);
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_controller_page_index(parents[1], "page", 2);
+    sync_property::<GuiComboBoxState>(&mut world);
+    assert_eq!(
+        world
+            .get::<GuiComboBoxState>(entity)
+            .unwrap()
+            .selected_index,
+        1
+    );
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .remove(parents[0]);
+    sync_property::<GuiComboBoxState>(&mut world);
+    assert_eq!(
+        world
+            .get::<GuiComboBoxState>(entity)
+            .unwrap()
+            .selection_controller,
+        None
+    );
+    {
+        let mut state = world.get_mut::<GuiComboBoxState>(entity).unwrap();
+        state.selection_controller = Some("page".into());
+        state.selected_index = 0;
+    }
+    sync_property::<GuiComboBoxState>(&mut world);
+    assert_eq!(page(&world, parents[1]), 0);
+    assert_eq!(
+        world
+            .get::<GuiComboBoxState>(entity)
+            .unwrap()
+            .selected_index,
+        0
+    );
+}
+
+#[test]
+fn combo_explicit_selection_survives_items_clamping_even_when_native_index_already_matched() {
+    let (mut app, owner, _) = fixture(true);
+    let entity = view(&app, owner);
+    app.world_mut()
+        .entity_mut(entity)
+        .insert(GuiComboBoxState::new(
+            vec!["A".into(), "B".into(), "C".into()],
+            Vec::new(),
+        ));
+    app.update();
+    let object = app.world().get::<GObjectRef>(entity).unwrap().0;
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .select_combo_index(object, 2);
+    {
+        let mut state = app.world_mut().get_mut::<GuiComboBoxState>(entity).unwrap();
+        state.items = vec!["Only".into()];
+        state.selected_index = 2;
+    }
+    app.update();
+    let state = snapshot(&mut app, owner);
+    assert_eq!(state.items, ["Only"]);
+    assert_eq!(
+        state.selected_index, 2,
+        "explicit selection applies after the native items setter clamps its index"
+    );
+    assert_eq!(state.selected_item(), None);
+    assert_eq!(app.world().get::<GuiText>(entity).unwrap().value(), "");
+}
 fn view(app: &App, owner: Entity) -> Entity {
     app.world().get::<GuiRootView>(owner).unwrap().0
 }

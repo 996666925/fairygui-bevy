@@ -130,6 +130,7 @@ impl ObjectStore {
 
     /// Bind by parent controller name, or detach with None. Like the native
     /// setter, binding alone does not change the selection or controller page.
+    /// The resolved controller owner is retained when the combo moves.
     pub fn set_combo_selection_controller(&mut self, combo: GObjectId, name: Option<&str>) -> bool {
         let Some(object) = self.object(combo) else {
             return false;
@@ -137,10 +138,12 @@ impl ObjectStore {
         if !matches!(object.control(), ControlData::ComboBox(_)) {
             return false;
         }
-        let index = if let Some(name) = name {
-            let Some(index) = object
-                .parent()
-                .and_then(|parent| self.object(parent))
+        let binding = if let Some(name) = name {
+            let Some(parent) = object.parent() else {
+                return false;
+            };
+            let Some(index) = self
+                .object(parent)
                 .and_then(|parent| parent.control().component())
                 .and_then(|data| {
                     data.controllers
@@ -150,14 +153,19 @@ impl ObjectStore {
             else {
                 return false;
             };
-            index as i32
+            Some((parent, index))
         } else {
-            -1
+            None
         };
         let ControlData::ComboBox(data) = &mut self.objects[combo].control else {
             unreachable!()
         };
-        data.selection_controller = index;
+        data.selection_controller = binding.map_or(-1, |(_, index)| index as i32);
+        if let Some(binding) = binding {
+            self.selection_controllers.insert(combo, binding);
+        } else {
+            self.selection_controllers.remove(&combo);
+        }
         true
     }
 
@@ -175,14 +183,10 @@ impl ObjectStore {
     }
 
     fn combo_controller(&self, combo: GObjectId) -> Option<(GObjectId, usize)> {
-        let object = self.object(combo)?;
-        let ControlData::ComboBox(data) = object.control() else {
+        let ControlData::ComboBox(_) = self.object(combo)?.control() else {
             return None;
         };
-        Some((
-            object.parent()?,
-            usize::try_from(data.selection_controller).ok()?,
-        ))
+        self.selection_controller_ref(combo)
     }
 
     pub(super) fn update_combo_selection_controller(&mut self, combo: GObjectId) {
@@ -236,8 +240,14 @@ impl ObjectStore {
         else {
             return;
         };
-        let combos: Vec<_> = self.object(parent).unwrap().children().iter().copied()
-            .filter(|&id| matches!(self.object(id).map(|o| o.control()), Some(ControlData::ComboBox(data)) if data.selection_controller == controller_index as i32)).collect();
+        let combos: Vec<_> = self
+            .object(parent)
+            .unwrap()
+            .children()
+            .iter()
+            .copied()
+            .filter(|&id| self.combo_controller(id) == Some((parent, controller_index)))
+            .collect();
         for combo in combos {
             self.select_combo_index(combo, selected);
         }

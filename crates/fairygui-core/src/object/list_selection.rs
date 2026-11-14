@@ -150,9 +150,9 @@ impl ObjectStore {
         let changed = data.selection_controller != index || previous != binding;
         data.selection_controller = index;
         if let Some(binding) = binding {
-            self.list_selection_controllers.insert(list, binding);
+            self.selection_controllers.insert(list, binding);
         } else {
-            self.list_selection_controllers.remove(&list);
+            self.selection_controllers.remove(&list);
         }
         changed
     }
@@ -462,31 +462,8 @@ impl ObjectStore {
     }
 
     fn list_controller_ref(&self, list: GObjectId) -> Option<(GObjectId, usize)> {
-        let data = self.list_data(list)?;
-        if let Some(binding) = self.list_selection_controllers.get(&list) {
-            return Some(*binding);
-        }
-        Some((
-            self.object(list)?.parent()?,
-            usize::try_from(data.selection_controller).ok()?,
-        ))
-    }
-
-    /// Exported references initially use the serialized parent index. Resolve
-    /// it before detachment so future accesses retain the original controller.
-    pub(super) fn preserve_list_selection_controller(&mut self, list: GObjectId) {
-        if self.list_selection_controllers.contains_key(&list) {
-            return;
-        }
-        if let Some((owner, index)) = self.list_controller_ref(list)
-            && self
-                .object(owner)
-                .and_then(|o| o.control().component())
-                .and_then(|c| c.controllers.get(index))
-                .is_some()
-        {
-            self.list_selection_controllers.insert(list, (owner, index));
-        }
+        self.list_data(list)?;
+        self.selection_controller_ref(list)
     }
 
     pub(super) fn sync_related_lists(&mut self, parent: GObjectId, name: &str) {
