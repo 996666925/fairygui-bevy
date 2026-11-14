@@ -451,7 +451,7 @@ commands.entity(bounded).insert(GuiDraggable {
 自由拖动、D 边界拖动也通过这些组件绑定。
 
 滚动容器上的 `GuiScrollSettings`（或 `gui.scroll_settings(entity)`）提供可写的滚轮开关、
-步长、条目吸附、触摸拖动、回弹与减速率。直接修改组件字段，插件会在处理输入前同步。
+步长、条目吸附、触摸拖动、回弹、惯性开关与减速率。直接修改组件字段，插件会在处理输入前同步。
 需要影响当帧输入的业务系统应放在 `GuiSystems::Input` 之前：
 
 ```rust,ignore
@@ -467,6 +467,8 @@ fn configure_scroll(mut panes: Query<&mut GuiScrollSettings>) {
 只修改需要调整的字段可保留导出配置及原生运行时的其他修改。`scroll_step = 0` 恢复配置默认值，
 负数反转滚轮方向，行滚轮移动两倍步长；减速率必须是 0～1 之间的有限值（不含端点）。
 配置修改不主动移动视口或重启补间；位置与播放状态仍从只读 `GuiScrollState` 查询。
+`inertia_disabled = true` 使后续拖动松手不再按速度继续滑行，越界回弹和条目/分页吸附仍生效；
+切换开关不会中断已开始的动画，也不会取消当前拖动。
 也可在 `FairyGuiRoot` 加载前附加设置组件，或使用直接方法 `set_scroll_settings`。
 `page_controller` 设置当前父对象上的分页控制器名称，`None` 解绑；无效名称保留旧绑定。
 绑定本身不移动视口、不切换控制器页；后续控制器切页驱动分页，滚动也会更新控制器。

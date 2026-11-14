@@ -17,6 +17,9 @@ pub struct GuiScrollSettings {
     pub snap_to_item: bool,
     pub touch_effect: bool,
     pub bounceback_effect: bool,
+    /// Skip velocity-based continuation on the next drag release. Bounce and
+    /// item/page alignment still apply; existing tweens keep their trajectory.
+    pub inertia_disabled: bool,
     /// Finite, strictly between zero and one. Affects future release planning.
     pub deceleration_rate: f64,
 }
@@ -31,6 +34,7 @@ impl Default for GuiScrollSettings {
             snap_to_item: false,
             touch_effect: defaults.touch_effect,
             bounceback_effect: defaults.bounceback_effect,
+            inertia_disabled: false,
             deceleration_rate: crate::core::scroll::ScrollPhysics::default().deceleration_rate,
         }
     }
@@ -49,6 +53,7 @@ impl Property for GuiScrollSettings {
             snap_to_item: pane.snap_to_item,
             touch_effect: pane.touch_effect,
             bounceback_effect: pane.bounceback_effect,
+            inertia_disabled: pane.inertia_disabled,
             deceleration_rate: pane.physics().deceleration_rate,
         })
     }
@@ -71,6 +76,7 @@ impl Property for GuiScrollSettings {
             snap_to_item => set_scroll_snap_to_item,
             touch_effect => set_scroll_touch_effect,
             bounceback_effect => set_scroll_bounceback_effect,
+            inertia_disabled => set_scroll_inertia_disabled,
         }
         if self.deceleration_rate != previous.deceleration_rate
             && self.deceleration_rate != native.deceleration_rate

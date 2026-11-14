@@ -43,6 +43,156 @@ fn load(app: &mut App, asset: &Handle<FuiAsset>) {
 }
 
 #[test]
+fn live_inertia_flag_changes_release_planning_without_restarting_motion_or_disabling_bounce() {
+    let (mut app, _, _) = fixture(true);
+    // The usual ScrollPane/item fixture uses page alignment. Use an ordinary
+    // vertical list to distinguish inertia from independent release snapping.
+    let id = {
+        let package = crate::core::FuiPackage::parse(
+            "ListEffect",
+            include_bytes!("../../fairygui-demo/assets/ui/ListEffect.fui"),
+        )
+        .unwrap();
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let index = runtime
+            .create_root(Handle::default(), &package, "Main")
+            .unwrap();
+        let root = runtime.root_object(index).unwrap();
+        runtime.store().child_by_name(root, "mailList").unwrap()
+    };
+    let view = app.world_mut().spawn(GObjectRef(id)).id();
+    crate::properties::sync(app.world_mut());
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let store = runtime.store_mut();
+        assert!(!store.scroll_pane(id).unwrap().page_mode);
+        store.layout_scroll_bars(id);
+        assert!(store.scroll_pane(id).unwrap().view_size().height > 0.);
+        store.set_scroll_snap_to_item(id, false);
+        store.set_scroll_bounceback_effect(id, true);
+        store.update_scroll_content_size(id, crate::core::Size::new(100., 3000.));
+        store.set_scroll_pos(id, 0., 200., false);
+        store.begin_scroll_drag(id);
+        store.drag_scroll_by(id, 0., -80., 0.016);
+        store.drag_scroll_by(id, 0., -80., 0.016);
+    }
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(view)
+        .unwrap()
+        .inertia_disabled = true;
+    crate::properties::sync(app.world_mut());
+    let stop = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let store = runtime.store_mut();
+        assert!(store.scroll_pane(id).unwrap().is_dragging());
+        let stop = store.scroll_pane(id).unwrap().display_pos();
+        store.end_scroll_drag(id);
+        store.advance_scrolls(0.2);
+        assert_eq!(store.scroll_pane(id).unwrap().display_pos(), stop);
+        assert!(!store.scroll_pane(id).unwrap().is_animating());
+        store.begin_scroll_drag(id);
+        store.drag_scroll_by(id, 0., -80., 0.016);
+        store.drag_scroll_by(id, 0., -80., 0.016);
+        stop
+    };
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(view)
+        .unwrap()
+        .inertia_disabled = false;
+    crate::properties::sync(app.world_mut());
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let store = runtime.store_mut();
+        store.end_scroll_drag(id);
+        assert!(store.scroll_pane(id).unwrap().is_animating());
+        store.advance_scrolls(0.05);
+        assert!(store.scroll_pane(id).unwrap().display_pos().y > stop.y + 160.);
+    }
+    let before = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .scroll_pane(id)
+        .unwrap()
+        .display_pos();
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(view)
+        .unwrap()
+        .inertia_disabled = true;
+    crate::properties::sync(app.world_mut());
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let store = runtime.store_mut();
+        assert_eq!(store.scroll_pane(id).unwrap().display_pos(), before);
+        assert!(store.scroll_pane(id).unwrap().is_animating());
+        store.advance_scrolls(0.05);
+        assert!(store.scroll_pane(id).unwrap().display_pos().y > before.y);
+        store.set_scroll_pos(id, 0., 0., false);
+        assert_eq!(
+            store.scroll_pane(id).unwrap().display_pos(),
+            crate::core::Point::ZERO
+        );
+        assert!(store.scroll_pane(id).unwrap().bounceback_effect);
+        store.begin_scroll_drag(id);
+        store.drag_scroll_by(id, 0., 60., 0.016);
+        assert!(store.scroll_pane(id).unwrap().display_pos().y < 0.);
+        store.end_scroll_drag(id);
+        assert!(
+            store.scroll_pane(id).unwrap().is_animating(),
+            "inertia disabled must retain overscroll bounce"
+        );
+        store.advance_scrolls(1.);
+        assert_eq!(
+            store.scroll_pane(id).unwrap().display_pos(),
+            crate::core::Point::ZERO
+        );
+        store.set_scroll_inertia_disabled(id, false);
+    }
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(view)
+        .unwrap()
+        .scroll_step = 9.;
+    crate::properties::sync(app.world_mut());
+    assert!(
+        !app.world()
+            .get::<GuiScrollSettings>(view)
+            .unwrap()
+            .inertia_disabled,
+        "unrelated ECS edits must preserve native flag changes"
+    );
+}
+
+#[test]
+fn disabling_inertia_preserves_page_release_alignment() {
+    let (mut app, owner, _) = fixture(true);
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    let id = app.world().get::<GObjectRef>(view).unwrap().0;
+    app.world_mut()
+        .get_mut::<GuiScrollSettings>(view)
+        .unwrap()
+        .inertia_disabled = true;
+    crate::properties::sync(app.world_mut());
+    let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+    let store = runtime.store_mut();
+    let width = store.scroll_pane(id).unwrap().view_size().width;
+    assert!(store.scroll_pane(id).unwrap().page_mode && width > 0.);
+    store.update_scroll_content_size(id, crate::core::Size::new(width * 3., 80.));
+    store.set_scroll_pos(id, 1., 0., false);
+    store.set_scroll_pos(id, 0., 0., false);
+    store.begin_scroll_drag(id);
+    store.drag_scroll_by(id, -width * 0.4, 0., 0.016);
+    let release = store.scroll_pane(id).unwrap().display_pos().x;
+    assert!(release > 0. && release < width);
+    store.end_scroll_drag(id);
+    assert!(
+        store.scroll_pane(id).unwrap().is_animating(),
+        "page alignment remains active independently of inertia"
+    );
+    store.advance_scrolls(1.);
+    assert_eq!(store.scroll_pane(id).unwrap().display_pos().x, width);
+}
+
+#[test]
 fn pending_scroll_settings_apply_before_initialize_and_project_only_on_scroll_panes() {
     #[derive(Resource, Default)]
     struct Seen(bool);
@@ -51,6 +201,7 @@ fn pending_scroll_settings_apply_before_initialize_and_project_only_on_scroll_pa
             let settings = gui.scroll_settings(owner).unwrap();
             assert!(settings.mouse_wheel_enabled);
             assert!(!settings.touch_effect);
+            assert!(settings.inertia_disabled);
             assert_eq!(settings.scroll_step, 12.5);
             assert_eq!(gui.scroll(owner).unwrap().position(), Vec2::ZERO);
             seen.0 = true;
@@ -61,6 +212,7 @@ fn pending_scroll_settings_apply_before_initialize_and_project_only_on_scroll_pa
         scroll_step: 12.5,
         touch_effect: false,
         bounceback_effect: false,
+        inertia_disabled: true,
         deceleration_rate: 0.925_000_000_000_000_2,
         ..default()
     };

@@ -231,6 +231,7 @@ fn drive(
             settings.touch_effect = true;
             settings.bounceback_effect = false;
             settings.deceleration_rate = 0.93;
+            settings.inertia_disabled = true;
             commands.entity(state.list.unwrap()).insert(settings);
             wheel.write(MouseWheel {
                 unit: MouseScrollUnit::Line,
@@ -260,6 +261,11 @@ fn drive(
             next = true;
         }
         22 if elapsed >= 8 => {
+            assert!(
+                (offset() - state.scroll_start - 65.).abs() < 0.1,
+                "disabled inertia must stop at the release position"
+            );
+            assert!(!gui.scroll(state.list.unwrap()).unwrap().is_animating());
             for &owner in &state.owners {
                 commands.entity(owner).despawn();
             }
@@ -268,7 +274,7 @@ fn drive(
         23 if elapsed >= 4 => {
             assert!(state.owners.iter().all(|&owner| !existing.contains(owner)));
             println!(
-                "demo smoke PASSED: real virtual slider rows, track press change with parent scrolling, grip press boundary and exclusive dragging, disabled track changes with parent scrolling, live ECS wheel and touch settings, disposal"
+                "demo smoke PASSED: real virtual slider rows, track press change with parent scrolling, grip press boundary and exclusive dragging, disabled track changes with parent scrolling, live ECS wheel/touch/inertia settings, release position retained without inertia, disposal"
             );
             exit.write(AppExit::Success);
             next = true;

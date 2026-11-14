@@ -6,6 +6,20 @@ use crate::scroll::ScrollPane;
 mod tests;
 
 impl ObjectStore {
+    /// The exported inertia flag is sampled when planning a drag release.
+    /// Assignment preserves the active gesture and already-planned tweens.
+    pub fn set_scroll_inertia_disabled(&mut self, container: GObjectId, disabled: bool) -> bool {
+        self.objects
+            .get_mut(container)
+            .and_then(|o| o.control.component_mut())
+            .and_then(|c| c.scroll_pane.as_mut())
+            .is_some_and(|pane| {
+                let changed = pane.inertia_disabled != disabled;
+                pane.inertia_disabled = disabled;
+                changed
+            })
+    }
+
     /// Native assignment only; does not cancel or reposition an active gesture.
     pub fn set_scroll_touch_effect(&mut self, container: GObjectId, enabled: bool) -> bool {
         self.objects
