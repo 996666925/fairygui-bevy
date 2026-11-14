@@ -197,6 +197,7 @@ pub struct ObjectStore {
     tree_cell_indents: std::collections::HashMap<GObjectId, (GObjectId, u8)>,
     relation_handling: HashSet<GObjectId>,
     syncing_list_controllers: HashSet<GObjectId>,
+    list_selection_controllers: std::collections::HashMap<GObjectId, (GObjectId, usize)>,
     scroll_page_controllers: std::collections::HashMap<GObjectId, (GObjectId, usize)>,
     syncing_scroll_controllers: HashSet<GObjectId>,
     pending_scroll_page_initialization: HashSet<GObjectId>,
@@ -313,6 +314,10 @@ impl ObjectStore {
             .retain(|owner, _| !removed_set.contains(owner));
         self.pending_list_layouts
             .retain(|owner| !removed_set.contains(owner));
+        // Keep a surviving list's dead owner identity: falling back to its new
+        // parent's same-index controller would silently bind a different object.
+        self.list_selection_controllers
+            .retain(|list, _| !removed_set.contains(list));
         self.tree_cell_indents
             .retain(|row, (tree, _)| !removed_set.contains(row) && !removed_set.contains(tree));
         self.refreshing_virtual_lists
@@ -473,6 +478,7 @@ impl ObjectStore {
         let Some(parent) = self.objects.get(child).and_then(|object| object.parent) else {
             return false;
         };
+        self.preserve_list_selection_controller(child);
         if let Some(parent_object) = self.objects.get_mut(parent) {
             if let Some(pane) = parent_object
                 .control

@@ -5,7 +5,8 @@ use crate::widget::{ControlData, ListSelectionMode};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListInteractionSettings {
     pub selection_mode: ListSelectionMode,
-    /// Controller on the list's parent. Assignment does not select a row.
+    /// New names resolve on the current parent; an unchanged name retains its
+    /// existing owner. Assignment does not select a row.
     pub selection_controller: Option<String>,
     /// Scroll the list's own pane when a materialized row is clicked.
     pub scroll_item_to_view_on_click: bool,
@@ -46,6 +47,9 @@ impl ObjectStore {
         list: GObjectId,
         settings: ListInteractionSettings,
     ) -> bool {
+        let controller_changed = self
+            .list_selection_controller(list)
+            .is_some_and(|name| name != settings.selection_controller);
         let Some(data) = self.list_data_mut(list) else {
             return false;
         };
@@ -55,8 +59,10 @@ impl ObjectStore {
         data.fold_invisible_items = settings.fold_invisible_items;
         data.scroll_item_to_view_on_click = settings.scroll_item_to_view_on_click;
         changed |= self.set_list_selection_mode(list, settings.selection_mode);
-        changed |=
-            self.set_list_selection_controller(list, settings.selection_controller.as_deref());
+        if controller_changed {
+            changed |=
+                self.set_list_selection_controller(list, settings.selection_controller.as_deref());
+        }
         if layout_changed {
             self.layout_list(list);
         }

@@ -294,7 +294,7 @@ fn drive(
             state.step = 6;
             state.since = state.frames;
         }
-        6 if elapsed >= 4 => {
+        6 if elapsed >= 1 => {
             verify_page(&state, &runtime, 2);
             let list = state.list.unwrap();
             let pane = runtime.store().scroll_pane(list).unwrap();
@@ -309,7 +309,7 @@ fn drive(
                 scrolls.get(runtime.entity_of(list).unwrap()).unwrap().0,
                 window.scale_factor()
             );
-            if !pane.is_animating() {
+            if elapsed >= 4 && !pane.is_animating() {
                 assert!(state.saw_motion);
                 assert_eq!(
                     scrolls.get(runtime.entity_of(list).unwrap()).unwrap().0.x,

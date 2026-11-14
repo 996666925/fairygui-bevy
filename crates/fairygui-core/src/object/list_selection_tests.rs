@@ -171,6 +171,126 @@ fn row_selection_follows_reparent_removal_reordering_and_external_button_setters
 }
 
 #[test]
+fn selection_controller_keeps_its_identity_across_reparenting_and_explicit_same_name_rebinding() {
+    let (mut store, original, list, _) = fixture(ListSelectionMode::Multiple, false);
+    let other = store.create(ObjectType::Component);
+    let controller = store
+        .object(original)
+        .unwrap()
+        .control()
+        .component()
+        .unwrap()
+        .controllers[0]
+        .clone();
+    store.objects[other]
+        .control
+        .component_mut()
+        .unwrap()
+        .controllers
+        .push(controller);
+    store.set_list_selection(list, 3);
+    store.set_parent(list, Some(other));
+    store.select_clicked_item_with_modifiers(store.list_item_at(list, 4).unwrap(), false, true);
+    let page = |store: &ObjectStore, owner| {
+        store
+            .object(owner)
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controller("selection")
+            .unwrap()
+            .selected_index
+    };
+    assert_eq!(page(&store, original), 4);
+    assert_eq!(
+        page(&store, other),
+        0,
+        "a same-name controller in the new parent is unrelated"
+    );
+    assert_eq!(store.list_selections(list), Some(vec![3, 4]));
+    store.set_controller_page_index(other, "selection", 7);
+    assert_eq!(store.list_selections(list), Some(vec![3, 4]));
+    store.set_controller_page_index(original, "selection", 1);
+    assert_eq!(
+        store.list_selections(list),
+        Some(vec![3, 4]),
+        "native controller changes only traverse current children"
+    );
+    assert!(store.set_list_selection_controller(list, Some("selection")));
+    assert_eq!(
+        store.list_selections(list),
+        Some(vec![3, 4]),
+        "assigning a new reference must not reselect"
+    );
+    store.set_list_selection(list, 6);
+    assert_eq!(page(&store, original), 1);
+    assert_eq!(page(&store, other), 6);
+}
+
+#[test]
+fn disposed_selection_controller_owner_never_retargets_a_new_parent_or_reused_slot() {
+    let (mut store, original, list, _) = fixture(ListSelectionMode::Single, false);
+    let other = store.create(ObjectType::Component);
+    let controller = store
+        .object(original)
+        .unwrap()
+        .control()
+        .component()
+        .unwrap()
+        .controllers[0]
+        .clone();
+    store.objects[other]
+        .control
+        .component_mut()
+        .unwrap()
+        .controllers
+        .push(controller.clone());
+    store.set_parent(list, Some(other));
+    store.remove(original);
+    let replacement = store.create(ObjectType::Component);
+    store.objects[replacement]
+        .control
+        .component_mut()
+        .unwrap()
+        .controllers
+        .push(controller);
+    assert_eq!(store.list_selection_controller(list), Some(None));
+    let mut settings = store.list_interaction_settings(list).unwrap();
+    settings.fold_invisible_items = true;
+    store.set_list_interaction_settings(list, settings);
+    store.set_list_selection(list, 4);
+    for owner in [other, replacement] {
+        assert_eq!(
+            store
+                .object(owner)
+                .unwrap()
+                .control()
+                .component()
+                .unwrap()
+                .controllers[0]
+                .selected_index,
+            0
+        );
+    }
+    assert!(store.set_list_selection_controller(list, Some("selection")));
+    store.set_list_selection(list, 6);
+    assert_eq!(
+        store
+            .object(other)
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controllers[0]
+            .selected_index,
+        6
+    );
+    store.remove(list);
+    assert!(store.list_selection_controllers.is_empty());
+}
+
+#[test]
 fn selection_controller_updates_both_ways_and_does_not_collapse_originating_multiselection() {
     let (mut store, parent, list, _) = fixture(ListSelectionMode::Multiple, false);
     store.add_list_selection(list, 2);

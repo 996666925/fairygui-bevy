@@ -9,7 +9,8 @@ use bevy::prelude::*;
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct GuiListSettings {
     pub selection_mode: ListSelectionMode,
-    /// Name of a controller on the list's parent. None unbinds it.
+    /// New names resolve on the current parent; existing bindings retain their
+    /// controller owner when the list moves. None unbinds the controller.
     /// Assignment alone does not change the current selected rows.
     pub selection_controller: Option<String>,
     pub scroll_item_to_view_on_click: bool,

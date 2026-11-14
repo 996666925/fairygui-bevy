@@ -289,6 +289,101 @@ fn initialize_and_post_layout_writes_reach_gears_in_the_same_frame() {
 }
 
 #[test]
+fn reparented_list_keeps_exported_controller_identity_through_settings_edits_and_owner_disposal() {
+    let (mut app, owner, asset) = fixture("BagWin", false);
+    load(&mut app, &asset, "Bag");
+    let other = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "BagWin"))
+        .id();
+    app.update();
+    let original_view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    let other_view = app.world().get::<GuiRootView>(other).unwrap().0;
+    for root in [owner, other] {
+        let list = child(&mut app, root, "list");
+        app.world_mut()
+            .entity_mut(list)
+            .insert(GuiListContent::new(45, |i, row| {
+                row.set_text(&i.to_string())
+            }));
+    }
+    app.update();
+    let pages = child(&mut app, owner, "n25");
+    let reference = app.world().get::<GObjectRef>(pages).unwrap().0;
+    let parent = app.world().get::<GObjectRef>(other_view).unwrap().0;
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(reference, Some(parent));
+    // Editing another field must not resolve the retained controller name
+    // against the new parent's unrelated, same-name controller.
+    app.world_mut()
+        .get_mut::<GuiListSettings>(pages)
+        .unwrap()
+        .fold_invisible_items = true;
+    app.world_mut()
+        .get_mut::<GuiListSelection>(pages)
+        .unwrap()
+        .0 = vec![2];
+    app.update();
+    assert_eq!(app.world().get::<GObjectRef>(pages).unwrap().0, reference);
+    assert_eq!(
+        app.world().get::<GuiObjectInfo>(pages).unwrap().parent(),
+        Some(other_view)
+    );
+    assert_eq!(index(&app, original_view, "page"), 2);
+    assert_eq!(index(&app, other_view, "page"), 0);
+    app.world_mut()
+        .get_mut::<GuiControllers>(other_view)
+        .unwrap()
+        .get_mut("page")
+        .unwrap()
+        .selected_index = 1;
+    app.update();
+    assert_eq!(app.world().get::<GuiListSelection>(pages).unwrap().0, [2]);
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(
+        app.world().get_entity(pages).is_ok(),
+        "the moved list belongs to its current parent"
+    );
+    assert_eq!(
+        app.world()
+            .get::<GuiListSettings>(pages)
+            .unwrap()
+            .selection_controller,
+        None
+    );
+    app.world_mut()
+        .get_mut::<GuiListSettings>(pages)
+        .unwrap()
+        .selection_mode = ListSelectionMode::Multiple;
+    app.world_mut()
+        .get_mut::<GuiListSelection>(pages)
+        .unwrap()
+        .0 = vec![0];
+    app.update();
+    assert_eq!(
+        index(&app, other_view, "page"),
+        1,
+        "a disposed controller must not retarget the current parent"
+    );
+    app.world_mut()
+        .get_mut::<GuiListSettings>(pages)
+        .unwrap()
+        .selection_controller = Some("page".into());
+    app.world_mut()
+        .get_mut::<GuiListSelection>(pages)
+        .unwrap()
+        .0 = vec![2];
+    app.update();
+    assert_eq!(index(&app, other_view, "page"), 2);
+    app.world_mut().despawn(other);
+    app.update();
+    assert!(app.world().get_entity(pages).is_err());
+}
+
+#[test]
 fn list_settings_bind_selection_controllers_without_reselecting_and_merge_native_changes() {
     let (mut app, owner, asset) = fixture("BagWin", false);
     load(&mut app, &asset, "Bag");

@@ -101,8 +101,8 @@ impl ObjectStore {
         Some(self.list_data(list)?.selection_mode)
     }
 
-    /// Controller name on the list's parent; None means this is not a list,
-    /// while Some(None) means the list has no resolved controller binding.
+    /// Bound controller name, retaining its owner when the list moves.
+    /// None means this is not a list; Some(None) means there is no live binding.
     pub fn list_selection_controller(&self, list: GObjectId) -> Option<Option<String>> {
         self.list_data(list)?;
         Some(self.list_controller(list).map(|(_, name)| name))
@@ -120,34 +120,41 @@ impl ObjectStore {
         true
     }
 
-    /// Bind a controller on the list's parent; assigning does not select a row.
+    /// Resolve a controller on the current parent. The resulting reference is
+    /// retained across reparenting; assigning it does not select a row.
     pub fn set_list_selection_controller(
         &mut self,
         list: GObjectId,
         controller: Option<&str>,
     ) -> bool {
-        let index = if let Some(name) = controller {
+        let binding = if let Some(name) = controller {
+            let Some(parent) = self.object(list).and_then(|o| o.parent()) else {
+                return false;
+            };
             let Some(index) = self
-                .object(list)
-                .and_then(|o| o.parent())
-                .and_then(|p| self.object(p))
+                .object(parent)
                 .and_then(|o| o.control().component())
                 .and_then(|c| c.controllers.iter().position(|c| c.name == name))
             else {
                 return false;
             };
-            index as i32
+            Some((parent, index))
         } else {
-            -1
+            None
         };
+        let previous = self.list_controller_ref(list);
         let Some(data) = self.list_data_mut(list) else {
             return false;
         };
-        if data.selection_controller == index {
-            return false;
-        }
+        let index = binding.map_or(-1, |(_, index)| index as i32);
+        let changed = data.selection_controller != index || previous != binding;
         data.selection_controller = index;
-        true
+        if let Some(binding) = binding {
+            self.list_selection_controllers.insert(list, binding);
+        } else {
+            self.list_selection_controllers.remove(&list);
+        }
+        changed
     }
 
     /// Native selectedIndex setter: replace the complete selection. Invalid
@@ -441,9 +448,7 @@ impl ObjectStore {
     }
 
     fn list_controller(&self, list: GObjectId) -> Option<(GObjectId, String)> {
-        let data = self.list_data(list)?;
-        let index = usize::try_from(data.selection_controller).ok()?;
-        let parent = self.object(list)?.parent()?;
+        let (parent, index) = self.list_controller_ref(list)?;
         Some((
             parent,
             self.object(parent)?
@@ -454,6 +459,34 @@ impl ObjectStore {
                 .name
                 .clone(),
         ))
+    }
+
+    fn list_controller_ref(&self, list: GObjectId) -> Option<(GObjectId, usize)> {
+        let data = self.list_data(list)?;
+        if let Some(binding) = self.list_selection_controllers.get(&list) {
+            return Some(*binding);
+        }
+        Some((
+            self.object(list)?.parent()?,
+            usize::try_from(data.selection_controller).ok()?,
+        ))
+    }
+
+    /// Exported references initially use the serialized parent index. Resolve
+    /// it before detachment so future accesses retain the original controller.
+    pub(super) fn preserve_list_selection_controller(&mut self, list: GObjectId) {
+        if self.list_selection_controllers.contains_key(&list) {
+            return;
+        }
+        if let Some((owner, index)) = self.list_controller_ref(list)
+            && self
+                .object(owner)
+                .and_then(|o| o.control().component())
+                .and_then(|c| c.controllers.get(index))
+                .is_some()
+        {
+            self.list_selection_controllers.insert(list, (owner, index));
+        }
     }
 
     pub(super) fn sync_related_lists(&mut self, parent: GObjectId, name: &str) {
