@@ -53,6 +53,149 @@ fn view(app: &App, owner: Entity) -> Entity {
 }
 
 #[test]
+fn ecs_related_controller_and_page_apply_before_selection_and_retain_identity_after_move() {
+    use crate::core::package::ObjectType;
+    use crate::properties::sync_property;
+    let mut world = World::new();
+    world.init_non_send::<GuiRuntime>();
+    let (parents, button, pages) = {
+        let package = crate::core::FuiPackage::parse(
+            "Bag",
+            include_bytes!("../../fairygui-demo/assets/ui/Bag.fui"),
+        )
+        .unwrap();
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        let first = runtime
+            .create_root(Handle::default(), &package, "BagWin")
+            .unwrap();
+        let second = runtime
+            .create_root(Handle::default(), &package, "BagWin")
+            .unwrap();
+        let parents = [
+            runtime.root_object(first).unwrap(),
+            runtime.root_object(second).unwrap(),
+        ];
+        let pages = runtime
+            .store()
+            .object(parents[0])
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controller("page")
+            .unwrap()
+            .page_ids
+            .clone();
+        let button = runtime.store_mut().create(ObjectType::Button);
+        runtime.store_mut().set_parent(button, Some(parents[0]));
+        (parents, button, pages)
+    };
+    let entity = world.spawn(GObjectRef(button)).id();
+    sync_property::<GuiButtonSettings>(&mut world);
+    sync_property::<GuiButtonSelected>(&mut world);
+    {
+        let mut settings = world.get_mut::<GuiButtonSettings>(entity).unwrap();
+        settings.mode = ButtonMode::Check;
+        settings.related_controller = Some("page".into());
+        settings.related_page_id = Some(pages[2].clone());
+    }
+    world.get_mut::<GuiButtonSelected>(entity).unwrap().0 = true;
+    crate::properties::sync(&mut world);
+    let index = |world: &World, owner| {
+        world
+            .non_send::<GuiRuntime>()
+            .store()
+            .object(owner)
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controller("page")
+            .unwrap()
+            .selected_index
+    };
+    assert_eq!(index(&world, parents[0]), 2);
+    assert!(world.get::<GuiButtonSelected>(entity).unwrap().0);
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(button, Some(parents[1]));
+    world
+        .get_mut::<GuiButtonSettings>(entity)
+        .unwrap()
+        .sound_volume_scale = 0.5;
+    world.get_mut::<GuiButtonSelected>(entity).unwrap().0 = false;
+    crate::properties::sync(&mut world);
+    assert_eq!(index(&world, parents[0]), 0);
+    assert_eq!(index(&world, parents[1]), 0);
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_controller_page_index(parents[1], "page", 2);
+    crate::properties::sync(&mut world);
+    assert!(
+        !world.get::<GuiButtonSelected>(entity).unwrap().0,
+        "unrelated same-name controller must not select the moved button"
+    );
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .remove(parents[0]);
+    crate::properties::sync(&mut world);
+    assert_eq!(
+        world
+            .get::<GuiButtonSettings>(entity)
+            .unwrap()
+            .related_controller,
+        None
+    );
+    {
+        let mut settings = world.get_mut::<GuiButtonSettings>(entity).unwrap();
+        settings.related_controller = Some("page".into());
+        settings.related_page_id = Some(pages[1].clone());
+    }
+    world.get_mut::<GuiButtonSelected>(entity).unwrap().0 = true;
+    crate::properties::sync(&mut world);
+    assert_eq!(index(&world, parents[1]), 1);
+    // Native controller replacement clears its page even if the button stays
+    // selected, and changing settings alone must not emit user change events.
+    world
+        .get_mut::<GuiButtonSettings>(entity)
+        .unwrap()
+        .related_controller = None;
+    crate::properties::sync(&mut world);
+    assert_eq!(
+        world
+            .get::<GuiButtonSettings>(entity)
+            .unwrap()
+            .related_page_id,
+        None
+    );
+    assert!(world.get::<GuiButtonSelected>(entity).unwrap().0);
+    assert_eq!(index(&world, parents[1]), 1);
+    let tick = world
+        .entity(entity)
+        .get_ref::<GuiButtonSettings>()
+        .unwrap()
+        .last_changed();
+    crate::properties::sync(&mut world);
+    assert_eq!(
+        world
+            .entity(entity)
+            .get_ref::<GuiButtonSettings>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    assert!(
+        world
+            .non_send_mut::<GuiRuntime>()
+            .drain_events()
+            .all(|event| event.kind != EventKind::StateChanged)
+    );
+}
+
+#[test]
 fn delayed_owner_settings_select_before_initialize_and_keep_base_title_and_icon() {
     #[derive(Resource, Default)]
     struct Seen(bool);

@@ -502,6 +502,11 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 `GuiTextFormat`、`GuiTooltips`、`GuiData`、`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
 将业务系统放在 `GuiSystems::Respond`，插件在推进动画前应用修改，并在本帧 Sync 更新 Bevy UI。
 
+按钮的 `GuiButtonSettings.related_controller` 按当前父对象的控制器名称绑定，
+`related_page_id` 指定关联页面 ID；两者先于同帧的 `GuiButtonSelected` 写入生效。
+更换或解除控制器会清空关联页面 ID，同帧明确修改的页面 ID 会随后应用。
+移动按钮保留原控制器身份；原拥有者销毁后可设置新绑定。单独修改关联配置不会改变选择。
+
 列表和树的 `GuiListLayout` 可直接修改布局类型、行列数、间距、对齐与自动拉伸。
 修改会重新布局普通列表及虚拟列表，并同步滚动内容范围；不合法的计数或虚拟几何会保留
 原布局。对齐量作用在列表内容容器上，行项目坐标仍保持原生局部坐标。

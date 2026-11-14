@@ -10,6 +10,75 @@ pub(super) struct ButtonFeedback {
 }
 
 impl ObjectStore {
+    /// Resolve a new related controller on the current parent. Native retains
+    /// this reference when moved and clears relatedPageId when it changes.
+    pub fn set_button_related_controller(&mut self, id: GObjectId, name: Option<&str>) -> bool {
+        if !matches!(
+            self.object(id).map(|o| o.control()),
+            Some(ControlData::Button(_))
+        ) {
+            return false;
+        }
+        let binding = if let Some(name) = name {
+            let Some(parent) = self.object(id).and_then(|o| o.parent()) else {
+                return false;
+            };
+            let Some(index) = self
+                .object(parent)
+                .and_then(|o| o.control().component())
+                .and_then(|c| c.controller_index_of(name))
+            else {
+                return false;
+            };
+            Some((parent, index))
+        } else {
+            None
+        };
+        if self.selection_controller_ref(id) == binding {
+            return false;
+        }
+        let ControlData::Button(data) = &mut self.objects[id].control else {
+            unreachable!()
+        };
+        data.related_controller = binding.map_or(-1, |(_, index)| index as i32);
+        data.related_page_id = None;
+        if let Some(binding) = binding {
+            self.selection_controllers.insert(id, binding);
+        } else {
+            self.selection_controllers.remove(&id);
+        }
+        true
+    }
+
+    pub fn button_related_controller(&self, id: GObjectId) -> Option<&str> {
+        let ControlData::Button(_) = self.object(id)?.control() else {
+            return None;
+        };
+        let (owner, index) = self.selection_controller_ref(id)?;
+        Some(
+            &self
+                .object(owner)?
+                .control()
+                .component()?
+                .controllers
+                .get(index)?
+                .name,
+        )
+    }
+
+    /// Assigning a page ID alone does not change selection or controller state.
+    pub fn set_button_related_page_id(&mut self, id: GObjectId, page: Option<&str>) -> bool {
+        let Some(ControlData::Button(data)) = self.objects.get_mut(id).map(|o| &mut o.control)
+        else {
+            return false;
+        };
+        if data.related_page_id.as_deref() == page {
+            return false;
+        }
+        data.related_page_id = page.map(str::to_owned);
+        true
+    }
+
     /// Native GButton.fireClick: execute internal click logic immediately.
     /// Returns None for non-buttons, otherwise whether selection changed.
     /// This does not emit Click, synthesize pointer state or open linked popups.
@@ -228,12 +297,17 @@ impl ObjectStore {
         let ControlData::Button(button) = &object.control else {
             return;
         };
-        let Some(parent) = object.parent else { return };
+        if object.parent.is_none() {
+            return;
+        }
+        let Some((parent, related)) = self.selection_controller_ref(id) else {
+            return;
+        };
         let Some(controller) = self
             .objects
             .get(parent)
             .and_then(|o| o.control.component())
-            .and_then(|data| data.controllers.get(button.related_controller as usize))
+            .and_then(|data| data.controllers.get(related))
         else {
             return;
         };
@@ -492,7 +566,7 @@ impl ObjectStore {
                 let ControlData::Button(data) = &self.objects.get(*id)?.control else {
                     return None;
                 };
-                (data.related_controller == index as i32)
+                (self.selection_controller_ref(*id) == Some((parent, index)))
                     .then_some((*id, data.related_page_id.as_deref() == page))
             })
             .collect();
@@ -505,18 +579,20 @@ impl ObjectStore {
         let Some(object) = self.objects.get(id) else {
             return;
         };
-        let ControlData::Button(data) = &object.control else {
+        let ControlData::Button(_) = &object.control else {
             return;
         };
-        let related = data.related_controller;
+        let Some(binding) = self.selection_controller_ref(id) else {
+            return;
+        };
         let Some(parent) = object.parent else { return };
         let Some(parent_object) = self.objects.get(parent) else {
             return;
         };
-        if !parent_object
-            .control
-            .component()
-            .and_then(|c| c.controllers.get(related as usize))
+        if !self
+            .object(binding.0)
+            .and_then(|o| o.control().component())
+            .and_then(|c| c.controllers.get(binding.1))
             .is_some_and(|c| c.auto_radio_group_depth)
         {
             return;
@@ -526,8 +602,11 @@ impl ObjectStore {
         };
         let last = parent_object.children.iter().rposition(|child| {
             *child != id
-                && matches!(self.objects.get(*child).map(|o| &o.control),
-                Some(ControlData::Button(button)) if button.related_controller == related)
+                && matches!(
+                    self.objects.get(*child).map(|o| &o.control),
+                    Some(ControlData::Button(_))
+                )
+                && self.selection_controller_ref(*child) == Some(binding)
         });
         if let Some(last) = last.filter(|last| *last > from) {
             let other = self.objects[parent].children[last];
@@ -593,6 +672,87 @@ mod tests {
             .unwrap()
             .selected_page_name()
             .unwrap()
+    }
+
+    #[test]
+    fn moved_button_preserves_related_controller_and_depth_only_compares_matching_references() {
+        let (mut store, original, button) = fixture(ButtonMode::Check);
+        store.objects[original]
+            .control
+            .component_mut()
+            .unwrap()
+            .controllers[0]
+            .auto_radio_group_depth = true;
+        let other = store.create(ObjectType::Component);
+        let mut controller = store
+            .object(original)
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controllers[0]
+            .clone();
+        controller.auto_radio_group_depth = false;
+        store.objects[other]
+            .control
+            .component_mut()
+            .unwrap()
+            .controllers
+            .push(controller);
+        let matching = store.create(ObjectType::Button);
+        let unrelated = store.create(ObjectType::Button);
+        store.set_parent(matching, Some(original));
+        store.set_button_related_controller(matching, Some("pages"));
+        store.set_parent(button, Some(other));
+        store.set_parent(matching, Some(other));
+        store.set_parent(unrelated, Some(other));
+        store.set_button_related_controller(unrelated, Some("pages"));
+        store.set_button_selected(button, true);
+        assert_eq!(page(&store, original, "pages"), "Second");
+        assert_eq!(page(&store, other, "pages"), "First");
+        assert_eq!(
+            store.object(other).unwrap().children(),
+            &[matching, button, unrelated],
+            "same serialized index is not the same controller reference"
+        );
+        store.set_controller_page_index(other, "pages", 1);
+        assert_eq!(store.button_selected(button), Some(true));
+        store.set_button_selected(button, false);
+        assert_eq!(page(&store, original, "pages"), "First");
+        assert_eq!(page(&store, other, "pages"), "Second");
+        assert!(store.set_button_related_controller(button, Some("pages")));
+        assert!(
+            matches!(store.object(button).unwrap().control(), ControlData::Button(data) if data.related_page_id.is_none())
+        );
+        store.set_button_related_page_id(button, Some("first-id"));
+        store.set_button_selected(button, true);
+        assert_eq!(page(&store, other, "pages"), "First");
+        store.remove(original);
+        assert_eq!(store.button_related_controller(matching), None);
+        store.remove(other);
+        assert!(store.selection_controllers.is_empty());
+    }
+
+    #[test]
+    fn related_controller_assignments_clear_page_only_when_the_reference_changes() {
+        let (mut store, parent, button) = fixture(ButtonMode::Radio);
+        assert!(!store.set_button_related_controller(button, Some("pages")));
+        assert!(!store.set_button_related_controller(button, Some("missing")));
+        assert!(
+            matches!(store.object(button).unwrap().control(), ControlData::Button(data) if data.related_page_id.as_deref() == Some("second-id"))
+        );
+        assert!(store.set_button_related_controller(button, None));
+        assert!(
+            matches!(store.object(button).unwrap().control(), ControlData::Button(data) if data.related_page_id.is_none())
+        );
+        store.set_button_related_page_id(button, Some("second-id"));
+        store.set_button_selected(button, true);
+        assert_eq!(page(&store, parent, "pages"), "First");
+        assert!(store.set_button_related_controller(button, Some("pages")));
+        assert!(
+            matches!(store.object(button).unwrap().control(), ControlData::Button(data) if data.related_page_id.is_none() && data.selected)
+        );
+        assert_eq!(page(&store, parent, "pages"), "First");
     }
 
     #[test]

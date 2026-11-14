@@ -11,6 +11,10 @@ use bevy::prelude::*;
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct GuiButtonSettings {
     pub mode: ButtonMode,
+    /// New names resolve on the current parent; moving retains the old owner.
+    /// Changing the controller clears its related page ID, matching native.
+    pub related_controller: Option<String>,
+    pub related_page_id: Option<String>,
     pub change_state_on_click: bool,
     /// None or an empty string falls back to the base title/icon.
     pub selected_title: Option<String>,
@@ -27,6 +31,8 @@ impl Default for GuiButtonSettings {
     fn default() -> Self {
         Self {
             mode: ButtonMode::Common,
+            related_controller: None,
+            related_page_id: None,
             change_state_on_click: true,
             selected_title: None,
             selected_icon: None,
@@ -44,6 +50,11 @@ impl Property for GuiButtonSettings {
         };
         Some(Self {
             mode: data.mode,
+            related_controller: runtime
+                .store()
+                .button_related_controller(object)
+                .map(str::to_owned),
+            related_page_id: data.related_page_id.clone(),
             change_state_on_click: data.change_state_on_click,
             selected_title: data.selected_title.clone(),
             selected_icon: data.selected_icon.clone(),
@@ -60,6 +71,14 @@ impl Property for GuiButtonSettings {
         )*}; }
         apply! { mode => set_button_mode, change_state_on_click => set_button_change_state_on_click,
         sound_volume_scale => set_button_sound_volume }
+        if self.related_controller != previous.related_controller
+            && self.related_controller != native.related_controller
+        {
+            store.set_button_related_controller(object, self.related_controller.as_deref());
+        }
+        if self.related_page_id != previous.related_page_id {
+            store.set_button_related_page_id(object, self.related_page_id.as_deref());
+        }
         if self.selected_title != previous.selected_title
             && self.selected_title != native.selected_title
         {

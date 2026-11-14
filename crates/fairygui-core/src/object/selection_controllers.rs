@@ -1,4 +1,4 @@
-//! Native selection-controller references shared by lists, trees and combos.
+//! Native controller references shared by lists, trees, combos and buttons.
 use super::{GObjectId, ObjectStore};
 use crate::widget::ControlData;
 
@@ -9,6 +9,7 @@ impl ObjectStore {
             ControlData::List(list) => list.selection_controller,
             ControlData::Tree(tree) => tree.list.selection_controller,
             ControlData::ComboBox(combo) => combo.selection_controller,
+            ControlData::Button(button) => button.related_controller,
             _ => return None,
         };
         // A combo temporarily writes -1 while updating its controller, matching
