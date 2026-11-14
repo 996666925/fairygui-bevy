@@ -30,8 +30,6 @@ fn fixture(grip_hit: bool) -> Fixture {
         let pane = gui.store().child_by_name(root, "mailList").unwrap();
         gui.store_mut().set_xy(pane, 0., 0.);
         gui.store_mut().set_size(pane, 300., 200.);
-        gui.store_mut()
-            .update_scroll_content_size(pane, Size::new(300., 1000.));
         let row = gui.store_mut().create(ObjectType::Button);
         gui.store_mut().set_parent(row, Some(pane));
         gui.store_mut().set_size(row, 300., 30.);
@@ -56,6 +54,11 @@ fn fixture(grip_hit: bool) -> Fixture {
         };
         gui.store_mut().set_parent(hit, Some(parent));
         gui.store_mut().set_size(hit, 10., 10.);
+        // This input fixture controls its hit row and content range explicitly.
+        gui.store_mut().flush_list_layouts();
+        gui.store_mut().set_xy(row, 0., 80.);
+        gui.store_mut()
+            .update_scroll_content_size(pane, Size::new(300., 1000.));
         (pane, row, slider, grip)
     };
     Fixture {

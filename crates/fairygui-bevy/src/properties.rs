@@ -84,6 +84,17 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiProgressState>(world);
     sync_property::<GuiProgressValue>(world);
     sync_property::<GuiComboBoxState>(world);
+    if world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .flush_list_layouts()
+        != 0
+    {
+        // All row edits have now been applied. Publish positions and automatic
+        // widths again so earlier entity visits cannot expose stale geometry.
+        sync_property::<GuiTransform>(world);
+        sync_property::<GuiDisplay>(world);
+    }
 }
 
 fn snapshot<T: Property>(world: &World, object: GObjectId) -> Option<T> {
@@ -120,7 +131,10 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
             };
             let baseline = stored
                 .as_ref()
-                .filter(|(id, _)| *id == object)
+                // View components are projections of their current binding.
+                // Root/window owners instead retain application configuration
+                // when replacing their underlying native model.
+                .filter(|(id, _)| reference.is_some() || *id == object)
                 .map_or(&native, |(_, value)| value);
             let next = if let Some(value) = &value
                 && *value != native

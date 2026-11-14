@@ -507,6 +507,8 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 原布局。对齐量作用在列表内容容器上，行项目坐标仍保持原生局部坐标。
 `GuiListSettings` 控制点击列表项时滚入视口，以及不可见行是否折叠布局；折叠只改变位置和内容范围，
 不改变项目顺序、索引或选择状态。
+直接修改行的 `GuiDisplay.visible`、`GuiTransform.size` 或列表自身尺寸，也会在当帧
+刷新普通列表和树的布局、自动行宽与滚动内容范围，无需再调用布局方法。
 
 ```rust,ignore
 fn update_label(mut labels: Query<&mut GuiText>, target: Entity) {

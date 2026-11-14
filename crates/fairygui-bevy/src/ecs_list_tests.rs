@@ -45,6 +45,128 @@ fn config(count: usize) -> GuiVirtualList {
 }
 
 #[test]
+fn writable_row_visibility_and_size_reflow_list_geometry_in_the_same_frame() {
+    use crate::{GuiButtonSelected, GuiDisplay, GuiListLayout, GuiListSelection, GuiListSettings};
+    let (mut app, _owner, list, view) = fixture(
+        "ListEffect",
+        include_bytes!("../../fairygui-demo/assets/ui/ListEffect.fui"),
+        "mailList",
+    );
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiListContent::new(10, |_, row| row.set_text("Mail")));
+    app.update();
+    let rows = app
+        .world()
+        .get::<GuiListState>(view)
+        .unwrap()
+        .items()
+        .to_vec();
+    let height = app.world().get::<GuiTransform>(rows[0]).unwrap().size.y;
+    let width = app.world().get::<GuiTransform>(view).unwrap().size.x + 37.;
+    app.world_mut()
+        .get_mut::<GuiButtonSelected>(rows[1])
+        .unwrap()
+        .0 = true;
+    // These components are synchronized in different passes. Layout must see
+    // the final values together, regardless of entity iteration order.
+    app.world_mut()
+        .get_mut::<GuiListLayout>(view)
+        .unwrap()
+        .line_gap = 7;
+    app.world_mut()
+        .get_mut::<GuiListSettings>(view)
+        .unwrap()
+        .fold_invisible_items = true;
+    app.world_mut()
+        .get_mut::<GuiDisplay>(rows[1])
+        .unwrap()
+        .visible = false;
+    app.world_mut()
+        .get_mut::<GuiTransform>(rows[0])
+        .unwrap()
+        .size
+        .y += 17.;
+    app.world_mut()
+        .get_mut::<GuiTransform>(view)
+        .unwrap()
+        .size
+        .x = width;
+    app.update();
+    let transform = |entity| *app.world().get::<GuiTransform>(entity).unwrap();
+    assert_eq!(transform(rows[2]).position.y, height + 17. + 7.);
+    assert_eq!(transform(rows[0]).size.x, transform(rows[2]).size.x);
+    assert_eq!(
+        transform(rows[0]).size.x,
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .scroll_pane(list)
+            .unwrap()
+            .view_size()
+            .width
+    );
+    let last = transform(rows[9]);
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .scroll_pane(list)
+            .unwrap()
+            .content_size()
+            .height,
+        last.position.y + last.size.y,
+    );
+    assert_eq!(app.world().get::<GuiListState>(view).unwrap().items(), rows);
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [1]);
+
+    // Later edits must also invalidate layout when its settings are unchanged.
+    app.world_mut()
+        .get_mut::<GuiDisplay>(rows[0])
+        .unwrap()
+        .visible = false;
+    app.world_mut()
+        .get_mut::<GuiDisplay>(rows[1])
+        .unwrap()
+        .visible = true;
+    app.world_mut()
+        .get_mut::<GuiTransform>(rows[1])
+        .unwrap()
+        .size
+        .y += 11.;
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiTransform>(rows[1]).unwrap().position.y,
+        0.
+    );
+    assert_eq!(
+        app.world().get::<GuiTransform>(rows[2]).unwrap().position.y,
+        height + 11. + 7.
+    );
+    let ticks: Vec<_> = rows
+        .iter()
+        .map(|&row| {
+            app.world()
+                .entity(row)
+                .get_ref::<GuiTransform>()
+                .unwrap()
+                .last_changed()
+        })
+        .collect();
+    app.update();
+    for (&row, tick) in rows.iter().zip(ticks) {
+        assert_eq!(
+            app.world()
+                .entity(row)
+                .get_ref::<GuiTransform>()
+                .unwrap()
+                .last_changed(),
+            tick
+        );
+    }
+}
+
+#[test]
 fn child_view_snapshots_track_native_geometry_hidden_rows_and_display_scroll_without_tick_churn() {
     use bevy::ecs::system::SystemState;
     let (mut app, owner, _, list) = fixture(

@@ -34,13 +34,23 @@ fn property_queries_follow_new_archetypes_rebound_objects_and_entity_generations
         Some("Edited")
     );
     assert_eq!(world.get::<GuiText>(later).unwrap().value(), "Second");
-    // Rebinding discards the old object's baseline and writes only explicit
-    // application fields; unsupported objects reclaim both projected values.
+    // Rebinding refreshes an unchanged projection from the new object. An old
+    // object's last projected value must not turn into a new application edit.
     world.entity_mut(entity).insert(GObjectRef(second));
     sync_property::<GuiText>(&mut world);
     assert_eq!(
         world.non_send::<GuiRuntime>().store().object_text(second),
-        Some("Edited")
+        Some("Second")
+    );
+    world.entity_mut(entity).insert(GObjectRef(first));
+    world
+        .get_mut::<GuiText>(entity)
+        .unwrap()
+        .set("Explicit rebind edit");
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(
+        world.non_send::<GuiRuntime>().store().object_text(first),
+        Some("Explicit rebind edit")
     );
     world.entity_mut(entity).insert(GObjectRef(image));
     sync_property::<GuiText>(&mut world);

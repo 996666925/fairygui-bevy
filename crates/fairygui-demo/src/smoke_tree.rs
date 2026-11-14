@@ -241,12 +241,37 @@ fn drive(
                     < 0.01
             );
             state.dynamic_rows.push(new);
+            let mut settings = *gui.list_settings(state.dynamic.unwrap()).unwrap();
+            settings.fold_invisible_items = true;
+            commands.entity(state.dynamic.unwrap()).insert(settings);
+            let mut display = *gui.display(state.dynamic_rows[1]).unwrap();
+            display.visible = false;
+            commands.entity(state.dynamic_rows[1]).insert(display);
+            let mut transform = *gui.transform(state.dynamic_rows[0]).unwrap();
+            transform.size.y += 12.;
+            commands.entity(state.dynamic_rows[0]).insert(transform);
+            next = true;
+        }
+        18 if elapsed >= 8 => {
+            let first = gui.transform(state.dynamic_rows[0]).unwrap();
+            let following = gui.transform(state.dynamic_rows[2]).unwrap();
+            assert_eq!(first.size.y, 60.);
+            assert_eq!(following.position.y, 60.);
+            let first_node = nodes.get(state.dynamic_rows[0]).unwrap();
+            let following_node = nodes.get(state.dynamic_rows[2]).unwrap();
+            let scale = first_node.0.size().y / first.size.y;
+            let first_top = first_node.1.transform_point2(-first_node.0.size() / 2.);
+            let following_top = following_node
+                .1
+                .transform_point2(-following_node.0.size() / 2.);
+            assert!((following_top.y - first_top.y - 60. * scale).abs() < 0.1);
+            assert!(!gui.display(state.dynamic_rows[1]).unwrap().visible);
             commands
                 .entity(state.dynamic.unwrap())
                 .insert(GuiTreeContent::default());
             next = true;
         }
-        18 if elapsed >= 8 => {
+        19 if elapsed >= 8 => {
             assert!(gui.tree(state.dynamic.unwrap()).unwrap().nodes().is_empty());
             assert!(
                 state
@@ -257,10 +282,10 @@ fn drive(
             commands.entity(state.owner.unwrap()).despawn();
             next = true;
         }
-        19 if elapsed >= 8 => {
+        20 if elapsed >= 8 => {
             assert!(state.rows.iter().all(|&row| !existing.contains(row)));
             println!(
-                "demo smoke PASSED: exported and keyed dynamic trees, actual row/arrow clicks, native collapse defaults, folder/file icons, keyed row reuse, live ECS indent with retained/new cells, data updates, growth and disposal"
+                "demo smoke PASSED: exported and keyed dynamic trees, actual row/arrow clicks, native collapse defaults, folder/file icons, keyed row reuse, live ECS indent with retained/new cells, row visibility/size reflow in computed geometry, data updates, growth and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

@@ -3337,6 +3337,7 @@ pub(crate) fn sync_dirty(
         Option<&RichTextBlock>,
     )>,
 ) {
+    runtime.store_mut().flush_list_layouts();
     let dirty_objects = runtime.store_mut().take_dirty();
     if dirty_objects.is_empty() {
         return;

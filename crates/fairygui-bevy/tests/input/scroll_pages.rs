@@ -50,6 +50,11 @@ fn exported_bag_page_button_and_wheel_drive_each_other_without_selecting_list_it
             gui.store_mut().set_parent(row, Some(pager));
         }
         gui.store_mut().initialize_list_selections(owner);
+        // Pager creation can invalidate related lists; settle those bounds
+        // before installing the three synthetic content pages used here.
+        gui.store_mut().flush_list_layouts();
+        gui.store_mut()
+            .update_scroll_content_size(list, Size::new(view.width * 3., view.height));
         let button = gui.store().list_item_at(pager, 2).unwrap();
         (owner, list, pager, button, name, view.width)
     };
@@ -84,6 +89,11 @@ fn exported_bag_page_button_and_wheel_drive_each_other_without_selecting_list_it
         .non_send_mut::<GuiRuntime>()
         .store_mut()
         .set_scroll_mouse_wheel_enabled(list, true);
+    // This headless target picks the pane itself, without content render nodes.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_component_opaque(list, true);
     app.world_mut().write_message(MouseWheel {
         unit: MouseScrollUnit::Line,
         x: 0.,

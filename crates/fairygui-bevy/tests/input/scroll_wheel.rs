@@ -41,6 +41,7 @@ fn exported(app: &mut App, kind: ScrollType) -> GObjectId {
         .unwrap();
     gui.store_mut().set_size(list, 100., 80.);
     gui.store_mut().layout_scroll_bars(list);
+    gui.store_mut().flush_list_layouts();
     gui.store_mut()
         .update_scroll_content_size(list, Size::new(1000., 1000.));
     gui.store_mut().set_scroll_mouse_wheel_enabled(list, true);
@@ -208,6 +209,12 @@ fn actual_wheel_router_uses_raw_nested_hit_and_bubbles_through_disabled_or_bound
         gui.store_mut().set_parent(inner, Some(button));
         gui.store_mut().set_parent(leaf, Some(inner));
         gui.store_mut().set_scroll_step(inner, 12.5);
+        // Finish native row layout before substituting synthetic scroll bounds.
+        gui.store_mut().flush_list_layouts();
+        for pane in [outer, inner] {
+            gui.store_mut()
+                .update_scroll_content_size(pane, Size::new(1000., 1000.));
+        }
     }
     send(&mut app, window, MouseScrollUnit::Line, 0., -100.);
     {

@@ -861,6 +861,12 @@ fn wheel_pixels_and_lines_have_distinct_units_and_ignore_other_windows() {
         .non_send_mut::<GuiRuntime>()
         .store_mut()
         .set_parent(child, Some(container));
+    {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        gui.store_mut().flush_list_layouts();
+        gui.store_mut()
+            .update_scroll_content_size(container, fairygui_core::geom::Size::new(2000., 2000.));
+    }
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .store_mut()

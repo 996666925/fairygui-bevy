@@ -54,6 +54,8 @@ mod list_items;
 #[path = "list_layout.rs"]
 mod list_layout;
 pub use list_layout::ListLayoutSettings;
+#[path = "list_invalidation.rs"]
+mod list_invalidation;
 #[path = "list_selection.rs"]
 mod list_selection;
 #[path = "list_settings.rs"]
@@ -190,6 +192,8 @@ pub struct ObjectStore {
     objects: slotmap::SlotMap<GObjectId, GObject>,
     dirty_ids: HashSet<GObjectId>,
     list_bounds: std::collections::HashMap<GObjectId, Size>,
+    pending_list_layouts: HashSet<GObjectId>,
+    laying_out_lists: HashSet<GObjectId>,
     tree_cell_indents: std::collections::HashMap<GObjectId, (GObjectId, u8)>,
     relation_handling: HashSet<GObjectId>,
     syncing_list_controllers: HashSet<GObjectId>,
@@ -307,6 +311,8 @@ impl ObjectStore {
             .retain(|owner, _| !removed_set.contains(owner));
         self.list_bounds
             .retain(|owner, _| !removed_set.contains(owner));
+        self.pending_list_layouts
+            .retain(|owner| !removed_set.contains(owner));
         self.tree_cell_indents
             .retain(|row, (tree, _)| !removed_set.contains(row) && !removed_set.contains(tree));
         self.refreshing_virtual_lists
@@ -447,6 +453,7 @@ impl ObjectStore {
             self.dirty_ids.insert(parent);
             self.initialize_list_item(parent, child);
             self.refresh_list_selection_snapshot(parent);
+            self.invalidate_list_layout(parent);
         }
         self.refresh_stage();
         true
@@ -499,6 +506,7 @@ impl ObjectStore {
         self.touch_display(child);
         self.dirty_ids.insert(parent);
         self.refresh_list_selection_snapshot(parent);
+        self.invalidate_list_layout(parent);
         self.layout_scroll_refresh_bars(parent);
         true
     }
@@ -778,6 +786,8 @@ impl ObjectStore {
             object.height = height;
         }
         self.touch(id, dirty::SIZE);
+        self.invalidate_list_layout(id);
+        self.invalidate_parent_list_layout(id);
 
         // GImage caches Sprite position. Match GObject.setSize's pivot order:
         // non-anchor setXY runs with the old pivot offset, before it is updated.
@@ -1174,6 +1184,7 @@ impl ObjectStore {
         };
         if changed {
             self.touch_display(id);
+            self.invalidate_parent_list_layout(id);
         }
     }
 
@@ -1630,6 +1641,16 @@ impl ObjectStore {
 
     /// 按布局摆放单个列表的项。
     pub fn layout_list(&mut self, list: GObjectId) -> usize {
+        self.pending_list_layouts.remove(&list);
+        if !self.laying_out_lists.insert(list) {
+            return 0;
+        }
+        let applied = self.layout_list_now(list);
+        self.laying_out_lists.remove(&list);
+        applied
+    }
+
+    fn layout_list_now(&mut self, list: GObjectId) -> usize {
         self.prepare_tree_indents(list);
         if self.is_virtual_list(list) {
             return 0;
