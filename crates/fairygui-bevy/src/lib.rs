@@ -92,6 +92,8 @@ pub use runtime::{GuiMut, GuiObjectMut, GuiWorldExt};
 pub mod slider;
 pub use slider::GuiSliderState;
 pub mod text;
+mod tooltips;
+pub use tooltips::GuiTooltips;
 mod text_format;
 pub use text_format::GuiTextFormat;
 mod text_stroke;
@@ -197,7 +199,7 @@ pub mod prelude {
         GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollSettings, GuiScrollState,
         GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText,
         GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTooltipCommand, GuiTooltipError,
-        GuiTooltipSettings, GuiTooltipState, GuiTransform, GuiTransitionCallback,
+        GuiTooltipSettings, GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback,
         GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
         GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
         GuiTreeNodeState, GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget,

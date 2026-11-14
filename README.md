@@ -499,7 +499,7 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 `entity` 与 `callback` 字段，也在 Sync 后发布。demo 通过完成消息回收临时界面。
 
 普通属性直接修改 ECS 组件：`GuiText`、`GuiIcon`、`GuiTransform`、`GuiDisplay`、
-`GuiTextFormat`、`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
+`GuiTextFormat`、`GuiTooltips`、`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
 将业务系统放在 `GuiSystems::Respond`，插件在推进动画前应用修改，并在本帧 Sync 更新 Bevy UI。
 
 列表和树的 `GuiListLayout` 可直接修改布局类型、行列数、间距、对齐与自动拉伸。
