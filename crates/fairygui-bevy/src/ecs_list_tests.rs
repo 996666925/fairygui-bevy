@@ -45,6 +45,179 @@ fn config(count: usize) -> GuiVirtualList {
 }
 
 #[test]
+fn writable_selection_waits_for_content_and_tracks_native_and_row_edits() {
+    use crate::{GuiButtonSelected, GuiListSelection};
+    let (mut app, _, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.world_mut().entity_mut(view).insert((
+        GuiListContent::new(8, |_, row| row.set_text("Mail")),
+        GuiListSelection(vec![2]),
+    ));
+    app.update();
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_selections(list),
+        Some(vec![2])
+    );
+    let rows = app
+        .world()
+        .get::<GuiListState>(view)
+        .unwrap()
+        .items()
+        .to_vec();
+    assert!(app.world().get::<GuiButtonSelected>(rows[2]).unwrap().0);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_list_selection_mode(list, fairygui_core::widget::ListSelectionMode::Multiple);
+    app.world_mut().get_mut::<GuiListSelection>(view).unwrap().0 = vec![5, 1, 5, usize::MAX];
+    app.update();
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [1, 5]);
+    for (index, &row) in rows.iter().enumerate() {
+        assert_eq!(
+            app.world().get::<GuiButtonSelected>(row).unwrap().0,
+            [1, 5].contains(&index)
+        );
+    }
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_list_selection(list, 3);
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiListSelection>(view).unwrap().0,
+        [3],
+        "native changes must not replay old ECS writes"
+    );
+    app.world_mut()
+        .get_mut::<GuiButtonSelected>(rows[4])
+        .unwrap()
+        .0 = true;
+    app.update();
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [3, 4]);
+    app.world_mut()
+        .get_mut::<GuiListSelection>(view)
+        .unwrap()
+        .0
+        .clear();
+    app.update();
+    assert!(
+        app.world()
+            .get::<GuiListSelection>(view)
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_list_selection_mode(list, fairygui_core::widget::ListSelectionMode::Single);
+    app.world_mut().get_mut::<GuiListSelection>(view).unwrap().0 = vec![6, 2, usize::MAX];
+    app.update();
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [2]);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_list_selection_mode(list, fairygui_core::widget::ListSelectionMode::None);
+    app.world_mut().get_mut::<GuiListSelection>(view).unwrap().0 = vec![4];
+    app.update();
+    assert!(
+        app.world()
+            .get::<GuiListSelection>(view)
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    let tick = app
+        .world()
+        .entity(view)
+        .get_ref::<GuiListSelection>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(view)
+            .get_ref::<GuiListSelection>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    assert!(
+        app.world_mut()
+            .non_send_mut::<GuiRuntime>()
+            .drain_events()
+            .all(|event| !matches!(
+                event.kind,
+                crate::core::object::EventKind::ClickItem
+                    | crate::core::object::EventKind::StateChanged
+            ))
+    );
+}
+
+#[test]
+fn writable_virtual_selection_retains_offscreen_indices_without_scrolling_and_survives_reconfiguration()
+ {
+    use crate::{GuiButtonSelected, GuiListSelection};
+    let (mut app, _, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.world_mut()
+        .entity_mut(view)
+        .insert((config(1000), GuiListSelection(vec![900])));
+    app.update();
+    let runtime = app.world().non_send::<GuiRuntime>();
+    assert_eq!(runtime.store().list_selections(list), Some(vec![900]));
+    assert!(runtime.store().virtual_item_object(list, 900).is_none());
+    assert_eq!(
+        runtime.store().scroll_pane(list).unwrap().pos(),
+        crate::core::Point::ZERO
+    );
+    assert!(
+        runtime
+            .store()
+            .virtual_list_info(list)
+            .unwrap()
+            .active_count
+            < 30
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .scroll_list_item_to_view(list, 900, false, false);
+    app.update();
+    let runtime = app.world().non_send::<GuiRuntime>();
+    let row = runtime.store().virtual_item_object(list, 900).unwrap();
+    assert!(
+        app.world()
+            .get::<GuiButtonSelected>(runtime.entity_of(row).unwrap())
+            .unwrap()
+            .0
+    );
+    app.world_mut()
+        .get_mut::<GuiVirtualList>(view)
+        .unwrap()
+        .item_count = 10;
+    app.world_mut().get_mut::<GuiListSelection>(view).unwrap().0 = vec![2];
+    app.update();
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_selections(list),
+        Some(vec![2])
+    );
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [2]);
+}
+
+#[test]
 fn writable_row_visibility_and_size_reflow_list_geometry_in_the_same_frame() {
     use crate::{GuiButtonSelected, GuiDisplay, GuiListLayout, GuiListSelection, GuiListSettings};
     let (mut app, _owner, list, view) = fixture(

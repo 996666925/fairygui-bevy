@@ -8,6 +8,10 @@ pub(crate) trait Property:
     Component<Mutability = bevy::ecs::component::Mutable> + Clone + PartialEq
 {
     fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self>;
+    /// Keep application writes pending while dependent content is prepared.
+    fn ready(_world: &World, _entity: Entity, _object: GObjectId) -> bool {
+        true
+    }
     /// Add read-only metadata owned by the materialized ECS view.
     fn read_view(&mut self, _world: &World, _object: GObjectId) {}
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId);
@@ -55,6 +59,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiControllers>(world);
     sync_property::<GuiData>(world);
     sync_property::<GuiButtonSettings>(world);
+    sync_property::<GuiListSelection>(world);
     sync_property::<GuiScrollSettings>(world);
     sync_property::<GuiListLayout>(world);
     sync_property::<GuiListSettings>(world);
@@ -84,6 +89,8 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiProgressState>(world);
     sync_property::<GuiProgressValue>(world);
     sync_property::<GuiComboBoxState>(world);
+    // Row button edits also change a list's native selected indices.
+    sync_property::<GuiListSelection>(world);
     if world
         .non_send_mut::<GuiRuntime>()
         .store_mut()
@@ -129,6 +136,9 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
                 }
                 continue;
             };
+            if !T::ready(world, entity, object) {
+                continue;
+            }
             let baseline = stored
                 .as_ref()
                 // View components are projections of their current binding.

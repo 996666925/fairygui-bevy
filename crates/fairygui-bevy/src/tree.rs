@@ -81,11 +81,30 @@ pub enum GuiTreeContentError {
 pub struct GuiTreeContentState {
     error: Option<GuiTreeContentError>,
     object: Option<crate::core::GObjectId>,
+    revision: Option<bevy::ecs::change_detection::Tick>,
 }
 impl GuiTreeContentState {
     pub fn error(&self) -> Option<&GuiTreeContentError> {
         self.error.as_ref()
     }
+}
+
+pub(crate) fn content_pending(
+    world: &World,
+    entity: Entity,
+    object: crate::core::GObjectId,
+) -> bool {
+    let view = world.entity(entity);
+    view.get_ref::<GuiTreeContent>().is_some_and(|config| {
+        view.get::<GuiTreeContentState>().is_none_or(|state| {
+            state.object != Some(object)
+                || state.revision.is_none_or(|revision| {
+                    config
+                        .last_changed()
+                        .is_newer_than(revision, world.read_change_tick())
+                })
+        })
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +154,7 @@ pub(crate) fn sync_tree_content(
         let next = GuiTreeContentState {
             error,
             object: Some(reference.0),
+            revision: Some(config.last_changed()),
         };
         if current != Some(&next) {
             commands.entity(entity).insert(next);

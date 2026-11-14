@@ -162,6 +162,23 @@ impl ObjectStore {
             .is_some_and(|after| after != before)
     }
 
+    /// Replace the selected indices using native clearSelection/addSelection
+    /// semantics. Invalid indices are ignored; rows obey their native button
+    /// and selection modes. Does not scroll or synthesize input events.
+    pub fn set_list_selections(&mut self, list: GObjectId, indices: &[usize]) -> bool {
+        let Some(before) = self.list_selections(list) else {
+            return false;
+        };
+        let outer = self.list_selection_batches.insert(list);
+        self.clear_list_selection(list);
+        for &index in indices {
+            self.add_list_selection(list, index);
+        }
+        self.finish_list_selection(list, outer);
+        self.list_selections(list)
+            .is_some_and(|after| after != before)
+    }
+
     /// Add a row to the selection; Single clears other rows. No StateChanged
     /// event is emitted by programmatic selection, matching button.selected.
     pub fn add_list_selection(&mut self, list: GObjectId, index: usize) -> bool {

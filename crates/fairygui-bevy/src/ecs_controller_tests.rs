@@ -313,6 +313,14 @@ fn controller_components_drive_scroll_pages_and_selection_then_follow_native_scr
     assert_eq!(pane.position().x, pane.view_size().x * 2.);
     assert_eq!(app.world().get::<GuiListSelection>(pages).unwrap().0, [2]);
     app.world_mut()
+        .get_mut::<GuiListSelection>(pages)
+        .unwrap()
+        .0 = vec![1];
+    app.update();
+    assert_eq!(index(&app, view, "page"), 1);
+    let pane = app.world().get::<GuiScrollState>(list).unwrap();
+    assert_eq!(pane.position().x, pane.view_size().x);
+    app.world_mut()
         .gui_mut(list)
         .unwrap()
         .scroll_to(Vec2::ZERO, false);

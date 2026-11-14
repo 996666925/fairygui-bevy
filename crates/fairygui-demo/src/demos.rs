@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use fairygui_bevy::{
-    FairyGuiRoot, GuiMenuAction, GuiMut, GuiObjectMut, GuiPopupCommand, GuiPopupMenu, GuiQuery,
-    GuiRootInstance, GuiTransitionComplete, GuiTransitionHook,
+    FairyGuiRoot, GuiListSelection, GuiMenuAction, GuiMut, GuiObjectMut, GuiPopupCommand,
+    GuiPopupMenu, GuiQuery, GuiRootInstance, GuiTransitionComplete, GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -514,6 +514,7 @@ pub fn handle_virtual_list_action(
     controller: &DemoController,
     listener: u64,
     objects: &mut GuiMut,
+    selections: &mut Query<&mut GuiListSelection>,
 ) {
     let Some(root) = controller.root_owner else {
         return;
@@ -526,8 +527,11 @@ pub fn handle_virtual_list_action(
     };
     match listener.checked_sub(DEMO_ACTION_BASE) {
         Some(0) => {
+            if let Ok(mut selection) = selections.get_mut(target) {
+                selection.0 = vec![500];
+            }
             objects.edit(target, |object: &mut GuiObjectMut| {
-                object.select_list_index(500, true)
+                object.scroll_list_item_to_view(500, false)
             });
         }
         Some(index @ (1 | 2)) => {

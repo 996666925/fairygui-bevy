@@ -500,6 +500,12 @@ impl GuiObjectMut<'_> {
                 .set_scroll_pos(object, position.x, position.y, allow_bounce);
         }
     }
+    /// Scroll a logical list item into view without changing its selection.
+    pub fn scroll_list_item_to_view(&mut self, index: usize, animated: bool) {
+        self.runtime
+            .store_mut()
+            .scroll_list_item_to_view(self.object, index, animated, false);
+    }
     pub fn select_list_index(&mut self, index: usize, scroll_to_view: bool) {
         let runtime = &mut *self.runtime;
         let object = self.object;

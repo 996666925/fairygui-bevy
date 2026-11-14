@@ -670,6 +670,7 @@ fn virtual_list_action(
     mut objects: GuiMut,
     gui: GuiQuery,
     controller: Res<demos::DemoController>,
+    mut selections: Query<&mut GuiListSelection>,
 ) {
     if event.event().event.kind != fairygui_core::object::EventKind::Click {
         return;
@@ -677,7 +678,7 @@ fn virtual_list_action(
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
-    demos::handle_virtual_list_action(&gui, &controller, action.0, &mut objects);
+    demos::handle_virtual_list_action(&gui, &controller, action.0, &mut objects, &mut selections);
 }
 
 fn basics_text_get_input(

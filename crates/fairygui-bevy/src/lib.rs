@@ -78,6 +78,7 @@ mod list_properties;
 pub use list_properties::GuiListLayout;
 mod list_settings;
 pub use list_settings::GuiListSettings;
+mod list_selection;
 pub mod movie;
 pub mod popup;
 pub mod progress;
@@ -319,7 +320,6 @@ impl Plugin for FairyGuiPlugin {
         .add_systems(
             Update,
             (
-                runtime::sync_list_selection_components,
                 properties::sync,
                 ecs::sync_gui_scroll_state,
                 (ecs::sync_gui_transitions, animation::sync_state).chain(),
@@ -483,7 +483,6 @@ impl Plugin for FairyGuiPlugin {
         app.add_systems(
             Update,
             (
-                runtime::sync_list_selection_components,
                 properties::sync,
                 ecs::sync_gui_objects,
                 properties::sync,

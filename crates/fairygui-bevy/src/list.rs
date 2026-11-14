@@ -139,7 +139,34 @@ impl GuiListContentState {
     }
 }
 #[derive(Component, Debug)]
-pub(crate) struct ContentBinding(GObjectId);
+pub(crate) struct ContentBinding(GObjectId, bevy::ecs::change_detection::Tick);
+
+pub(crate) fn content_pending(world: &World, entity: Entity, object: GObjectId) -> bool {
+    let view = world.entity(entity);
+    if let Some(config) = view.get_ref::<GuiListContent>()
+        && view.get::<ContentBinding>().is_none_or(|binding| {
+            binding.0 != object
+                || config
+                    .last_changed()
+                    .is_newer_than(binding.1, world.read_change_tick())
+        })
+    {
+        return true;
+    }
+    if let Some(config) = view.get_ref::<GuiVirtualList>()
+        && view.get::<Binding>().is_none_or(|binding| {
+            binding.object != Some(object)
+                || binding.revision.is_none_or(|revision| {
+                    config
+                        .last_changed()
+                        .is_newer_than(revision, world.read_change_tick())
+                })
+        })
+    {
+        return true;
+    }
+    false
+}
 
 #[allow(clippy::type_complexity)]
 pub(crate) fn sync_list_content(
@@ -196,7 +223,9 @@ pub(crate) fn sync_list_content(
         let next = GuiListContentState {
             error: result.err(),
         };
-        commands.entity(entity).insert(ContentBinding(reference.0));
+        commands
+            .entity(entity)
+            .insert(ContentBinding(reference.0, config.last_changed()));
         if current != Some(&next) {
             commands.entity(entity).insert(next);
         }
@@ -339,6 +368,7 @@ impl GuiVirtualListState {
 #[derive(Component, Debug, Default)]
 pub(crate) struct Binding {
     object: Option<GObjectId>,
+    revision: Option<bevy::ecs::change_detection::Tick>,
     error: Option<VirtualListError>,
 }
 
@@ -400,6 +430,7 @@ pub(crate) fn sync_virtual_list_bindings(
         applied.insert(entity, reference.0);
         let next = Binding {
             object: Some(reference.0),
+            revision: Some(config.last_changed()),
             error: result.err(),
         };
         if let Some(mut binding) = binding {

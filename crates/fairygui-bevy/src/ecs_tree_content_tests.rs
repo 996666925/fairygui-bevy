@@ -66,6 +66,65 @@ fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObject
 }
 
 #[test]
+fn writable_tree_selection_waits_for_keyed_content_without_expanding_collapsed_folders() {
+    use crate::{GuiButtonSelected, GuiListSelection};
+    let (mut app, _, tree) = fixture();
+    app.world_mut()
+        .entity_mut(tree)
+        .insert((config(), GuiListSelection(vec![1])));
+    app.update();
+    let file = view(&app, tree, "file");
+    let state = app.world().get::<GuiTreeState>(tree).unwrap();
+    assert_eq!(state.visible_nodes(), [0, 2]);
+    assert_eq!(state.selected_nodes(), [1]);
+    assert!(app.world().get::<GuiButtonSelected>(file).unwrap().0);
+
+    let mut updated = config();
+    updated.items.swap(0, 1);
+    app.world_mut()
+        .entity_mut(tree)
+        .insert((updated.clone(), GuiListSelection(vec![0])));
+    app.update();
+    assert_eq!(view(&app, tree, "file"), file);
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .selected_nodes(),
+        [0]
+    );
+    assert!(!app.world().get::<GuiButtonSelected>(file).unwrap().0);
+    assert!(
+        app.world()
+            .get::<GuiButtonSelected>(view(&app, tree, "other"))
+            .unwrap()
+            .0
+    );
+
+    // A rejected content edit keeps the previous rows. Selection can still be
+    // applied after that configuration attempt, rather than waiting forever.
+    updated.items.push(GuiTreeItem::leaf("file", "Duplicate"));
+    app.world_mut()
+        .entity_mut(tree)
+        .insert((updated, GuiListSelection(vec![1])));
+    app.update();
+    assert!(
+        app.world()
+            .get::<GuiTreeContentState>(tree)
+            .unwrap()
+            .error()
+            .is_some()
+    );
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .selected_nodes(),
+        [1]
+    );
+}
+
+#[test]
 fn keyed_tree_reconciles_hierarchy_preserves_rows_selection_expansion_and_reclaims_removed_branches()
  {
     let (mut app, owner, tree) = fixture();

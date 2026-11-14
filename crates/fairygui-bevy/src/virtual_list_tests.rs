@@ -127,17 +127,14 @@ fn virtual_thousand_rows_refresh_automatically_retain_views_and_dispose_their_po
 }
 
 #[test]
-fn ecs_commands_drive_virtual_list_selection_and_scroll() {
+fn ecs_properties_drive_virtual_list_selection_and_scroll() {
     let (mut app, _root, list) = fixture();
     let list_entity = app
         .world()
         .non_send::<GuiRuntime>()
         .entity_of(list)
         .unwrap();
-    app.add_systems(
-        Update,
-        (crate::properties::sync, sync_list_selection_components).chain(),
-    );
+    app.add_systems(Update, crate::properties::sync);
 
     let max_scroll = app
         .world()
@@ -152,9 +149,9 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
     if let Some(mut object) = app.world_mut().gui_mut(list_entity) {
         object.set_scroll_position(Vec2::new(max_scroll.x, max_scroll.y), false)
     }
-    if let Some(mut object) = app.world_mut().gui_mut(list_entity) {
-        object.set_list_selection(123)
-    }
+    app.world_mut()
+        .entity_mut(list_entity)
+        .insert(GuiListSelection(vec![123]));
 
     app.update();
     {
@@ -168,9 +165,11 @@ fn ecs_commands_drive_virtual_list_selection_and_scroll() {
         Some(&GuiListSelection(vec![123]))
     );
 
-    if let Some(mut object) = app.world_mut().gui_mut(list_entity) {
-        object.set_list_selection(-1)
-    }
+    app.world_mut()
+        .get_mut::<GuiListSelection>(list_entity)
+        .unwrap()
+        .0
+        .clear();
     app.update();
     assert_eq!(
         app.world()

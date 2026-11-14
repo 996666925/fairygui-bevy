@@ -796,6 +796,19 @@ Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐�
 `GuiSliderValue`、`GuiButtonSelected` 查询组件。它们在事件发布前和同帧 Sync 后反映最新的控件状态；
 状态可直接通过可变 ECS 组件写入，可以直接用 ECS 查询驱动其他业务系统。
 
+`GuiListSelection.0` 接受逻辑行索引，写入会替换当前选择；空数组清空，重复和无效索引
+按原生选择规则归一化，单选模式保留最后一个有效项。选择会联动行按钮和选择控制器，
+不会自动滚动、展开树节点或生成点击事件。可与 `GuiListContent`、`GuiVirtualList` 或 `GuiTreeContent`
+同批插入；选择会在内容准备后应用。虚拟列表支持尚未生成视图的离屏索引。
+
+```rust,ignore
+fn select_mail(mut lists: Query<&mut GuiListSelection>, target: Entity) {
+    if let Ok(mut selection) = lists.get_mut(target) {
+        selection.0 = vec![2];
+    }
+}
+```
+
 进度条的 `GuiProgressValue` 使用 `f64`，`GuiProgressState` 或 `gui.progress(entity)`
 可读取范围、目标值、当前显示值、显示比例、标题类型、反向配置及补间是否运行。
 

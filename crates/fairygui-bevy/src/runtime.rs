@@ -43,10 +43,9 @@ pub(crate) mod windows;
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GObjectRef(pub GObjectId);
 
-/// Current selected row indices projected onto a FairyGUI list entity.
-///
-/// Read-only projection. Use `GuiObjectMut::set_list_selection` or
-/// `select_list_index` so controllers and virtual lists stay synchronized.
+/// Writable selected row indices, in native logical order. Replacing the vector
+/// clears the previous selection, then selects its valid indices without
+/// scrolling. Single mode keeps the last valid entry; an empty vector clears.
 #[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
 pub struct GuiListSelection(pub Vec<usize>);
 
@@ -1969,21 +1968,6 @@ pub(crate) fn emit_text_input_messages(
         }
         commands.trigger(event.clone());
         messages.write(event);
-    }
-}
-
-pub fn sync_list_selection_components(
-    mut commands: Commands,
-    runtime: NonSend<GuiRuntime>,
-    lists: Query<(Entity, &GObjectRef, &GuiListSelection)>,
-) {
-    for (entity, object, current) in &lists {
-        let Some(selected) = runtime.store().list_selections(object.0) else {
-            continue;
-        };
-        if current.0 != selected {
-            commands.entity(entity).insert(GuiListSelection(selected));
-        }
     }
 }
 

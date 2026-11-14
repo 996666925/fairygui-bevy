@@ -241,6 +241,9 @@ fn drive(
                     < 0.01
             );
             state.dynamic_rows.push(new);
+            commands
+                .entity(state.dynamic.unwrap())
+                .insert(GuiListSelection(vec![2]));
             let mut settings = *gui.list_settings(state.dynamic.unwrap()).unwrap();
             settings.fold_invisible_items = true;
             commands.entity(state.dynamic.unwrap()).insert(settings);
@@ -253,6 +256,10 @@ fn drive(
             next = true;
         }
         18 if elapsed >= 8 => {
+            assert_eq!(
+                gui.tree(state.dynamic.unwrap()).unwrap().selected_nodes(),
+                [2]
+            );
             let first = gui.transform(state.dynamic_rows[0]).unwrap();
             let following = gui.transform(state.dynamic_rows[2]).unwrap();
             assert_eq!(first.size.y, 60.);
@@ -285,7 +292,7 @@ fn drive(
         20 if elapsed >= 8 => {
             assert!(state.rows.iter().all(|&row| !existing.contains(row)));
             println!(
-                "demo smoke PASSED: exported and keyed dynamic trees, actual row/arrow clicks, native collapse defaults, folder/file icons, keyed row reuse, live ECS indent with retained/new cells, row visibility/size reflow in computed geometry, data updates, growth and disposal"
+                "demo smoke PASSED: exported and keyed dynamic trees, actual row/arrow clicks, native collapse defaults, folder/file icons, keyed row reuse, live ECS selection, indent with retained/new cells, row visibility/size reflow in computed geometry, data updates, growth and disposal"
             );
             exit.write(AppExit::Success);
             next = true;
