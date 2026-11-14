@@ -243,8 +243,9 @@ fn drive(
             state.dynamic_rows.push(new);
             commands
                 .entity(state.dynamic.unwrap())
-                .insert(GuiListSelection(vec![2]));
-            let mut settings = *gui.list_settings(state.dynamic.unwrap()).unwrap();
+                .insert(GuiListSelection(vec![0, 2]));
+            let mut settings = gui.list_settings(state.dynamic.unwrap()).unwrap().clone();
+            settings.selection_mode = ListSelectionMode::Multiple;
             settings.fold_invisible_items = true;
             commands.entity(state.dynamic.unwrap()).insert(settings);
             let mut display = *gui.display(state.dynamic_rows[1]).unwrap();
@@ -258,7 +259,7 @@ fn drive(
         18 if elapsed >= 8 => {
             assert_eq!(
                 gui.tree(state.dynamic.unwrap()).unwrap().selected_nodes(),
-                [2]
+                [0, 2]
             );
             let first = gui.transform(state.dynamic_rows[0]).unwrap();
             let following = gui.transform(state.dynamic_rows[2]).unwrap();

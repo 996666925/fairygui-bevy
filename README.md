@@ -507,6 +507,10 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 原布局。对齐量作用在列表内容容器上，行项目坐标仍保持原生局部坐标。
 `GuiListSettings` 控制点击列表项时滚入视口，以及不可见行是否折叠布局；折叠只改变位置和内容范围，
 不改变项目顺序、索引或选择状态。
+它的 `selection_mode` 可直接设置 `ListSelectionMode::{Single, Multiple, MultipleSingleClick, None}`，
+`selection_controller` 可绑定列表父对象上的控制器名称，`None` 解除绑定；不存在的名称会保留原绑定。
+切换模式或绑定控制器本身不改变已有选择，后续选择按新配置执行。与 `GuiListSelection` 同帧修改时，
+配置先于选择生效。
 直接修改行的 `GuiDisplay.visible`、`GuiTransform.size` 或列表自身尺寸，也会在当帧
 刷新普通列表和树的布局、自动行宽与滚动内容范围，无需再调用布局方法。
 

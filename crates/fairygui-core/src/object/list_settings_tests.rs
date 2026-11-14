@@ -24,6 +24,7 @@ fn folding_reflows_visible_rows_without_changing_logical_children() {
         ListInteractionSettings {
             scroll_item_to_view_on_click: false,
             fold_invisible_items: true,
+            ..Default::default()
         }
     ));
     assert_eq!(store.object(last).unwrap().y(), 20.);
@@ -36,6 +37,7 @@ fn folding_reflows_visible_rows_without_changing_logical_children() {
         Some(ListInteractionSettings {
             scroll_item_to_view_on_click: false,
             fold_invisible_items: true,
+            ..Default::default()
         })
     );
 }

@@ -97,6 +97,17 @@ impl ObjectStore {
         }
     }
 
+    pub fn list_selection_mode(&self, list: GObjectId) -> Option<ListSelectionMode> {
+        Some(self.list_data(list)?.selection_mode)
+    }
+
+    /// Controller name on the list's parent; None means this is not a list,
+    /// while Some(None) means the list has no resolved controller binding.
+    pub fn list_selection_controller(&self, list: GObjectId) -> Option<Option<String>> {
+        self.list_data(list)?;
+        Some(self.list_controller(list).map(|(_, name)| name))
+    }
+
     /// Change the mode without clearing existing selection (native setter).
     pub fn set_list_selection_mode(&mut self, list: GObjectId, mode: ListSelectionMode) -> bool {
         let Some(data) = self.list_data_mut(list) else {

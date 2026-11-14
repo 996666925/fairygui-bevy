@@ -48,6 +48,7 @@ fn interaction_fields_merge_native_updates_and_folding_reflows_same_frame() {
         Some(&GuiListSettings {
             scroll_item_to_view_on_click: false,
             fold_invisible_items: true,
+            ..Default::default()
         })
     );
 }

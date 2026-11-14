@@ -68,6 +68,53 @@ fn click(app: &mut App, entities: &[Entity], index: usize, shift: bool, ctrl: bo
 }
 
 #[test]
+fn ecs_selection_mode_changes_preserve_existing_rows_and_control_the_next_pointer_click() {
+    let (mut app, list, _, entities) = fixture();
+    app.update();
+    let list_entity = app
+        .world_mut()
+        .query::<(Entity, &GObjectRef)>()
+        .iter(app.world())
+        .find_map(|(entity, reference)| (reference.0 == list).then_some(entity))
+        .unwrap();
+    let selected = |app: &App| {
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_selections(list)
+            .unwrap()
+    };
+    click(&mut app, &entities, 1, false, false);
+    assert_eq!(selected(&app), [1]);
+    app.world_mut()
+        .get_mut::<GuiListSettings>(list_entity)
+        .unwrap()
+        .selection_mode = ListSelectionMode::None;
+    app.update();
+    assert_eq!(selected(&app), [1]);
+    click(&mut app, &entities, 2, false, false);
+    assert_eq!(selected(&app), [1]);
+    app.world_mut()
+        .get_mut::<GuiListSettings>(list_entity)
+        .unwrap()
+        .selection_mode = ListSelectionMode::MultipleSingleClick;
+    click(&mut app, &entities, 3, false, false);
+    assert_eq!(selected(&app), [1, 3]);
+    click(&mut app, &entities, 3, false, false);
+    assert_eq!(selected(&app), [1]);
+    click(&mut app, &entities, 4, false, false);
+    assert_eq!(selected(&app), [1, 4]);
+    app.world_mut()
+        .get_mut::<GuiListSettings>(list_entity)
+        .unwrap()
+        .selection_mode = ListSelectionMode::Single;
+    app.update();
+    assert_eq!(selected(&app), [1, 4]);
+    click(&mut app, &entities, 0, false, false);
+    assert_eq!(selected(&app), [0]);
+}
+
+#[test]
 fn right_clicking_a_list_row_does_not_change_list_or_button_selection() {
     let (mut app, list, rows, entities) = fixture();
     app.world_mut()

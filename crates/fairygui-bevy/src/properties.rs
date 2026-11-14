@@ -59,10 +59,10 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiControllers>(world);
     sync_property::<GuiData>(world);
     sync_property::<GuiButtonSettings>(world);
-    sync_property::<GuiListSelection>(world);
     sync_property::<GuiScrollSettings>(world);
     sync_property::<GuiListLayout>(world);
     sync_property::<GuiListSettings>(world);
+    sync_property::<GuiListSelection>(world);
     sync_property::<GuiTreeNode>(world);
     sync_property::<GuiTreeSettings>(world);
     sync_property::<GuiBlendMode>(world);
