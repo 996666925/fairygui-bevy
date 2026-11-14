@@ -74,7 +74,14 @@ pub fn bind(
     }
 }
 
-fn open(event: On<GuiEvent>, buttons: Query<&OpenBag>, gui: GuiQuery, mut commands: Commands) {
+fn open(
+    event: On<GuiEvent>,
+    buttons: Query<&OpenBag>,
+    gui: GuiQuery,
+    mut commands: Commands,
+    mut windows: Query<&mut FairyGuiWindow>,
+    mut edit: GuiMut,
+) {
     if event.event.kind != fairygui_bevy::core::object::EventKind::Click {
         return;
     }
@@ -84,11 +91,12 @@ fn open(event: On<GuiEvent>, buttons: Query<&OpenBag>, gui: GuiQuery, mut comman
     if let Some(list) = gui.child_by_name(button.0, "list") {
         commands.entity(list).insert(inventory());
     }
-    commands.write_message(GuiWindowCommand::new(button.0, GuiWindowAction::Show));
-    commands.write_message(GuiWindowCommand::new(
-        button.0,
-        GuiWindowAction::BringToFront,
-    ));
+    if let Ok(mut window) = windows.get_mut(button.0) {
+        window.visible = true;
+    }
+    if let Some(mut window) = edit.get_mut(button.0) {
+        window.bring_window_to_front();
+    }
 }
 
 fn select(

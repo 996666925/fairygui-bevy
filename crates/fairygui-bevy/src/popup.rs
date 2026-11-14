@@ -256,14 +256,14 @@ pub(crate) fn apply_popup_commands(
             }
             GuiPopupCommand::Show { position, .. } => {
                 if runtime.window_index(object.unwrap()).is_some() {
-                    tracing::warn!("use GuiWindowCommand to show a native window");
+                    tracing::warn!("set FairyGuiWindow.visible = true to show a native window");
                     continue;
                 }
                 runtime.show_popup(object.unwrap(), Point::new(position.x, position.y));
             }
             GuiPopupCommand::Hide { .. } => {
                 if object.is_some_and(|object| runtime.window_index(object).is_some()) {
-                    tracing::warn!("use GuiWindowCommand to hide a native window");
+                    tracing::warn!("set FairyGuiWindow.visible = false to hide a native window");
                     continue;
                 }
                 runtime.hide_popup(object);

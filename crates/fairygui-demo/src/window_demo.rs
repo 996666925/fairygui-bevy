@@ -32,16 +32,22 @@ pub fn bind(
         commands.entity(page).insert(Bound);
     }
 }
-fn show(event: On<GuiEvent>, buttons: Query<&ShowWindow>, mut commands: Commands) {
+fn show(
+    event: On<GuiEvent>,
+    buttons: Query<&ShowWindow>,
+    mut windows: Query<&mut FairyGuiWindow>,
+    mut gui: GuiMut,
+) {
     if event.event().event.kind != fairygui_bevy::core::object::EventKind::Click {
         return;
     }
     if let Ok(button) = buttons.get(event.entity) {
-        commands.write_message(GuiWindowCommand::new(button.0, GuiWindowAction::Show));
-        commands.write_message(GuiWindowCommand::new(
-            button.0,
-            GuiWindowAction::BringToFront,
-        ));
+        if let Ok(mut window) = windows.get_mut(button.0) {
+            window.visible = true;
+        }
+        if let Some(mut window) = gui.get_mut(button.0) {
+            window.bring_window_to_front();
+        }
     }
 }
 

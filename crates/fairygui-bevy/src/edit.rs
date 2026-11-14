@@ -46,6 +46,25 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    /// Raise a ready native window without sending a lifecycle message.
+    pub fn bring_window_to_front(&mut self) -> bool {
+        self.runtime
+            .window_index(self.object)
+            .is_some_and(|index| self.runtime.bring_window_to_front(index))
+    }
+
+    /// Center a ready window in the current FairyGUI viewport. Viewport size is
+    /// refreshed from GuiInputSettings' chosen Bevy window during synchronization.
+    pub fn center_window(&mut self) -> bool {
+        let Some(index) = self.runtime.window_index(self.object) else {
+            return false;
+        };
+        let Some(root) = self.runtime.root.as_ref() else {
+            return false;
+        };
+        self.runtime.windows[index].center_on(&mut self.runtime.store, root);
+        true
+    }
     pub fn set_tree_settings(&mut self, settings: crate::GuiTreeSettings) {
         use crate::properties::Property;
         if let Some(native) = crate::GuiTreeSettings::read(self.runtime, self.object) {

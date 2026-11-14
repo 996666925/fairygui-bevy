@@ -29,13 +29,19 @@ fn count_global(event: On<GuiEvent>, mut state: ResMut<State>) {
     }
 }
 pub(super) fn install(app: &mut App) {
-    app.init_resource::<State>().add_systems(
-        PreUpdate,
-        drive
-            .after(InputSystems)
-            .before(UiSystems::Focus)
-            .before(PickingSystems::ProcessInput),
-    );
+    app.init_resource::<State>()
+        // Keep the demo's three-second jobs aligned with frame-driven input,
+        // including when startup rendering or screenshot capture takes longer.
+        .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_millis(16),
+        ))
+        .add_systems(
+            PreUpdate,
+            drive
+                .after(InputSystems)
+                .before(UiSystems::Focus)
+                .before(PickingSystems::ProcessInput),
+        );
 }
 fn point(entity: Entity, nodes: &Query<(&ComputedNode, &UiGlobalTransform)>, factor: f32) -> Vec2 {
     nodes.get(entity).unwrap().1.transform_point2(Vec2::ZERO) / factor

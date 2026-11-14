@@ -35,9 +35,34 @@ fn load(app: &mut App, asset: &Handle<FuiAsset>) {
         )
         .unwrap();
 }
-fn send(app: &mut App, owner: Entity, action: GuiWindowAction) {
+fn visible(app: &mut App, target: Entity, value: bool) {
+    let owner = if app.world().get::<FairyGuiWindow>(target).is_some() {
+        target
+    } else {
+        let mut query = app
+            .world_mut()
+            .query::<(Entity, &FairyGuiWindow, &GuiWindowState)>();
+        query
+            .iter(app.world())
+            .find_map(|(owner, _, state)| (state.view() == target).then_some(owner))
+            .unwrap()
+    };
     app.world_mut()
-        .write_message(GuiWindowCommand::new(owner, action));
+        .get_mut::<FairyGuiWindow>(owner)
+        .unwrap()
+        .visible = value;
+}
+fn wait(app: &mut App, owner: Entity, request: u32) {
+    app.world_mut()
+        .get_mut::<FairyGuiWindow>(owner)
+        .unwrap()
+        .modal_wait_request = Some(request);
+}
+fn close_wait(app: &mut App, owner: Entity, request: u32) {
+    app.world_mut()
+        .get_mut::<FairyGuiWindow>(owner)
+        .unwrap()
+        .close_modal_wait(request);
 }
 fn object(app: &App, owner: Entity) -> GObjectId {
     app.world()
@@ -47,13 +72,78 @@ fn object(app: &App, owner: Entity) -> GObjectId {
 }
 
 #[test]
+fn pending_window_and_modal_wait_configuration_materialize_together_and_native_hide_resets_both() {
+    let (mut app, asset) = app(false);
+    let mut source = FairyGuiWindow::new(asset.clone(), "WindowA");
+    source.modal_wait = Some("PopupMenu".into());
+    source.modal_wait_request = Some(3);
+    let owner = app.world_mut().spawn(source).id();
+    app.update();
+    assert!(app.world().get::<GuiWindowState>(owner).is_none());
+    assert_eq!(
+        app.world()
+            .get::<FairyGuiWindow>(owner)
+            .unwrap()
+            .modal_wait_request,
+        Some(3)
+    );
+    load(&mut app, &asset);
+    app.update();
+    let state = app.world().get::<GuiWindowState>(owner).unwrap();
+    assert!(state.is_showing() && state.is_modal_waiting());
+    assert_eq!(state.modal_wait_request(), 3);
+    let pane = state.modal_wait_pane().unwrap();
+    app.world_mut()
+        .get_mut::<FairyGuiWindow>(owner)
+        .unwrap()
+        .modal_wait_request = Some(4);
+    app.update();
+    assert!(
+        !app.world_mut()
+            .get_mut::<FairyGuiWindow>(owner)
+            .unwrap()
+            .close_modal_wait(3)
+    );
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiWindowState>(owner)
+            .unwrap()
+            .modal_wait_request(),
+        4
+    );
+    app.world_mut()
+        .get_mut::<FairyGuiWindow>(owner)
+        .unwrap()
+        .visible = false;
+    app.update();
+    let source = app.world().get::<FairyGuiWindow>(owner).unwrap();
+    assert!(!source.visible);
+    assert_eq!(source.modal_wait_request, None);
+    app.world_mut()
+        .get_mut::<FairyGuiWindow>(owner)
+        .unwrap()
+        .visible = true;
+    app.update();
+    assert!(
+        !app.world()
+            .get::<GuiWindowState>(owner)
+            .unwrap()
+            .is_modal_waiting()
+    );
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(app.world().get_entity(pane).is_err());
+}
+
+#[test]
 fn ecs_windows_wait_for_assets_keep_hidden_views_and_dispose_on_owner_removal() {
     let (mut app, asset) = app(false);
     let owner = app
         .world_mut()
         .spawn(FairyGuiWindow::new(asset.clone(), "WindowA"))
         .id();
-    send(&mut app, owner, GuiWindowAction::Hide);
+    visible(&mut app, owner, false);
     app.world_mut().entity_mut(owner).insert(GuiTransform {
         position: Vec2::new(23., 37.),
         ..default()
@@ -87,7 +177,7 @@ fn ecs_windows_wait_for_assets_keep_hidden_views_and_dispose_on_owner_removal() 
             .find_by_name(owner, "closeButton")
             .is_some()
     );
-    send(&mut app, state.view(), GuiWindowAction::Show);
+    visible(&mut app, state.view(), true);
     app.update();
     assert_eq!(
         app.world().get::<GuiWindowState>(owner).unwrap().view(),
@@ -100,7 +190,7 @@ fn ecs_windows_wait_for_assets_keep_hidden_views_and_dispose_on_owner_removal() 
             .is_showing()
     );
     assert!(app.world().get::<FairyGuiWindow>(owner).unwrap().visible);
-    send(&mut app, owner, GuiWindowAction::Center);
+    app.world_mut().gui_mut(owner).unwrap().center_window();
     app.update();
     let runtime = app.world().non_send::<GuiRuntime>();
     let window = runtime.store().object(model).unwrap();
@@ -118,7 +208,7 @@ fn ecs_windows_wait_for_assets_keep_hidden_views_and_dispose_on_owner_removal() 
 }
 
 #[test]
-fn ecs_window_modal_changes_keep_order_and_commands_survive_index_compaction() {
+fn ecs_window_modal_changes_keep_order_and_component_edits_survive_index_compaction() {
     let (mut app, asset) = app(true);
     let first = app
         .world_mut()
@@ -148,7 +238,7 @@ fn ecs_window_modal_changes_keep_order_and_commands_survive_index_compaction() {
     );
     // Remove the first array slot, then target the second by its stable entity.
     app.world_mut().despawn(first);
-    send(&mut app, second, GuiWindowAction::Hide);
+    visible(&mut app, second, false);
     app.update();
     assert_eq!(app.world().non_send::<GuiRuntime>().window_count(), 1);
     assert!(
@@ -157,7 +247,7 @@ fn ecs_window_modal_changes_keep_order_and_commands_survive_index_compaction() {
             .unwrap()
             .is_showing()
     );
-    send(&mut app, second, GuiWindowAction::Show);
+    visible(&mut app, second, true);
     app.world_mut()
         .get_mut::<FairyGuiWindow>(second)
         .unwrap()
@@ -170,13 +260,13 @@ fn ecs_window_modal_changes_keep_order_and_commands_survive_index_compaction() {
 }
 
 #[test]
-fn ecs_window_pending_requests_are_cancelled_on_replacement_removal_and_despawn() {
+fn ecs_window_pending_configuration_follows_replacement_removal_and_despawn() {
     for replacement in 0..3 {
         let (mut app, asset) = app(false);
         let mut source = FairyGuiWindow::new(asset.clone(), "WindowA");
         source.visible = false;
         let owner = app.world_mut().spawn(source.clone()).id();
-        send(&mut app, owner, GuiWindowAction::Show);
+        visible(&mut app, owner, true);
         if let Some(mut object) = app.world_mut().gui_mut(owner) {
             object.set_position(Vec2::new(17., 29.))
         }
@@ -206,7 +296,7 @@ fn ecs_window_pending_requests_are_cancelled_on_replacement_removal_and_despawn(
             continue;
         }
         let state = app.world().get::<GuiWindowState>(owner).unwrap();
-        assert!(!state.is_showing());
+        assert_eq!(state.is_showing(), replacement == 0);
         let runtime = app.world().non_send::<GuiRuntime>();
         let model = runtime.store().object(object(&app, owner)).unwrap();
         assert_ne!(model.position(), fairygui_core::Point::new(17., 29.));
@@ -287,11 +377,7 @@ fn ecs_modal_wait_matches_request_tokens_retains_detached_pane_and_disposes_it_w
     let owner = app.world_mut().spawn(config).id();
     app.update();
     app.update();
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::ShowModalWait { request: 7 },
-    );
+    wait(&mut app, owner, 7);
     app.update();
     let state = app.world().get::<GuiWindowState>(owner).unwrap();
     assert!(state.is_modal_waiting());
@@ -317,11 +403,7 @@ fn ecs_modal_wait_matches_request_tokens_retains_detached_pane_and_disposes_it_w
         runtime.store().object(model).unwrap().children().last(),
         Some(&pane)
     );
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::CloseModalWait { request: 9 },
-    );
+    close_wait(&mut app, owner, 9);
     app.update();
     assert!(
         app.world()
@@ -329,11 +411,7 @@ fn ecs_modal_wait_matches_request_tokens_retains_detached_pane_and_disposes_it_w
             .unwrap()
             .is_modal_waiting()
     );
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::CloseModalWait { request: 7 },
-    );
+    close_wait(&mut app, owner, 7);
     app.update();
     assert!(
         !app.world()
@@ -363,11 +441,7 @@ fn ecs_modal_wait_matches_request_tokens_retains_detached_pane_and_disposes_it_w
             .parent()
             .is_none()
     );
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::ShowModalWait { request: 11 },
-    );
+    wait(&mut app, owner, 11);
     app.update();
     assert_eq!(
         app.world()
@@ -376,7 +450,7 @@ fn ecs_modal_wait_matches_request_tokens_retains_detached_pane_and_disposes_it_w
             .modal_wait_pane(),
         Some(pane_view)
     );
-    send(&mut app, owner, GuiWindowAction::Hide);
+    visible(&mut app, owner, false);
     app.update();
     assert!(
         !app.world()
@@ -384,7 +458,7 @@ fn ecs_modal_wait_matches_request_tokens_retains_detached_pane_and_disposes_it_w
             .unwrap()
             .is_modal_waiting()
     );
-    send(&mut app, owner, GuiWindowAction::Show);
+    visible(&mut app, owner, true);
     app.update();
     assert!(
         !app.world()
@@ -405,16 +479,50 @@ fn ecs_modal_wait_matches_request_tokens_retains_detached_pane_and_disposes_it_w
 }
 
 #[test]
+fn hiding_window_after_modal_wait_template_failure_cancels_request_without_restarting_it() {
+    let (mut app, asset) = app(true);
+    let mut source = FairyGuiWindow::new(asset, "WindowA");
+    source.modal_wait = Some("MissingPane".into());
+    source.modal_wait_request = Some(7);
+    let owner = app.world_mut().spawn(source).id();
+    app.update();
+    app.update();
+    let state = app.world().get::<GuiWindowState>(owner).unwrap();
+    assert!(state.is_modal_waiting());
+    assert_eq!(state.modal_wait_error(), Some("MissingPane"));
+
+    visible(&mut app, owner, false);
+    app.update();
+    let state = app.world().get::<GuiWindowState>(owner).unwrap();
+    assert!(!state.is_showing());
+    assert!(!state.is_modal_waiting());
+    assert_eq!(
+        app.world()
+            .get::<FairyGuiWindow>(owner)
+            .unwrap()
+            .modal_wait_request,
+        None
+    );
+
+    // Neither subsequent synchronization nor showing the retained window may
+    // revive a request that hiding already cancelled.
+    app.update();
+    visible(&mut app, owner, true);
+    app.update();
+    app.update();
+    let state = app.world().get::<GuiWindowState>(owner).unwrap();
+    assert!(state.is_showing());
+    assert!(!state.is_modal_waiting());
+    assert_eq!(state.modal_wait_request(), 0);
+}
+
+#[test]
 fn ecs_modal_wait_template_replacement_failure_and_cross_package_retry_keep_ownership() {
     let (mut app, asset) = app(true);
     let mut source = FairyGuiWindow::new(asset, "WindowA");
     source.modal_wait = Some("MissingPane".into());
     let owner = app.world_mut().spawn(source).id();
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::ShowModalWait { request: 1 },
-    );
+    wait(&mut app, owner, 1);
     app.update();
     app.update();
     assert_eq!(
@@ -447,11 +555,7 @@ fn ecs_modal_wait_template_replacement_failure_and_cross_package_retry_keep_owne
         .get_mut::<FairyGuiWindow>(owner)
         .unwrap()
         .modal_wait = Some("ui://ModalWaiting/WindowModalWaiting".into());
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::ShowModalWait { request: 2 },
-    );
+    wait(&mut app, owner, 2);
     app.update();
     assert!(
         app.world()
@@ -463,11 +567,7 @@ fn ecs_modal_wait_template_replacement_failure_and_cross_package_retry_keep_owne
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .register_package(foreign, &package);
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::ShowModalWait { request: 2 },
-    );
+    wait(&mut app, owner, 2);
     app.update();
     app.update();
     let state = app.world().get::<GuiWindowState>(owner).unwrap();
@@ -483,11 +583,7 @@ fn ecs_modal_wait_template_replacement_failure_and_cross_package_retry_keep_owne
             .source_package_id(),
         Some(package.id())
     );
-    send(
-        &mut app,
-        owner,
-        GuiWindowAction::CloseModalWait { request: 0 },
-    );
+    close_wait(&mut app, owner, 0);
     app.update();
     app.world_mut()
         .get_mut::<FairyGuiWindow>(owner)

@@ -61,25 +61,35 @@ pub fn bind(
         commands.entity(owner).insert(WindowBound);
     }
 }
-fn show(event: On<GuiEvent>, buttons: Query<&Show>, mut commands: Commands) {
+fn show(
+    event: On<GuiEvent>,
+    buttons: Query<&Show>,
+    mut windows: Query<&mut FairyGuiWindow>,
+    mut gui: GuiMut,
+) {
     if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click
         && let Ok(button) = buttons.get(event.entity)
     {
-        commands.write_message(GuiWindowCommand::new(button.0, GuiWindowAction::Show));
-        commands.write_message(GuiWindowCommand::new(
-            button.0,
-            GuiWindowAction::BringToFront,
-        ));
+        if let Ok(mut window) = windows.get_mut(button.0) {
+            window.visible = true;
+        }
+        if let Some(mut window) = gui.get_mut(button.0) {
+            window.bring_window_to_front();
+        }
     }
 }
-fn start(event: On<GuiEvent>, buttons: Query<&Start>, mut commands: Commands) {
+fn start(
+    event: On<GuiEvent>,
+    buttons: Query<&Start>,
+    mut commands: Commands,
+    mut windows: Query<&mut FairyGuiWindow>,
+) {
     if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click
         && let Ok(button) = buttons.get(event.entity)
     {
-        commands.write_message(GuiWindowCommand::new(
-            button.0,
-            GuiWindowAction::ShowModalWait { request: 1 },
-        ));
+        if let Ok(mut window) = windows.get_mut(button.0) {
+            window.modal_wait_request = Some(1);
+        }
         commands
             .entity(button.0)
             .insert(WaitJob(Timer::from_seconds(3., TimerMode::Once)));
@@ -88,6 +98,7 @@ fn start(event: On<GuiEvent>, buttons: Query<&Start>, mut commands: Commands) {
 pub fn advance(
     mut commands: Commands,
     mut jobs: Query<(Entity, &mut WaitJob)>,
+    mut windows: Query<&mut FairyGuiWindow>,
     time: Res<Time>,
     mut global: ResMut<GlobalDemo>,
     existing: Query<()>,
@@ -106,10 +117,9 @@ pub fn advance(
     }
     for (owner, mut job) in &mut jobs {
         if job.0.tick(time.delta()).just_finished() {
-            commands.write_message(GuiWindowCommand::new(
-                owner,
-                GuiWindowAction::CloseModalWait { request: 1 },
-            ));
+            if let Ok(mut window) = windows.get_mut(owner) {
+                window.close_modal_wait(1);
+            }
             commands.entity(owner).remove::<WaitJob>();
         }
     }

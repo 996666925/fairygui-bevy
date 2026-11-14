@@ -1,5 +1,5 @@
 use super::*;
-use crate::{FairyGuiPlugin, FairyGuiWindow, GuiWindowAction, GuiWindowCommand};
+use crate::{FairyGuiPlugin, FairyGuiWindow, GuiWorldExt};
 use bevy::window::PrimaryWindow;
 
 fn fixture(loaded: bool) -> (App, Handle<FuiAsset>) {
@@ -222,7 +222,9 @@ fn global_wait_stays_above_new_windows_and_popups_and_gates_their_input_until_cl
         Some(&pane)
     );
     app.world_mut()
-        .write_message(GuiWindowCommand::new(owner, GuiWindowAction::BringToFront));
+        .gui_mut(owner)
+        .unwrap()
+        .bring_window_to_front();
     app.world_mut()
         .write_message(crate::GuiPopupCommand::ShowMenu {
             source: owner,

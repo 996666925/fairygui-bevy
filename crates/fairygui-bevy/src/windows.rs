@@ -1,4 +1,4 @@
-//! Entity-owned native windows and their lifecycle commands.
+//! Entity-owned native windows and writable lifecycle configuration.
 use super::*;
 use crate::GuiInputSettings;
 use bevy::window::PrimaryWindow;
@@ -20,6 +20,9 @@ pub struct FairyGuiWindow {
     pub center_on_create: bool,
     /// Local template name or registered ui:// URL, created lazily on first wait.
     pub modal_wait: Option<String>,
+    /// Some(token) displays the retained modal wait pane; None closes it.
+    /// Applied when assets are ready. Native hide resets this value to None.
+    pub modal_wait_request: Option<u32>,
 }
 impl FairyGuiWindow {
     pub fn new(asset: Handle<FuiAsset>, item_name: impl Into<String>) -> Self {
@@ -31,10 +34,23 @@ impl FairyGuiWindow {
             draggable: true,
             center_on_create: true,
             modal_wait: None,
+            modal_wait_request: None,
         }
     }
     fn same_template(&self, other: &Self) -> bool {
         self.asset == other.asset && self.item_name == other.item_name
+    }
+    /// Close only a matching request (zero closes any request). This protects a
+    /// newer wait from an older asynchronous job completing later.
+    pub fn close_modal_wait(&mut self, request: u32) -> bool {
+        if self.modal_wait_request.is_some()
+            && (request == 0 || self.modal_wait_request == Some(request))
+        {
+            self.modal_wait_request = None;
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -98,33 +114,6 @@ impl GuiWindowState {
     }
     pub fn modal_wait_error(&self) -> Option<&str> {
         self.modal_wait_error.as_deref()
-    }
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GuiWindowAction {
-    Show,
-    Hide,
-    BringToFront,
-    Center,
-    /// Zero is an unrestricted request token, following native window semantics.
-    ShowModalWait {
-        request: u32,
-    },
-    /// A nonzero token only closes the matching request; zero closes any request.
-    CloseModalWait {
-        request: u32,
-    },
-}
-/// Accepts a window owner or its root view. Waiting asset requests are retained;
-/// replacement/removal cancels them. Dispose by removing FairyGuiWindow/despawning.
-#[derive(Message, Debug, Clone, Copy)]
-pub struct GuiWindowCommand {
-    pub target: Entity,
-    pub action: GuiWindowAction,
-}
-impl GuiWindowCommand {
-    pub fn new(target: Entity, action: GuiWindowAction) -> Self {
-        Self { target, action }
     }
 }
 #[derive(Debug)]
@@ -234,7 +223,7 @@ pub(super) fn viewport(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_ecs_windows(
     mut commands: Commands,
-    sources: Query<(Entity, &FairyGuiWindow)>,
+    sources: Query<(Entity, Ref<FairyGuiWindow>)>,
     existing: Query<()>,
     mut removed: RemovedComponents<FairyGuiWindow>,
     assets: Res<Assets<FuiAsset>>,
@@ -242,6 +231,9 @@ pub(crate) fn sync_ecs_windows(
     settings: Res<GuiInputSettings>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
+    if !sources.is_empty() {
+        viewport(&mut runtime, &windows, &settings);
+    }
     for entity in removed.read() {
         if let Some(binding) = runtime.ecs_windows.remove(&entity)
             && let Some(object) = binding.object
@@ -255,6 +247,7 @@ pub(crate) fn sync_ecs_windows(
         }
     }
     for (entity, source) in &sources {
+        let source_changed = source.is_changed();
         if runtime
             .ecs_windows
             .get(&entity)
@@ -263,13 +256,16 @@ pub(crate) fn sync_ecs_windows(
             runtime.clear_ecs_wait(entity);
         }
         let mut binding = runtime.ecs_windows.remove(&entity).unwrap_or(Binding {
-            source: source.clone(),
+            source: (*source).clone(),
             object: None,
             failed: false,
             wait_pane: None,
             wait_error: None,
         });
-        if !binding.source.same_template(source) {
+        let mut apply_wait = binding.source.modal_wait_request != source.modal_wait_request
+            || binding.source.modal_wait != source.modal_wait
+            || (source_changed && binding.wait_error.is_some() && binding.source == *source);
+        if !binding.source.same_template(&source) {
             if let Some(object) = binding.object.take() {
                 runtime.dispose_ecs_window(&mut commands, object);
             }
@@ -324,94 +320,20 @@ pub(crate) fn sync_ecs_windows(
             ) {
                 runtime.windows[index].set_draggable(source.draggable);
                 binding.object = Some(runtime.windows[index].owner());
+                apply_wait = true;
             } else {
                 binding.failed = true;
                 tracing::warn!(?entity, item = %source.item_name, "ECS FairyGUI window could not be created");
             }
         }
-        binding.source = source.clone();
+        binding.source = (*source).clone();
+        let object = binding.object;
         runtime.ecs_windows.insert(entity, binding);
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn apply_window_commands(
-    mut messages: MessageReader<GuiWindowCommand>,
-    mut sources: Query<&mut FairyGuiWindow>,
-    objects: Query<&GObjectRef>,
-    mut removed: RemovedComponents<FairyGuiWindow>,
-    mut pending: Local<Vec<(FairyGuiWindow, GuiWindowCommand)>>,
-    windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
-    settings: Res<GuiInputSettings>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
-    for entity in removed.read() {
-        pending.retain(|(_, command)| command.target != entity);
-    }
-    let waiting = std::mem::take(&mut *pending);
-    for (expected, command) in waiting
-        .into_iter()
-        .map(|(source, command)| (Some(source), command))
-        .chain(messages.read().copied().map(|command| (None, command)))
-    {
-        let source = sources.get(command.target).ok();
-        if let Some(expected) = expected
-            && source.is_none_or(|source| !expected.same_template(source))
-        {
-            continue;
-        }
-        let object = runtime.ecs_window_object(command.target).or_else(|| {
-            objects
-                .get(command.target)
-                .ok()
-                .map(|reference| reference.0)
-        });
-        let index = object.and_then(|object| runtime.window_index(object));
-        let Some(index) = index else {
-            if let Some(source) = source
-                && runtime
-                    .ecs_windows
-                    .get(&command.target)
-                    .is_some_and(|binding| !binding.failed)
-            {
-                pending.push((source.clone(), command));
-            }
-            continue;
-        };
-        match command.action {
-            GuiWindowAction::Show => {
-                runtime.show_existing_window(index);
-            }
-            GuiWindowAction::Hide => {
-                runtime.hide_window(index);
-            }
-            GuiWindowAction::BringToFront => {
-                runtime.bring_window_to_front(index);
-            }
-            GuiWindowAction::Center => {
-                viewport(&mut runtime, &windows, &settings);
-                let runtime = &mut *runtime;
-                if let Some(root) = runtime.root.as_ref() {
-                    runtime.windows[index].center_on(&mut runtime.store, root);
-                }
-            }
-            GuiWindowAction::ShowModalWait { request } => {
+        if apply_wait && let Some(index) = object.and_then(|object| runtime.window_index(object)) {
+            if let Some(request) = source.modal_wait_request {
                 runtime.show_ecs_wait(index, request);
-            }
-            GuiWindowAction::CloseModalWait { request } => {
-                runtime.close_window_modal_wait(index, request);
-            }
-        }
-        let object = runtime.windows[index].owner();
-        let showing = runtime.windows[index].is_showing();
-        for (entity, binding) in &mut runtime.ecs_windows {
-            if binding.object == Some(object) {
-                binding.source.visible = showing;
-                if let Ok(mut source) = sources.get_mut(*entity)
-                    && source.visible != showing
-                {
-                    source.visible = showing;
-                }
+            } else {
+                runtime.close_window_modal_wait(index, 0);
             }
         }
     }
@@ -471,6 +393,13 @@ pub(crate) fn sync_window_state(
         if source.visible == binding.source.visible && source.visible != state.showing {
             source.visible = state.showing;
             binding.source.visible = state.showing;
+        }
+        let request = state.modal_waiting.then_some(state.modal_wait_request);
+        if source.modal_wait_request == binding.source.modal_wait_request
+            && source.modal_wait_request != request
+        {
+            source.modal_wait_request = request;
+            binding.source.modal_wait_request = request;
         }
     }
 }

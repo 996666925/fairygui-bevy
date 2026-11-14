@@ -457,7 +457,9 @@ fn window_owner_mounts_inherit_hidden_state_and_destruction() {
         window_view
     );
     app.world_mut()
-        .write_message(GuiWindowCommand::new(window, GuiWindowAction::Hide));
+        .get_mut::<FairyGuiWindow>(window)
+        .unwrap()
+        .visible = false;
     app.update();
     assert_eq!(view(&app, nested), nested_view);
     assert!(

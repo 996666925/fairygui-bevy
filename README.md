@@ -1120,7 +1120,8 @@ let mut window = FairyGuiWindow::new(assets.load("ui/Basics.fui"), "WindowA");
 window.visible = false;
 window.modal = true;
 let owner = commands.spawn(window).id();
-commands.write_message(GuiWindowCommand::new(owner, GuiWindowAction::Show));
+// 在业务系统中通过 Query<&mut FairyGuiWindow> 修改：
+windows.get_mut(owner).unwrap().visible = true;
 ```
 
 资产就绪后插件创建原生窗口，按约定识别 `frame`、`content`、`closeButton` 与拖动区，
@@ -1128,10 +1129,10 @@ commands.write_message(GuiWindowCommand::new(owner, GuiWindowAction::Show));
 可动态修改；`center_on_create = false` 保留导出位置。不要在同一实体上同时挂
 `FairyGuiRoot` 和 `FairyGuiWindow`，两者分别拥有独立界面。
 
-`GuiWindowAction` 支持 `Show`、`Hide`、`BringToFront` 和 `Center`，目标接受窗口
-拥有者或根视图实体。资产等待期间的命令会保留；替换资产/条目、移除组件或销毁
-拥有者会取消旧请求。`Center` 使用当前窗口尺寸。窗口命令在 Sync 的对象属性同步之后
-执行，同类命令保持顺序；`GuiMut` 同样支持已就绪的窗口拥有者。
+显示、隐藏、模态与拖动开关直接修改 `FairyGuiWindow`；资产等待期间保留最新组件值。
+对已就绪窗口，`gui_mut.get_mut(owner)` 返回的对象支持 `bring_window_to_front()` 和
+`center_window()`，也接受窗口根视图实体。方法立即执行；居中使用当前 FairyGUI 视口，
+视口会在窗口同步时跟随 `GuiInputSettings` 选择的 Bevy 窗口尺寸。
 
 `GuiWindowState` 在拥有者和根视图上提供显示、模态、拖动状态及窗框/内容/关闭按钮
 实体，也可通过 `gui.window(entity)` 查询。窗口拥有者支持 `GuiQuery` 的层级和属性
@@ -1147,18 +1148,19 @@ Bag 示例也通过子实体拥有 `BagWin` 窗口，每次打开生成 45 条�
 外部图片解码、第三页与页控制器联动、关闭重开和页面销毁。
 
 窗口可用 `modal_wait: Some("WindowModalWaiting".into())` 配置等待面板模板，也支持
-已登记包的 `ui://` 地址。第一次 `ShowModalWait { request }` 才创建，
-`CloseModalWait { request }` 只关闭匹配的非零请求；传零可结束当前任何请求。
+已登记包的 `ui://` 地址。设置 `modal_wait_request = Some(request)` 后才创建面板；
+设置为 `None` 关闭。`window.close_modal_wait(request)` 只关闭匹配的非零请求，
+传零可结束任何请求，避免旧异步任务误关新等待。加载前也可声明等待请求。
 等待面板在 `frame/contentArea` 内覆盖内容，标题栏和关闭按钮仍可使用；存在显式
 `frame/dragArea` 时窗口优先使用它。没有内容区域时使用窗口的内容组件或整个窗口。
 
 `GuiWindowState` 提供 `is_modal_waiting()`、`modal_wait_request()`、
 `modal_wait_pane()` 和 `modal_wait_error()`。模板解析失败仍保留逻辑等待请求，
-不会生成遮挡面板；登记依赖后重新发送 Show 可重试。未配置模板时也仅记录请求。
+不会生成遮挡面板；登记依赖后重新给 `modal_wait_request` 赋值可重试。未配置模板时也仅记录请求。
 关闭等待会撤下面板并保留对象和实体，再次等待复用它；隐藏窗口会同时结束等待。
 替换面板模板回收旧面板，销毁窗口也会回收已经撤下的面板。菜单的 `ShowMenu.source`
 现在同样接受窗口拥有者，并按窗口资产来源解析模板、保留资产等待请求；普通弹层的
-Show/Hide 使用 `GuiPopupCommand`，原生窗口的显示仍使用 `GuiWindowCommand`。
+Show/Hide 使用 `GuiPopupCommand`，原生窗口的显示直接修改 `FairyGuiWindow.visible`。
 ModalWaiting 示例中的 Open Window / Refresh 按钮通过 ECS 驱动三秒等待，专项窗口
 回归可运行 `--smoke-window-wait`。普通文字按原版不作为鼠标命中目标，父控件仍可
 接收点击；富文本链接与输入框继续使用各自的交互路径。

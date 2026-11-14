@@ -133,7 +133,7 @@ pub use runtime::object_drag::{GuiDragBounds, GuiDraggable, GuiObjectDragState};
 pub use runtime::tooltip::{
     GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
 };
-pub use runtime::windows::{FairyGuiWindow, GuiWindowAction, GuiWindowCommand, GuiWindowState};
+pub use runtime::windows::{FairyGuiWindow, GuiWindowState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
     GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
@@ -209,9 +209,9 @@ pub mod prelude {
         GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
         GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
         GuiTreeNodeState, GuiTreeSettings, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
-        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowAction, GuiWindowCommand,
-        GuiWindowState, GuiWorldExt, ListInteractionSettings, ListLayoutSettings, ListLayoutType,
-        ListSelectionMode, PopupMenuTemplates, TreeSettings,
+        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowState, GuiWorldExt,
+        ListInteractionSettings, ListLayoutSettings, ListLayoutType, ListSelectionMode,
+        PopupMenuTemplates, TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 }
@@ -276,7 +276,6 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiPullRelease>()
         .add_message::<GuiPullCommand>()
         .add_message::<GuiPopupCommand>()
-        .add_message::<GuiWindowCommand>()
         .add_message::<GuiGlobalWaitCommand>()
         .add_message::<GuiTooltipCommand>()
         .add_message::<GuiDragCommand>()
@@ -471,7 +470,6 @@ impl Plugin for FairyGuiPlugin {
                 runtime::root_mount::sync_mounts,
                 input::apply_scroll_drag_commands,
                 properties::sync,
-                runtime::windows::apply_window_commands,
                 popup::apply_popup_commands,
                 runtime::ecs_drag_drop::apply_drag_commands,
                 runtime::global_wait::sync_global_wait,

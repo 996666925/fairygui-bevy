@@ -34,16 +34,13 @@ fn point(
     };
     transform.transform_point2(at) / factor
 }
-fn command(commands: &mut Commands, target: Entity, action: GuiWindowAction) {
-    commands.write_message(GuiWindowCommand::new(target, action));
-}
 #[allow(clippy::too_many_arguments)]
 fn drive(
     mut state: ResMut<State>,
     demo: Res<Demo>,
     gui: GuiQuery,
     states: Query<&GuiWindowState>,
-    sources: Query<&FairyGuiWindow>,
+    mut sources: Query<&mut FairyGuiWindow>,
     existing: Query<()>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     assets: Res<AssetServer>,
@@ -101,7 +98,7 @@ fn drive(
                     .all(|&owner| !states.get(owner).unwrap().is_showing())
             );
             let first = first.unwrap();
-            command(&mut commands, first, GuiWindowAction::Show);
+            sources.get_mut(first).unwrap().visible = true;
             gui_edit.edit(first, |object: &mut GuiObjectMut| {
                 object.set_position(Vec2::new(200., 130.))
             });
@@ -129,7 +126,7 @@ fn drive(
             assert!(!sources.get(first).unwrap().visible);
             assert_eq!(states.get(first).unwrap().view(), state.views[0]);
             assert!(existing.contains(state.views[0]));
-            command(&mut commands, first, GuiWindowAction::Show);
+            sources.get_mut(first).unwrap().visible = true;
             next = true;
         }
         6 if elapsed >= 12 => {
@@ -164,7 +161,7 @@ fn drive(
         }
         10 if elapsed >= 8 => {
             assert!(!states.get(first.unwrap()).unwrap().is_dragging());
-            command(&mut commands, second.unwrap(), GuiWindowAction::Show);
+            sources.get_mut(second.unwrap()).unwrap().visible = true;
             next = true;
         }
         11 if elapsed >= 12 => {
@@ -174,7 +171,7 @@ fn drive(
             next = true;
         }
         12 if elapsed >= 8 => {
-            command(&mut commands, second.unwrap(), GuiWindowAction::Center);
+            gui_edit.get_mut(second.unwrap()).unwrap().center_window();
             next = true;
         }
         13 if elapsed >= 8 => {
@@ -185,7 +182,7 @@ fn drive(
                     .length()
                     < 0.01
             );
-            command(&mut commands, second.unwrap(), GuiWindowAction::Hide);
+            sources.get_mut(second.unwrap()).unwrap().visible = false;
             next = true;
         }
         14 if elapsed >= 8 => {
