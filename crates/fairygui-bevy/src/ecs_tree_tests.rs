@@ -149,6 +149,47 @@ fn exported_tree_materializes_titles_icons_folder_controls_hierarchy_and_stable_
 }
 
 #[test]
+fn tree_row_expanded_field_reflows_and_tracks_native_expansion_changes() {
+    let (mut app, _, owner) = fixture(true);
+    app.update();
+    app.update();
+    let tree = tree(&mut app, owner);
+    let rows: Vec<_> = app
+        .world()
+        .get::<GuiTreeState>(tree)
+        .unwrap()
+        .nodes()
+        .iter()
+        .map(|node| node.view().unwrap())
+        .collect();
+    assert!(app.world().get::<GuiTreeNode>(rows[0]).unwrap().expanded);
+
+    app.world_mut()
+        .get_mut::<GuiTreeNode>(rows[0])
+        .unwrap()
+        .expanded = false;
+    app.update();
+    let state = app.world().get::<GuiTreeState>(tree).unwrap();
+    assert_eq!(state.visible_nodes(), [0, 5, 6]);
+    assert!(!state.node(0).unwrap().is_expanded());
+    assert!(!app.world().get::<GuiDisplay>(rows[1]).unwrap().visible());
+    assert!(!app.world().get::<GuiTreeNode>(rows[0]).unwrap().expanded);
+
+    send(&mut app, tree, |object: &mut crate::GuiObjectMut| {
+        object.set_tree_expanded(0, true)
+    });
+    app.update();
+    assert!(app.world().get::<GuiTreeNode>(rows[0]).unwrap().expanded);
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .visible_nodes(),
+        [0, 1, 2, 3, 4, 5, 6]
+    );
+}
+
+#[test]
 fn ecs_tree_commands_collapse_top_level_folders_reflow_retain_views_and_select_hidden_nodes() {
     let (mut app, _, owner) = fixture(true);
     app.update();

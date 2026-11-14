@@ -1,5 +1,5 @@
 //! Entity snapshots for exported tree nodes, including retained collapsed cells.
-use crate::{GObjectRef, GuiRuntime};
+use crate::{GObjectRef, GuiRuntime, properties::Property};
 use bevy::prelude::*;
 
 #[cfg(test)]
@@ -222,6 +222,8 @@ impl GuiTreeState {
 pub struct GuiTreeNode {
     tree: Entity,
     index: usize,
+    /// Writable native expanded state. Non-folder rows remain expanded.
+    pub expanded: bool,
 }
 impl GuiTreeNode {
     pub fn tree(&self) -> Entity {
@@ -229,6 +231,39 @@ impl GuiTreeNode {
     }
     pub fn index(&self) -> usize {
         self.index
+    }
+}
+
+impl Property for GuiTreeNode {
+    fn read(runtime: &GuiRuntime, object: crate::core::GObjectId) -> Option<Self> {
+        let (tree, _, index) = runtime.store().list_item_of(object)?;
+        let crate::core::widget::ControlData::Tree(data) = runtime.store().object(tree)?.control()
+        else {
+            return None;
+        };
+        Some(Self {
+            tree: runtime.entity_of(tree)?,
+            index,
+            expanded: data.is_expanded(index),
+        })
+    }
+
+    fn apply(
+        &self,
+        previous: &Self,
+        native: &Self,
+        runtime: &mut GuiRuntime,
+        object: crate::core::GObjectId,
+    ) {
+        if self.expanded == previous.expanded || self.expanded == native.expanded {
+            return;
+        }
+        let Some((tree, _, index)) = runtime.store().list_item_of(object) else {
+            return;
+        };
+        runtime
+            .store_mut()
+            .set_tree_node_expanded(tree, index, self.expanded);
     }
 }
 
@@ -282,6 +317,7 @@ pub(crate) fn sync_tree_state(
                         GuiTreeNode {
                             tree: entity,
                             index,
+                            expanded: data.is_expanded(index),
                         },
                     );
                 }
