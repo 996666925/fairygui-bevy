@@ -108,9 +108,35 @@ fn extract_policies(
             Option<&CalculatedClip>,
         )>,
     >,
+    owners: Extract<Query<(&crate::GObjectRef, &ComputedNode, &UiGlobalTransform)>>,
 ) {
     policies.nodes.clear();
     policies.active = false;
+    let clip_transforms: HashMap<_, _> = owners
+        .iter()
+        .filter_map(|(owner, node, transform)| {
+            let inverse = transform.try_inverse()?;
+            let scale = node.inverse_scale_factor();
+            let origin = (inverse.translation + node.size() * 0.5) * scale;
+            Some((
+                owner.0,
+                [
+                    Vec4::new(
+                        inverse.matrix2.x_axis.x * scale,
+                        inverse.matrix2.y_axis.x * scale,
+                        origin.x,
+                        1.,
+                    ),
+                    Vec4::new(
+                        inverse.matrix2.x_axis.y * scale,
+                        inverse.matrix2.y_axis.y * scale,
+                        origin.y,
+                        0.,
+                    ),
+                ],
+            ))
+        })
+        .collect();
     for (entity, policy, node, transform, visible, clip) in &nodes {
         if !visible.get() || node.is_empty() {
             continue;
@@ -146,10 +172,20 @@ fn extract_policies(
                 ));
             }
         }
+        let mut policy = policy.clone();
+        for group in &mut policy.groups {
+            if let Some(clip) = &mut group.clip {
+                if let Some(transform) = clip_transforms.get(&group.id) {
+                    clip.from_screen = *transform;
+                } else {
+                    // Missing/singular owners must not paint unclipped content.
+                    clip.rect = Rect::default();
+                    clip.from_screen = [Vec4::new(0., 0., 1., 1.); 2];
+                }
+            }
+        }
         policies.active |= !policy.groups.is_empty() || Mode::from(policy.blend) != Mode::Normal;
-        policies
-            .nodes
-            .insert(entity.into(), (policy.clone(), bounds));
+        policies.nodes.insert(entity.into(), (policy, bounds));
     }
 }
 fn effects(policies: Res<Policies>) -> bool {
@@ -178,6 +214,7 @@ fn barriers(policies: Res<Policies>, mut phases: ResMut<ViewSortedRenderPhases<T
                     || pipeline != item.pipeline
                     || draw != item.draw_function
                     || Mode::from(policy.blend) == Mode::Multiply
+                    || policy.groups.iter().any(|group| group.clip.is_some())
             }) {
                 phase.add_transient(TransparentUi {
                     sort_key: item.sort_key,
@@ -200,6 +237,10 @@ struct CompositeUniform {
     screen: Vec4,
     rows: [Vec4; 4],
     offsets: Vec4,
+    clip_rect: Vec4,
+    clip_edges: Vec4,
+    clip_x: Vec4,
+    clip_y: Vec4,
 }
 impl CompositeUniform {
     fn new(size: Extent3d, matrix: ColorMatrix, opacity: f32) -> Self {
@@ -212,6 +253,10 @@ impl CompositeUniform {
                 matrix.values[14],
                 matrix.values[19],
             ),
+            clip_rect: Vec4::ZERO,
+            clip_edges: Vec4::ZERO,
+            clip_x: Vec4::ZERO,
+            clip_y: Vec4::ZERO,
         }
     }
 }
@@ -334,7 +379,7 @@ enum Op {
         multiply: bool,
     },
     Group {
-        group: Group,
+        group: Box<Group>,
         bounds: Rect,
         children: Vec<Op>,
         mask_children: Vec<Op>,
@@ -349,9 +394,11 @@ fn append(
     depth: usize,
 ) {
     if let Some(group) = policy.groups.get(depth) {
-        if !matches!(ops.last(), Some(Op::Group { group: last, .. }) if last.id == group.id) {
+        if group.clip.is_some()
+            || !matches!(ops.last(), Some(Op::Group { group: last, .. }) if last.as_ref() == group)
+        {
             ops.push(Op::Group {
-                group: group.clone(),
+                group: Box::new(group.clone()),
                 bounds,
                 children: Vec::new(),
                 mask_children: Vec::new(),
@@ -368,7 +415,7 @@ fn append(
             unreachable!()
         };
         *total = total.union(bounds);
-        let children = if policy.mask_for.contains(&group.id) {
+        let children = if group.clip.is_none() && policy.mask_for.contains(&group.id) {
             mask_children
         } else {
             children
@@ -407,7 +454,7 @@ fn prepare(
     policies: Res<Policies>,
     mut phases: ResMut<ViewSortedRenderPhases<TransparentUi>>,
     views: Query<(&ExtractedView, &UiViewTarget)>,
-    targets: Query<&ViewTarget>,
+    targets: Query<(&ViewTarget, &ExtractedCamera)>,
     device: Res<RenderDevice>,
     queue: Res<RenderQueue>,
     pipeline: Res<Pipeline>,
@@ -427,7 +474,7 @@ fn prepare(
         let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
             continue;
         };
-        let Ok(target) = targets.get(target.0) else {
+        let Ok((target, camera)) = targets.get(target.0) else {
             continue;
         };
         let size = target.main_texture().size();
@@ -541,6 +588,7 @@ fn prepare(
             pipelines: &mut Pipelines,
             pipeline: &Pipeline,
             cache: &mut PipelineCache,
+            viewport_offset: Vec2,
         ) {
             for op in ops {
                 match op {
@@ -553,9 +601,33 @@ fn prepare(
                     } => {
                         let mut data = CompositeUniform::new(size, group.matrix, group.opacity);
                         data.screen.w = if group.mask.is_some() { 1. } else { 0. };
+                        if let Some(clip) = group.clip {
+                            data.clip_rect = Vec4::new(
+                                clip.rect.min.x,
+                                clip.rect.min.y,
+                                clip.rect.max.x,
+                                clip.rect.max.y,
+                            );
+                            data.clip_edges = clip.edges;
+                            data.clip_x = clip.from_screen[0];
+                            data.clip_y = clip.from_screen[1];
+                            data.clip_x.z -= data.clip_x.x * viewport_offset.x
+                                + data.clip_x.y * viewport_offset.y;
+                            data.clip_y.z -= data.clip_y.x * viewport_offset.x
+                                + data.clip_y.y * viewport_offset.y;
+                        }
                         *uniform = buffer.push(&data);
                         pipelines.composite(format, group.blend.into(), pipeline, cache);
-                        uniforms(children, buffer, size, format, pipelines, pipeline, cache);
+                        uniforms(
+                            children,
+                            buffer,
+                            size,
+                            format,
+                            pipelines,
+                            pipeline,
+                            cache,
+                            viewport_offset,
+                        );
                         uniforms(
                             mask_children,
                             buffer,
@@ -564,6 +636,7 @@ fn prepare(
                             pipelines,
                             pipeline,
                             cache,
+                            viewport_offset,
                         );
                     }
                     Op::Draw { multiply: true, .. } => {
@@ -581,6 +654,10 @@ fn prepare(
             &mut pipelines,
             &pipeline,
             &mut cache,
+            camera
+                .viewport
+                .as_ref()
+                .map_or(Vec2::ZERO, |viewport| viewport.physical_position.as_vec2()),
         );
         frame.uniforms.write_buffer(&device, &queue);
         let layout = cache.get_bind_group_layout(&pipeline.layout);

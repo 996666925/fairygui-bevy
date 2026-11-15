@@ -97,3 +97,17 @@ fn normal_mask_batches_are_replayed_after_content_regardless_of_child_order() {
     assert!(matches!(&children[..],[Op::Draw {range,..}] if *range==(2..3)));
     assert!(matches!(&mask_children[..],[Op::Group {group,..}] if group.id==mask));
 }
+
+#[test]
+fn soft_clip_draws_remain_separate_to_preserve_overlapping_alpha() {
+    let (gui, _, child) = super::super::tests::clip_fixture("Component1");
+    let policy = super::super::policy(&gui, child);
+    let mut ops = Vec::new();
+    append(&mut ops, &policy, Rect::default(), 0..1, 0);
+    append(&mut ops, &policy, Rect::default(), 1..2, 0);
+    assert_eq!(
+        ops.len(),
+        2,
+        "each draw receives its gradient before blending"
+    );
+}

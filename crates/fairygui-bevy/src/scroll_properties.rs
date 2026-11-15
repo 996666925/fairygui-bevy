@@ -20,6 +20,9 @@ pub struct GuiScrollSettings {
     /// Skip velocity-based continuation on the next drag release. Bounce and
     /// item/page alignment still apply; existing tweens keep their trajectory.
     pub inertia_disabled: bool,
+    /// Fade leading edges after leaving the scroll origin (default false).
+    /// Widths are configured through GuiClipSoftness.
+    pub softness_on_top_left: bool,
     /// Finite, strictly between zero and one. Affects future release planning.
     pub deceleration_rate: f64,
 }
@@ -35,6 +38,7 @@ impl Default for GuiScrollSettings {
             touch_effect: defaults.touch_effect,
             bounceback_effect: defaults.bounceback_effect,
             inertia_disabled: false,
+            softness_on_top_left: false,
             deceleration_rate: crate::core::scroll::ScrollPhysics::default().deceleration_rate,
         }
     }
@@ -54,6 +58,7 @@ impl Property for GuiScrollSettings {
             touch_effect: pane.touch_effect,
             bounceback_effect: pane.bounceback_effect,
             inertia_disabled: pane.inertia_disabled,
+            softness_on_top_left: pane.softness_on_top_left,
             deceleration_rate: pane.physics().deceleration_rate,
         })
     }
@@ -77,6 +82,7 @@ impl Property for GuiScrollSettings {
             touch_effect => set_scroll_touch_effect,
             bounceback_effect => set_scroll_bounceback_effect,
             inertia_disabled => set_scroll_inertia_disabled,
+            softness_on_top_left => set_scroll_softness_on_top_left,
         }
         if self.deceleration_rate != previous.deceleration_rate
             && self.deceleration_rate != native.deceleration_rate

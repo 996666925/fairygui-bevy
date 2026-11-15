@@ -169,6 +169,9 @@ pub struct ScrollPane {
     pub floating: bool,
     /// 是否不裁剪边距内的内容。
     pub dont_clip_margin: bool,
+    /// Fade the leading edges while content is scrolled away from its origin.
+    /// Matches FairyGUI ScrollPane.softnessOnTopOrLeftSide (false by default).
+    pub softness_on_top_left: bool,
     mouse_wheel_enabled: bool,
     scroll_step: f32,
 
@@ -232,6 +235,7 @@ impl Default for ScrollPane {
             clip: true,
             floating: false,
             dont_clip_margin: false,
+            softness_on_top_left: false,
             mouse_wheel_enabled: true,
             scroll_step: SCROLL_STEP,
             scroll_bar_margin: Margin::ZERO,

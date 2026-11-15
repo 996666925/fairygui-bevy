@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_soft_clip.rs"]
+mod soft_clip;
+pub(super) fn install_soft_clip(app: &mut App) {
+    soft_clip::install(app);
+}
 #[path = "smoke_group_alignment.rs"]
 mod group_alignment;
 pub(super) fn install_group_alignment(app: &mut App) {

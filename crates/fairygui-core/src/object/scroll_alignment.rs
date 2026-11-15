@@ -6,6 +6,19 @@ use crate::geom::{Point, Rect};
 mod tests;
 
 impl ObjectStore {
+    pub fn set_scroll_softness_on_top_left(&mut self, container: GObjectId, enabled: bool) -> bool {
+        self.objects
+            .get_mut(container)
+            .and_then(|object| object.control.component_mut())
+            .and_then(|component| component.scroll_pane.as_mut())
+            .is_some_and(|pane| {
+                if pane.softness_on_top_left == enabled {
+                    return false;
+                }
+                pane.softness_on_top_left = enabled;
+                true
+            })
+    }
     pub fn scroll_snap_to_item(&self, container: GObjectId) -> Option<bool> {
         self.scroll_pane(container).map(|p| p.snap_to_item)
     }

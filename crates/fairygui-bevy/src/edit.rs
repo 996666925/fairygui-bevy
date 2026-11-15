@@ -100,6 +100,13 @@ impl GuiObjectMut<'_> {
             .store_mut()
             .set_component_opaque(self.object, opaque);
     }
+
+    pub fn set_clip_softness(&mut self, softness: Vec2) {
+        self.runtime.store_mut().set_clip_softness(
+            self.object,
+            fairygui_core::Point::new(softness.x, softness.y),
+        );
+    }
     pub fn set_image_flip(&mut self, flip: crate::FlipType) {
         self.runtime.store_mut().set_image_flip(self.object, flip);
     }

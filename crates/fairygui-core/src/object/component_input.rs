@@ -27,6 +27,27 @@ impl GObject {
     }
 }
 impl ObjectStore {
+    /// Set component clip fade widths. It affects painting, not object geometry
+    /// or input hit testing. Invalid widths and non-components are unchanged.
+    pub fn set_clip_softness(&mut self, id: GObjectId, value: crate::geom::Point) -> bool {
+        if !value.x.is_finite() || !value.y.is_finite() || value.x < 0. || value.y < 0. {
+            return false;
+        }
+        let Some(component) = self
+            .objects
+            .get_mut(id)
+            .and_then(|object| object.control.component_mut())
+        else {
+            return false;
+        };
+        if component.clip_softness == value {
+            return false;
+        }
+        component.clip_softness = value;
+        self.touch(id, dirty::LOOK);
+        true
+    }
+
     /// Toggle native blank-rectangle picking without changing opacity, child
     /// interaction or a custom pixel/child hit area. Same-value writes do nothing.
     pub fn set_component_opaque(&mut self, id: GObjectId, value: bool) -> bool {

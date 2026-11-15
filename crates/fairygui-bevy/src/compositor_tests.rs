@@ -317,3 +317,69 @@ fn matches_upstream_sprite_substructure_alpha_and_inherited_blend() {
     }
     assert_eq!(cases, 216);
 }
+
+pub(super) fn clip_fixture(item: &str) -> (GuiRuntime, GObjectId, GObjectId) {
+    let package = crate::core::FuiPackage::parse(
+        "Basics",
+        include_bytes!("../../fairygui-demo/assets/ui/Basics.fui"),
+    )
+    .unwrap();
+    let mut gui = GuiRuntime::default();
+    gui.compositing = true;
+    let index = gui.create_root(Handle::default(), &package, item).unwrap();
+    let owner = gui.root_object(index).unwrap();
+    let child = gui.store_mut().create(ObjectType::Graph);
+    gui.store_mut().set_parent(child, Some(owner));
+    gui.store_mut()
+        .set_clip_softness(owner, crate::core::Point::new(24., 20.));
+    (gui, owner, child)
+}
+
+#[test]
+fn soft_clipping_preserves_per_draw_alpha_blend_and_owner_graphics() {
+    let (mut gui, owner, child) = clip_fixture("Component1");
+    gui.store_mut().set_alpha(owner, 0.5);
+    gui.store_mut().set_alpha(child, 0.6);
+    gui.store_mut().set_blend_mode(owner, BlendMode::Add);
+    assert!(policy(&gui, owner).groups.is_empty());
+    let content = policy(&gui, child);
+    assert_eq!(content.groups.len(), 1);
+    let clip = &content.groups[0];
+    assert_eq!(clip.blend, BlendMode::Add);
+    assert_eq!(clip.opacity, 1.);
+    assert_eq!(clip.clip.unwrap().edges, Vec4::new(24., 20., 24., 20.));
+    assert_eq!(content.blend, BlendMode::Normal);
+    assert!((gui.paint_alpha(child) - 0.3).abs() < 1e-6);
+    gui.store_mut()
+        .set_clip_softness(owner, crate::core::Point::ZERO);
+    assert!(policy(&gui, child).groups.is_empty());
+}
+
+#[test]
+fn scroll_soft_edges_follow_content_and_exclude_scrollbars_and_masks() {
+    let (mut gui, owner, child) = clip_fixture("Component7");
+    gui.store_mut()
+        .update_scroll_content_size(owner, crate::core::Size::new(1000., 1000.));
+    let edges = |gui: &GuiRuntime| {
+        policy(gui, child)
+            .groups
+            .into_iter()
+            .find_map(|g| g.clip)
+            .unwrap()
+            .edges
+    };
+    assert_eq!(edges(&gui), Vec4::new(0., 0., 24., 20.));
+    let max = gui.store().scroll_pane(owner).unwrap().max_scroll_pos();
+    gui.store_mut()
+        .set_scroll_pos(owner, max.x * 0.5, max.y * 0.5, false);
+    gui.store_mut().set_scroll_softness_on_top_left(owner, true);
+    assert_eq!(edges(&gui), Vec4::new(24., 20., 24., 20.));
+    gui.store_mut().set_scroll_pos(owner, max.x, max.y, false);
+    assert_eq!(edges(&gui), Vec4::new(24., 20., 0., 0.));
+    if let Some(bar) = gui.store().scroll_pane(owner).unwrap().vt_bar {
+        assert!(policy(&gui, bar).groups.iter().all(|g| g.clip.is_none()));
+    }
+    gui.store_mut()
+        .set_component_mask(owner, Some(child), false);
+    assert!(policy(&gui, child).groups.iter().all(|g| g.clip.is_none()));
+}

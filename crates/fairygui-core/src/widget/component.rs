@@ -84,6 +84,8 @@ pub struct ComponentData {
     pub margin: Margin,
     /// 溢出处理方式。
     pub overflow: OverflowType,
+    /// Exported horizontal/vertical edge fade widths, in component logical pixels.
+    pub clip_softness: crate::geom::Point,
     /// 是否整体不参与命中测试。
     pub opaque: bool,
     /// 作为遮罩的子对象编号。
@@ -300,9 +302,8 @@ fn build_component(
         buffer.set_position(saved);
     }
 
-    if buffer.read_bool()? {
-        // 裁剪的软化范围，渲染层暂不支持。
-        buffer.skip(8);
+    if let Some(softness) = read_clip_softness(&mut buffer)? {
+        component.clip_softness = softness;
     }
 
     // ---- 块 1：控制器 ----
@@ -717,4 +718,64 @@ fn build_component(
     store.initialize_slider(object);
 
     Ok(())
+}
+
+/// The component and list-instance records encode the same optional pair.
+pub(super) fn read_clip_softness(
+    buffer: &mut crate::binary::ByteBuffer<'_>,
+) -> Result<Option<crate::geom::Point>> {
+    if !buffer.read_bool()? {
+        return Ok(None);
+    }
+    Ok(Some(crate::geom::Point::new(
+        buffer.read_i32()?.max(0) as f32,
+        buffer.read_i32()?.max(0) as f32,
+    )))
+}
+
+#[cfg(test)]
+mod clip_softness_tests {
+    use super::*;
+    #[test]
+    fn exported_list_softness_survives_package_construction() {
+        let package =
+            FuiPackage::parse("Basics", include_bytes!("../../tests/fixtures/Basics.fui")).unwrap();
+        let mut store = ObjectStore::new();
+        let root = create_from_package(
+            &mut store,
+            &package,
+            package.item_index_by_name("Demo_List").unwrap(),
+            &LoadContext::none(),
+        )
+        .unwrap();
+        let list = store.child_by_name(root, "n0").unwrap();
+        assert_eq!(
+            store
+                .object(list)
+                .unwrap()
+                .control()
+                .component()
+                .unwrap()
+                .clip_softness,
+            crate::geom::Point::new(0., 20.)
+        );
+    }
+    #[test]
+    fn optional_clip_widths_consume_exact_record_and_reject_truncation() {
+        use crate::{binary::ByteBuffer, geom::Point};
+        let mut buffer = ByteBuffer::new(&[0, 77]);
+        assert_eq!(read_clip_softness(&mut buffer).unwrap(), None);
+        assert_eq!(buffer.read_i8().unwrap(), 77);
+        let mut bytes = vec![1];
+        bytes.extend_from_slice(&18i32.to_be_bytes());
+        bytes.extend_from_slice(&(-4i32).to_be_bytes());
+        bytes.push(77);
+        let mut buffer = ByteBuffer::new(&bytes);
+        assert_eq!(
+            read_clip_softness(&mut buffer).unwrap(),
+            Some(Point::new(18., 0.))
+        );
+        assert_eq!(buffer.read_i8().unwrap(), 77);
+        assert!(read_clip_softness(&mut ByteBuffer::new(&bytes[..8])).is_err());
+    }
 }

@@ -63,7 +63,7 @@ mod data_property;
 pub use data_property::GuiData;
 mod component_properties;
 mod compositor;
-pub use component_properties::GuiOpaque;
+pub use component_properties::{GuiClipSoftness, GuiOpaque};
 pub mod ecs;
 mod effect_properties;
 pub use effect_properties::{GuiBlendMode, GuiColorFilter};
@@ -192,10 +192,10 @@ pub mod prelude {
         BlendMode, ButtonMode, ChildrenRenderOrder, ColorFilterParams, FairyGuiPlugin,
         FairyGuiRoot, FairyGuiWindow, FillMethod, FlipType, FuiAsset, GObjectRef, GraphType,
         GroupLayoutSettings, GroupLayoutType, GuiAnimationComplete, GuiAnimationPlaySettings,
-        GuiAnimationState, GuiBlendMode, GuiButtonSelected, GuiButtonSettings, GuiColor,
-        GuiColorFilter, GuiComboBoxState, GuiConfig, GuiControllerState, GuiControllers, GuiData,
-        GuiDisplay, GuiDrag, GuiDragBounds, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop,
-        GuiDropTarget, GuiEvent, GuiFont, GuiGlobalWaitError, GuiGlobalWaitSettings,
+        GuiAnimationState, GuiBlendMode, GuiButtonSelected, GuiButtonSettings, GuiClipSoftness,
+        GuiColor, GuiColorFilter, GuiComboBoxState, GuiConfig, GuiControllerState, GuiControllers,
+        GuiData, GuiDisplay, GuiDrag, GuiDragBounds, GuiDragSource, GuiDragState, GuiDraggable,
+        GuiDrop, GuiDropTarget, GuiEvent, GuiFont, GuiGlobalWaitError, GuiGlobalWaitSettings,
         GuiGlobalWaitState, GuiGraph, GuiGroupLayout, GuiIcon, GuiImageFill, GuiImageFlip,
         GuiInput, GuiInputSettings, GuiInputState, GuiLink, GuiListContent, GuiListContentError,
         GuiListContentState, GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow,

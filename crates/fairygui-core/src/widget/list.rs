@@ -393,9 +393,8 @@ pub(crate) fn read_list(
             buffer.set_position(saved);
         }
 
-        if buffer.read_bool()? {
-            // 裁剪软化，渲染层暂不支持。
-            buffer.skip(8);
+        if let Some(softness) = super::component::read_clip_softness(buffer)? {
+            data.component.clip_softness = softness;
         }
 
         if buffer.version() >= 2 {
@@ -483,6 +482,34 @@ pub(super) fn setup_item(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_clip_softness_does_not_shift_following_selection_flags() {
+        let mut bytes = vec![0u8; 20];
+        bytes[0] = 9;
+        bytes[1] = 1;
+        bytes[12..14].copy_from_slice(&20u16.to_be_bytes());
+        bytes.extend_from_slice(&[0; 16]); // layout, counts, render order, apex
+        bytes.extend_from_slice(&[0, 1, 1]); // no margin, hidden overflow, softness
+        bytes.extend_from_slice(&11i32.to_be_bytes());
+        bytes.extend_from_slice(&23i32.to_be_bytes());
+        bytes.extend_from_slice(&[1, 0]); // scrollItemToView, foldInvisibleItems
+        let mut buffer = ByteBuffer::new(&bytes);
+        buffer.set_version(2);
+        let mut data = ListData::default();
+        read_list(
+            &mut data,
+            &mut buffer,
+            &StringTable::new(),
+            0,
+            false,
+            crate::scroll::ScrollDefaults::default(),
+        )
+        .unwrap();
+        assert_eq!(data.component.clip_softness, Point::new(11., 23.));
+        assert!(data.scroll_item_to_view_on_click);
+        assert!(!data.fold_invisible_items);
+    }
 
     fn list_with(layout: ListLayoutType) -> ListData {
         ListData {

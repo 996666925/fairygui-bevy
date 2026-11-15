@@ -35,6 +35,79 @@ fn isolated(object: &fairygui_core::GObject) -> bool {
             .is_some_and(|c| object.mask().is_some() && !c.mask_reversed)
 }
 
+/// Component-local rectangle and left/top/right/bottom fade widths. The render
+/// extractor resolves physical screen coordinates from the owner's UI transform.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct SoftClip {
+    pub rect: Rect,
+    pub edges: Vec4,
+    pub from_screen: [Vec4; 2],
+}
+
+fn soft_clip(object: &fairygui_core::GObject) -> Option<SoftClip> {
+    use fairygui_core::widget::OverflowType;
+    let component = object.control().component()?;
+    let softness = component.clip_softness;
+    if softness.x <= 0. && softness.y <= 0. {
+        return None;
+    }
+    let margin = component.margin;
+    let (min, size, edges) = if let Some(pane) = component.scroll_pane.as_ref() {
+        if !pane.clip {
+            return None;
+        }
+        let position = pane.display_pos();
+        let max = pane.max_scroll_pos();
+        let edges = Vec4::new(
+            if pane.softness_on_top_left && position.x > 0. {
+                softness.x
+            } else {
+                0.
+            },
+            if pane.softness_on_top_left && position.y > 0. {
+                softness.y
+            } else {
+                0.
+            },
+            if position.x < max.x { softness.x } else { 0. },
+            if position.y < max.y { softness.y } else { 0. },
+        );
+        let view = pane.view_size();
+        if pane.dont_clip_margin {
+            (
+                Vec2::ZERO,
+                Vec2::new(
+                    view.width + margin.left + margin.right,
+                    view.height + margin.top + margin.bottom,
+                ),
+                edges,
+            )
+        } else {
+            (
+                Vec2::new(margin.left, margin.top),
+                Vec2::new(view.width, view.height),
+                edges,
+            )
+        }
+    } else if component.overflow == OverflowType::Hidden {
+        (
+            Vec2::new(margin.left, margin.top),
+            Vec2::new(
+                object.width() - margin.left - margin.right,
+                object.height() - margin.top - margin.bottom,
+            ),
+            Vec4::new(softness.x, softness.y, softness.x, softness.y),
+        )
+    } else {
+        return None;
+    };
+    Some(SoftClip {
+        rect: Rect::from_corners(min, min + size.max(Vec2::ZERO)),
+        edges,
+        from_screen: [Vec4::ZERO; 2],
+    })
+}
+
 impl GuiRuntime {
     pub(crate) fn has_composited_filter(&self, id: GObjectId) -> bool {
         if !self.compositing {
@@ -97,6 +170,7 @@ pub(super) struct Group {
     pub opacity: f32,
     pub blend: BlendMode,
     pub mask: Option<GObjectId>,
+    pub clip: Option<SoftClip>,
 }
 #[derive(Component, Debug, Clone, Default, PartialEq)]
 pub(super) struct PaintPolicy {
@@ -116,8 +190,15 @@ fn policy(gui: &GuiRuntime, id: GObjectId) -> PaintPolicy {
         current = object.parent();
     }
     let mut result = PaintPolicy::default();
+    let mut clips = Vec::new();
+    // Mask coverage is combined with already faded content, so fading the
+    // mask source as well would apply the viewport gradient twice.
+    let mask_source = chain
+        .windows(2)
+        .any(|pair| pair[1].1.mask() == Some(pair[0].0));
     let mut alpha = 1.;
-    for (id, object) in chain.into_iter().rev() {
+    chain.reverse();
+    for (index, &(id, object)) in chain.iter().enumerate() {
         alpha *= object.alpha();
         if object.blend_mode_is_set() {
             result.blend = object.blend_mode();
@@ -139,10 +220,50 @@ fn policy(gui: &GuiRuntime, id: GObjectId) -> PaintPolicy {
                     .control()
                     .component()
                     .and_then(|c| object.mask().filter(|_| !c.mask_reversed)),
+                clip: None,
             });
             alpha = 1.;
             result.blend = BlendMode::Normal;
         }
+        // Keep the owner's own graphics and registered scrollbar/refresh
+        // subtrees outside the content fade.
+        if !mask_source
+            && index + 1 < chain.len()
+            && !gui.store().is_scroll_overlay(chain[index + 1].0)
+            && object.mask() != Some(chain[index + 1].0)
+            && let Some(mut clip) = soft_clip(object)
+        {
+            if let Some(pane) = object
+                .control()
+                .component()
+                .and_then(|c| c.scroll_pane.as_ref())
+                && pane.display_on_left
+                && !pane.floating
+                && let Some(bar) = pane.vt_bar.and_then(|bar| gui.store().object(bar))
+            {
+                clip.rect.min.x += bar.width();
+                clip.rect.max.x += bar.width();
+            }
+            clips.push(Group {
+                id,
+                matrix: ColorMatrix::IDENTITY,
+                opacity: 1.,
+                blend: BlendMode::Normal,
+                mask: None,
+                clip: Some(clip),
+            });
+        }
+    }
+    // Apply clipping per draw, preserving inherited blend factors and parent
+    // opacity. Combining siblings first would change translucent overlaps.
+    for (index, mut clip) in clips.into_iter().enumerate() {
+        if index == 0 {
+            clip.blend = result.blend;
+        }
+        result.groups.push(clip);
+    }
+    if result.groups.iter().any(|group| group.clip.is_some()) {
+        result.blend = BlendMode::Normal;
     }
     result
 }
