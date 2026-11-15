@@ -20,16 +20,12 @@ impl State {
     }
 }
 
-fn observe_polygon_click(event: On<GuiEvent>, mut smoke: ResMut<Smoke>) {
-    if event.event().event.kind == fairygui_core::object::EventKind::Click {
-        smoke.polygons.polygon_clicks += 1;
-    }
+fn observe_polygon_click(_event: On<GuiClick>, mut smoke: ResMut<Smoke>) {
+    smoke.polygons.polygon_clicks += 1;
 }
 
-fn observe_background_click(event: On<GuiEvent>, mut smoke: ResMut<Smoke>) {
-    if event.event().event.kind == fairygui_core::object::EventKind::Click {
-        smoke.polygons.background_clicks += 1;
-    }
+fn observe_background_click(_event: On<GuiClick>, mut smoke: ResMut<Smoke>) {
+    smoke.polygons.background_clicks += 1;
 }
 
 fn point(

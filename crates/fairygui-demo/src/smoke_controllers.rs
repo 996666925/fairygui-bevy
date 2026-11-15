@@ -33,14 +33,11 @@ fn initialize(
     }
 }
 fn clicked(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     owners: Query<&Owner>,
     mut controllers: Query<&mut GuiControllers>,
     mut results: ResMut<Results>,
 ) {
-    if event.event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     let owner = owners.get(event.entity).unwrap().0;
     let mut states = controllers.get_mut(owner).unwrap();
     let page = states.get("c1").unwrap().selected_index;

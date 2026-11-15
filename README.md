@@ -66,7 +66,7 @@ let template = ui::basics::WindowA::ITEM_NAME;
 
 输入与帧调度的设计见 [架构说明](docs/architecture.md)。应用可通过
 `fairygui_bevy::prelude::*` 导入常用类型，将事件处理系统放入
-`GuiSystems::Respond`，保证本帧点击在本帧同步到视图。`GuiEvent` 以 Bevy
+`GuiSystems::Respond`，保证本帧点击在本帧同步到视图。`GuiClick` 等具体事件以 Bevy
 entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输入窗口，
 `GuiInputState` 提供悬停、指针捕获与游戏输入仲裁状态。
 
@@ -240,10 +240,8 @@ fn bind_menu(
     }
 }
 
-fn on_menu_button(event: On<GuiEvent>, mut texts: Query<&mut GuiText>) {
-    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
-        if let Ok(mut text) = texts.get_mut(event.entity) { text.set("Clicked"); }
-    }
+fn on_menu_button(event: On<GuiClick>, mut texts: Query<&mut GuiText>) {
+    if let Ok(mut text) = texts.get_mut(event.entity) { text.set("Clicked"); }
 }
 
 // 新根就绪后立即绑定，并在同帧布局前应用业务配置。
@@ -378,17 +376,32 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 `Empty`、`Loading`、`Ready` 或具体失败原因。URL 改变时不会继续暴露旧 URL 的失败
 结果；状态在 Publish 前、PostLayout 前和 Sync 末尾投影，未变化时保留变更标记。
 
-冒泡的 `GuiEvent.entity` 表示当前接收实体，`target` 是原始目标的视图实体（没有
+业务直接按类型订阅事件，不需要在回调中判断 `kind`：
+
+| 操作 | observer 参数 |
+| --- | --- |
+| 点击、右键点击 | `On<GuiClick>`、`On<GuiRightClick>` |
+| 按下、拖动、松开 | `On<GuiMouseDown>`、`On<GuiMouseDrag>`、`On<GuiMouseUp>` |
+| 触摸开始、移动、结束 | `On<GuiTouchBegin>`、`On<GuiTouchMove>`、`On<GuiTouchEnd>` |
+| 悬停进入、离开 | `On<GuiRollOver>`、`On<GuiRollOut>` |
+| 按钮、下拉框、滑块的值变化 | `On<GuiStateChanged>` |
+| 滚动、滚动结束 | `On<GuiScroll>`、`On<GuiScrollEnd>` |
+| 输入、提交变化、回车 | `On<GuiInputEvent>`、`On<GuiChange>`、`On<GuiEnter>`，`value()` 读取原始提交文本 |
+| 窗口显示、隐藏 | `On<GuiWindowShown>`、`On<GuiWindowHide>` |
+| 控件拖动生命周期 | `On<GuiDragStart>`、`On<GuiDragMove>`、`On<GuiDragEnd>` |
+| 自定义通知 | `On<GuiCustomEvent>`，`name()` 读取名称 |
+
+全部类型由 prelude 和 `fairygui_bevy::events` 导出。一次原生通知只触发对应的类型，
+没有额外的通用 observer 事件流；`GuiEvent` 是具体事件共享的数据结构。
+冒泡的 `event.entity` 表示当前接收实体，`target` 是原始目标的视图实体（没有
 对应视图时为 `None`）。可沿 `GuiObjectInfo::parent()` 判断点击是否来自某个子控件，
 无需借用运行时解析原生对象 ID。
 
 冒泡使用 Bevy 的同一次事件传播，业务 observer 可停止后续祖先投递：
 
 ```rust,ignore
-fn on_child(mut event: On<GuiEvent>) {
-    if event.event.kind == fairygui_bevy::core::object::EventKind::Click {
-        event.propagate(false);
-    }
+fn on_child(mut event: On<GuiClick>) {
+    event.propagate(false);
 }
 ```
 
@@ -398,7 +411,7 @@ fn on_child(mut event: On<GuiEvent>) {
 这是对通知传播的控制，不会撤销输入阶段已完成的按钮/列表选择，也不会取消另行发布的
 `GuiListItemClick`、`GuiTextInput` 或 `GuiLink`。按钮选择、列表选择和控件值在发布通知前
 刷新，observer 对组件的修改仍在同帧 Sync 生效。
-`GuiEvent::new(entity, event)` 可构造只投递给一个实体的直接通知。
+`GuiClick::new(entity, object_id)` 等构造器创建只投递给一个实体的直接通知。
 `--smoke-observer-events` 验证实际复选框点击、停止/继续冒泡、共享载荷和同帧文字更新。
 
 `GuiInputState::hovered()`、`captured()`、`captured_touch(id)` 和
@@ -431,12 +444,10 @@ Stick/Delete 按钮。虚拟行重新绑定数据时通过 `GuiListItem::set_scr
 
 ```rust,ignore
 fn keep_editing(
-    input: On<GuiTextInput>,
+    input: On<GuiEnter>,
     mut commands: Commands,
 ) {
-    if input.event.kind == fairygui_bevy::core::object::EventKind::Enter {
-        commands.write_message(GuiInputCommand::PreventSubmit(input.entity));
-    }
+    commands.write_message(GuiInputCommand::PreventSubmit(input.entity));
 }
 ```
 
@@ -482,18 +493,11 @@ fn on_drop(event: On<GuiDrop>) {
 与 `GuiMut` 同时使用时通过 `ParamSet` 分别借用，避免重复可变借用运行时。
 
 ```rust,ignore
-fn begin(event: On<GuiEvent>, mut drag: GuiDrag) {
-    let begin = match event.event.kind {
-        fairygui_bevy::core::object::EventKind::MouseDown => event.event.touch_id.is_none(),
-        fairygui_bevy::core::object::EventKind::TouchBegin => true,
-        _ => false,
-    };
-    if begin {
-        drag.start(event.entity, GuiDragSource {
-            icon: None,
-            data: Some("inventory:42".into()),
-        }, event.event.touch_id);
-    }
+fn begin(event: On<GuiMouseDown>, mut drag: GuiDrag) {
+    drag.start(event.entity, GuiDragSource {
+        icon: None,
+        data: Some("inventory:42".into()),
+    }, event.event.touch_id);
 }
 ```
 
@@ -513,7 +517,7 @@ commands.entity(bounded).insert(GuiDraggable {
 
 `GuiDragBounds::Stage(rect)` 使用固定舞台逻辑坐标；`Control(entity)` 随边界控件的
 位置和尺寸更新。`GuiObjectDragState` 提供拖动中和所属触摸 ID；在控件上观察
-`GuiEvent` 的 `DragStart`、`DragMove`、`DragEnd` 响应生命周期。超过阈值时记录
+`GuiDragStart`、`GuiDragMove`、`GuiDragEnd` 响应生命周期。超过阈值时记录
 起点，从后续位移开始移动，位置遵循原版整数取整，超大控件固定到边界起点。
 移除组件或失去输入资格会结束拖动；同一控件只允许一个指针操作。Basics 的 A
 自由拖动、D 边界拖动也通过这些组件绑定。
@@ -971,7 +975,7 @@ items、values 和 icons 独立，不要求等长。更新 items 会保留或收
 选中索引与控制器双向联动，超出控制器页面数的索引不会改变控制器。
 
 同原版，programmatic setters 不发出 `StateChanged`；真实选择或重选都会触发控件的
-`GuiEvent` observer，observer 内可直接读取当前 `GuiComboBoxState`。选项修改在下次
+`GuiStateChanged` observer，observer 内可直接读取当前 `GuiComboBoxState`。选项修改在下次
 展开时刷新弹层内容，隐藏保留弹层视图，销毁下拉框拥有者时一并回收。
 `--smoke-combo` 验证实际菜单导航、选择/重选、value 设置、数据替换、弹层复用与回收。
 
@@ -1110,7 +1114,7 @@ key 在整棵树内唯一；相同 key、模板和节点类型会复用行实体
 修改组件后按 key 更新，重复 key、无效层级或模板错误会保留当前树，并在
 `GuiTreeContentState::error()` 报告；修改组件或标记变更可重试。移除配置组件保留
 当前内容和 key，重新挂载可继续复用；空内容回收全部数据行。TreeView 右侧的
-动态文件夹和文件已使用这套接口。`GuiEvent::ClickItem` 在列表/树实体上发布一次，
+动态文件夹和文件已使用这套接口。`GuiClickItem` 在列表/树实体上发布一次，
 observer 可直接查询本次选择和行文本。
 
 依赖本帧列表布局的装饰系统可放入 `GuiSystems::PostLayout`。这是 Sync 内部的

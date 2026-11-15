@@ -23,14 +23,11 @@ fn clicked(event: On<GuiListItemClick>, mut events: ResMut<Events>) {
     events.clicks.push((event.entity, event.index));
 }
 fn swapped(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     swaps: Query<&Swap>,
     mut lists: Query<&mut GuiVirtualList>,
     mut events: ResMut<Events>,
 ) {
-    if event.event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     let Ok(swap) = swaps.get(event.entity) else {
         return;
     };

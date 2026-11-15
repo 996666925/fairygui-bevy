@@ -271,9 +271,9 @@ pub(crate) mod content;
 mod resource_tests;
 
 #[path = "events.rs"]
-mod events;
+pub mod events;
 use events::PendingGuiEvent;
-pub use events::{GuiEvent, GuiEventTraversal, emit_gui_events};
+pub use events::*;
 
 /// One rich-text link activation, published before `GuiSystems::Respond`.
 /// The href is preserved verbatim (including `event:`). Applications decide how
@@ -1914,8 +1914,10 @@ impl GuiRuntime {
         target: GObjectId,
         value: &str,
     ) {
-        let event = fairygui_core::object::UiEvent::new(kind, target);
+        let event = fairygui_core::object::UiEvent::new(kind, target)
+            .with_data(fairygui_core::object::EventData::Text(value.to_owned()));
         self.events.push(event.clone());
+        self.gui_events.push(PendingGuiEvent::direct(event.clone()));
         if let Some(entity) = self.entity_of(target) {
             self.input_events.push(GuiTextInput {
                 entity,

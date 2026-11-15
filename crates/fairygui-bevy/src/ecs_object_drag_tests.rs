@@ -1,5 +1,7 @@
 use super::*;
-use crate::{FairyGuiPlugin, GuiEvent, GuiWorldExt};
+use crate::{
+    FairyGuiPlugin, GuiClick, GuiDragEnd, GuiDragMove, GuiDragStart, GuiEventType, GuiWorldExt,
+};
 use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::picking::{backend::HitData, hover::HoverMap, hover::Hovered, pointer::PointerId};
 use bevy::ui::{ComputedStackIndex, RelativeCursorPosition};
@@ -8,7 +10,7 @@ use fairygui_core::object::EventKind;
 
 #[derive(Resource, Default)]
 struct Events(Vec<(EventKind, Option<u64>)>);
-fn observe(event: On<GuiEvent>, mut events: ResMut<Events>) {
+fn observe<E: GuiEventType>(event: On<E>, mut events: ResMut<Events>) {
     if !event.event.bubbling
         && matches!(
             event.event.kind,
@@ -63,7 +65,10 @@ fn fixture() -> (App, Entity, Entity, Entity, Entity) {
     app.world_mut()
         .entity_mut(control)
         .insert(GuiDraggable::default())
-        .observe(observe);
+        .observe(observe::<GuiClick>)
+        .observe(observe::<GuiDragStart>)
+        .observe(observe::<GuiDragMove>)
+        .observe(observe::<GuiDragEnd>);
     hover(&mut app, control);
     app.update();
     (app, window, page, control, bounds)

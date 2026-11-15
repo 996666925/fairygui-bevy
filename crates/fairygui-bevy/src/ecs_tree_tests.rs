@@ -630,35 +630,35 @@ fn observe_typed_item_click(
         gui.text(event.item).unwrap().to_owned(),
     ));
 }
-fn observe_item_click(event: On<crate::GuiEvent>, gui: GuiQuery, mut clicks: ResMut<ItemClicks>) {
-    if event.event.kind == crate::core::object::EventKind::ClickItem {
-        let tree = gui.tree(event.entity).unwrap();
-        let index = tree.selected_nodes()[0];
-        clicks.0.push((
-            index,
-            gui.text(tree.node(index).unwrap().view().unwrap())
-                .unwrap()
-                .to_owned(),
-        ));
-    }
+fn observe_item_click(
+    event: On<crate::GuiClickItem>,
+    gui: GuiQuery,
+    mut clicks: ResMut<ItemClicks>,
+) {
+    let tree = gui.tree(event.entity).unwrap();
+    let index = tree.selected_nodes()[0];
+    clicks.0.push((
+        index,
+        gui.text(tree.node(index).unwrap().view().unwrap())
+            .unwrap()
+            .to_owned(),
+    ));
 }
 fn observe_folder_click(
-    event: On<crate::GuiEvent>,
+    event: On<crate::GuiClick>,
     nodes: Query<&GuiTreeNode>,
     trees: Query<&GuiTreeState>,
     mut snapshots: ResMut<ClickSnapshots>,
 ) {
-    if event.event.kind == crate::core::object::EventKind::Click {
-        let node = nodes.get(event.entity).unwrap();
-        snapshots.0.push(
-            trees
-                .get(node.tree())
-                .unwrap()
-                .node(node.index())
-                .unwrap()
-                .is_expanded(),
-        );
-    }
+    let node = nodes.get(event.entity).unwrap();
+    snapshots.0.push(
+        trees
+            .get(node.tree())
+            .unwrap()
+            .node(node.index())
+            .unwrap()
+            .is_expanded(),
+    );
 }
 #[test]
 fn tree_body_and_expander_clicks_each_toggle_once_and_publish_state_before_observers() {

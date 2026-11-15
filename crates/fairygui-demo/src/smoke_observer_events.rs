@@ -1,6 +1,6 @@
 //! Real checkbox input with Bevy-controlled logical event propagation.
 use super::*;
-use fairygui_core::object::{EventData, EventKind};
+use fairygui_core::object::EventData;
 
 #[derive(Resource, Default)]
 struct State {
@@ -17,14 +17,11 @@ struct Events {
     parent_clicks: usize,
 }
 fn child(
-    mut event: On<GuiEvent>,
+    mut event: On<GuiClick>,
     mut gui: ParamSet<(GuiQuery, Query<&mut GuiText>)>,
     selected: Query<&GuiButtonSelected>,
     mut events: ResMut<Events>,
 ) {
-    if event.event.kind != EventKind::Click {
-        return;
-    }
     assert_eq!(event.target, Some(event.entity));
     assert!(!event.event.bubbling);
     let checked = selected.get(event.entity).unwrap().0;
@@ -46,13 +43,10 @@ fn child(
         .set(format!("Local: {checked}"));
 }
 fn parent(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     mut gui: ParamSet<(GuiQuery, Query<&mut GuiText>)>,
     mut events: ResMut<Events>,
 ) {
-    if event.event.kind != EventKind::Click {
-        return;
-    }
     assert!(event.event.bubbling);
     assert_ne!(event.target, Some(event.entity));
     assert_eq!(event.event.data, EventData::Text("shared".into()));

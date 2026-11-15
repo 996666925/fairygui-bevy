@@ -6,7 +6,7 @@ use bevy::{
     ui::{ComputedStackIndex, RelativeCursorPosition},
     window::PrimaryWindow,
 };
-use fairygui_core::{object::EventKind, package::FuiPackage};
+use fairygui_core::package::FuiPackage;
 
 fn load(app: &mut App, handle: &Handle<FuiAsset>) {
     app.world_mut()
@@ -176,8 +176,8 @@ fn slider_properties_wait_for_assets_and_initialize_fractional_geometry_on_the_f
 fn grip_drag_does_not_jump_round_unrequested_values_or_lose_the_event_snapshot() {
     #[derive(Resource, Default)]
     struct Events(Vec<f64>);
-    fn observe(event: On<GuiEvent>, gui: GuiQuery, mut events: ResMut<Events>) {
-        if event.event.kind == EventKind::StateChanged && !event.event.bubbling {
+    fn observe(event: On<GuiStateChanged>, gui: GuiQuery, mut events: ResMut<Events>) {
+        if !event.event.bubbling {
             events.0.push(gui.slider(event.entity).unwrap().value());
         }
     }

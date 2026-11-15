@@ -1,6 +1,6 @@
 //! Joystick ownership lives on the page; only its touch area observes pointers.
 use bevy::{prelude::*, window::PrimaryWindow};
-use fairygui_bevy::{core::object::EventKind, prelude::*};
+use fairygui_bevy::prelude::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Pointer {
@@ -102,7 +102,12 @@ pub fn bind(
             })
             .observe(moving)
             .observe(released);
-        commands.entity(area).insert(Owner(page)).observe(pointer);
+        commands
+            .entity(area)
+            .insert(Owner(page))
+            .observe(pointer_down)
+            .observe(pointer_drag)
+            .observe(pointer_up);
         commands
             .entity(button)
             .insert(Owner(page))
@@ -186,8 +191,65 @@ fn restore(joystick: &mut Joystick, gui: &GuiQuery, objects: &mut GuiMut) {
     });
 }
 
-fn pointer(
-    event: On<GuiEvent>,
+fn pointer_down(
+    event: On<GuiMouseDown>,
+    owners: Query<&Owner>,
+    mut pages: Query<&mut Joystick>,
+    gui: GuiQuery,
+    mut objects: GuiMut,
+) {
+    let Ok(owner) = owners.get(event.entity) else {
+        return;
+    };
+    let Ok(mut joystick) = pages.get_mut(owner.0) else {
+        return;
+    };
+    let id = Pointer::from_touch(event.event.touch_id);
+    if joystick.pointer.is_some() {
+        return;
+    }
+
+    let Some(point) = event
+        .event
+        .pointer
+        .and_then(|p| gui.global_to_local(owner.0, Vec2::new(p.x, p.y)))
+    else {
+        return;
+    };
+    let Some(area) = gui.transform(joystick.area) else {
+        return;
+    };
+    let point = Vec2::new(
+        point.x.clamp(0., area.size().x),
+        point.y.clamp(
+            area.position().y.min(joystick.viewport.y),
+            joystick.viewport.y,
+        ),
+    );
+    joystick.pointer = Some(id);
+    joystick.returning = false;
+    joystick.start = point;
+    joystick.last = point;
+    joystick.button_center = point;
+    joystick.rotation = (point - joystick.home).to_angle().to_degrees() + 90.;
+    objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+        object.stop_tween(GuiTweenProperty::Xy)
+    });
+    objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+        object.set_button_selected(true)
+    });
+    objects.edit(joystick.center, |object: &mut GuiObjectMut| {
+        object.set_visible(true)
+    });
+    position(joystick.center, point, &gui, &mut objects);
+    position(joystick.button, point, &gui, &mut objects);
+    objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
+        object.set_rotation(joystick.rotation)
+    });
+}
+
+fn pointer_drag(
+    event: On<GuiMouseDrag>,
     owners: Query<&Owner>,
     mut pages: Query<&mut Joystick>,
     gui: GuiQuery,
@@ -201,94 +263,73 @@ fn pointer(
         return;
     };
     let id = Pointer::from_touch(event.event.touch_id);
-    match event.event.kind {
-        EventKind::MouseDown if joystick.pointer.is_none() => {
-            let Some(point) = event
-                .event
-                .pointer
-                .and_then(|p| gui.global_to_local(owner.0, Vec2::new(p.x, p.y)))
-            else {
-                return;
-            };
-            let Some(area) = gui.transform(joystick.area) else {
-                return;
-            };
-            let point = Vec2::new(
-                point.x.clamp(0., area.size().x),
-                point.y.clamp(
-                    area.position().y.min(joystick.viewport.y),
-                    joystick.viewport.y,
-                ),
-            );
-            joystick.pointer = Some(id);
-            joystick.returning = false;
-            joystick.start = point;
-            joystick.last = point;
-            joystick.button_center = point;
-            joystick.rotation = (point - joystick.home).to_angle().to_degrees() + 90.;
-            objects.edit(joystick.button, |object: &mut GuiObjectMut| {
-                object.stop_tween(GuiTweenProperty::Xy)
-            });
-            objects.edit(joystick.button, |object: &mut GuiObjectMut| {
-                object.set_button_selected(true)
-            });
-            objects.edit(joystick.center, |object: &mut GuiObjectMut| {
-                object.set_visible(true)
-            });
-            position(joystick.center, point, &gui, &mut objects);
-            position(joystick.button, point, &gui, &mut objects);
-            objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
-                object.set_rotation(joystick.rotation)
-            });
-        }
-        EventKind::MouseDrag if joystick.pointer == Some(id) => {
-            let Some(point) = event
-                .event
-                .pointer
-                .and_then(|p| gui.global_to_local(owner.0, Vec2::new(p.x, p.y)))
-            else {
-                return;
-            };
-            let offset = joystick.button_center + point - joystick.last - joystick.start;
-            joystick.last = point;
-            let degrees = offset.to_angle().to_degrees();
-            joystick.rotation = degrees + 90.;
-            let mut center = joystick.start + offset.clamp_length_max(150.);
-            center.x = center.x.max(0.);
-            center.y = center.y.min(joystick.viewport.y);
-            joystick.button_center = center;
-            position(joystick.button, center, &gui, &mut objects);
-            objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
-                object.set_rotation(joystick.rotation)
-            });
-            commands.trigger(Moving {
-                entity: owner.0,
-                degrees,
-            });
-        }
-        EventKind::MouseUp if joystick.pointer == Some(id) => {
-            joystick.pointer = None;
-            joystick.returning = true;
-            joystick.rotation += 180.;
-            objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
-                object.set_rotation(joystick.rotation)
-            });
-            objects.edit(joystick.center, |object: &mut GuiObjectMut| {
-                object.set_visible(false)
-            });
-            if let Some(button) = gui.transform(joystick.button) {
-                objects.edit(joystick.button, |object: &mut GuiObjectMut| {
-                    object.tween(
-                        GuiTweenTarget::Position(joystick.home - button.size() / 2.),
-                        0.3,
-                        20,
-                    )
-                });
-            }
-            commands.trigger(Released { entity: owner.0 });
-        }
-        _ => {}
+    if joystick.pointer != Some(id) {
+        return;
     }
+
+    let Some(point) = event
+        .event
+        .pointer
+        .and_then(|p| gui.global_to_local(owner.0, Vec2::new(p.x, p.y)))
+    else {
+        return;
+    };
+    let offset = joystick.button_center + point - joystick.last - joystick.start;
+    joystick.last = point;
+    let degrees = offset.to_angle().to_degrees();
+    joystick.rotation = degrees + 90.;
+    let mut center = joystick.start + offset.clamp_length_max(150.);
+    center.x = center.x.max(0.);
+    center.y = center.y.min(joystick.viewport.y);
+    joystick.button_center = center;
+    position(joystick.button, center, &gui, &mut objects);
+    objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
+        object.set_rotation(joystick.rotation)
+    });
+    commands.trigger(Moving {
+        entity: owner.0,
+        degrees,
+    });
+}
+
+fn pointer_up(
+    event: On<GuiMouseUp>,
+    owners: Query<&Owner>,
+    mut pages: Query<&mut Joystick>,
+    gui: GuiQuery,
+    mut objects: GuiMut,
+    mut commands: Commands,
+) {
+    let Ok(owner) = owners.get(event.entity) else {
+        return;
+    };
+    let Ok(mut joystick) = pages.get_mut(owner.0) else {
+        return;
+    };
+    let id = Pointer::from_touch(event.event.touch_id);
+    if joystick.pointer != Some(id) {
+        return;
+    }
+
+    joystick.pointer = None;
+    joystick.returning = true;
+    joystick.rotation += 180.;
+    objects.edit(joystick.thumb, |object: &mut GuiObjectMut| {
+        object.set_rotation(joystick.rotation)
+    });
+    objects.edit(joystick.center, |object: &mut GuiObjectMut| {
+        object.set_visible(false)
+    });
+    if let Some(button) = gui.transform(joystick.button) {
+        objects.edit(joystick.button, |object: &mut GuiObjectMut| {
+            object.tween(
+                GuiTweenTarget::Position(joystick.home - button.size() / 2.),
+                0.3,
+                20,
+            )
+        });
+    }
+    commands.trigger(Released { entity: owner.0 });
 }
 
 fn returned(

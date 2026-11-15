@@ -854,15 +854,12 @@ fn ecs_text_is_current_before_observers_and_their_commands_sync_in_the_same_fram
         output: Entity,
     }
     fn copy(
-        event: On<GuiEvent>,
+        event: On<GuiClick>,
         gui: GuiQuery,
         sources: Query<&CopyText>,
         _commands: Commands,
         mut gui_edit: crate::GuiMut,
     ) {
-        if event.event().event.kind != EventKind::Click {
-            return;
-        }
         let source = sources.get(event.entity).unwrap();
         assert!(!gui.display(source.input).unwrap().touchable());
         gui_edit.edit(source.output, |object: &mut crate::GuiObjectMut| {

@@ -63,14 +63,12 @@ pub fn bind(
     }
 }
 fn show(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     buttons: Query<&Show>,
     mut windows: Query<&mut FairyGuiWindow>,
     mut gui: GuiMut,
 ) {
-    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click
-        && let Ok(button) = buttons.get(event.entity)
-    {
+    if let Ok(button) = buttons.get(event.entity) {
         if let Ok(mut window) = windows.get_mut(button.0) {
             window.visible = true;
         }
@@ -80,14 +78,12 @@ fn show(
     }
 }
 fn start(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     buttons: Query<&Start>,
     mut commands: Commands,
     mut windows: Query<&mut FairyGuiWindow>,
 ) {
-    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click
-        && let Ok(button) = buttons.get(event.entity)
-    {
+    if let Ok(button) = buttons.get(event.entity) {
         if let Ok(mut window) = windows.get_mut(button.0) {
             window.modal_wait_request = Some(1);
         }

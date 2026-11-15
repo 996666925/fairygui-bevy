@@ -395,15 +395,13 @@ pub fn navigate_basics(
 /// The official Popup page's menu entry, using application actions rather than
 /// interpreting the runtime's raw event queue.
 pub fn show_basics_menu(
-    event: On<fairygui_bevy::GuiEvent>,
+    event: On<fairygui_bevy::GuiClick>,
     mut commands: Commands,
     controller: Res<DemoController>,
     gui: GuiQuery,
 ) {
     use fairygui_core::popup::MenuItem;
-    if event.event().event.kind != fairygui_core::object::EventKind::Click
-        || controller.package.as_deref() != Some("Basics")
-    {
+    if controller.package.as_deref() != Some("Basics") {
         return;
     }
     let Some(page) = controller.basics_page_owner else {

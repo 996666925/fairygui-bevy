@@ -22,13 +22,13 @@ struct Events {
     clicks: usize,
     changes: usize,
 }
-fn observe(event: On<GuiEvent>, mut events: ResMut<Events>) {
-    match event.event.kind {
-        fairygui_core::object::EventKind::Click => events.clicks += 1,
-        fairygui_core::object::EventKind::StateChanged => events.changes += 1,
-        _ => {}
-    }
+fn observe_click(_: On<GuiClick>, mut events: ResMut<Events>) {
+    events.clicks += 1;
 }
+fn observe_change(_: On<GuiStateChanged>, mut events: ResMut<Events>) {
+    events.changes += 1;
+}
+
 fn initialize(
     roots: Query<Entity, (With<Panel>, Added<GuiRootView>)>,
     mut ui: ParamSet<(
@@ -147,7 +147,10 @@ fn drive(
             state.title = Some(title);
             state.icon = Some(icon);
             state.child = Some(commands.spawn((Node::default(), ChildOf(button))).id());
-            commands.entity(button).observe(observe);
+            commands
+                .entity(button)
+                .observe(observe_click)
+                .observe(observe_change);
             state.cursor = Some(
                 nodes.get(button).unwrap().1.transform_point2(Vec2::ZERO) / window.scale_factor(),
             );

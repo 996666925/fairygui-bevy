@@ -302,15 +302,12 @@ fn observers_can_write_components_in_the_current_frame_and_editors_are_immediate
     let (mut app, owner, _) = fixture("Button1", true);
     let view = app.world().get::<GuiRootView>(owner).unwrap().0;
     app.world_mut().entity_mut(view).observe(
-        |event: On<GuiEvent>, mut texts: Query<&mut GuiText>| {
+        |event: On<GuiClick>, mut texts: Query<&mut GuiText>| {
             texts.get_mut(event.entity).unwrap().set("Clicked");
         },
     );
     let object = app.world().get::<GObjectRef>(view).unwrap().0;
-    app.world_mut().trigger(GuiEvent::new(
-        view,
-        crate::core::object::UiEvent::new(crate::core::object::EventKind::Click, object),
-    ));
+    app.world_mut().trigger(GuiClick::new(view, object));
     app.update();
     assert_eq!(
         app.world()

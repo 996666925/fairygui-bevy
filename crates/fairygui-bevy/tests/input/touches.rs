@@ -735,7 +735,7 @@ fn touch_events_from_picking_are_published_to_entity_observers_in_the_same_frame
             is_hoverable: true,
         });
     app.world_mut().entity_mut(entity).observe(
-        |event: On<GuiEvent>, mut received: ResMut<Received>| {
+        |event: On<GuiClick>, mut received: ResMut<Received>| {
             received
                 .0
                 .push((event.event.kind.clone(), event.event.touch_id));

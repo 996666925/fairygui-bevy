@@ -11,8 +11,8 @@ struct State {
 }
 #[derive(Resource, Default)]
 struct Events(Vec<(Entity, f64)>);
-fn changed(event: On<GuiEvent>, gui: GuiQuery, mut events: ResMut<Events>) {
-    if event.event.kind == fairygui_core::object::EventKind::StateChanged && !event.event.bubbling {
+fn changed(event: On<GuiStateChanged>, gui: GuiQuery, mut events: ResMut<Events>) {
+    if !event.event.bubbling {
         events
             .0
             .push((event.entity, gui.slider(event.entity).unwrap().value()));

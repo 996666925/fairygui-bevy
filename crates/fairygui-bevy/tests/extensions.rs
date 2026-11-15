@@ -13,10 +13,8 @@ struct Mail {
     clicks: usize,
 }
 fn attach(entity: &mut EntityCommands) {
-    entity.observe(|event: On<GuiEvent>, mut items: Query<&mut Mail>| {
-        if event.event.kind == fairygui_bevy::core::object::EventKind::Click {
-            items.get_mut(event.entity).unwrap().clicks += 1;
-        }
+    entity.observe(|event: On<GuiClick>, mut items: Query<&mut Mail>| {
+        items.get_mut(event.entity).unwrap().clicks += 1;
     });
     entity.insert(GuiDisplay::default().with_alpha(0.75));
 }
@@ -129,13 +127,7 @@ fn extensions_are_ready_for_initialize_and_post_layout_keep_bound_children_on_po
         .unwrap()
         .last_changed();
     let object = app.world().get::<GObjectRef>(first[0]).unwrap().0;
-    app.world_mut().trigger(GuiEvent::new(
-        first[0],
-        fairygui_bevy::core::object::UiEvent::new(
-            fairygui_bevy::core::object::EventKind::Click,
-            object,
-        ),
-    ));
+    app.world_mut().trigger(GuiClick::new(first[0], object));
     app.update();
     assert_eq!(app.world().get::<Mail>(first[0]).unwrap().clicks, 1);
     assert_eq!(

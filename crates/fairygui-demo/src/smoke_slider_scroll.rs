@@ -19,13 +19,11 @@ struct Events {
     pane_presses: usize,
     values: Vec<f64>,
 }
-fn pane_pressed(event: On<GuiEvent>, mut events: ResMut<Events>) {
-    if event.event.kind == fairygui_core::object::EventKind::MouseDown {
-        events.pane_presses += 1;
-    }
+fn pane_pressed(_event: On<GuiMouseDown>, mut events: ResMut<Events>) {
+    events.pane_presses += 1;
 }
-fn changed(event: On<GuiEvent>, gui: GuiQuery, mut events: ResMut<Events>) {
-    if event.event.kind == fairygui_core::object::EventKind::StateChanged && !event.event.bubbling {
+fn changed(event: On<GuiStateChanged>, gui: GuiQuery, mut events: ResMut<Events>) {
+    if !event.event.bubbling {
         events
             .values
             .push(gui.slider(event.entity).unwrap().value());

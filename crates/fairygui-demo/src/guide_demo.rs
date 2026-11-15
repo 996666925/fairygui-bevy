@@ -1,7 +1,7 @@
 //! Retained guide overlay, native coordinate queries and property tweens.
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use fairygui_bevy::core::{Rect, object::EventKind};
+use fairygui_bevy::core::Rect;
 use fairygui_bevy::prelude::*;
 
 #[derive(Component)]
@@ -61,14 +61,11 @@ pub fn bind(
 }
 
 fn click(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     buttons: Query<&Button>,
     mut pages: Query<&mut Guide>,
     mut roots: Query<&mut FairyGuiRoot>,
 ) {
-    if event.event.kind != EventKind::Click {
-        return;
-    }
     let Ok(button) = buttons.get(event.entity) else {
         return;
     };

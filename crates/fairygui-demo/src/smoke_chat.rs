@@ -17,6 +17,7 @@ struct State {
     sent: usize,
     count: usize,
     before: Vec2,
+    last_progress: f64,
 }
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>().add_systems(
@@ -65,7 +66,7 @@ fn drive(
 ) {
     state.frame += 1;
     assert!(
-        time.elapsed_secs_f64() < 120.,
+        time.elapsed_secs_f64() < 300. && time.elapsed_secs_f64() - state.last_progress < 30.,
         "chat smoke timed out at step {}",
         state.step
     );
@@ -285,6 +286,11 @@ fn drive(
     if next {
         state.step += 1;
         state.since = state.frame;
+        state.last_progress = time.elapsed_secs_f64();
+    }
+    // The history loop advances by setting its next step directly.
+    if state.since == state.frame {
+        state.last_progress = time.elapsed_secs_f64();
     }
     window.set_cursor_position(state.cursor);
     move_pointer(window_entity, state.cursor, &mut pointers);

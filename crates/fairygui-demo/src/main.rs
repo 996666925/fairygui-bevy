@@ -565,15 +565,12 @@ fn bind_demo_observers(
 }
 
 fn close_demo(
-    event: On<GuiEvent>,
+    _event: On<GuiClick>,
     mut commands: Commands,
     mut objects: GuiMut,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     commands.write_message(GuiPopupCommand::HideAll);
     demos::dispose_dynamic_roots(&mut commands, &mut controller);
     // 销毁演示界面，收起关闭按钮，把菜单放回来。
@@ -596,14 +593,11 @@ fn close_demo(
 }
 
 fn open_menu_entry(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     entries: Query<&MenuEntry>,
     asset_server: Res<AssetServer>,
     mut demo: ResMut<Demo>,
 ) {
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     let Ok(entry) = entries.get(event.entity) else {
         return;
     };
@@ -623,7 +617,7 @@ fn open_menu_entry(
 }
 
 fn navigate_basics_action(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     actions: Query<&DemoAction>,
     mut commands: Commands,
     gui: GuiQuery,
@@ -631,9 +625,6 @@ fn navigate_basics_action(
     demo: Res<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
@@ -651,7 +642,7 @@ fn navigate_basics_action(
 }
 
 fn play_transition_action(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     actions: Query<&DemoAction>,
     mut commands: Commands,
     demo: Res<Demo>,
@@ -660,9 +651,6 @@ fn play_transition_action(
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     let Some((_, handle, _)) = &demo.open else {
         return;
     };
@@ -670,16 +658,13 @@ fn play_transition_action(
 }
 
 fn virtual_list_action(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     actions: Query<&DemoAction>,
     mut objects: GuiMut,
     gui: GuiQuery,
     controller: Res<demos::DemoController>,
     mut selections: Query<&mut GuiListSelection>,
 ) {
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     let Ok(action) = actions.get(event.entity) else {
         return;
     };
@@ -687,14 +672,11 @@ fn virtual_list_action(
 }
 
 fn basics_text_get_input(
-    event: On<GuiEvent>,
+    _event: On<GuiClick>,
     gui: GuiQuery,
     controller: Res<demos::DemoController>,
     mut objects: GuiMut,
 ) {
-    if event.event().event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     demos::copy_basics_input(&gui, &controller, &mut objects);
 }
 

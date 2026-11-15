@@ -1,6 +1,6 @@
 //! Chat state belongs to its page; controls observe only their own events.
 use bevy::{prelude::*, window::PrimaryWindow};
-use fairygui_bevy::{core::object::EventKind, prelude::*};
+use fairygui_bevy::prelude::*;
 use std::{hash::BuildHasher, sync::Arc};
 
 #[cfg(test)]
@@ -160,26 +160,21 @@ pub fn bind(
     }
 }
 
-fn enter(event: On<GuiTextInput>, owners: Query<&Owner>, mut commands: Commands) {
-    if event.event.kind == EventKind::Enter
-        && let Ok(owner) = owners.get(event.entity)
-    {
+fn enter(event: On<GuiEnter>, owners: Query<&Owner>, mut commands: Commands) {
+    if let Ok(owner) = owners.get(event.entity) {
         commands.trigger(Submit {
             entity: owner.0,
-            text: event.value.clone(),
+            text: event.value().to_owned(),
         });
     }
 }
 fn send_clicked(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     owners: Query<&Owner>,
     pages: Query<&Chat>,
     gui: GuiQuery,
     mut commands: Commands,
 ) {
-    if event.event.kind != EventKind::Click {
-        return;
-    }
     let Ok(owner) = owners.get(event.entity) else {
         return;
     };
@@ -222,14 +217,11 @@ fn submit(event: On<Submit>, mut pages: Query<&mut Chat>, gui: GuiQuery, mut com
     commands.entity(chat.input).insert(GuiText::new(""));
 }
 fn emoji_clicked(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     owners: Query<&Owner>,
     pages: Query<&Chat>,
     mut commands: Commands,
 ) {
-    if event.event.kind != EventKind::Click {
-        return;
-    }
     let Ok(owner) = owners.get(event.entity) else {
         return;
     };

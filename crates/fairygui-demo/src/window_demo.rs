@@ -37,14 +37,11 @@ pub fn bind(
     }
 }
 fn show(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     buttons: Query<&ShowWindow>,
     mut windows: Query<&mut FairyGuiWindow>,
     mut gui: GuiMut,
 ) {
-    if event.event().event.kind != fairygui_bevy::core::object::EventKind::Click {
-        return;
-    }
     if let Ok(button) = buttons.get(event.entity) {
         if let Ok(mut window) = windows.get_mut(button.0) {
             window.visible = true;
@@ -111,13 +108,7 @@ mod tests {
                     .is_showing()
             );
             let object = app.world().get::<GObjectRef>(button).unwrap().0;
-            app.world_mut().trigger(GuiEvent::new(
-                button,
-                fairygui_bevy::core::object::UiEvent::new(
-                    fairygui_bevy::core::object::EventKind::Click,
-                    object,
-                ),
-            ));
+            app.world_mut().trigger(GuiClick::new(button, object));
             app.update();
             let state = app.world().get::<GuiWindowState>(owner).unwrap();
             assert!(state.is_showing());

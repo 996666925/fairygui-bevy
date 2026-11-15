@@ -209,15 +209,12 @@ fn ecs_scroll_observers_see_input_changes_before_publishing_and_commands_use_cur
     #[derive(Component)]
     struct WatchScroll(Entity);
     fn respond(
-        event: On<crate::GuiEvent>,
+        event: On<crate::GuiClick>,
         gui: GuiQuery,
         watch: Query<&WatchScroll>,
         _commands: Commands,
         mut gui_edit: crate::GuiMut,
     ) {
-        if event.event().event.kind != EventKind::Click {
-            return;
-        }
         let target = watch.get(event.entity).unwrap().0;
         let state = gui.scroll(target).unwrap();
         assert_eq!(state.position().y, 123.);

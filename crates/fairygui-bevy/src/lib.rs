@@ -1,7 +1,7 @@
 //! FairyGUI 运行时的 Bevy 集成层。
 //!
 //! 面向应用的界面生命周期、事件响应与控件修改都通过 Bevy ECS 完成：用
-//! [`FairyGuiRoot`] 拥有界面，用 [`GuiQuery`] 查找控件实体，用 [`GuiEvent`]
+//! [`FairyGuiRoot`] 拥有界面，用 [`GuiQuery`] 查找控件实体，用 [`GuiClick`] 等具体事件的
 //! observer 响应交互，直接修改可变属性组件（如 [`GuiText`]、[`GuiTextFormat`]）；
 //! 播放、滚动等使用 [`GuiMut`]。
 //!
@@ -95,6 +95,8 @@ pub use visual_properties::{GuiColor, GuiImageFill, GuiImageFlip, GuiLoaderSetti
 mod ecs_pull_tests;
 pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;
+pub use events::*;
+pub use runtime::events;
 pub use runtime::root_mount::GuiRootMountState;
 pub use runtime::{GuiMut, GuiObjectMut, GuiWorldExt};
 pub mod slider;
@@ -186,6 +188,7 @@ enum SyncPhase {
 
 /// Common application imports; the existing crate-root API remains supported.
 pub mod prelude {
+    pub use crate::events::*;
     pub use crate::{
         BlendMode, ButtonMode, ChildrenRenderOrder, ColorFilterParams, FairyGuiPlugin,
         FairyGuiRoot, FairyGuiWindow, FillMethod, FlipType, FuiAsset, GObjectRef, GraphType,

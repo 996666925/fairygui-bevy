@@ -345,8 +345,8 @@ fn combo_value_icon_arrays_and_items_setters_preserve_native_independent_arrays(
 fn combo_observers_read_current_selection_and_programmatic_edits_do_not_emit_change() {
     #[derive(Resource, Default)]
     struct Seen(Vec<(i32, String)>);
-    fn observe(event: On<GuiEvent>, gui: GuiQuery, mut seen: ResMut<Seen>) {
-        if event.event.kind == EventKind::StateChanged && !event.event.bubbling {
+    fn observe(event: On<GuiStateChanged>, gui: GuiQuery, mut seen: ResMut<Seen>) {
+        if !event.event.bubbling {
             let state = gui.combo_box(event.entity).unwrap();
             seen.0
                 .push((state.selected_index(), state.value().unwrap().to_owned()));

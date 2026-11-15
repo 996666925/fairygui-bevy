@@ -19,15 +19,12 @@ struct Results {
 struct Controls([Entity; 2]);
 
 fn click(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     controls: Query<&Controls>,
     mut results: ResMut<Results>,
     mut animations: Query<&mut GuiAnimationState>,
     mut objects: GuiMut,
 ) {
-    if event.event.kind != fairygui_core::object::EventKind::Click {
-        return;
-    }
     let Ok(controls) = controls.get(event.entity) else {
         return;
     };

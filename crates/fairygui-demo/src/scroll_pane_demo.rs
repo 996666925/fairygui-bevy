@@ -1,6 +1,5 @@
 //! Nested horizontal action rows inside an ECS virtual vertical list.
 use bevy::prelude::*;
-use fairygui_bevy::core::object::EventKind;
 use fairygui_bevy::prelude::*;
 
 #[derive(Component)]
@@ -93,14 +92,11 @@ fn descendant(gui: &GuiQuery, mut target: Entity, ancestor: Entity) -> bool {
 }
 
 fn close_open_rows(
-    event: On<GuiEvent>,
+    event: On<GuiMouseDown>,
     gui: GuiQuery,
     mut commands: Commands,
     mut gui_edit: GuiMut,
 ) {
-    if event.event.kind != EventKind::MouseDown {
-        return;
-    }
     let Some(target) = event.target else { return };
     let Some(list) = gui.list(event.entity) else {
         return;
@@ -126,10 +122,7 @@ fn close_open_rows(
     }
 }
 
-fn action(event: On<GuiEvent>, actions: Query<&Action>, gui: GuiQuery, mut gui_edit: GuiMut) {
-    if event.event.kind != EventKind::Click {
-        return;
-    }
+fn action(event: On<GuiClick>, actions: Query<&Action>, gui: GuiQuery, mut gui_edit: GuiMut) {
     let Ok(action) = actions.get(event.entity) else {
         return;
     };

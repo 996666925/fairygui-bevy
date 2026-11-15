@@ -22,10 +22,8 @@ impl State {
     }
 }
 
-pub(super) fn observe_loaded_button(event: On<GuiEvent>, mut smoke: ResMut<Smoke>) {
-    if event.event().event.kind == fairygui_core::object::EventKind::Click {
-        smoke.loader_components.clicks += 1;
-    }
+pub(super) fn observe_loaded_button(_event: On<GuiClick>, mut smoke: ResMut<Smoke>) {
+    smoke.loader_components.clicks += 1;
 }
 
 #[allow(clippy::too_many_arguments)]

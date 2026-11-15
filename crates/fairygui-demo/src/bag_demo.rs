@@ -75,16 +75,13 @@ pub fn bind(
 }
 
 fn open(
-    event: On<GuiEvent>,
+    event: On<GuiClick>,
     buttons: Query<&OpenBag>,
     gui: GuiQuery,
     mut commands: Commands,
     mut windows: Query<&mut FairyGuiWindow>,
     mut edit: GuiMut,
 ) {
-    if event.event.kind != fairygui_bevy::core::object::EventKind::Click {
-        return;
-    }
     let Ok(button) = buttons.get(event.entity) else {
         return;
     };

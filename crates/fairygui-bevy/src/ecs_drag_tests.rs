@@ -312,7 +312,7 @@ fn ecs_drag_explicit_starts_require_owning_live_pointer_and_unmarked_release_is_
 
 #[test]
 fn ecs_drag_observer_starts_immediately_and_direct_cancel_reclaims_proxy_without_a_drop() {
-    fn begin(event: On<GuiEvent>, icons: Query<&GuiIcon>, mut drag: GuiDrag) {
+    fn begin<E: GuiEventType>(event: On<E>, icons: Query<&GuiIcon>, mut drag: GuiDrag) {
         let begin = match event.event.kind {
             fairygui_core::object::EventKind::MouseDown => event.event.touch_id.is_none(),
             fairygui_core::object::EventKind::TouchBegin => true,
@@ -335,7 +335,8 @@ fn ecs_drag_observer_starts_immediately_and_direct_cancel_reclaims_proxy_without
         app.world_mut()
             .entity_mut(source)
             .remove::<GuiDragSource>()
-            .observe(begin);
+            .observe(begin::<GuiMouseDown>)
+            .observe(begin::<GuiTouchBegin>);
         if touch_input {
             app.init_resource::<bevy::picking::hover::HoverMap>();
             app.world_mut()

@@ -13,8 +13,8 @@ struct State {
 }
 #[derive(Resource, Default)]
 struct Clicks(Vec<Entity>);
-fn clicked(event: On<GuiEvent>, mut clicks: ResMut<Clicks>) {
-    if event.event.kind == fairygui_core::object::EventKind::Click && !event.event.bubbling {
+fn clicked(event: On<GuiClick>, mut clicks: ResMut<Clicks>) {
+    if !event.event.bubbling {
         clicks.0.push(event.entity);
     }
 }

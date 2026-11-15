@@ -298,10 +298,8 @@ fn current_frame_settings_control_internal_clicks_and_mode_reset_does_not_emit_s
         );
     let button = view(&app, owner);
     app.world_mut().entity_mut(button).observe(
-        |event: On<GuiEvent>, mut changes: ResMut<Changes>| {
-            if event.event.kind == EventKind::StateChanged {
-                changes.0 += 1;
-            }
+        |_event: On<GuiStateChanged>, mut changes: ResMut<Changes>| {
+            changes.0 += 1;
         },
     );
     {

@@ -1163,10 +1163,8 @@ fn button_background_swapping_does_not_cancel_click() {
 fn plugin_publishes_clicks_before_application_response_in_same_frame() {
     #[derive(Resource, Default)]
     struct Received(usize);
-    fn respond(event: On<GuiEvent>, mut received: ResMut<Received>) {
-        if event.event().event.kind == EventKind::Click {
-            received.0 += 1;
-        }
+    fn respond(_event: On<GuiClick>, mut received: ResMut<Received>) {
+        received.0 += 1;
     }
     let mut app = App::new();
     app.add_plugins((

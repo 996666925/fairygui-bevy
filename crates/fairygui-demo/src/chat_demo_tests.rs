@@ -1,5 +1,6 @@
 use super::*;
 use bevy::ecs::system::SystemState;
+use fairygui_bevy::core::object::EventKind;
 
 fn fixture() -> (App, Entity) {
     let mut app = App::new();
@@ -56,10 +57,7 @@ fn child(app: &mut App, owner: Entity, name: &str) -> Entity {
 }
 fn click(app: &mut App, entity: Entity) {
     let object = app.world().get::<GObjectRef>(entity).unwrap().0;
-    app.world_mut().trigger(GuiEvent::new(
-        entity,
-        fairygui_bevy::core::object::UiEvent::new(EventKind::Click, object),
-    ));
+    app.world_mut().trigger(GuiClick::new(entity, object));
     app.update();
 }
 fn set_input(app: &mut App, page: Entity, text: &str) {
@@ -142,11 +140,9 @@ fn chat_entity_observers_send_enter_select_emoji_cap_history_preserve_scroll_and
     );
     // Enter observes the input directly and uses the notification's committed value.
     let input_id = app.world().get::<GObjectRef>(input).unwrap().0;
-    app.world_mut().trigger(GuiTextInput {
-        entity: input,
-        value: "Enter [:88]".into(),
-        event: fairygui_bevy::core::object::UiEvent::new(EventKind::Enter, input_id),
-    });
+    let mut enter = GuiEnter::new(input, input_id);
+    enter.event.data = fairygui_bevy::core::object::EventData::Text("Enter [:88]".into());
+    app.world_mut().trigger(enter);
     app.update();
     assert!(
         app.world()

@@ -1,6 +1,5 @@
 //! ECS-owned child roots inherit rendered parent transforms, clips and input.
 use super::*;
-use fairygui_core::object::EventKind;
 
 #[derive(Resource, Default)]
 struct State {
@@ -17,10 +16,7 @@ struct Events {
     child: usize,
     panels: Vec<Entity>,
 }
-fn clicked(event: On<GuiEvent>, mut events: ResMut<Events>) {
-    if event.event.kind != EventKind::Click {
-        return;
-    }
+fn clicked(event: On<GuiClick>, mut events: ResMut<Events>) {
     if event.event.bubbling {
         events.panels.push(event.entity);
     } else {

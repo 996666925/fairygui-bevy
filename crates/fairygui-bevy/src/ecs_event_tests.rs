@@ -6,8 +6,8 @@ use fairygui_core::{
 
 #[derive(Resource, Default)]
 struct Received(Vec<GuiEvent>);
-fn received(event: On<GuiEvent>, mut received: ResMut<Received>) {
-    received.0.push(event.event().clone());
+fn received<E: GuiEventType>(event: On<E>, mut received: ResMut<Received>) {
+    received.0.push(event.context().clone());
 }
 struct Fixture {
     app: App,
@@ -28,8 +28,23 @@ fn fixture() -> Fixture {
         store.set_parent(ids[2], Some(ids[1]));
         ids
     };
-    let views = ids.map(|id| app.world_mut().spawn(GObjectRef(id)).observe(received).id());
-    let decoration = app.world_mut().spawn_empty().observe(received).id();
+    let views = ids.map(|id| {
+        app.world_mut()
+            .spawn(GObjectRef(id))
+            .observe(received::<GuiClick>)
+            .observe(received::<GuiMouseMove>)
+            .observe(received::<GuiMouseDown>)
+            .observe(received::<GuiCustomEvent>)
+            .id()
+    });
+    let decoration = app
+        .world_mut()
+        .spawn_empty()
+        .observe(received::<GuiClick>)
+        .observe(received::<GuiMouseMove>)
+        .observe(received::<GuiMouseDown>)
+        .observe(received::<GuiCustomEvent>)
+        .id();
     // Deliberately disagree with the logical native hierarchy.
     app.world_mut()
         .entity_mut(views[2])
@@ -90,19 +105,15 @@ fn observers_can_mutate_the_shared_payload_and_stop_only_the_current_dispatch() 
     f.app
         .world_mut()
         .entity_mut(f.views[2])
-        .observe(|mut event: On<GuiEvent>| {
+        .observe(|mut event: On<GuiClick>| {
             assert_eq!(event.original_event_target(), event.target.unwrap());
-            if event.event.kind == EventKind::Click {
-                event.event.data = EventData::Text("handled".into());
-            }
+            event.event.data = EventData::Text("handled".into());
         });
     f.app
         .world_mut()
         .entity_mut(f.views[1])
-        .observe(|mut event: On<GuiEvent>| {
-            if event.event.kind == EventKind::Click {
-                event.propagate(false);
-            }
+        .observe(|mut event: On<GuiClick>| {
+            event.propagate(false);
         });
     dispatch(&mut f, EventKind::Click);
     dispatch(&mut f, EventKind::Click); // identical events still have independent triggers
@@ -145,7 +156,7 @@ fn captured_paths_keep_native_stops_and_do_not_follow_later_reparenting() {
     f.app
         .world_mut()
         .entity_mut(f.views[1])
-        .observe(|mut event: On<GuiEvent>| {
+        .observe(|mut event: On<GuiMouseDown>| {
             event.propagate(true);
         });
     f.app
@@ -162,7 +173,10 @@ fn captured_paths_keep_native_stops_and_do_not_follow_later_reparenting() {
         .app
         .world_mut()
         .spawn(GObjectRef(replacement))
-        .observe(received)
+        .observe(received::<GuiClick>)
+        .observe(received::<GuiMouseMove>)
+        .observe(received::<GuiMouseDown>)
+        .observe(received::<GuiCustomEvent>)
         .id();
     f.app
         .world_mut()
@@ -211,14 +225,9 @@ fn a_direct_notification_and_nested_dispatch_do_not_inherit_another_events_stop(
     let root = f.views[0];
     let root_id = f.ids[0];
     f.app.world_mut().entity_mut(f.views[2]).observe(
-        move |mut event: On<GuiEvent>, mut commands: Commands| {
-            if event.event.kind == EventKind::Click {
-                event.propagate(false);
-                commands.trigger(GuiEvent::new(
-                    root,
-                    UiEvent::new(EventKind::Other("nested".into()), root_id),
-                ));
-            }
+        move |mut event: On<GuiClick>, mut commands: Commands| {
+            event.propagate(false);
+            commands.trigger(GuiCustomEvent::new(root, root_id, "nested"));
         },
     );
     dispatch(&mut f, EventKind::Click);
@@ -236,14 +245,44 @@ fn a_direct_notification_and_nested_dispatch_do_not_inherit_another_events_stop(
             .any(|e| e.entity == root && e.event.kind == EventKind::Other("nested".into()))
     );
     f.app.world_mut().resource_mut::<Received>().0.clear();
-    f.app.world_mut().trigger(GuiEvent::new(
-        f.views[2],
-        UiEvent::new(EventKind::MouseMove, f.ids[2]),
-    ));
+    f.app
+        .world_mut()
+        .trigger(GuiMouseMove::new(f.views[2], f.ids[2]));
     assert_eq!(
         f.app.world().resource::<Received>().0.len(),
         1,
         "direct notifications don't walk ChildOf"
+    );
+}
+
+#[test]
+fn typed_input_notifications_keep_committed_text_and_never_bubble_to_parent_controls() {
+    #[derive(Resource, Default)]
+    struct Texts(Vec<(Entity, String)>);
+    let mut f = fixture();
+    f.app.init_resource::<Texts>();
+    for entity in f.views {
+        f.app
+            .world_mut()
+            .entity_mut(entity)
+            .observe(|event: On<GuiInputEvent>, mut seen: ResMut<Texts>| {
+                seen.0.push((event.entity, event.value().to_owned()));
+            })
+            .observe(|event: On<GuiChange>, mut seen: ResMut<Texts>| {
+                seen.0.push((event.entity, event.value().to_owned()));
+            })
+            .observe(|event: On<GuiEnter>, mut seen: ResMut<Texts>| {
+                seen.0.push((event.entity, event.value().to_owned()));
+            });
+    }
+    let mut runtime = f.app.world_mut().non_send_mut::<GuiRuntime>();
+    for kind in [EventKind::Input, EventKind::Change, EventKind::Enter] {
+        runtime.emit_input_event(kind, f.ids[2], "中文 secret");
+    }
+    f.app.update();
+    assert_eq!(
+        f.app.world().resource::<Texts>().0,
+        vec![(f.views[2], "中文 secret".into()); 3]
     );
 }
 
@@ -259,16 +298,13 @@ fn click_observers_read_current_button_state_and_write_commands_in_the_same_fram
     #[derive(Resource, Default)]
     struct Selected(Vec<bool>);
     fn click(
-        mut event: On<GuiEvent>,
+        mut event: On<GuiClick>,
         gui: GuiQuery,
         selected: Query<&GuiButtonSelected>,
         mut seen: ResMut<Selected>,
         _commands: Commands,
         mut gui_edit: crate::GuiMut,
     ) {
-        if event.event.kind != EventKind::Click {
-            return;
-        }
         let checked = selected.get(event.entity).unwrap().0;
         seen.0.push(checked);
         if seen.0.len() == 1 {
@@ -321,7 +357,12 @@ fn click_observers_read_current_button_state_and_write_commands_in_the_same_fram
             gui.child_by_name(owner, "n8").unwrap(),
         )
     };
-    app.world_mut().entity_mut(root).observe(received);
+    app.world_mut()
+        .entity_mut(root)
+        .observe(received::<GuiClick>)
+        .observe(received::<GuiMouseMove>)
+        .observe(received::<GuiMouseDown>)
+        .observe(received::<GuiCustomEvent>);
     app.world_mut().entity_mut(button).observe(click).insert((
         Hovered(true),
         ComputedStackIndex(1000),

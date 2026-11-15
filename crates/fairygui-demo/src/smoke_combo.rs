@@ -13,8 +13,8 @@ struct State {
 }
 #[derive(Resource, Default)]
 struct Events(Vec<(i32, String)>);
-fn changed(event: On<GuiEvent>, gui: GuiQuery, mut events: ResMut<Events>) {
-    if event.event.kind == fairygui_core::object::EventKind::StateChanged && !event.event.bubbling {
+fn changed(event: On<GuiStateChanged>, gui: GuiQuery, mut events: ResMut<Events>) {
+    if !event.event.bubbling {
         let combo = gui.combo_box(event.entity).unwrap();
         events
             .0

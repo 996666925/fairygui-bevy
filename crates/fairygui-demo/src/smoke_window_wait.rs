@@ -18,15 +18,11 @@ struct State {
     global_clicks: usize,
     global_done: bool,
 }
-fn count(event: On<GuiEvent>, mut state: ResMut<State>) {
-    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
-        state.clicks += 1;
-    }
+fn count(_event: On<GuiClick>, mut state: ResMut<State>) {
+    state.clicks += 1;
 }
-fn count_global(event: On<GuiEvent>, mut state: ResMut<State>) {
-    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
-        state.global_clicks += 1;
-    }
+fn count_global(_event: On<GuiClick>, mut state: ResMut<State>) {
+    state.global_clicks += 1;
 }
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>()

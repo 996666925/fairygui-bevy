@@ -197,10 +197,8 @@ fn changing_the_input_window_releases_old_mouse_captures_without_cross_window_dr
 fn observers_read_current_capture_and_sync_filters_hidden_or_despawned_roots() {
     #[derive(Resource, Default)]
     struct Presses(Vec<Option<Entity>>);
-    fn pressed(event: On<GuiEvent>, input: Res<GuiInputState>, mut presses: ResMut<Presses>) {
-        if event.event.kind == EventKind::MouseDown {
-            presses.0.push(input.captured());
-        }
+    fn pressed(_event: On<GuiMouseDown>, input: Res<GuiInputState>, mut presses: ResMut<Presses>) {
+        presses.0.push(input.captured());
     }
     #[derive(Resource)]
     struct Mutation {
