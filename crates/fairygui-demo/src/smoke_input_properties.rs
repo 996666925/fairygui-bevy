@@ -20,17 +20,53 @@ struct State {
     input: Option<Entity>,
     prompt: Option<Entity>,
     cursor: Option<Vec2>,
+    direct_checked: bool,
+    enter_count: usize,
 }
 
 pub(super) fn install(app: &mut App) {
-    app.init_resource::<State>().add_systems(
-        PreUpdate,
-        drive
-            .after(InputSystems)
-            .before(InputFocusSystems::Dispatch)
-            .before(UiSystems::Focus)
-            .before(PickingSystems::ProcessInput),
-    );
+    app.init_resource::<State>()
+        .add_observer(keep_editing)
+        .add_systems(Update, check_direct_input.in_set(GuiSystems::Respond))
+        .add_systems(
+            PreUpdate,
+            drive
+                .after(InputSystems)
+                .before(InputFocusSystems::Dispatch)
+                .before(UiSystems::Focus)
+                .before(PickingSystems::ProcessInput),
+        );
+}
+
+fn keep_editing(event: On<GuiEnter>, mut state: ResMut<State>, mut input: GuiInput) {
+    if state.input == Some(event.entity) {
+        assert!(input.prevent_submit(event.entity));
+        state.enter_count += 1;
+    }
+}
+
+fn check_direct_input(
+    mut state: ResMut<State>,
+    mut input: GuiInput,
+    windows: Query<Entity, With<bevy::window::PrimaryWindow>>,
+    mut commands: Commands,
+) {
+    if state.step == 16 && !state.direct_checked {
+        let entity = state.input.unwrap();
+        input.blur();
+        assert_eq!(input.focused_entity(), None);
+        assert!(input.focus(entity));
+        assert_eq!(input.focused_entity(), Some(entity));
+        assert!(!input.prevent_submit(entity));
+        key(
+            &mut commands,
+            windows.single().unwrap(),
+            Key::Enter,
+            KeyCode::Enter,
+            None,
+        );
+        state.direct_checked = true;
+    }
 }
 
 fn key(
@@ -325,6 +361,9 @@ fn drive(
             next = true;
         }
         16 if elapsed >= 6 => {
+            assert!(state.direct_checked);
+            assert_eq!(state.enter_count, 1);
+            assert_eq!(focus.focused_entity(), state.input);
             commands.entity(state.owner.unwrap()).despawn();
             next = true;
         }
@@ -334,7 +373,7 @@ fn drive(
             assert_eq!(focus.focused_entity(), None);
             assert!(!window.ime_enabled);
             println!(
-                "demo smoke PASSED: ECS input settings, prompt colors, pointer focus, KeyboardInput/IME, UTF-16 restriction/length, password real value, same-frame read-only, programmatic assignment and disposal"
+                "demo smoke PASSED: ECS input settings, prompt colors, pointer and direct focus, direct Enter prevention, KeyboardInput/IME, UTF-16 restriction/length, password real value, same-frame read-only, programmatic assignment and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

@@ -1,9 +1,18 @@
 use super::*;
 use crate::GuiWorldExt as _;
-use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiInputCommand, GuiQuery, GuiVirtualList};
-use bevy::ecs::system::RunSystemOnce;
+use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiInput, GuiQuery, GuiVirtualList};
 use bevy::ecs::system::SystemState;
 use bevy::window::PrimaryWindow;
+
+fn cancel(app: &mut App, entity: Entity) {
+    let mut state = SystemState::<GuiInput>::new(app.world_mut());
+    assert!(
+        state
+            .get_mut(app.world_mut())
+            .unwrap()
+            .cancel_scroll_drag(entity)
+    );
+}
 
 fn fixture() -> (App, Entity, Entity, Vec<Entity>) {
     let mut app = App::new();
@@ -112,10 +121,8 @@ fn pending_nested_cancellation_does_not_restart_and_two_fingers_choose_independe
     use bevy::picking::{backend::HitData, hover::HoverMap};
     let (mut app, window, list, rows) = fixture();
     press(&mut app, rows[0]);
-    app.world_mut()
-        .write_message(GuiInputCommand::CancelScrollDrag(rows[0]));
-    app.world_mut()
-        .write_message(GuiInputCommand::CancelScrollDrag(list));
+    cancel(&mut app, rows[0]);
+    cancel(&mut app, list);
     app.update();
     move_to(&mut app, window, Vec2::new(80., 80.));
     assert_eq!(offset(&app, rows[0]), Vec2::ZERO);
@@ -173,8 +180,7 @@ fn pending_nested_cancellation_does_not_restart_and_two_fingers_choose_independe
     });
     app.update();
     assert!((offset(&app, list).y - 80.).abs() < 0.01);
-    app.world_mut()
-        .write_message(GuiInputCommand::CancelScrollDrag(rows[0]));
+    cancel(&mut app, rows[0]);
     app.update();
     app.world_mut().write_message(TouchInput {
         id: 11,
@@ -232,16 +238,12 @@ fn nested_scroll_axes_choose_the_inner_horizontal_or_outer_vertical_and_lock_the
 }
 
 #[test]
-fn cancel_scroll_command_keeps_animation_and_prevents_capture_restart_or_release_inertia() {
+fn direct_scroll_cancel_keeps_animation_and_prevents_capture_restart_or_release_inertia() {
     let (mut app, window, list, rows) = fixture();
     press(&mut app, rows[0]);
     move_to(&mut app, window, Vec2::new(120., 200.));
     assert!(offset(&app, rows[0]).x > 70.);
-    app.world_mut()
-        .write_message(GuiInputCommand::CancelScrollDrag(rows[0]));
-    app.world_mut()
-        .run_system_once(crate::input::apply_scroll_drag_commands)
-        .unwrap();
+    cancel(&mut app, rows[0]);
     if let Some(mut object) = app.world_mut().gui_mut(rows[0]) {
         object.scroll_to(Vec2::ZERO, true)
     }

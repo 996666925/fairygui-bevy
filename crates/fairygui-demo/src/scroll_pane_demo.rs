@@ -91,12 +91,7 @@ fn descendant(gui: &GuiQuery, mut target: Entity, ancestor: Entity) -> bool {
     }
 }
 
-fn close_open_rows(
-    event: On<GuiMouseDown>,
-    gui: GuiQuery,
-    mut commands: Commands,
-    mut gui_edit: GuiMut,
-) {
+fn close_open_rows(event: On<GuiMouseDown>, gui: GuiQuery, mut edit: ParamSet<(GuiMut, GuiInput)>) {
     let Some(target) = event.target else { return };
     let Some(list) = gui.list(event.entity) else {
         return;
@@ -112,11 +107,11 @@ fn close_open_rows(
             }) {
                 return;
             }
-            gui_edit.edit(row, |object: &mut GuiObjectMut| {
+            edit.p0().edit(row, |object: &mut GuiObjectMut| {
                 object.scroll_to(Vec2::ZERO, true)
             });
-            commands.write_message(GuiInputCommand::CancelScrollDrag(row));
-            commands.write_message(GuiInputCommand::CancelScrollDrag(event.entity));
+            edit.p1().cancel_scroll_drag(row);
+            edit.p1().cancel_scroll_drag(event.entity);
             break;
         }
     }

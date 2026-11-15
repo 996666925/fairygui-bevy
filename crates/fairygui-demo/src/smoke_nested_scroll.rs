@@ -22,7 +22,7 @@ pub(super) fn install(app: &mut App) {
             .before(PickingSystems::ProcessInput),
     );
 }
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn drive(
     mut state: ResMut<State>,
     demo: Res<Demo>,
@@ -31,13 +31,12 @@ fn drive(
     existing: Query<()>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     assets: Res<AssetServer>,
-    mut windows: Query<(Entity, &mut Window)>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
-    mut gui_edit: GuiMut,
+    mut edit: ParamSet<(GuiMut, GuiInput, Query<(Entity, &mut Window)>)>,
 ) {
     state.frame += 1;
     assert!(
@@ -45,20 +44,24 @@ fn drive(
         "nested scroll smoke timeout step {}",
         state.step
     );
-    let Ok((window_entity, mut window)) = windows.single_mut() else {
-        return;
+    let (window_entity, scale_factor) = {
+        let mut windows = edit.p2();
+        let Ok((entity, mut window)) = windows.single_mut() else {
+            return;
+        };
+        window.focused = true;
+        (entity, window.scale_factor())
     };
-    window.focused = true;
     let elapsed = state.frame - state.since;
-    let center =
-        |entity| nodes.get(entity).unwrap().1.transform_point2(Vec2::ZERO) / window.scale_factor();
+    let center = |entity| nodes.get(entity).unwrap().1.transform_point2(Vec2::ZERO) / scale_factor;
     let mut next = false;
     match state.step {
         0 => {
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
+            edit.p0()
+                .edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let owner = commands
                 .spawn(
                     FairyGuiRoot::new(assets.load("ui/ScrollPane.fui"), "Main")
@@ -181,10 +184,11 @@ fn drive(
                     > 100.
             );
             mouse.release(MouseButton::Left);
-            commands.write_message(GuiInputCommand::CancelScrollDrag(state.list.unwrap()));
-            gui_edit.edit(state.list.unwrap(), |object: &mut GuiObjectMut| {
-                object.scroll_to(Vec2::new(0., 7000.), false)
-            });
+            assert!(edit.p1().cancel_scroll_drag(state.list.unwrap()));
+            edit.p0()
+                .edit(state.list.unwrap(), |object: &mut GuiObjectMut| {
+                    object.scroll_to(Vec2::new(0., 7000.), false)
+                });
             next = true;
         }
         // Recycled row observers must use the new logical row's text.
@@ -247,6 +251,10 @@ fn drive(
         state.step += 1;
         state.since = state.frame;
     }
-    window.set_cursor_position(state.cursor);
+    edit.p2()
+        .get_mut(window_entity)
+        .unwrap()
+        .1
+        .set_cursor_position(state.cursor);
     move_pointer(window_entity, state.cursor, &mut pointers);
 }

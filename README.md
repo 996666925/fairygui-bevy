@@ -441,7 +441,7 @@ fn on_child(mut event: On<GuiClick>) {
 嵌套滚动在指针超过本地轴的拖动阈值后选择面板。横纵方向竞争时按主要位移方向
 处理，同方向优先最近面板；取得拖动权后保持到松手。鼠标和触摸使用相同规则。
 `GuiScrollState::is_dragging()` 提供当前状态；
-`GuiInputCommand::CancelScrollDrag(entity)` 取消该面板当前和等待中的指针拖动，
+`GuiInput::cancel_scroll_drag(entity)` 取消该面板当前和等待中的指针拖动，
 不产生惯性、吸附或下拉释放，并保留已发起的程序滚动动画。
 
 ScrollPane 示例通过 `GuiVirtualList` 配置 1000 行，竖向拖动列表、横向滑出每行的
@@ -449,23 +449,35 @@ Stick/Delete 按钮。虚拟行重新绑定数据时通过 `GuiListItem::set_scr
 重置横向位置；点按钮会更新右侧文字，在其他位置按下会收回已展开行，并取消
 展开行与外层列表的拖动。`--smoke-nested-scroll` 验证实际拖动、按钮点击、回收重绑与销毁。
 
-输入框通过 `GuiInputCommand::Focus(entity)` 获取焦点，`Blur` 释放 GUI 输入焦点；
-`GuiInputState::focused_entity()` 返回实际输入框视图实体。`GuiTextInput.entity`
-也指向该输入框。可直接在输入实体上 `.observe(keep_editing)`，响应 Enter 并保留编辑会话：
+输入框通过 `GuiInput` 系统参数直接获取和释放焦点：
 
 ```rust,ignore
-fn keep_editing(
-    input: On<GuiEnter>,
-    mut commands: Commands,
-) {
-    commands.write_message(GuiInputCommand::PreventSubmit(input.entity));
+fn focus_editor(_: On<GuiClick>, mut input: GuiInput, editor: Single<Entity, With<MyEditor>>) {
+    input.focus(*editor);
+}
+
+fn keep_editing(event: On<GuiEnter>, mut input: GuiInput) {
+    input.prevent_submit(event.entity);
 }
 ```
 
-输入命令在 Sync 完成视图、编辑策略和舞台同步后、焦点协调前执行；Respond 和
-PostLayout 均可发送。Focus/PreventSubmit 接受已就绪的根/窗口拥有者和控件视图，
-复合控件转发到输入标题；资产未就绪或目标不存在时丢弃请求。隐藏、离台、模态
-遮挡等仍遵循统一输入策略。Blur 保留其他 Bevy 控件的焦点，同帧焦点请求以最后一个为准。
+`focus(entity)` 接受已就绪的根/窗口拥有者和控件视图，复合控件转发到输入标题。
+目标不存在、资产未就绪、隐藏、离台、被模态遮挡或输入窗口未激活时返回 `false`，
+保留当前焦点，也不会留下等待重试的请求。`blur()` 立即结束 GUI 编辑会话，并保留
+其他 Bevy 控件的焦点；它也取消尚未完成的 GUI 焦点获取。`prevent_submit(entity)`
+在输入框的 `GuiEnter` observer 中取消本次回车后的失焦，没有待提交回车时返回 `false`。
+`cancel_scroll_drag(entity)` 直接取消该面板的拖动，与焦点无关。
+
+调用立即更新 Bevy `InputFocus`、原生编辑会话和输入路由；同帧的多次焦点切换各自
+产生真实的 FocusIn/Change/FocusOut。`GuiInput::focused_entity()` 读取即时焦点，
+`GuiInputState::focused_entity()` 是输入阶段与 Sync 结束时刷新的快照。IME 窗口状态
+和光标位置在 PostUpdate 同步。可在 Respond、Initialize、PostLayout 中调用；与
+`GuiMut` 同时使用时通过 `ParamSet<(GuiMut, GuiInput)>` 分别借用运行时。
+同一系统还直接访问 `InputFocus`、`EditableText` 或修改 `Window` 时，也要通过
+`ParamSet` 分开借用这些共享状态。
+选区与光标仍使用 Bevy `EditableText`，失焦时清理当前组合输入及选区。
+`--smoke-input-properties` 验证真实键盘/IME、直接焦点和回车取消，
+`--smoke-nested-scroll` 验证直接取消滚动手势时保留程序滚动动画。
 
 `GuiTextInput` 的目标 observer 在 Publish 阶段触发，不冒泡；`value` 为已提交的
 原始文本，密码框也不会用遮罩字符替代。需要集中记录时仍可通过消息读取。

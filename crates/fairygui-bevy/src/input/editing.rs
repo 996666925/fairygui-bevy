@@ -1,6 +1,7 @@
 //! Focused keyboard/IME input under the same hit and modal policy as GUI pointers.
 use super::*;
 use crate::runtime::{InputEditPolicy, InputPasswordView};
+use bevy::ecs::system::SystemParam;
 use bevy::input::{
     ButtonState,
     keyboard::{Key, KeyCode, KeyboardInput},
@@ -16,67 +17,118 @@ mod tests;
 #[derive(Resource, Default)]
 struct GuiImeWindow(Option<Entity>);
 
-/// Entity-addressed input responses. Send in `GuiSystems::Respond` (or
-/// PostLayout); commands execute in order after view/policy synchronization and
-/// before focus reconciliation. Targets must already be materialized; requests
-/// for missing entities or assets still loading are discarded.
-#[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GuiInputCommand {
-    /// Focus an input view, or a compound control whose title is an input.
-    /// Root/window owners are accepted too. Normal visibility/modal rules apply.
-    Focus(Entity),
-    /// Release GUI text focus without clearing another Bevy widget's focus.
-    Blur,
-    /// Keep the current input session open after its Enter notification.
-    /// Send while handling `GuiTextInput` in Respond.
-    PreventSubmit(Entity),
-    /// Cancel this pane's pending/active mouse and touch scrolling. No inertia
-    /// or pull release is generated; programmatic scroll animation is preserved.
-    CancelScrollDrag(Entity),
+/// Direct GUI input access for systems and entity observers. Focus transitions,
+/// submit prevention and scroll cancellation apply immediately; GuiInputState is
+/// the published snapshot. Like GuiMut, this mutably borrows GuiRuntime. Use a
+/// ParamSet when combining it with GuiMut or another GUI service in one system.
+/// Direct access to InputFocus, Window or EditableText in that system may also
+/// need a ParamSet because this parameter borrows those Bevy types.
+#[derive(SystemParam)]
+pub struct GuiInput<'w, 's> {
+    runtime: NonSendMut<'w, GuiRuntime>,
+    state: ResMut<'w, InputRouter>,
+    focus: ResMut<'w, InputFocus>,
+    settings: Res<'w, GuiInputSettings>,
+    windows: Query<'w, 's, (Entity, &'static Window, Has<PrimaryWindow>)>,
+    objects: Query<'w, 's, &'static GObjectRef>,
+    roots: Query<'w, 's, &'static crate::FairyGuiRoot>,
+    window_sources: Query<'w, 's, &'static crate::FairyGuiWindow>,
+    editors: Query<'w, 's, (&'static mut EditableText, &'static mut InputEditPolicy)>,
 }
-
-pub(crate) fn apply_input_commands(
-    mut messages: MessageReader<GuiInputCommand>,
-    objects: Query<&GObjectRef>,
-    roots: Query<&crate::GuiRootInstance>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
-    for &message in messages.read() {
-        let target = match message {
-            GuiInputCommand::Focus(target) | GuiInputCommand::PreventSubmit(target) => target,
-            GuiInputCommand::CancelScrollDrag(_) => continue,
-            GuiInputCommand::Blur => {
-                runtime.request_input_focus(None);
-                continue;
-            }
-        };
-        let object = objects
-            .get(target)
-            .map(|reference| reference.0)
-            .or_else(|_| roots.get(target).map(|root| root.object))
+impl std::fmt::Debug for GuiInput<'_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuiInput")
+            .field("focused_entity", &self.focused_entity())
+            .finish_non_exhaustive()
+    }
+}
+impl GuiInput<'_, '_> {
+    fn object(&self, entity: Entity) -> Option<GObjectId> {
+        self.objects
+            .get(entity)
             .ok()
-            .or_else(|| runtime.ecs_window_object(target));
-        let Some(input) = object.and_then(|object| runtime.store().input_field_of(object)) else {
-            continue;
+            .map(|reference| reference.0)
+            .or_else(|| {
+                self.roots
+                    .get(entity)
+                    .ok()
+                    .filter(|source| self.runtime.ecs_root_source_matches(entity, source))
+                    .and_then(|_| self.runtime.ecs_root_object(entity))
+            })
+            .or_else(|| {
+                self.window_sources
+                    .get(entity)
+                    .ok()
+                    .filter(|source| self.runtime.ecs_window_source_matches(entity, source))
+                    .and_then(|_| self.runtime.ecs_window_object(entity))
+            })
+            .filter(|&object| self.runtime.store().contains(object))
+    }
+    fn input(&self, entity: Entity) -> Option<(GObjectId, Entity)> {
+        let input = self.runtime.store().input_field_of(self.object(entity)?)?;
+        let view = self.runtime.entity_of(input)?;
+        self.objects
+            .get(view)
+            .is_ok_and(|reference| reference.0 == input)
+            .then_some((input, view))
+    }
+    /// Focus a materialized input, a compound control's input title, or its
+    /// root/window owner. Returns false for absent/unready/hidden/modal-blocked
+    /// inputs or an inactive input window, preserving the current focus.
+    pub fn focus(&mut self, entity: Entity) -> bool {
+        let Some((input, view)) = self.input(entity) else {
+            return false;
         };
-        if runtime.entity_of(input).is_none() {
-            continue;
+        let window_active = self
+            .windows
+            .iter()
+            .find(|(entity, _, primary)| selected_window(*entity, *primary, &self.settings))
+            .is_none_or(|(_, window, _)| window.focused);
+        if !window_active || !eligible(&self.runtime, input) || !self.editors.contains(view) {
+            return false;
         }
-        match message {
-            GuiInputCommand::Focus(_) => {
-                runtime.request_input_focus(Some(input));
-            }
-            GuiInputCommand::PreventSubmit(_) => {
-                runtime.prevent_input_submit(input);
-            }
-            GuiInputCommand::Blur | GuiInputCommand::CancelScrollDrag(_) => unreachable!(),
-        }
+        self.runtime.request_input_focus(Some(input));
+        self.reconcile();
+        self.focused_entity() == Some(view)
+    }
+    /// End the GUI editing session now, preserving another Bevy widget's focus.
+    /// Pending GUI focus acquisition is canceled too.
+    pub fn blur(&mut self) {
+        self.runtime.request_input_focus(None);
+        self.reconcile();
+    }
+    /// Keep the current input session after its GuiEnter notification. Returns
+    /// false if that input has no pending Enter submission.
+    pub fn prevent_submit(&mut self, entity: Entity) -> bool {
+        let Some((input, _)) = self.input(entity) else {
+            return false;
+        };
+        self.runtime.prevent_input_submit(input)
+    }
+    /// Cancel a pane's current and pending mouse/touch scroll gestures, without
+    /// inertia or pull release. Programmatic scrolling animation is preserved.
+    /// Returns false if the entity is not a materialized scroll pane.
+    pub fn cancel_scroll_drag(&mut self, entity: Entity) -> bool {
+        let Some(object) = self
+            .object(entity)
+            .filter(|&object| self.runtime.store().scroll_pane(object).is_some())
+        else {
+            return false;
+        };
+        self.state.cancel_scroll_drag(&mut self.runtime, object);
+        true
+    }
+    /// Live GUI focus; GuiInputState is refreshed by the scheduler.
+    pub fn focused_entity(&self) -> Option<Entity> {
+        self.runtime
+            .focused_input
+            .and_then(|input| self.runtime.entity_of(input))
+            .filter(|entity| self.focus.get() == Some(*entity))
     }
 }
 
 pub(super) fn register(app: &mut App) {
     app.init_resource::<InputFocus>()
-        .add_message::<GuiInputCommand>()
         .init_resource::<ButtonInput<Key>>()
         .init_resource::<GuiImeWindow>()
         .add_message::<Ime>()
@@ -121,95 +173,103 @@ fn selected_window(entity: Entity, primary: bool, settings: &GuiInputSettings) -
 
 /// Observe external InputFocus changes and requests before input dispatch and
 /// after GUI mutations. Native input notifications are target-only, not bubbled.
-pub(crate) fn reconcile_focus(
-    mut focus: ResMut<InputFocus>,
-    mut state: ResMut<InputRouter>,
-    settings: Res<GuiInputSettings>,
-    windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
-    objects: Query<&GObjectRef>,
-    mut editors: Query<(&mut EditableText, &mut InputEditPolicy)>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
-    let mut request = runtime.input_focus_request.take();
-    if let Some(Some(owner)) = request
-        && runtime.entity_of(owner).is_none()
-        && runtime.store().object(owner).is_some()
-    {
-        runtime.input_focus_request = request;
-        request = None;
-    }
-    if let Some(request) = request {
-        if let Some(entity) = request.and_then(|owner| runtime.entity_of(owner)) {
-            focus.set(entity, FocusCause::Navigated);
-        } else if focus.get().is_some_and(|entity| {
-            state.focused_entity == Some(entity)
-                || objects
-                    .get(entity)
-                    .is_ok_and(|owner| runtime.store().input_field_of(owner.0) == Some(owner.0))
-        }) {
-            focus.clear();
-        }
-    }
-    if let Some((owner, true)) = runtime.input_submit {
-        runtime.input_submit = None;
-        if runtime.focused_input == Some(owner) && focus.get() == runtime.entity_of(owner) {
-            focus.clear();
-        }
-    }
-    let window_active = windows
-        .iter()
-        .find(|(entity, _, primary)| selected_window(*entity, *primary, &settings))
-        .is_none_or(|(_, window, _)| window.focused);
-    let current = focus.get();
-    let candidate = current
-        .and_then(|entity| objects.get(entity).ok())
-        .map(|o| o.0);
-    let next = candidate.filter(|&owner| {
-        window_active
-            && eligible(&runtime, owner)
-            && runtime
-                .entity_of(owner)
-                .is_some_and(|entity| editors.contains(entity))
-            && runtime.store().input_field_of(owner) == Some(owner)
-    });
-    if next.is_none()
-        && candidate.is_some_and(|owner| runtime.store().input_field_of(owner) == Some(owner))
-    {
-        focus.clear();
-    }
-    if runtime.focused_input != next {
-        if let Some(old) = runtime.focused_input.take() {
-            let mut value = runtime
-                .store()
-                .object(old)
-                .and_then(|o| o.control().as_text_field())
-                .map(|d| d.text.clone())
-                .unwrap_or_default();
-            if let Some(entity) = runtime.entity_of(old)
-                && let Ok((mut editor, mut policy)) = editors.get_mut(entity)
-            {
-                value = editor.value().to_string();
-                policy.cancel_session(&mut editor);
-            }
-            if let Some(object) = runtime.store().object(old) {
-                let editable = matches!(object.control(), fairygui_core::widget::ControlData::TextInput(d) if d.editable);
-                if editable {
-                    runtime.emit_input_event(EventKind::Change, old, &value);
-                }
-                runtime.emit_input_event(EventKind::FocusOut, old, &value);
-            }
-            runtime.input_submit = None;
-        }
-        runtime.focused_input = next;
-        if let Some(owner) = next
-            && let Some(entity) = runtime.entity_of(owner)
-            && let Ok((editor, _)) = editors.get(entity)
+pub(crate) fn reconcile_focus(mut input: GuiInput) {
+    input.reconcile();
+}
+
+impl GuiInput<'_, '_> {
+    fn reconcile(&mut self) {
+        let Self {
+            focus,
+            state,
+            settings,
+            windows,
+            objects,
+            editors,
+            runtime,
+            ..
+        } = self;
+        let mut request = runtime.input_focus_request.take();
+        if let Some(Some(owner)) = request
+            && runtime.entity_of(owner).is_none()
+            && runtime.store().object(owner).is_some()
         {
-            runtime.emit_input_event(EventKind::FocusIn, owner, &editor.value().to_string());
+            runtime.input_focus_request = request;
+            request = None;
         }
+        if let Some(request) = request {
+            if let Some(entity) = request.and_then(|owner| runtime.entity_of(owner)) {
+                focus.set(entity, FocusCause::Navigated);
+            } else if focus.get().is_some_and(|entity| {
+                state.focused_entity == Some(entity)
+                    || objects
+                        .get(entity)
+                        .is_ok_and(|owner| runtime.store().input_field_of(owner.0) == Some(owner.0))
+            }) {
+                focus.clear();
+            }
+        }
+        if let Some((owner, true)) = runtime.input_submit {
+            runtime.input_submit = None;
+            if runtime.focused_input == Some(owner) && focus.get() == runtime.entity_of(owner) {
+                focus.clear();
+            }
+        }
+        let window_active = windows
+            .iter()
+            .find(|(entity, _, primary)| selected_window(*entity, *primary, settings))
+            .is_none_or(|(_, window, _)| window.focused);
+        let current = focus.get();
+        let candidate = current
+            .and_then(|entity| objects.get(entity).ok())
+            .map(|o| o.0);
+        let next = candidate.filter(|&owner| {
+            window_active
+                && eligible(runtime, owner)
+                && runtime
+                    .entity_of(owner)
+                    .is_some_and(|entity| editors.contains(entity))
+                && runtime.store().input_field_of(owner) == Some(owner)
+        });
+        if next.is_none()
+            && candidate.is_some_and(|owner| runtime.store().input_field_of(owner) == Some(owner))
+        {
+            focus.clear();
+        }
+        if runtime.focused_input != next {
+            if let Some(old) = runtime.focused_input.take() {
+                let mut value = runtime
+                    .store()
+                    .object(old)
+                    .and_then(|o| o.control().as_text_field())
+                    .map(|d| d.text.clone())
+                    .unwrap_or_default();
+                if let Some(entity) = runtime.entity_of(old)
+                    && let Ok((mut editor, mut policy)) = editors.get_mut(entity)
+                {
+                    value = editor.value().to_string();
+                    policy.cancel_session(&mut editor);
+                }
+                if let Some(object) = runtime.store().object(old) {
+                    let editable = matches!(object.control(), fairygui_core::widget::ControlData::TextInput(d) if d.editable);
+                    if editable {
+                        runtime.emit_input_event(EventKind::Change, old, &value);
+                    }
+                    runtime.emit_input_event(EventKind::FocusOut, old, &value);
+                }
+                runtime.input_submit = None;
+            }
+            runtime.focused_input = next;
+            if let Some(owner) = next
+                && let Some(entity) = runtime.entity_of(owner)
+                && let Ok((editor, _)) = editors.get(entity)
+            {
+                runtime.emit_input_event(EventKind::FocusIn, owner, &editor.value().to_string());
+            }
+        }
+        state.focused = next;
+        state.focused_entity = next.and_then(|owner| runtime.entity_of(owner));
     }
-    state.focused = next;
-    state.focused_entity = next.and_then(|owner| runtime.entity_of(owner));
 }
 
 fn shortcut(input: &KeyboardInput, letter: &str, code: KeyCode) -> bool {

@@ -2,7 +2,7 @@
 //! Read `GuiInputState` after `GuiSystems::Input` to arbitrate game input.
 mod actions;
 pub(crate) mod editing;
-pub use editing::GuiInputCommand;
+pub use editing::GuiInput;
 mod gestures;
 mod masks;
 mod slider;
@@ -348,40 +348,12 @@ pub fn register(app: &mut App) {
                 .in_set(crate::GuiSystems::Input),
         );
     editing::register(app);
-    app.init_resource::<ScrollCancelCursor>();
     app.add_systems(
         Update,
         masks::sync
             .in_set(crate::GuiSystems::Sync)
             .after(crate::runtime::sync_stage_hierarchy),
     );
-}
-
-#[derive(Resource, Default)]
-pub(crate) struct ScrollCancelCursor(bevy::ecs::message::MessageCursor<GuiInputCommand>);
-
-pub(crate) fn apply_scroll_drag_commands(
-    messages: Res<Messages<GuiInputCommand>>,
-    mut cursor: ResMut<ScrollCancelCursor>,
-    objects: Query<&GObjectRef>,
-    roots: Query<&crate::GuiRootInstance>,
-    mut state: ResMut<InputRouter>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
-    for message in cursor.0.read(&messages) {
-        let GuiInputCommand::CancelScrollDrag(target) = message else {
-            continue;
-        };
-        let object = objects
-            .get(*target)
-            .map(|reference| reference.0)
-            .or_else(|_| roots.get(*target).map(|root| root.object))
-            .ok()
-            .or_else(|| runtime.ecs_window_object(*target));
-        if let Some(object) = object {
-            state.cancel_scroll_drag(&mut runtime, object);
-        }
-    }
 }
 
 /// Shared policy for clicks, wheel input, capture and drop targets.

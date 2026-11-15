@@ -121,9 +121,7 @@ pub use ecs::{
 };
 pub use extension::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 pub use fairygui_bevy_macros::GuiExtension;
-pub use input::{
-    GuiInputCommand, GuiInputSettings, GuiInputState, GuiPointerCapture, GuiPointerId,
-};
+pub use input::{GuiInput, GuiInputSettings, GuiInputState, GuiPointerCapture, GuiPointerId};
 pub use list::{
     GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListRow,
     GuiListState, GuiVirtualList, GuiVirtualListState,
@@ -195,7 +193,7 @@ pub mod prelude {
         GuiConfig, GuiControllerState, GuiControllers, GuiData, GuiDisplay, GuiDrag, GuiDragBounds,
         GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
         GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState, GuiGraph, GuiIcon,
-        GuiImageFill, GuiImageFlip, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink,
+        GuiImageFill, GuiImageFlip, GuiInput, GuiInputSettings, GuiInputState, GuiLink,
         GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
         GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings, GuiListState,
         GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
@@ -228,12 +226,6 @@ pub struct FairyGuiPlugin;
 
 impl Plugin for FairyGuiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            input::apply_scroll_drag_commands
-                .after(GuiSystems::Respond)
-                .before(GuiSystems::Advance),
-        );
         // Text source snapshots also run in renderer-free apps. Preserve an
         // existing ImagePlugin store; init_asset would replace it if repeated.
         if !app.world().contains_resource::<Assets<Image>>() {
@@ -362,7 +354,6 @@ impl Plugin for FairyGuiPlugin {
         .add_systems(
             Update,
             (
-                input::apply_scroll_drag_commands,
                 properties::sync,
                 runtime::text_measure::sync_sizes,
                 (
@@ -399,7 +390,6 @@ impl Plugin for FairyGuiPlugin {
         .add_systems(
             Update,
             (
-                input::apply_scroll_drag_commands,
                 properties::sync,
                 (
                     runtime::sync_movie_sources,
@@ -445,7 +435,6 @@ impl Plugin for FairyGuiPlugin {
                 image_fill::sync_image_fills,
                 (
                     runtime::sync_stage_hierarchy,
-                    input::editing::apply_input_commands,
                     input::editing::reconcile_focus,
                 )
                     .chain(),
@@ -465,7 +454,6 @@ impl Plugin for FairyGuiPlugin {
                 runtime::sync_ecs_roots,
                 runtime::windows::sync_ecs_windows,
                 runtime::root_mount::sync_mounts,
-                input::apply_scroll_drag_commands,
                 properties::sync,
                 popup::sync_pending_popups,
                 runtime::global_wait::sync_global_wait,

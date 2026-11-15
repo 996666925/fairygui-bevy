@@ -1,5 +1,6 @@
 use super::*;
 use crate::runtime;
+use bevy::ecs::system::SystemState;
 use bevy::input_focus::{InputDispatchPlugin, InputFocusPlugin};
 use fairygui_core::package::FuiPackage;
 
@@ -67,7 +68,9 @@ fn fixture() -> (App, GObjectId, Entity, Entity) {
         )
         .add_systems(
             Update,
-            runtime::emit_text_input_messages.in_set(crate::GuiSystems::Publish),
+            (runtime::emit_gui_events, runtime::emit_text_input_messages)
+                .chain()
+                .in_set(crate::GuiSystems::Publish),
         )
         .add_systems(
             Update,
@@ -80,7 +83,6 @@ fn fixture() -> (App, GObjectId, Entity, Entity) {
                 runtime::sync_input_policy,
                 runtime::sync_password_views,
                 runtime::sync_stage_hierarchy,
-                apply_input_commands,
                 reconcile_focus,
                 // This fixture installs the focus bridge without FairyGuiPlugin;
                 // mirror its end-of-Sync entity snapshot publication too.
@@ -398,36 +400,41 @@ fn ime_messages_filter_commit_and_focus_loss_readonly_and_programmatic_changes_f
     assert_eq!(events(&mut app), [EventKind::FocusOut]);
 }
 
-fn prevent_submit(
-    mut messages: MessageReader<crate::GuiTextInput>,
-    mut commands: MessageWriter<GuiInputCommand>,
-) {
-    for message in messages.read() {
-        if message.event.kind == EventKind::Enter {
-            commands.write(GuiInputCommand::PreventSubmit(message.entity));
-        }
-    }
+fn with_input(app: &mut App, edit: impl FnOnce(&mut GuiInput)) {
+    let mut state = SystemState::<GuiInput>::new(app.world_mut());
+    edit(&mut state.get_mut(app.world_mut()).unwrap());
+}
+fn focus(app: &mut App, entity: Entity) -> bool {
+    let mut result = false;
+    with_input(app, |input| result = input.focus(entity));
+    result
+}
+fn blur(app: &mut App) {
+    with_input(app, |input| input.blur());
+}
+fn prevent_submit(event: On<crate::GuiEnter>, mut input: GuiInput) {
+    assert!(input.prevent_submit(event.entity));
 }
 
 #[test]
 fn input_entity_observers_receive_committed_password_value_and_can_cancel_enter_before_sync() {
     #[derive(Resource, Default)]
     struct Seen(Vec<(Entity, EventKind, String)>);
-    fn observe(event: On<crate::GuiTextInput>, mut seen: ResMut<Seen>, mut commands: Commands) {
+    fn observe(event: On<crate::GuiTextInput>, mut seen: ResMut<Seen>) {
         seen.0
             .push((event.entity, event.event.kind.clone(), event.value.clone()));
-        if event.event.kind == EventKind::Enter {
-            commands.write_message(GuiInputCommand::PreventSubmit(event.entity));
-        }
     }
     let (mut app, owner, view, window) = fixture();
     app.init_resource::<Seen>();
-    app.world_mut().entity_mut(view).observe(observe);
+    app.world_mut()
+        .entity_mut(view)
+        .observe(observe)
+        .observe(prevent_submit);
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .store_mut()
         .set_input_password(owner, true);
-    app.world_mut().write_message(GuiInputCommand::Focus(view));
+    focus(&mut app, view);
     app.update();
     key(
         &mut app,
@@ -462,7 +469,73 @@ fn input_entity_observers_receive_committed_password_value_and_can_cancel_enter_
 }
 
 #[test]
-fn entity_input_commands_resolve_compound_owners_and_preserve_other_bevy_focus() {
+fn direct_focus_and_blur_update_bevy_and_native_sessions_without_waiting_for_sync() {
+    let (mut app, owner, view, _) = fixture();
+    with_input(&mut app, |input| {
+        assert!(input.focus(view));
+        assert_eq!(input.focused_entity(), Some(view));
+        assert!(!input.prevent_submit(view));
+    });
+    assert_eq!(app.world().resource::<InputFocus>().get(), Some(view));
+    assert_eq!(
+        app.world().non_send::<GuiRuntime>().focused_input(),
+        Some(owner)
+    );
+    assert_eq!(events(&mut app), [EventKind::FocusIn]);
+    let unrelated = app.world_mut().spawn_empty().id();
+    with_input(&mut app, |input| {
+        assert!(!input.focus(unrelated));
+        assert!(!input.cancel_scroll_drag(view));
+        assert_eq!(input.focused_entity(), Some(view));
+        input.blur();
+        assert_eq!(input.focused_entity(), None);
+    });
+    assert_eq!(app.world().resource::<InputFocus>().get(), None);
+    assert_eq!(app.world().non_send::<GuiRuntime>().focused_input(), None);
+    assert_eq!(events(&mut app), [EventKind::Change, EventKind::FocusOut]);
+    app.update();
+    assert_eq!(
+        app.world().resource::<GuiInputState>().focused_entity(),
+        None
+    );
+}
+
+#[test]
+fn direct_focus_rejects_destroyed_or_unready_views_without_leaving_a_request() {
+    let (mut app, _, view, _) = fixture();
+    let pending = app
+        .world()
+        .resource::<Assets<crate::FuiAsset>>()
+        .reserve_handle();
+    let owner = app
+        .world_mut()
+        .spawn(crate::FairyGuiRoot::new(pending, "Input"))
+        .id();
+    with_input(&mut app, |input| {
+        assert!(!input.focus(owner));
+        assert_eq!(input.focused_entity(), None);
+    });
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .input_focus_request
+            .is_none()
+    );
+    app.world_mut().despawn(view);
+    with_input(&mut app, |input| {
+        assert!(!input.focus(view));
+        assert!(!input.prevent_submit(view));
+    });
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .input_focus_request
+            .is_none()
+    );
+}
+
+#[test]
+fn direct_input_resolves_compound_views_and_preserves_other_bevy_focus() {
     let (mut app, input, view, _) = fixture();
     let (root, wrapper) = {
         let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
@@ -478,13 +551,11 @@ fn entity_input_commands_resolve_compound_owners_and_preserve_other_bevy_focus()
     };
     app.update();
     let owner = app
-        .world_mut()
-        .spawn(crate::GuiRootInstance {
-            handle: 0,
-            object: wrapper,
-        })
-        .id();
-    app.world_mut().write_message(GuiInputCommand::Focus(owner));
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(wrapper)
+        .unwrap();
+    focus(&mut app, owner);
     app.update();
     assert_eq!(
         app.world().resource::<GuiInputState>().focused_entity(),
@@ -507,15 +578,17 @@ fn entity_input_commands_resolve_compound_owners_and_preserve_other_bevy_focus()
         .non_send::<GuiRuntime>()
         .entity_of(root)
         .unwrap();
-    app.world_mut().write_message(GuiInputCommand::Blur);
-    app.world_mut().write_message(GuiInputCommand::Focus(view));
-    app.world_mut()
-        .write_message(GuiInputCommand::Focus(root_view));
+    blur(&mut app);
+    focus(&mut app, view);
+    focus(&mut app, root_view);
     app.update();
     assert_eq!(app.world().resource::<InputFocus>().get(), Some(view));
-    assert!(events(&mut app).is_empty());
-    app.world_mut().write_message(GuiInputCommand::Focus(owner));
-    app.world_mut().write_message(GuiInputCommand::Blur);
+    assert_eq!(
+        events(&mut app),
+        [EventKind::Change, EventKind::FocusOut, EventKind::FocusIn]
+    );
+    focus(&mut app, owner);
+    blur(&mut app);
     app.update();
     assert_eq!(
         app.world().resource::<GuiInputState>().focused_entity(),
@@ -526,13 +599,13 @@ fn entity_input_commands_resolve_compound_owners_and_preserve_other_bevy_focus()
     app.world_mut()
         .resource_mut::<InputFocus>()
         .set(other, FocusCause::Navigated);
-    app.world_mut().write_message(GuiInputCommand::Blur);
+    blur(&mut app);
     app.update();
     assert_eq!(app.world().resource::<InputFocus>().get(), Some(other));
 
     // External focus can move in Respond, before Sync has ended the old GUI
     // session. Blur must inspect current Bevy focus instead of the old session.
-    app.world_mut().write_message(GuiInputCommand::Focus(view));
+    focus(&mut app, view);
     app.update();
     events(&mut app);
     app.insert_resource(ExternalFocus(other));
@@ -549,20 +622,16 @@ fn entity_input_commands_resolve_compound_owners_and_preserve_other_bevy_focus()
 #[derive(Resource)]
 struct ExternalFocus(Entity);
 
-fn hand_off_focus(
-    target: Res<ExternalFocus>,
-    mut focus: ResMut<InputFocus>,
-    mut commands: MessageWriter<GuiInputCommand>,
-) {
-    focus.set(target.0, FocusCause::Navigated);
-    commands.write(GuiInputCommand::Blur);
+fn hand_off_focus(target: Res<ExternalFocus>, mut input: ParamSet<(ResMut<InputFocus>, GuiInput)>) {
+    input.p0().set(target.0, FocusCause::Navigated);
+    input.p1().blur();
 }
 
 #[test]
-fn entity_input_commands_cancel_enter_in_respond_and_ignore_missing_or_hidden_targets() {
+fn direct_input_cancels_enter_and_ignores_missing_or_hidden_targets() {
     let (mut app, input, view, window) = fixture();
-    app.add_systems(Update, prevent_submit.in_set(crate::GuiSystems::Respond));
-    app.world_mut().write_message(GuiInputCommand::Focus(view));
+    app.add_observer(prevent_submit);
+    focus(&mut app, view);
     app.update();
     events(&mut app);
     key(
@@ -587,9 +656,10 @@ fn entity_input_commands_cancel_enter_in_respond_and_ignore_missing_or_hidden_ta
     );
     let stale = app.world_mut().spawn_empty().id();
     app.world_mut().despawn(stale);
-    app.world_mut().write_message(GuiInputCommand::Focus(stale));
-    app.world_mut()
-        .write_message(GuiInputCommand::PreventSubmit(stale));
+    focus(&mut app, stale);
+    with_input(&mut app, |input| {
+        assert!(!input.prevent_submit(stale));
+    });
     app.update();
     assert_eq!(
         app.world().resource::<GuiInputState>().focused_entity(),
@@ -599,7 +669,7 @@ fn entity_input_commands_cancel_enter_in_respond_and_ignore_missing_or_hidden_ta
         .non_send_mut::<GuiRuntime>()
         .store_mut()
         .set_visible(input, false);
-    app.world_mut().write_message(GuiInputCommand::Focus(view));
+    focus(&mut app, view);
     app.update();
     assert_eq!(
         app.world().resource::<GuiInputState>().focused_entity(),
@@ -636,7 +706,7 @@ fn entity_input_focus_obeys_native_window_modality_and_does_not_retry_rejected_r
             fairygui_core::Size::new(1280., 720.),
         )
         .unwrap();
-    app.world_mut().write_message(GuiInputCommand::Focus(view));
+    focus(&mut app, view);
     app.update();
     assert_eq!(
         app.world().resource::<GuiInputState>().focused_entity(),
@@ -651,7 +721,7 @@ fn entity_input_focus_obeys_native_window_modality_and_does_not_retry_rejected_r
         app.world().resource::<GuiInputState>().focused_entity(),
         None
     );
-    app.world_mut().write_message(GuiInputCommand::Focus(view));
+    focus(&mut app, view);
     app.update();
     assert_eq!(
         app.world().resource::<GuiInputState>().focused_entity(),
@@ -687,7 +757,7 @@ fn executable_native_session_traces_match_real_keyboard_focus_and_edit_notificat
             runtime.request_input_focus(Some(owner));
         }
         if name == "prevent_enter" {
-            app.add_systems(Update, prevent_submit.in_set(crate::GuiSystems::Respond));
+            app.add_observer(prevent_submit);
         }
         app.update();
         match name {
