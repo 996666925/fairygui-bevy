@@ -2,6 +2,7 @@
 use super::*;
 use crate::GuiInputSettings;
 use crate::input::InputRouter;
+use bevy::ecs::system::SystemParam;
 use bevy::window::PrimaryWindow;
 
 #[cfg(test)]
@@ -10,7 +11,7 @@ mod tests;
 
 /// Attach to a control view to start a drag after the configured pointer threshold.
 /// The nearest configured ancestor of the pressed control wins. Removing this
-/// component disables future starts; Cancel ends an already active drag.
+/// component disables future starts; GuiDrag::cancel ends an already active drag.
 #[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
 pub struct GuiDragSource {
     /// Native 100x100 centered Loader proxy; None starts without a visual proxy.
@@ -23,18 +24,66 @@ pub struct GuiDragSource {
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct GuiDropTarget;
 
-/// Explicit starts accept a materialized root/window owner or control view.
-/// The source must contain the captured left mouse/finger target. Missing targets
-/// and pointers already released are discarded; an active drag ignores new starts.
-#[derive(Message, Debug, Clone)]
-pub enum GuiDragCommand {
-    Start {
+/// Immediate access to application drag-and-drop from systems and observers.
+/// Accepts materialized root/window owners or control views. The chosen mouse
+/// or finger must still be captured inside the source. Use GuiDragSource for
+/// automatic threshold starts; GuiDragState remains the published ECS snapshot.
+///
+/// Like GuiMut, this parameter mutably borrows GuiRuntime. Use a ParamSet if a
+/// system also needs GuiMut, and release each borrow before using the other.
+#[derive(SystemParam)]
+pub struct GuiDrag<'w, 's> {
+    runtime: NonSendMut<'w, GuiRuntime>,
+    input: ResMut<'w, InputRouter>,
+    objects: Query<'w, 's, &'static GObjectRef>,
+    windows: Query<'w, 's, (Entity, &'static Window, Has<PrimaryWindow>)>,
+    settings: Res<'w, GuiInputSettings>,
+    commands: Commands<'w, 's>,
+}
+impl std::fmt::Debug for GuiDrag<'_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuiDrag")
+            .field("dragging", &self.is_dragging())
+            .finish_non_exhaustive()
+    }
+}
+impl GuiDrag<'_, '_> {
+    /// Start immediately with a captured pointer: None selects the left mouse,
+    /// Some(id) selects that finger. Returns false for absent/unready/ineligible
+    /// sources, unrelated/released pointers, or an already active drag.
+    pub fn start(
+        &mut self,
         source: Entity,
-        icon: Option<String>,
-        data: Option<String>,
+        configuration: GuiDragSource,
         touch_id: Option<u64>,
-    },
-    Cancel,
+    ) -> bool {
+        let object = self
+            .objects
+            .get(source)
+            .ok()
+            .map(|reference| reference.0)
+            .or_else(|| self.runtime.ecs_root_object(source))
+            .or_else(|| self.runtime.ecs_window_object(source));
+        let Some(object) = object else {
+            return false;
+        };
+        windows::viewport(&mut self.runtime, &self.windows, &self.settings);
+        self.runtime
+            .begin_ecs_drag(&mut self.input, object, &configuration, touch_id)
+    }
+    /// Cancel immediately without emitting a drop. Native proxy data is removed
+    /// immediately; proxy entities are despawned when Bevy applies deferred work.
+    /// The claimed pointer cannot trigger another automatic start until pressed again.
+    pub fn cancel(&mut self) -> bool {
+        if !self.runtime.is_dragging() {
+            return false;
+        }
+        self.runtime.cancel_drag(&mut self.commands);
+        true
+    }
+    pub fn is_dragging(&self) -> bool {
+        self.runtime.is_dragging()
+    }
 }
 
 /// Target-only application event. Generic GuiEvent Drop notifications still
@@ -108,26 +157,26 @@ impl GuiRuntime {
         source: GObjectId,
         configuration: &GuiDragSource,
         touch_id: Option<u64>,
-    ) {
+    ) -> bool {
         if self.is_dragging() || !crate::input::eligible(self, source) {
-            return;
+            return false;
         }
         let Some(entity) = self.entity_of(source) else {
-            return;
+            return false;
         };
         let Some((_, pressed, position, _, _)) = input
             .drag_pointers()
             .into_iter()
             .find(|(id, ..)| *id == touch_id)
         else {
-            return;
+            return false;
         };
         let mut ancestor = Some(pressed);
         while ancestor.is_some_and(|ancestor| ancestor != source) {
             ancestor = ancestor.and_then(|ancestor| self.store.object(ancestor)?.parent());
         }
         if ancestor.is_none() || !position.is_finite() {
-            return;
+            return false;
         }
         let icon = configuration
             .icon
@@ -161,6 +210,7 @@ impl GuiRuntime {
         );
         self.drag_touch_id = touch_id;
         self.ecs_drag = Some(Session { source: entity });
+        true
     }
 }
 
@@ -219,49 +269,6 @@ pub(crate) fn begin_configured_drags(
                 .store
                 .object(object)
                 .and_then(|object| object.parent());
-        }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn apply_drag_commands(
-    mut commands: Commands,
-    mut messages: MessageReader<GuiDragCommand>,
-    objects: Query<&GObjectRef>,
-    roots: Query<&GuiRootInstance>,
-    mut state: ResMut<InputRouter>,
-    windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
-    settings: Res<GuiInputSettings>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
-    for message in messages.read() {
-        match message {
-            GuiDragCommand::Cancel => runtime.cancel_drag(&mut commands),
-            GuiDragCommand::Start {
-                source,
-                icon,
-                data,
-                touch_id,
-            } => {
-                let object = objects
-                    .get(*source)
-                    .map(|reference| reference.0)
-                    .or_else(|_| roots.get(*source).map(|root| root.object))
-                    .ok()
-                    .or_else(|| runtime.ecs_window_object(*source));
-                if let Some(object) = object {
-                    windows::viewport(&mut runtime, &windows, &settings);
-                    runtime.begin_ecs_drag(
-                        &mut state,
-                        object,
-                        &GuiDragSource {
-                            icon: icon.clone(),
-                            data: data.clone(),
-                        },
-                        *touch_id,
-                    );
-                }
-            }
         }
     }
 }

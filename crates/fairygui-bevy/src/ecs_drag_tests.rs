@@ -1,11 +1,38 @@
 use super::*;
 use crate::{
-    FairyGuiPlugin, GuiDragCommand, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget, GuiIcon,
+    FairyGuiPlugin, GuiDrag, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget, GuiIcon,
     GuiWorldExt,
 };
+use bevy::ecs::system::SystemState;
 use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::picking::hover::Hovered;
 use bevy::ui::{ComputedStackIndex, RelativeCursorPosition};
+
+fn start(app: &mut App, source: Entity, touch_id: Option<u64>) -> bool {
+    let mut system = SystemState::<GuiDrag>::new(app.world_mut());
+    let result = system.get_mut(app.world_mut()).unwrap().start(
+        source,
+        GuiDragSource {
+            icon: None,
+            data: Some("explicit".into()),
+        },
+        touch_id,
+    );
+    assert_eq!(
+        system.get_mut(app.world_mut()).unwrap().is_dragging(),
+        app.world().non_send::<GuiRuntime>().is_dragging()
+    );
+    system.apply(app.world_mut());
+    result
+}
+fn cancel(app: &mut App) -> bool {
+    let mut system = SystemState::<GuiDrag>::new(app.world_mut());
+    let mut drag = system.get_mut(app.world_mut()).unwrap();
+    let result = drag.cancel();
+    assert!(!drag.is_dragging());
+    system.apply(app.world_mut());
+    result
+}
 
 #[derive(Resource, Default)]
 struct Drops(Vec<GuiDrop>);
@@ -203,7 +230,7 @@ fn ecs_drag_cancellation_source_disposal_and_hidden_source_never_deliver_or_rest
         move_mouse(&mut app, window, Vec2::splat(70.));
         match policy {
             0 => {
-                app.world_mut().write_message(GuiDragCommand::Cancel);
+                assert!(cancel(&mut app));
             }
             1 => {
                 app.world_mut().despawn(owner);
@@ -257,21 +284,16 @@ fn ecs_drag_cancellation_source_disposal_and_hidden_source_never_deliver_or_rest
 #[test]
 fn ecs_drag_explicit_starts_require_owning_live_pointer_and_unmarked_release_is_ignored() {
     let (mut app, window, _, source, receiver) = fixture();
-    let start = |source| GuiDragCommand::Start {
-        source,
-        icon: None,
-        data: Some("explicit".into()),
-        touch_id: None,
-    };
-    app.world_mut().write_message(start(source));
+    assert!(!start(&mut app, source, None));
     app.update();
     assert!(!app.world().resource::<GuiDragState>().is_dragging());
     app.world_mut().entity_mut(source).remove::<GuiDragSource>();
     mouse(&mut app, true);
-    app.world_mut().write_message(start(receiver));
+    assert!(!start(&mut app, receiver, None));
     app.update();
     assert!(!app.world().resource::<GuiDragState>().is_dragging());
-    app.world_mut().write_message(start(source));
+    assert!(start(&mut app, source, None));
+    assert!(!start(&mut app, receiver, None));
     app.update();
     assert!(app.world().resource::<GuiDragState>().is_dragging());
     assert_eq!(app.world().resource::<GuiDragState>().agent(), None);
@@ -283,9 +305,133 @@ fn ecs_drag_explicit_starts_require_owning_live_pointer_and_unmarked_release_is_
     mouse(&mut app, false);
     assert!(!app.world().resource::<GuiDragState>().is_dragging());
     assert!(app.world().resource::<Drops>().0.is_empty());
-    app.world_mut().write_message(start(source));
+    assert!(!start(&mut app, source, None));
     app.update();
     assert!(!app.world().resource::<GuiDragState>().is_dragging());
+}
+
+#[test]
+fn ecs_drag_observer_starts_immediately_and_direct_cancel_reclaims_proxy_without_a_drop() {
+    fn begin(event: On<GuiEvent>, icons: Query<&GuiIcon>, mut drag: GuiDrag) {
+        let begin = match event.event.kind {
+            fairygui_core::object::EventKind::MouseDown => event.event.touch_id.is_none(),
+            fairygui_core::object::EventKind::TouchBegin => true,
+            _ => false,
+        };
+        if !begin {
+            return;
+        }
+        assert!(!drag.is_dragging());
+        let configuration = GuiDragSource {
+            icon: Some(icons.get(event.entity).unwrap().value().into()),
+            data: Some("observer".into()),
+        };
+        assert!(drag.start(event.entity, configuration.clone(), event.event.touch_id));
+        assert!(drag.is_dragging());
+        assert!(!drag.start(event.entity, configuration, event.event.touch_id));
+    }
+    for touch_input in [false, true] {
+        let (mut app, window, _, source, receiver) = fixture();
+        app.world_mut()
+            .entity_mut(source)
+            .remove::<GuiDragSource>()
+            .observe(begin);
+        if touch_input {
+            app.init_resource::<bevy::picking::hover::HoverMap>();
+            app.world_mut()
+                .get_mut::<Window>(window)
+                .unwrap()
+                .set_cursor_position(None);
+            touch(
+                &mut app,
+                window,
+                7,
+                source,
+                TouchPhase::Started,
+                Vec2::splat(10.),
+            );
+        } else {
+            mouse(&mut app, true);
+        }
+        let state = app.world().resource::<GuiDragState>();
+        assert_eq!(state.source(), Some(source));
+        assert_eq!(state.data(), Some("observer"));
+        assert_eq!(state.touch_id(), touch_input.then_some(7));
+        let agent = state.agent().unwrap();
+        let model = app.world().get::<GObjectRef>(agent).unwrap().0;
+        assert!(cancel(&mut app));
+        assert!(!cancel(&mut app));
+        assert!(!app.world().non_send::<GuiRuntime>().store().contains(model));
+        assert!(app.world().get_entity(agent).is_err());
+        app.update();
+        assert!(!app.world().resource::<GuiDragState>().is_dragging());
+        if touch_input {
+            touch(
+                &mut app,
+                window,
+                7,
+                receiver,
+                TouchPhase::Moved,
+                Vec2::splat(70.),
+            );
+            touch(
+                &mut app,
+                window,
+                7,
+                receiver,
+                TouchPhase::Ended,
+                Vec2::splat(70.),
+            );
+        } else {
+            hover(&mut app, receiver);
+            move_mouse(&mut app, window, Vec2::splat(70.));
+            mouse(&mut app, false);
+        }
+        assert!(app.world().resource::<Drops>().0.is_empty());
+    }
+}
+
+#[test]
+fn ecs_drag_direct_start_resolves_owners_and_does_not_retain_missing_or_pending_targets() {
+    let (mut app, _, owner, source, _) = fixture();
+    app.world_mut().entity_mut(source).remove::<GuiDragSource>();
+    let handle = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
+    let pending = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(handle.clone(), "Demo_Drag&Drop"))
+        .id();
+    app.update();
+    mouse(&mut app, true);
+    assert!(!start(&mut app, pending, None));
+    assert!(!start(&mut app, Entity::PLACEHOLDER, None));
+    assert!(start(&mut app, owner, None));
+    assert!(app.world().non_send::<GuiRuntime>().is_dragging());
+    app.update();
+    assert_eq!(
+        app.world().resource::<GuiDragState>().source(),
+        Some(app.world().get::<crate::GuiRootView>(owner).unwrap().0)
+    );
+    assert!(cancel(&mut app));
+    let package = FuiPackage::parse(
+        "Basics",
+        include_bytes!("../../fairygui-demo/assets/ui/Basics.fui"),
+    )
+    .unwrap();
+    app.world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .insert(
+            handle.id(),
+            FuiAsset {
+                package,
+                res_key: "ui/Basics".into(),
+            },
+        )
+        .unwrap();
+    app.update();
+    app.update();
+    assert!(app.world().get::<crate::GuiRootView>(pending).is_some());
+    assert!(!app.world().resource::<GuiDragState>().is_dragging());
+    assert!(!app.world().non_send::<GuiRuntime>().is_dragging());
 }
 
 #[test]

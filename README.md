@@ -473,7 +473,30 @@ fn on_drop(event: On<GuiDrop>) {
 源和目标组件添加在控件视图上；释放时最近的目标祖先接收一次 `GuiDrop`。
 可选图标使用原生 100×100、中心轴心、不接收输入的 Loader，结束或取消后回收。
 `GuiDragState` 资源提供源、临时图标、当前目标、数据和所属触摸 ID；
-`GuiDragCommand::Start` 支持业务主动启动已捕获指针的拖放，`Cancel` 取消当前拖放。
+业务系统或 observer 可使用 `GuiDrag` 参数直接调用 `start(source, configuration, touch_id)`
+和 `cancel()`，方法立即执行并返回是否成功，不发送命令消息。配置使用 `GuiDragSource`；
+`touch_id = None` 选择鼠标，`Some(id)` 选择对应手指。源须包含仍在捕获中的按下目标，
+未加载、已销毁或不允许交互的源、无关或已松开的指针以及已有拖放都会返回 `false`。
+`is_dragging()` 可立即读取调用结果；`GuiDragState` 在 Publish/Sync 更新。
+取消立即释放原生图标，图标实体在 Bevy 应用延迟工作时销毁。
+与 `GuiMut` 同时使用时通过 `ParamSet` 分别借用，避免重复可变借用运行时。
+
+```rust,ignore
+fn begin(event: On<GuiEvent>, mut drag: GuiDrag) {
+    let begin = match event.event.kind {
+        fairygui_bevy::core::object::EventKind::MouseDown => event.event.touch_id.is_none(),
+        fairygui_bevy::core::object::EventKind::TouchBegin => true,
+        _ => false,
+    };
+    if begin {
+        drag.start(event.entity, GuiDragSource {
+            icon: None,
+            data: Some("inventory:42".into()),
+        }, event.event.touch_id);
+    }
+}
+```
+
 源销毁、隐藏、离台或被模态界面阻挡时自动取消；取消后需重新按下才会自动开始。
 `GuiIcon` / `gui.icon(entity)` 读取原生图标地址，`set_icon` 修改图标，空字符串清除。
 Basics 的 b→c 拖放使用这套接口，`--smoke-drag-drop` 可运行真实窗口专项回归。

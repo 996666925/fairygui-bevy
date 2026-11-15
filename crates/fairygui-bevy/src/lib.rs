@@ -127,9 +127,7 @@ pub use list::{
     GuiListState, GuiVirtualList, GuiVirtualListState,
 };
 pub use popup::{GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState};
-pub use runtime::ecs_drag_drop::{
-    GuiDragCommand, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget,
-};
+pub use runtime::ecs_drag_drop::{GuiDrag, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget};
 pub use runtime::global_wait::{GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState};
 pub use runtime::object_drag::{GuiDragBounds, GuiDraggable, GuiObjectDragState};
 pub use runtime::tooltip::{
@@ -193,13 +191,13 @@ pub mod prelude {
         FairyGuiRoot, FairyGuiWindow, FillMethod, FlipType, FuiAsset, GObjectRef, GraphType,
         GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState, GuiBlendMode,
         GuiButtonSelected, GuiButtonSettings, GuiColor, GuiColorFilter, GuiComboBoxState,
-        GuiConfig, GuiControllerState, GuiControllers, GuiData, GuiDisplay, GuiDragBounds,
-        GuiDragCommand, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget,
-        GuiEvent, GuiFont, GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState, GuiGraph,
-        GuiIcon, GuiImageFill, GuiImageFlip, GuiInputCommand, GuiInputSettings, GuiInputState,
-        GuiLink, GuiListContent, GuiListContentError, GuiListContentState, GuiListItem,
-        GuiListItemClick, GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings,
-        GuiListState, GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
+        GuiConfig, GuiControllerState, GuiControllers, GuiData, GuiDisplay, GuiDrag, GuiDragBounds,
+        GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
+        GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState, GuiGraph, GuiIcon,
+        GuiImageFill, GuiImageFlip, GuiInputCommand, GuiInputSettings, GuiInputState, GuiLink,
+        GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
+        GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings, GuiListState,
+        GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
         GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
         GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullPart, GuiPullRelease,
@@ -280,7 +278,6 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiPullRelease>()
         .add_message::<GuiPopupCommand>()
         .add_message::<GuiTooltipCommand>()
-        .add_message::<GuiDragCommand>()
         .init_resource::<GuiDragState>()
         .init_resource::<GuiGlobalWaitSettings>()
         .init_resource::<GuiGlobalWaitState>()
@@ -472,7 +469,6 @@ impl Plugin for FairyGuiPlugin {
                 input::apply_scroll_drag_commands,
                 properties::sync,
                 popup::apply_popup_commands,
-                runtime::ecs_drag_drop::apply_drag_commands,
                 runtime::global_wait::sync_global_wait,
                 runtime::tooltip::sync_tooltips,
             )

@@ -1,4 +1,5 @@
 //! Exported Basics drag source/receiver, bound through ECS components and observers.
+use crate::ui::basics::DemoDragDrop;
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 
@@ -12,27 +13,20 @@ pub fn bind(
     mut gui_edit: GuiMut,
 ) {
     for (page, root) in &pages {
-        if root.item_name != "Demo_Drag&Drop" {
+        if root.item_name != DemoDragDrop::ITEM_NAME {
             continue;
         }
-        let Some(source) = gui.child_by_name(page, "b") else {
+        let Ok(binding) = DemoDragDrop::bind(&gui, page) else {
             continue;
         };
-        let Some(receiver) = gui.child_by_name(page, "c") else {
-            continue;
-        };
+        let source = binding.b.entity();
+        let receiver = binding.c.entity();
         let Some(icon) = gui.icon(source) else {
             continue;
         };
-        let Some(free) = gui.child_by_name(page, "a") else {
-            continue;
-        };
-        let Some(bounded) = gui.child_by_name(page, "d") else {
-            continue;
-        };
-        let Some(bounds) = gui.child_by_name(page, "bounds") else {
-            continue;
-        };
+        let free = binding.a.entity();
+        let bounded = binding.d.entity();
+        let bounds = binding.bounds.entity();
         commands.entity(free).insert(GuiDraggable::default());
         commands.entity(bounded).insert(GuiDraggable {
             bounds: Some(GuiDragBounds::Control(bounds)),
