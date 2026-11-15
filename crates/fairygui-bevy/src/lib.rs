@@ -90,6 +90,8 @@ pub mod movie;
 pub mod popup;
 pub mod progress;
 mod properties;
+mod size_properties;
+pub use size_properties::GuiSizeConstraints;
 mod scroll_properties;
 pub use scroll_properties::GuiScrollSettings;
 mod visual_properties;
@@ -204,11 +206,11 @@ pub mod prelude {
         GuiOpaque, GuiPointerCapture, GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu,
         GuiPopupState, GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullPart,
         GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
-        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue,
-        GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput,
-        GuiTextInputSettings, GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
-        GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSizeConstraints, GuiSliderState,
+        GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat,
+        GuiTextInput, GuiTextInputSettings, GuiTooltip, GuiTooltipError, GuiTooltipSettings,
+        GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
         GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
         GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,

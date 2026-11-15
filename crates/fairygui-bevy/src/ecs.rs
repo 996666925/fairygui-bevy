@@ -556,6 +556,7 @@ pub struct GuiQuery<'w, 's> {
     roots: Query<'w, 's, &'static GuiRootView>,
     objects: Query<'w, 's, &'static GuiObjectInfo>,
     transforms: Query<'w, 's, &'static GuiTransform>,
+    size_constraints: Query<'w, 's, &'static crate::GuiSizeConstraints>,
     spaces: Query<'w, 's, &'static GuiSpace>,
     texts: Query<'w, 's, &'static GuiText>,
     text_formats: Query<'w, 's, &'static crate::GuiTextFormat>,
@@ -594,6 +595,9 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn size_constraints(&self, entity: Entity) -> Option<&crate::GuiSizeConstraints> {
+        self.size_constraints.get(self.view(entity)?).ok()
+    }
     pub fn clip_softness(&self, entity: Entity) -> Option<Vec2> {
         Some(self.clip_softness.get(self.view(entity)?).ok()?.0)
     }

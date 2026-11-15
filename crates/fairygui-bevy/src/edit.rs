@@ -269,6 +269,22 @@ impl GuiObjectMut<'_> {
             runtime.store_mut().set_xy(object, position.x, position.y);
         }
     }
+    pub fn set_size_constraints(&mut self, constraints: crate::GuiSizeConstraints) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiSizeConstraints::read(self.runtime, self.object) {
+            constraints.apply(&native, &native, self.runtime, self.object);
+        }
+    }
+    pub fn set_width(&mut self, width: f32) {
+        if width.is_finite() && width >= 0. {
+            self.runtime.store_mut().set_width(self.object, width);
+        }
+    }
+    pub fn set_height(&mut self, height: f32) {
+        if height.is_finite() && height >= 0. {
+            self.runtime.store_mut().set_height(self.object, height);
+        }
+    }
     pub fn set_size(&mut self, size: Vec2) {
         let runtime = &mut *self.runtime;
         let object = self.object;

@@ -383,27 +383,13 @@ impl ObjectStore {
         cross_delta: f32,
     ) {
         let object = &self.objects[member];
-        let raw = object.group_raw_size.unwrap_or_else(|| object.size());
+        let raw = object.requested_size();
         let requested = if horizontal {
             Size::new(extent, raw.height + cross_delta)
         } else {
             Size::new(raw.width + cross_delta, extent)
         };
-        // GObject.setSize compares requested dimensions before applying limits.
-        if requested == raw {
-            return;
-        }
-        let limit = |value: f32, min: f32, max: f32| {
-            let value = if value.is_finite() {
-                value.max(min)
-            } else {
-                min
-            };
-            if max > 0. { value.min(max) } else { value }
-        };
-        let width = limit(requested.width, object.min_width, object.max_width);
-        let height = limit(requested.height, object.min_height, object.max_height);
-        self.set_size_internal(member, width, height, true, Some(requested));
+        self.set_size_internal(member, requested.width, requested.height, true, false);
     }
 
     pub(super) fn resize_group_members(
@@ -507,7 +493,7 @@ impl ObjectStore {
         for (&(member, percent, included), before) in shares.members.iter().zip(previous) {
             if !included {
                 let object = &self.objects[member];
-                let raw = object.group_raw_size.unwrap_or_else(|| object.size());
+                let raw = object.requested_size();
                 self.resize_group_member(
                     member,
                     horizontal,
@@ -698,7 +684,10 @@ mod layout_tests {
                 }
             } else {
                 match v[0] as u8 {
-                    1 => store.set_size(members[0], 75., 45.),
+                    // This fixture executes GGroup against a geometry-only host.
+                    // Pivot side effects of GObject.setSize are covered by the
+                    // separate size-constraints-reference fixture.
+                    1 => store.set_size_internal(members[0], 75., 45., true, false),
                     2 => store.set_visible(members[1], false),
                     _ => {}
                 }

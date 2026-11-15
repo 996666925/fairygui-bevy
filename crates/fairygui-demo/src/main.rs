@@ -211,7 +211,9 @@ fn main() -> AppExit {
         .load::<Font>("fonts/NotoSansSC-VF.ttf");
     app.insert_resource(GuiFont(Some(font)));
 
-    if std::env::args().any(|arg| arg == "--smoke-soft-clip") {
+    if std::env::args().any(|arg| arg == "--smoke-size-constraints") {
+        smoke::install_size_constraints(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-soft-clip") {
         smoke::install_soft_clip(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-group-alignment") {
         smoke::install_group_alignment(&mut app);

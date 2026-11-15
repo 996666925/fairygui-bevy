@@ -34,6 +34,9 @@ mod animation_tests;
 mod component_input;
 #[path = "image.rs"]
 mod image;
+#[path = "size_constraints.rs"]
+mod size_constraints;
+pub use size_constraints::SizeConstraints;
 #[cfg(test)]
 #[path = "loader_component_tests.rs"]
 mod loader_component_tests;
@@ -792,51 +795,41 @@ impl ObjectStore {
     ///
     /// 容器尺寸变化会带动子对象的关联调整，与官方行为一致。
     pub fn set_size(&mut self, id: GObjectId, width: f32, height: f32) {
-        self.set_size_internal(id, width, height, false, None);
+        self.set_size_internal(id, width, height, false, false);
     }
 
-    fn set_size_internal(
+    pub(crate) fn set_size_internal(
         &mut self,
         id: GObjectId,
         width: f32,
         height: f32,
         ignore_pivot: bool,
-        group_raw_size: Option<Size>,
+        force: bool,
     ) {
-        let raw_changed = self.objects.get(id).is_some_and(|o| {
-            group_raw_size.is_none()
-                && o.group_raw_size
-                    .is_some_and(|s| s != Size::new(width, height))
-        });
-        if let Some(object) = self.objects.get_mut(id) {
-            object.group_raw_size = group_raw_size;
+        if !width.is_finite() || !height.is_finite() {
+            return;
         }
-        if raw_changed {
-            self.invalidate_member_group(id);
-        }
-        let Some((old_width, old_height)) = self
-            .objects
-            .get(id)
-            .map(|object| (object.width, object.height))
-        else {
+        let Some(object) = self.objects.get(id) else {
             return;
         };
-        if old_width == width && old_height == height {
+        let requested = Size::new(width, height);
+        if !force && object.requested_size() == requested {
             return;
         }
-
-        if let Some(object) = self.objects.get_mut(id) {
-            object.width = width;
-            object.height = height;
-        }
+        let (old_width, old_height) = (object.width, object.height);
+        let width = object.constrain_width(width);
+        let height = object.constrain_height(height);
+        let object = self.objects.get_mut(id).unwrap();
+        object.requested_size = Some(requested);
+        object.width = width;
+        object.height = height;
         self.touch(id, dirty::SIZE);
         self.invalidate_list_layout(id);
         self.invalidate_parent_list_layout(id);
 
-        // GImage caches Sprite position. Match GObject.setSize's pivot order:
-        // non-anchor setXY runs with the old pivot offset, before it is updated.
+        // Native setSize preserves the pivot for every object, not just images.
+        // GImage additionally retains its cached display-position update order.
         if let Some(object) = self.objects.get(id)
-            && object.image_transform.is_some()
             && (object.pivot_x != 0. || object.pivot_y != 0.)
         {
             if object.pivot_as_anchor {
@@ -865,7 +858,7 @@ impl ObjectStore {
         {
             let (old_x, old_y) = (object.x, object.y);
             let (mut x, mut y) = (old_x, old_y);
-            let pivot = if object.pivot_as_anchor {
+            let pivot = if object.pivot_as_anchor || !ignore_pivot {
                 Point::new(object.pivot_x, object.pivot_y)
             } else {
                 Point::ZERO

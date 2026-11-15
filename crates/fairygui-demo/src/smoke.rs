@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_size_constraints.rs"]
+mod size_constraints;
+pub(super) fn install_size_constraints(app: &mut App) {
+    size_constraints::install(app);
+}
 #[path = "smoke_soft_clip.rs"]
 mod soft_clip;
 pub(super) fn install_soft_clip(app: &mut App) {

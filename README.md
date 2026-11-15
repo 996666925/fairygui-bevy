@@ -609,6 +609,14 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 更换或解除控制器会清空关联页面 ID，同帧明确修改的页面 ID 会随后应用。
 移动按钮保留原控制器身份；原拥有者销毁后可设置新绑定。单独修改关联配置不会改变选择。
 
+所有控件的尺寸写入都会应用导出的最小／最大尺寸，并使用实际尺寸变化更新轴心、关联和布局。
+通过 `GuiSizeConstraints { min: Vec2::new(80., 40.), max: Vec2::new(300., 0.) }`
+可修改约束；`max` 中的零值表示该轴无上限。宽高使用未缩放的逻辑像素，缩放不受约束。
+`GuiTransform.size` 投影夹取后的实际尺寸，运行时保留原请求尺寸，解除约束会重新应用该请求。
+单独编辑 `GuiTransform.size.x` 或 `.y` 保留另一轴的请求值；即时接口提供 `set_width`、
+`set_height` 和 `set_size_constraints`。可用 `gui.size_constraints(entity)` 查询当前约束。
+非有限值、负约束和最大值小于最小值的约束轴会保留原配置，其余有效轴仍可更新。
+
 组件、列表和树中导出的 `clipSoftness` 会保留并渲染为边缘渐隐，也可通过
 `GuiClipSoftness(Vec2::new(24., 20.))` 修改，宽度单位为控件局部逻辑像素，零值关闭。
 该效果遵循 FairyGUI 标准运行时的软裁剪规则；Laya 参考运行时会跳过这组导出数据。

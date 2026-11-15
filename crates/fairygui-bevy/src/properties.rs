@@ -80,6 +80,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiRenderOrder>(world);
     sync_property::<GuiImageFlip>(world);
     sync_property::<GuiSortingOrder>(world);
+    sync_property::<GuiSizeConstraints>(world);
     sync_property::<GuiTransform>(world);
     sync_property::<GuiDisplay>(world);
     sync_property::<GuiText>(world);
@@ -244,13 +245,22 @@ impl Property for GuiTransform {
         runtime.store().object(object).map(Self::from_object)
     }
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
-        field!(self, previous, native, size, {
-            if self.size.is_finite() && self.size.min_element() >= 0. {
-                runtime
-                    .store_mut()
-                    .set_size(object, self.size.x, self.size.y);
-            }
-        });
+        // A write to one axis retains the other requested axis, even when the
+        // previous frame projected a clamped size there.
+        if self.size != previous.size && self.size.is_finite() && self.size.min_element() >= 0. {
+            let request = runtime.store().object(object).unwrap().requested_size();
+            let width = if self.size.x != previous.size.x {
+                self.size.x
+            } else {
+                request.width
+            };
+            let height = if self.size.y != previous.size.y {
+                self.size.y
+            } else {
+                request.height
+            };
+            runtime.store_mut().set_size(object, width, height);
+        }
         field!(self, previous, native, position, {
             if self.position.is_finite() {
                 runtime

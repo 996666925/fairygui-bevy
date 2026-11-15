@@ -79,8 +79,8 @@ pub struct GObject {
     pub(crate) y: f32,
     pub(crate) width: f32,
     pub(crate) height: f32,
-    /// Requested size before a group applies min/max limits.
-    pub(crate) group_raw_size: Option<Size>,
+    /// Requested dimensions before applying min/max restrictions.
+    pub(crate) requested_size: Option<Size>,
     pub(crate) init_width: f32,
     pub(crate) init_height: f32,
     pub(crate) min_width: f32,
@@ -155,7 +155,7 @@ impl GObject {
             y: 0.0,
             width: 0.0,
             height: 0.0,
-            group_raw_size: None,
+            requested_size: None,
             init_width: 0.0,
             init_height: 0.0,
             min_width: 0.0,
@@ -230,6 +230,23 @@ impl GObject {
     /// inherit the package containing their serialized instance data.
     pub fn source_package_id(&self) -> Option<&str> {
         self.source_package_id.as_deref()
+    }
+
+    pub(crate) fn constrain_width(&self, width: f32) -> f32 {
+        let width = width.max(self.min_width);
+        if self.max_width > 0. {
+            width.min(self.max_width)
+        } else {
+            width
+        }
+    }
+    pub(crate) fn constrain_height(&self, height: f32) -> f32 {
+        let height = height.max(self.min_height);
+        if self.max_height > 0. {
+            height.min(self.max_height)
+        } else {
+            height
+        }
     }
 
     // ---- 几何 ----
@@ -391,6 +408,16 @@ impl GObject {
         &self.children
     }
 
+    /// Requested dimensions before clamping; subsequent single-axis edits
+    /// retain the other requested axis rather than its clamped value.
+    pub fn requested_size(&self) -> Size {
+        self.requested_size.unwrap_or_else(|| self.size())
+    }
+
+    pub fn min_size(&self) -> Size {
+        Size::new(self.min_width, self.min_height)
+    }
+
     /// Exported size restrictions. Zero means that axis has no upper bound.
     pub fn max_size(&self) -> Size {
         Size::new(self.max_width, self.max_height)
@@ -460,10 +487,13 @@ impl GObject {
         self.y = buffer.read_i32()? as f32;
 
         if buffer.read_bool()? {
-            self.width = buffer.read_i32()? as f32;
-            self.height = buffer.read_i32()? as f32;
-            self.init_width = self.width;
-            self.init_height = self.height;
+            let width = buffer.read_i32()? as f32;
+            let height = buffer.read_i32()? as f32;
+            self.init_width = width;
+            self.init_height = height;
+            self.requested_size = Some(Size::new(width, height));
+            self.width = self.constrain_width(width);
+            self.height = self.constrain_height(height);
         }
 
         if buffer.read_bool()? {

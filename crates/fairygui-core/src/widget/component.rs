@@ -407,12 +407,20 @@ fn build_component(
         // Instance dimensions override the source component dimensions. Apply
         // that change through the store so backgrounds/text follow relations.
         let instance_size = store.object(child).unwrap().size();
+        let instance_requested = store.object(child).unwrap().requested_size();
         if instance_size != built_size && !store.object(child).unwrap().children().is_empty() {
             if let Some(target) = store.object_mut(child) {
                 target.width = built_size.width;
                 target.height = built_size.height;
+                target.requested_size = None;
             }
-            store.set_size(child, instance_size.width, instance_size.height);
+            store.set_size_internal(
+                child,
+                instance_requested.width,
+                instance_requested.height,
+                true,
+                true,
+            );
         }
 
         store.set_parent(child, Some(object));
