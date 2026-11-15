@@ -1,4 +1,5 @@
 //! ModalWaiting's retained window and simulated asynchronous request use ECS.
+use crate::ui::modal_waiting::{self as ui, GlobalModalWaiting, TestWin, WindowModalWaiting};
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 
@@ -24,38 +25,40 @@ pub fn bind(
     mut commands: Commands,
     pages: Query<(Entity, &FairyGuiRoot), Without<PageBound>>,
     windows: Query<Entity, (With<DemoWindow>, Without<WindowBound>)>,
-    assets: Res<Assets<FuiAsset>>,
     gui: GuiQuery,
     mut global: ResMut<GlobalDemo>,
 ) {
     for (page, source) in &pages {
-        if source.item_name != "Main"
-            || assets
-                .get(&source.asset)
-                .is_none_or(|asset| asset.package.name() != "ModalWaiting")
-        {
+        if source.item_name != ui::Main::ITEM_NAME {
             continue;
         }
-        let Some(button) = gui.child_by_name(page, "n0") else {
+        let Ok(binding) = ui::Main::bind(&gui, page) else {
             continue;
         };
-        let mut window = FairyGuiWindow::new(source.asset.clone(), "TestWin");
+        let mut window = FairyGuiWindow::new(source.asset.clone(), TestWin::ITEM_NAME);
         window.visible = false;
-        window.modal_wait = Some("WindowModalWaiting".into());
+        window.modal_wait = Some(WindowModalWaiting::ITEM_NAME.into());
         let owner = commands.spawn((window, DemoWindow, ChildOf(page))).id();
-        commands.entity(button).insert(Show(owner)).observe(show);
+        commands
+            .entity(binding.n0.entity())
+            .insert(Show(owner))
+            .observe(show);
         commands.entity(page).insert(PageBound);
-        let mut settings = GuiGlobalWaitSettings::new(source.asset.clone(), "GlobalModalWaiting");
+        let mut settings =
+            GuiGlobalWaitSettings::new(source.asset.clone(), GlobalModalWaiting::ITEM_NAME);
         settings.visible = true;
         commands.insert_resource(settings);
         global.page = Some(page);
         global.timer = Some(Timer::from_seconds(3., TimerMode::Once));
     }
     for owner in &windows {
-        let Some(button) = gui.child_by_name(owner, "n1") else {
+        let Ok(binding) = TestWin::bind(&gui, owner) else {
             continue;
         };
-        commands.entity(button).insert(Start(owner)).observe(start);
+        commands
+            .entity(binding.n1.entity())
+            .insert(Start(owner))
+            .observe(start);
         commands.entity(owner).insert(WindowBound);
     }
 }
