@@ -457,3 +457,15 @@ fn read_only_inputs_keep_selection_copy_and_programmatic_updates_but_reject_edit
     );
     assert_eq!(value(&app, entity), "editable!");
 }
+
+#[test]
+fn unchanged_input_sync_keeps_editor_and_text_change_flags_clear() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, _, entity) = fixture(None, 0, true);
+    app.world_mut().clear_trackers();
+    app.world_mut().run_system_once(sync_text_inputs).unwrap();
+    let entity = app.world().entity(entity);
+    assert!(!entity.get_ref::<EditableText>().unwrap().is_changed());
+    assert!(!entity.get_ref::<Text>().unwrap().is_changed());
+    assert!(!entity.get_ref::<InputTextState>().unwrap().is_changed());
+}

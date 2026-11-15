@@ -20,6 +20,7 @@ pub(super) fn autoscroll(
     views: PointerViews,
     runtime: NonSend<GuiRuntime>,
     mut editors: Query<(
+        &GObjectRef,
         &mut EditableText,
         &ComputedNode,
         &UiGlobalTransform,
@@ -28,6 +29,25 @@ pub(super) fn autoscroll(
     )>,
 ) {
     let Some(entity) = focus.get() else { return };
+    let Ok((reference, mut editor, node, transform, info, layout)) = editors.get_mut(entity) else {
+        return;
+    };
+    if runtime.entity_of(reference.0) != Some(entity) {
+        return;
+    }
+    // Generic picking can retain a drag after a direct selection cancels GUI
+    // editing capture. Only GUI capture may enqueue these actions for our input.
+    let generic_pointer_edit = |edit: &TextEdit| {
+        matches!(
+            edit,
+            TextEdit::ScrollBy(_) | TextEdit::ExtendSelectionToPoint(_)
+        )
+    };
+    if editor.pending_edits.iter().any(generic_pointer_edit) {
+        editor
+            .pending_edits
+            .retain(|edit| !generic_pointer_edit(edit));
+    }
     let pointer = state
         .capture
         .as_ref()
@@ -51,9 +71,6 @@ pub(super) fn autoscroll(
     if !window.focused || !eligible(&runtime, owner) {
         return;
     }
-    let Ok((mut editor, node, transform, info, layout)) = editors.get_mut(entity) else {
-        return;
-    };
     if editor.is_composing()
         || editor
             .pending_edits
@@ -88,14 +105,6 @@ pub(super) fn autoscroll(
     );
     let offset = (editor.viewport.offset + delta)
         .clamp(Vec2::ZERO, (content - editor.viewport.size).max(Vec2::ZERO));
-    // Bevy's generic widget autoscroll can also see picking drag state. Replace
-    // its queued pointer scroll/selection with this capture's viewport-aware step.
-    editor.pending_edits.retain(|edit| {
-        !matches!(
-            edit,
-            TextEdit::ScrollBy(_) | TextEdit::ExtendSelectionToPoint(_)
-        )
-    });
     let displacement = offset - editor.viewport.offset;
     if displacement != Vec2::ZERO {
         editor.queue_edit(TextEdit::ScrollBy(displacement));

@@ -473,9 +473,25 @@ fn keep_editing(event: On<GuiEnter>, mut input: GuiInput) {
 `GuiInputState::focused_entity()` 是输入阶段与 Sync 结束时刷新的快照。IME 窗口状态
 和光标位置在 PostUpdate 同步。可在 Respond、Initialize、PostLayout 中调用；与
 `GuiMut` 同时使用时通过 `ParamSet<(GuiMut, GuiInput)>` 分别借用运行时。
-同一系统还直接访问 `InputFocus`、`EditableText` 或修改 `Window` 时，也要通过
+同一系统还直接访问 `InputFocus`、`EditableText`、`Text`、`FontCx`、`LayoutCx` 或修改 `Window` 时，也要通过
 `ParamSet` 分开借用这些共享状态。
-选区与光标仍使用 Bevy `EditableText`，失焦时清理当前组合输入及选区。
+通过 `GuiInput` 操作光标和选区，业务层无需访问 `EditableText`：
+
+```rust,ignore
+input.set_selection(editor, GuiTextSelection::new(4, 1)); // 反向选择
+input.set_caret_position(editor, 2);
+input.select_all(editor);
+let selection = input.selection(editor); // anchor / focus；range() 返回排序后的范围
+let selected = input.selected_text(editor);
+```
+
+与原版一致，设置选区会聚焦输入框，索引按原文的 UTF-16 单元计算；密码框也使用原文索引，
+`selected_text` 返回原文而不是遮罩字符。超出范围的索引会截断，代理对内部的索引向前移到字符边界，
+编辑器再将端点移到有效光标位置；`selection()` 返回实际端点并保留方向。
+设置立即生效；同帧通过 `GuiMut` 修改的文本会先同步到编辑器，旧的指针／导航操作不会覆盖新选区，
+等待中的键入或粘贴会作用于新选区。设置操作返回是否接受，未就绪、不可聚焦及活动／等待中的 IME
+组合输入返回 `false`；活动组合输入期间，选区和选中文本查询返回 `None`，保留预编辑。
+只读输入仍可选择文本，设置选区不会产生 `GuiInputEvent`。失焦时清理当前组合输入及选区。
 输入框的字形、光标和选区统一由编辑器布局生成，避免静态文本布局覆盖拖选高亮。
 鼠标与触摸按 UI 相机视口换算选区坐标，失焦会结束本次拖选归属，重新聚焦不会恢复旧拖选。
 `--smoke-text-selection` 验证正反向拖选、中文/密码选区、按住不动、松开、改尺寸与全选，
@@ -484,6 +500,7 @@ fn keep_editing(event: On<GuiEnter>, mut input: GuiInput) {
 普通单行、密码和多行输入均沿当前文本视口扩展选区，鼠标与触摸捕获共用该行为；
 密码输入的滚动与点击使用遮罩字形的坐标，避免原文字宽度造成跳动。
 `--smoke-input-properties` 验证真实键盘/IME、直接焦点和回车取消，
+`--smoke-input-selection` 验证普通、密码和多行输入的直接选区、UTF-16、全选、重聚焦及光标滚动，
 `--smoke-nested-scroll` 验证直接取消滚动手势时保留程序滚动动画。
 
 `GuiTextInput` 的目标 observer 在 Publish 阶段触发，不冒泡；`value` 为已提交的

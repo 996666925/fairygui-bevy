@@ -7,7 +7,7 @@ use bevy::input::{
     keyboard::{Key, KeyCode, KeyboardInput},
 };
 use bevy::input_focus::{FocusCause, FocusedInput, InputFocus, InputFocusSystems};
-use bevy::text::{EditableText, TextEdit};
+use bevy::text::{EditableText, FontCx, LayoutCx, TextEdit};
 use bevy::window::{Ime, PrimaryWindow};
 
 #[cfg(test)]
@@ -17,12 +17,51 @@ mod tests;
 #[derive(Resource, Default)]
 struct GuiImeWindow(Option<Entity>);
 
+/// Directed selection in UTF-16 code units of the input's real text.
+/// The focus endpoint is the caret; equal endpoints describe a collapsed caret.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GuiTextSelection {
+    pub anchor: usize,
+    pub focus: usize,
+}
+impl GuiTextSelection {
+    pub const fn new(anchor: usize, focus: usize) -> Self {
+        Self { anchor, focus }
+    }
+    pub const fn caret(position: usize) -> Self {
+        Self::new(position, position)
+    }
+    pub fn range(self) -> std::ops::Range<usize> {
+        self.anchor.min(self.focus)..self.anchor.max(self.focus)
+    }
+    pub const fn is_collapsed(self) -> bool {
+        self.anchor == self.focus
+    }
+}
+
+fn utf16_to_byte(text: &str, index: usize) -> usize {
+    let mut offset = 0;
+    for (byte, character) in text.char_indices() {
+        if index < offset + character.len_utf16() {
+            return byte;
+        }
+        offset += character.len_utf16();
+    }
+    text.len()
+}
+
+fn byte_to_utf16(text: &str, index: usize) -> usize {
+    text[..text.floor_char_boundary(index.min(text.len()))]
+        .encode_utf16()
+        .count()
+}
+
 /// Direct GUI input access for systems and entity observers. Focus transitions,
 /// submit prevention and scroll cancellation apply immediately; GuiInputState is
 /// the published snapshot. Like GuiMut, this mutably borrows GuiRuntime. Use a
 /// ParamSet when combining it with GuiMut or another GUI service in one system.
-/// Direct access to InputFocus, Window or EditableText in that system may also
-/// need a ParamSet because this parameter borrows those Bevy types.
+/// Direct access to InputFocus, Window, EditableText, Text, FontCx or LayoutCx
+/// in that system may also need a ParamSet because this service borrows them too.
 #[derive(SystemParam)]
 pub struct GuiInput<'w, 's> {
     runtime: NonSendMut<'w, GuiRuntime>,
@@ -34,6 +73,16 @@ pub struct GuiInput<'w, 's> {
     roots: Query<'w, 's, &'static crate::FairyGuiRoot>,
     window_sources: Query<'w, 's, &'static crate::FairyGuiWindow>,
     editors: Query<'w, 's, (&'static mut EditableText, &'static mut InputEditPolicy)>,
+    values: Query<
+        'w,
+        's,
+        (
+            &'static mut crate::runtime::InputTextState,
+            Option<&'static mut Text>,
+        ),
+    >,
+    fonts: Option<ResMut<'w, FontCx>>,
+    layouts: Option<ResMut<'w, LayoutCx>>,
 }
 impl std::fmt::Debug for GuiInput<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -43,6 +92,110 @@ impl std::fmt::Debug for GuiInput<'_, '_> {
     }
 }
 impl GuiInput<'_, '_> {
+    /// Live directed selection. Returns None for unready/non-input entities or
+    /// during IME composition. Password indices refer to the real input value.
+    pub fn selection(&self, entity: Entity) -> Option<GuiTextSelection> {
+        let (_, view) = self.input(entity)?;
+        let (editor, _) = self.editors.get(view).ok()?;
+        if editor.is_composing() {
+            return None;
+        }
+        let selection = editor.editor.raw_selection();
+        let text = editor.editor.raw_text();
+        Some(GuiTextSelection::new(
+            byte_to_utf16(text, selection.anchor().index()),
+            byte_to_utf16(text, selection.focus().index()),
+        ))
+    }
+
+    /// Selected real text, including for passwords. A collapsed selection,
+    /// active composition, or absent editor returns None. Does not copy to the OS.
+    pub fn selected_text(&self, entity: Entity) -> Option<&str> {
+        let (_, view) = self.input(entity)?;
+        let (editor, _) = self.editors.get(view).ok()?;
+        if editor.is_composing() {
+            return None;
+        }
+        editor.editor.selected_text()
+    }
+
+    /// Focus and select immediately, as in native Input.setSelection. UTF-16
+    /// indices clamp to the text and snap to valid editor cursor boundaries;
+    /// indices inside a surrogate pair snap before that character. Returns false
+    /// for inputs that cannot focus, missing editor resources, or active/pending
+    /// IME composition, preserving that composition and the previous focus.
+    /// Supersedes older pointer/navigation edits; pending text edits and paste
+    /// use this new selection. Explicit model text changes are synchronized first.
+    pub fn set_selection(&mut self, entity: Entity, selection: GuiTextSelection) -> bool {
+        let Some((input, view)) = self.input(entity) else {
+            return false;
+        };
+        if !self.can_focus(input, view)
+            || self.fonts.is_none()
+            || self.layouts.is_none()
+            || !self.values.contains(view)
+        {
+            return false;
+        }
+        let Ok((editor, policy)) = self.editors.get(view) else {
+            return false;
+        };
+        if editor.is_composing() || policy.has_pending_ime(editor) {
+            return false;
+        }
+        {
+            let (editor, _) = self.editors.get_mut(view).unwrap();
+            let (state, text) = self.values.get_mut(view).unwrap();
+            let _ = crate::runtime::sync_input_text(
+                &mut self.runtime,
+                input,
+                editor,
+                text,
+                Some(state),
+            );
+        }
+        if !self.focus(entity) {
+            return false;
+        }
+        self.state.cancel_text_selection(view);
+        let (mut editor, mut policy) = self.editors.get_mut(view).unwrap();
+        policy.supersede_navigation(&mut editor);
+        let text = editor.editor.raw_text();
+        let anchor = utf16_to_byte(text, selection.anchor);
+        let focus = utf16_to_byte(text, selection.focus);
+        let password = self.runtime.store().input_field_of(input)
+            .and_then(|id| self.runtime.store().object(id))
+            .is_some_and(|object| matches!(object.control(), fairygui_core::widget::ControlData::TextInput(data) if data.password));
+        let editor = &mut *editor;
+        let mut driver = editor.editor.driver(
+            self.fonts.as_mut().unwrap(),
+            &mut self.layouts.as_mut().unwrap().0,
+        );
+        driver.select_byte_range(anchor, focus);
+        if !password && let Some(cursor) = bevy::text::cursor_reveal_rect(&mut driver) {
+            let layout = driver.layout();
+            editor.viewport.reveal_caret(
+                cursor,
+                Vec2::new(layout.full_width(), layout.height()),
+                editor.cursor_margin,
+                layout
+                    .lines()
+                    .map(|line| bevy::text::TextLineYBounds::from_line(&line)),
+            );
+        }
+        true
+    }
+
+    /// Focus and place a collapsed caret at a UTF-16 index.
+    pub fn set_caret_position(&mut self, entity: Entity, position: usize) -> bool {
+        self.set_selection(entity, GuiTextSelection::caret(position))
+    }
+
+    /// Focus and select all real text. Uses the same readiness/IME policy.
+    pub fn select_all(&mut self, entity: Entity) -> bool {
+        self.set_selection(entity, GuiTextSelection::new(0, usize::MAX))
+    }
+
     fn object(&self, entity: Entity) -> Option<GObjectId> {
         self.objects
             .get(entity)
@@ -79,17 +232,20 @@ impl GuiInput<'_, '_> {
         let Some((input, view)) = self.input(entity) else {
             return false;
         };
-        let window_active = self
-            .windows
-            .iter()
-            .find(|(entity, _, primary)| selected_window(*entity, *primary, &self.settings))
-            .is_none_or(|(_, window, _)| window.focused);
-        if !window_active || !eligible(&self.runtime, input) || !self.editors.contains(view) {
+        if !self.can_focus(input, view) {
             return false;
         }
         self.runtime.request_input_focus(Some(input));
         self.reconcile();
         self.focused_entity() == Some(view)
+    }
+    fn can_focus(&self, input: GObjectId, view: Entity) -> bool {
+        let window_active = self
+            .windows
+            .iter()
+            .find(|(entity, _, primary)| selected_window(*entity, *primary, &self.settings))
+            .is_none_or(|(_, window, _)| window.focused);
+        window_active && eligible(&self.runtime, input) && self.editors.contains(view)
     }
     /// End the GUI editing session now, preserving another Bevy widget's focus.
     /// Pending GUI focus acquisition is canceled too.

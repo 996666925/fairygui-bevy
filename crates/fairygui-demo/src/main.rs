@@ -231,6 +231,8 @@ fn main() -> AppExit {
         smoke::install_button_properties(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-text-selection") {
         smoke::install_text_selection(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-input-selection") {
+        smoke::install_input_selection(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-input-properties") {
         smoke::install_input_properties(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-visual-properties") {

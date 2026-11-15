@@ -130,7 +130,9 @@ pub use ecs::{
 };
 pub use extension::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
 pub use fairygui_bevy_macros::GuiExtension;
-pub use input::{GuiInput, GuiInputSettings, GuiInputState, GuiPointerCapture, GuiPointerId};
+pub use input::{
+    GuiInput, GuiInputSettings, GuiInputState, GuiPointerCapture, GuiPointerId, GuiTextSelection,
+};
 pub use list::{
     GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListRow,
     GuiListState, GuiVirtualList, GuiVirtualListState,
@@ -212,14 +214,14 @@ pub mod prelude {
         GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
         GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSizeConstraints, GuiSliderState,
         GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat,
-        GuiTextInput, GuiTextInputSettings, GuiTooltip, GuiTooltipError, GuiTooltipSettings,
-        GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
-        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
-        GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
-        GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
-        ListLayoutSettings, ListLayoutType, ListSelectionMode, PopupMenuTemplates, RelationType,
-        TreeSettings,
+        GuiTextInput, GuiTextInputSettings, GuiTextSelection, GuiTooltip, GuiTooltipError,
+        GuiTooltipSettings, GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback,
+        GuiTransitionComplete, GuiTransitionHook, GuiTransitionState, GuiTransitions,
+        GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
+        GuiTreeNodeState, GuiTreeSettings, GuiTreeState, GuiTweenComplete, GuiTweenProperty,
+        GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowState, GuiWorldExt,
+        ListInteractionSettings, ListLayoutSettings, ListLayoutType, ListSelectionMode,
+        PopupMenuTemplates, RelationType, TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
     pub use crate::{

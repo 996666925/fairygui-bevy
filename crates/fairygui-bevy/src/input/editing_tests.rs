@@ -1319,3 +1319,250 @@ fn selection_autoscroll_uses_captured_mouse_or_touch_and_stops_at_bounds_and_ree
             .is_empty()
     );
 }
+
+#[test]
+fn direct_selection_uses_utf16_preserves_direction_and_syncs_new_model_text() {
+    let (mut app, owner, view, _) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "A中😀e\u{301}Z");
+    with_input(&mut app, |input| {
+        assert!(input.set_selection(view, GuiTextSelection::new(4, 1)));
+        assert_eq!(input.focused_entity(), Some(view));
+        assert_eq!(input.selection(view), Some(GuiTextSelection::new(4, 1)));
+        assert_eq!(input.selected_text(view), Some("中😀"));
+        assert!(input.set_caret_position(view, 3));
+        assert_eq!(input.selection(view), Some(GuiTextSelection::caret(2)));
+        assert!(input.selected_text(view).is_none());
+        assert!(input.select_all(view));
+        assert_eq!(input.selection(view).unwrap().range(), 0..7);
+        assert_eq!(input.selected_text(view), Some("A中😀e\u{301}Z"));
+    });
+    assert_eq!(events(&mut app), [EventKind::FocusIn]);
+    for _ in 0..3 {
+        app.update();
+        with_input(&mut app, |input| {
+            assert_eq!(input.selection(view), Some(GuiTextSelection::new(0, 7)))
+        });
+    }
+    with_input(&mut app, |input| {
+        input.blur();
+        assert!(input.set_selection(view, GuiTextSelection::new(4, 1)));
+    });
+    app.update();
+    with_input(&mut app, |input| {
+        assert_eq!(input.selected_text(view), Some("中😀"))
+    });
+    assert_eq!(value(&app, view), "A中😀e\u{301}Z");
+}
+
+#[test]
+fn direct_selection_supersedes_old_navigation_but_keeps_pending_text_replacement() {
+    let (mut app, owner, view, _) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "abcde");
+    with_input(&mut app, |input| assert!(input.select_all(view)));
+    events(&mut app);
+    app.world_mut()
+        .get_mut::<EditableText>(view)
+        .unwrap()
+        .pending_edits
+        .extend([
+            TextEdit::TextStart(false),
+            TextEdit::CollapseSelection,
+            TextEdit::Insert("X".into()),
+        ]);
+    with_input(&mut app, |input| {
+        assert!(input.set_selection(view, GuiTextSelection::new(1, 4)))
+    });
+    app.update();
+    assert_eq!(value(&app, view), "aXe");
+    with_input(&mut app, |input| {
+        assert_eq!(input.selection(view), Some(GuiTextSelection::caret(2)))
+    });
+    assert_eq!(events(&mut app), [EventKind::Input]);
+}
+
+#[test]
+fn direct_selection_preserves_active_and_pending_ime_and_rejects_ineligible_targets() {
+    let (mut app, owner, view, window) = fixture();
+    let missing = app.world_mut().spawn_empty().id();
+    with_input(&mut app, |input| {
+        assert!(!input.select_all(missing));
+        assert!(input.selection(missing).is_none());
+        assert!(input.select_all(view));
+    });
+    app.world_mut().write_message(Ime::Preedit {
+        window,
+        value: "中文".into(),
+        cursor: Some((0, 6)),
+    });
+    app.update();
+    let raw = app
+        .world()
+        .get::<EditableText>(view)
+        .unwrap()
+        .editor
+        .raw_text()
+        .to_owned();
+    with_input(&mut app, |input| {
+        assert!(input.selection(view).is_none());
+        assert!(input.selected_text(view).is_none());
+        assert!(!input.set_caret_position(view, 0));
+        assert_eq!(input.focused_entity(), Some(view));
+    });
+    assert_eq!(
+        app.world()
+            .get::<EditableText>(view)
+            .unwrap()
+            .editor
+            .raw_text(),
+        raw
+    );
+    app.world_mut().write_message(Ime::Commit {
+        window,
+        value: "中文".into(),
+    });
+    app.update();
+    assert_eq!(value(&app, view), "中文");
+    app.world_mut()
+        .get_mut::<EditableText>(view)
+        .unwrap()
+        .queue_edit(TextEdit::ImeSetCompose {
+            value: "新".into(),
+            cursor: None,
+        });
+    with_input(&mut app, |input| assert!(!input.select_all(view)));
+    app.world_mut()
+        .get_mut::<EditableText>(view)
+        .unwrap()
+        .pending_edits
+        .clear();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_visible(owner, false);
+    with_input(&mut app, |input| assert!(!input.select_all(view)));
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_visible(owner, true);
+    app.world_mut().get_mut::<Window>(window).unwrap().focused = false;
+    with_input(&mut app, |input| assert!(!input.select_all(view)));
+    app.world_mut().despawn(view);
+    with_input(&mut app, |input| assert!(input.selection(view).is_none()));
+}
+
+#[test]
+fn direct_selection_addresses_real_utf16_text_in_readonly_passwords_and_compound_titles() {
+    let (mut app, owner, _, _) = fixture();
+    let wrapper = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let parent = runtime.store().object(owner).unwrap().parent().unwrap();
+        let wrapper = runtime
+            .store_mut()
+            .create(fairygui_core::package::ObjectType::Label);
+        runtime.store_mut().set_parent(wrapper, Some(parent));
+        runtime.store_mut().set_name(owner, "title");
+        runtime.store_mut().set_parent(owner, Some(wrapper));
+        runtime.store_mut().set_object_text(owner, "A中😀Z");
+        runtime.store_mut().set_input_password(owner, true);
+        runtime.store_mut().set_input_editable(owner, false);
+        runtime.queue_subtree(wrapper);
+        wrapper
+    };
+    app.update();
+    let wrapper = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(wrapper)
+        .unwrap();
+    let view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(owner)
+        .unwrap();
+    // Apply the application's new value after the compound view is materialized.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "A中😀Z");
+    with_input(&mut app, |input| {
+        assert!(input.set_selection(wrapper, GuiTextSelection::new(2, 4)));
+        assert_eq!(input.selection(wrapper), Some(GuiTextSelection::new(2, 4)));
+        assert_eq!(input.selected_text(wrapper), Some("😀"));
+        assert_eq!(input.focused_entity(), Some(view));
+    });
+    app.update();
+    assert_eq!(value(&app, view), "A中😀Z");
+    with_input(&mut app, |input| {
+        assert_eq!(input.selected_text(wrapper), Some("😀"))
+    });
+}
+
+#[test]
+fn direct_selection_rejects_old_picking_drag_edits_without_changing_other_bevy_editors() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, owner, view, _) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "abcdef");
+    with_input(&mut app, |input| assert!(input.set_caret_position(view, 0)));
+    // The widget's generic autoscroll runs after Respond and can still see its
+    // old picking drag. These are the exact two edits it produces outside bounds.
+    app.world_mut()
+        .get_mut::<EditableText>(view)
+        .unwrap()
+        .pending_edits
+        .extend([
+            TextEdit::ScrollBy(Vec2::splat(100.)),
+            TextEdit::ExtendSelectionToPoint(Vec2::splat(100.)),
+        ]);
+    app.world_mut()
+        .run_system_once(super::super::text_selection::autoscroll)
+        .unwrap();
+    assert!(
+        app.world()
+            .get::<EditableText>(view)
+            .unwrap()
+            .pending_edits
+            .is_empty()
+    );
+    app.world_mut()
+        .run_system_once(runtime::apply_selection_edits)
+        .unwrap();
+    with_input(&mut app, |input| {
+        assert_eq!(input.selection(view), Some(GuiTextSelection::caret(0)))
+    });
+    let foreign = app
+        .world_mut()
+        .spawn(EditableText::new("other Bevy widget"))
+        .id();
+    app.world_mut()
+        .get_mut::<EditableText>(foreign)
+        .unwrap()
+        .queue_edit(TextEdit::ScrollBy(Vec2::splat(10.)));
+    let pending = app
+        .world()
+        .get::<EditableText>(foreign)
+        .unwrap()
+        .pending_edits
+        .clone();
+    app.world_mut()
+        .resource_mut::<InputFocus>()
+        .set(foreign, FocusCause::Navigated);
+    app.world_mut()
+        .run_system_once(super::super::text_selection::autoscroll)
+        .unwrap();
+    assert_eq!(
+        app.world()
+            .get::<EditableText>(foreign)
+            .unwrap()
+            .pending_edits,
+        pending
+    );
+}

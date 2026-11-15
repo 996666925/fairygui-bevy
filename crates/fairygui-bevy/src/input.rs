@@ -2,7 +2,7 @@
 //! Read `GuiInputState` after `GuiSystems::Input` to arbitrate game input.
 mod actions;
 pub(crate) mod editing;
-pub use editing::GuiInput;
+pub use editing::{GuiInput, GuiTextSelection};
 mod gestures;
 mod masks;
 mod slider;

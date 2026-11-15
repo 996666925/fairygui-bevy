@@ -68,6 +68,30 @@ enum InputCommand {
 }
 
 impl InputEditPolicy {
+    pub(crate) fn has_pending_ime(&self, editor: &EditableText) -> bool {
+        let ime = |edit: &TextEdit| {
+            matches!(edit,
+            TextEdit::ImeSetCompose { value, .. } if !value.is_empty())
+                || matches!(edit, TextEdit::ImeCommit { .. })
+        };
+        editor.pending_edits.iter().any(ime)
+            || self
+                .queued
+                .iter()
+                .any(|command| matches!(command, InputCommand::Edit(edit) if ime(edit)))
+    }
+
+    /// A direct selection takes precedence over older pointer/navigation edits.
+    /// Text mutations, clipboard operations and submission retain their order.
+    pub(crate) fn supersede_navigation(&mut self, editor: &mut EditableText) {
+        let retain = |edit: &TextEdit| edit.is_destructive() || matches!(edit, TextEdit::Copy);
+        editor.pending_edits.retain(retain);
+        self.queued.retain(|command| match command {
+            InputCommand::Edit(edit) => retain(edit),
+            InputCommand::Submit => true,
+        });
+    }
+
     pub(crate) fn queue_submit(&mut self, editor: &mut EditableText) {
         self.queued.extend(
             std::mem::take(&mut editor.pending_edits)

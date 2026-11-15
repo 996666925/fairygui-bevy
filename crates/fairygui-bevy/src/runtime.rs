@@ -3233,81 +3233,91 @@ pub fn sync_text_inputs(
         Option<&mut InputTextState>,
     )>,
 ) {
-    for (entity, entity_ref, mut editor, text, state) in &mut query {
-        let object = entity_ref.0;
-        let Some(current) = runtime.store().object(object).and_then(|item| {
-            if let ControlData::TextInput(data) = item.control() {
-                Some((
-                    data.text_field.text.clone(),
-                    !data.text_field.single_line,
-                    data.password,
-                    data.text_field.ubb_enabled,
-                ))
-            } else {
-                None
-            }
-        }) else {
-            continue;
-        };
-        let (current, multiline, password, ubb) = current;
-        let translated = fairygui_core::text::input::normalize_input_lines(
-            &runtime.translate(&current),
-            multiline,
-        );
-        let value = editor.value().to_string();
-        // Explicit model/translation edits win over a concurrent editor change.
-        // Font/layout updates alone must not reset selection or IME composition.
-        let model_changed = state
-            .as_ref()
-            .is_some_and(|state| state.source != current || state.display != translated);
-        let next = if model_changed {
-            if state.as_ref().is_some_and(|state| state.source != current)
-                && runtime.focused_input == Some(object)
-            {
-                runtime.emit_input_event(
-                    fairygui_core::object::EventKind::Change,
-                    object,
-                    &translated,
-                );
-            }
-            if value != translated {
-                editor.editor.set_text(&translated);
-            }
-            InputTextState {
-                source: current,
-                display: translated,
-            }
-        } else if state.as_ref().is_some_and(|state| state.display == value) {
-            InputTextState {
-                source: current,
-                display: translated,
-            }
-        } else {
-            if current != value {
-                runtime.store_mut().set_object_text(object, &value);
-            }
-            InputTextState {
-                source: value.clone(),
-                display: value,
-            }
-        };
-        let display = if password {
-            fairygui_core::text::input::password_text(&next.display, ubb)
-        } else {
-            next.display.clone()
-        };
-        if let Some(mut text) = text
-            && text.0 != display
-        {
-            text.0 = display;
-        }
-        if let Some(mut state) = state {
-            if *state != next {
-                *state = next;
-            }
-        } else {
+    for (entity, entity_ref, editor, text, state) in &mut query {
+        if let Some(next) = sync_input_text(&mut runtime, entity_ref.0, editor, text, state) {
             commands.entity(entity).insert(next);
         }
+    }
+}
+
+/// Synchronize the committed model and editor before direct caret changes too.
+/// Returns initial state only when a view has not published it yet.
+pub(crate) fn sync_input_text(
+    runtime: &mut GuiRuntime,
+    object: GObjectId,
+    mut editor: Mut<bevy::text::EditableText>,
+    text: Option<Mut<Text>>,
+    state: Option<Mut<InputTextState>>,
+) -> Option<InputTextState> {
+    let current = runtime.store().object(object).and_then(|item| {
+        if let ControlData::TextInput(data) = item.control() {
+            Some((
+                data.text_field.text.clone(),
+                !data.text_field.single_line,
+                data.password,
+                data.text_field.ubb_enabled,
+            ))
+        } else {
+            None
+        }
+    })?;
+    let (current, multiline, password, ubb) = current;
+    let translated =
+        fairygui_core::text::input::normalize_input_lines(&runtime.translate(&current), multiline);
+    let value = editor.value().to_string();
+    // Explicit model/translation edits win over a concurrent editor change.
+    // Font/layout updates alone must not reset selection or IME composition.
+    let model_changed = state
+        .as_ref()
+        .is_some_and(|state| state.source != current || state.display != translated);
+    let next = if model_changed {
+        if state.as_ref().is_some_and(|state| state.source != current)
+            && runtime.focused_input == Some(object)
+        {
+            runtime.emit_input_event(
+                fairygui_core::object::EventKind::Change,
+                object,
+                &translated,
+            );
+        }
+        if value != translated {
+            editor.editor.set_text(&translated);
+        }
+        InputTextState {
+            source: current,
+            display: translated,
+        }
+    } else if state.as_ref().is_some_and(|state| state.display == value) {
+        InputTextState {
+            source: current,
+            display: translated,
+        }
+    } else {
+        if current != value {
+            runtime.store_mut().set_object_text(object, &value);
+        }
+        InputTextState {
+            source: value.clone(),
+            display: value,
+        }
+    };
+    let display = if password {
+        fairygui_core::text::input::password_text(&next.display, ubb)
+    } else {
+        next.display.clone()
+    };
+    if let Some(mut text) = text
+        && text.0 != display
+    {
+        text.0 = display;
+    }
+    if let Some(mut state) = state {
+        if *state != next {
+            *state = next;
+        }
+        None
+    } else {
+        Some(next)
     }
 }
 

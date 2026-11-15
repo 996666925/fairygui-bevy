@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_input_selection.rs"]
+mod input_selection;
+pub(super) fn install_input_selection(app: &mut App) {
+    input_selection::install(app);
+}
 #[path = "smoke_relation_api.rs"]
 mod relation_api;
 pub(super) fn install_relation_api(app: &mut App) {
