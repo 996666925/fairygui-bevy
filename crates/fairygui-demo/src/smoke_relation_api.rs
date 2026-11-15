@@ -193,8 +193,46 @@ fn drive(
             next = true;
         }
         7 if elapsed >= 20 => {
+            let owner = state.owners[1];
+            let title = gui.child_by_name(owner, "title").unwrap();
+            assert!(objects.clear_relations(title));
+            assert!(objects.add_relation(owner, title, RelationType::RightExtRight, false));
+            objects
+                .get_mut(owner)
+                .unwrap()
+                .set_pivot(Vec2::splat(0.5), false);
+            objects.get_mut(owner).unwrap().set_width(400.);
+            objects.get_mut(title).unwrap().set_width(300.);
+            commands
+                .entity(gui.view(owner).unwrap())
+                .insert(GuiSizeConstraints {
+                    min: Vec2::new(70., 50.),
+                    max: Vec2::new(240., 190.),
+                });
+            next = true;
+        }
+        8 if elapsed >= 12 => {
+            check_child_extension(&state, &gui, &nodes, 240.);
+            let title = gui.child_by_name(state.owners[1], "title").unwrap();
+            objects.get_mut(title).unwrap().set_width(30.);
+            next = true;
+        }
+        9 if elapsed >= 12 => {
+            check_child_extension(&state, &gui, &nodes, 70.);
+            let title = gui.child_by_name(state.owners[1], "title").unwrap();
+            objects.get_mut(title).unwrap().set_width(180.);
+            next = true;
+        }
+        10 if elapsed >= 12 => {
+            check_child_extension(&state, &gui, &nodes, 180.);
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-child-relations.png"));
+            next = true;
+        }
+        11 if elapsed >= 20 => {
             info!(
-                "demo smoke PASSED: typed entity relation add/remove/clear, root/view aliases, rendered same-frame geometry and target disposal"
+                "demo smoke PASSED: typed entity relation add/remove/clear, root/view aliases, rendered geometry, target disposal, child extension design sizes and clamped pivot stability"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -204,6 +242,31 @@ fn drive(
     if next {
         state.step += 1;
         state.since = state.frame;
+    }
+}
+
+fn check_child_extension(
+    state: &State,
+    gui: &GuiQuery,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    width: f32,
+) {
+    let owner = state.owners[1];
+    let root = gui.view(owner).unwrap();
+    assert_eq!(gui.transform(root).unwrap().size(), Vec2::new(width, 160.));
+    assert_eq!(
+        gui.transform(root).unwrap().position(),
+        Vec2::new(670. - width * 0.5, 215.)
+    );
+    let (node, transform) = nodes.get(root).unwrap();
+    let center = transform.transform_point2(Vec2::ZERO);
+    assert!(center.distance(state.current_center) <= 1.);
+    assert!((node.size().x * node.inverse_scale_factor() - width).abs() < 0.5);
+    for name in ["n1", "n2", "n3"] {
+        let child = gui.child_by_name(owner, name).unwrap();
+        assert_eq!(gui.transform(child).unwrap().size().x, width);
+        let actual = nodes.get(child).unwrap().1.transform_point2(Vec2::ZERO);
+        assert!(actual.distance(center) <= 1., "background {name}");
     }
 }
 

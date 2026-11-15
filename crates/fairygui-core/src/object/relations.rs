@@ -59,6 +59,7 @@ impl ObjectStore {
         }
         self.bind_relation_targets(owner);
         let parent = self.objects[owner].parent;
+        let initial_position = self.position_of(target).unwrap();
         let items = &mut self.objects[owner].relations.items;
         let index = if let Some(index) = items.iter().position(|item| {
             item.binding
@@ -73,6 +74,7 @@ impl ObjectStore {
                 binding: Some(RelationBinding {
                     target: Some(target),
                     track_position: parent != Some(target),
+                    initial_position,
                 }),
                 defs: Vec::new(),
             });

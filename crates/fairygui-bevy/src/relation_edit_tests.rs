@@ -239,3 +239,100 @@ fn window_owners_and_views_resolve_the_same_relation_target() {
     );
     assert!(app.world_mut().gui_clear_relations_to(owner, target_view));
 }
+
+#[test]
+fn child_extension_relations_restore_design_edges_after_manual_resize_and_size_limits() {
+    let (mut app, asset) = app();
+    let owner = app
+        .world_mut()
+        .spawn(
+            FairyGuiRoot::new(asset, "Button1")
+                .with_position(Vec2::new(400., 200.))
+                .with_size(Vec2::new(200., 120.)),
+        )
+        .id();
+    app.update();
+    let mut queries = SystemState::<GuiQuery>::new(app.world_mut());
+    let gui = queries.get(app.world()).unwrap();
+    let title = gui.child_by_name(owner, "title").unwrap();
+    let view = gui.view(owner).unwrap();
+    app.world_mut().gui_mut(title).unwrap().clear_relations();
+    app.world_mut()
+        .gui_mut(owner)
+        .unwrap()
+        .set_pivot(Vec2::splat(0.5), false);
+    assert!(
+        app.world_mut()
+            .gui_add_relation(owner, title, RelationType::RightExtRight, false)
+    );
+    app.world_mut().gui_mut(owner).unwrap().set_width(400.);
+    app.world_mut().gui_mut(title).unwrap().set_width(260.);
+    app.update();
+    let gui = queries.get(app.world()).unwrap();
+    assert_eq!(gui.transform(owner).unwrap().size(), Vec2::new(260., 120.));
+    assert_eq!(
+        gui.transform(owner).unwrap().position(),
+        Vec2::new(370., 200.)
+    );
+    app.world_mut().entity_mut(view).insert(GuiSizeConstraints {
+        min: Vec2::new(70., 50.),
+        max: Vec2::new(240., 190.),
+    });
+    app.update();
+    for (request, effective) in [(280., 240.), (30., 70.), (180., 180.)] {
+        app.world_mut().gui_mut(title).unwrap().set_width(request);
+        app.update();
+        let gui = queries.get(app.world()).unwrap();
+        assert_eq!(gui.transform(owner).unwrap().size().x, effective);
+        assert_eq!(
+            gui.transform(owner).unwrap().position().x,
+            500. - effective * 0.5
+        );
+        let node = app.world().get::<Node>(view).unwrap();
+        assert_eq!(
+            (node.left, node.width),
+            (Val::Px(500. - effective * 0.5), Val::Px(effective))
+        );
+    }
+}
+
+#[test]
+fn exported_chat_height_relation_uses_design_size_after_runtime_row_height_overrides() {
+    let (mut app, _) = app();
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: fairygui_core::FuiPackage::parse(
+                "Chat",
+                include_bytes!("../../fairygui-demo/assets/ui/Chat.fui"),
+            )
+            .unwrap(),
+            res_key: "ui/Chat".into(),
+        });
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "chatLeft"))
+        .id();
+    app.update();
+    let mut queries = SystemState::<GuiQuery>::new(app.world_mut());
+    let gui = queries.get(app.world()).unwrap();
+    let bubble = gui.child_by_name(owner, "n0").unwrap();
+    let view = gui.view(owner).unwrap();
+    assert!(
+        app.world_mut()
+            .gui_has_relation(owner, bubble, RelationType::Height)
+    );
+    app.world_mut().gui_mut(owner).unwrap().set_height(240.);
+    app.world_mut().gui_mut(bubble).unwrap().set_height(121.);
+    app.update();
+    let gui = queries.get(app.world()).unwrap();
+    assert_eq!(gui.transform(owner).unwrap().size().y, 160.);
+    assert_eq!(app.world().get::<Node>(view).unwrap().height, Val::Px(160.));
+    app.world_mut().gui_mut(owner).unwrap().set_height(300.);
+    app.world_mut().gui_mut(bubble).unwrap().set_height(61.);
+    app.update();
+    let gui = queries.get(app.world()).unwrap();
+    assert_eq!(gui.transform(owner).unwrap().size().y, 100.);
+    assert_eq!(app.world().get::<Node>(view).unwrap().height, Val::Px(100.));
+}

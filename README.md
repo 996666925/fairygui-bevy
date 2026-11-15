@@ -650,6 +650,9 @@ fn bind_layout(gui: &mut GuiMut, owner: Entity, target: Entity) {
 独占系统可使用 `World::gui_add_relation`、`gui_remove_relation`、`gui_has_relation`、
 `gui_clear_relations_to`，或 `world.gui_mut(owner).unwrap().clear_relations()`。
 目标重排或换父节点后保留原对象身份，销毁后不会跟随复用其位置的新对象。
+扩展边关联保留尺寸限制前的请求值，恢复空间后继续按该值计算；
+父组件关联子对象宽高／右下扩展边时，使用导出的设计尺寸与子对象初始尺寸，
+不会把临时修改的父组件尺寸累计进关联偏移。
 `--smoke-relation-api` 验证动态增删、根／视图别名、渲染位置和目标销毁。
 
 组合通过 `GuiGroupLayout` 修改横向／纵向排列、间距、隐藏成员排除和固定尺寸策略；

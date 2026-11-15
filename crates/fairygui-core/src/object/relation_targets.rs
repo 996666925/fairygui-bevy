@@ -42,6 +42,9 @@ impl ObjectStore {
                     RelationBinding {
                         target,
                         track_position: target != parent,
+                        initial_position: target
+                            .and_then(|id| self.objects.get(id))
+                            .map_or(Point::ZERO, |o| Point::new(o.x, o.y)),
                     },
                 ))
             })
