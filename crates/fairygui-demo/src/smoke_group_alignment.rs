@@ -7,6 +7,7 @@ struct State {
     since: u32,
     step: u8,
     panels: Vec<Entity>,
+    buttons: Vec<Entity>,
     member_sizes: Vec<(Vec2, Vec2)>,
 }
 
@@ -208,8 +209,70 @@ fn drive(
             next = true;
         }
         9 if elapsed >= 20 => {
+            for (index, pivot) in [0., 0.5, 1.].into_iter().enumerate() {
+                state.buttons.push(
+                    commands
+                        .spawn((
+                            FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Button1")
+                                .with_position(Vec2::new(70. + index as f32 * 380., 530.))
+                                .with_size(Vec2::new(160., 60.)),
+                            GuiText::new(format!("Group pivot {pivot}")),
+                        ))
+                        .id(),
+                );
+            }
+            next = true;
+        }
+        10 if elapsed >= 16 && state.buttons.iter().all(|&owner| gui.view(owner).is_some()) => {
+            for (index, &owner) in state.buttons.iter().enumerate() {
+                // Use the actual exported parent-size relations on the button
+                // backgrounds/title, then measure their common group bounds.
+                commands.queue(move |world: &mut World| {
+                    let mut runtime = world.non_send_mut::<GuiRuntime>();
+                    let root = runtime.ecs_root_object(owner).unwrap();
+                    let store = runtime.store_mut();
+                    let members = store.object(root).unwrap().children().to_vec();
+                    let group = store.create(fairygui_core::package::ObjectType::Group);
+                    store.set_name(group, "pivot_group");
+                    store.set_parent(group, Some(root));
+                    for member in members {
+                        store.set_group(member, Some(group));
+                        store.set_pivot(member, index as f32 * 0.5, index as f32 * 0.5, false);
+                    }
+                });
+            }
+            next = true;
+        }
+        11 if elapsed >= 12 => {
+            for &owner in &state.buttons {
+                let mut transform = *gui.transform(owner).unwrap();
+                transform.size = Vec2::new(280., 100.);
+                commands.entity(owner).insert(transform);
+            }
+            next = true;
+        }
+        12 if elapsed >= 12 => {
+            check_pivot_groups(&state, &gui, &nodes, Vec2::new(280., 100.));
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-group-pivot-alignment.png",
+                ));
+            next = true;
+        }
+        13 if elapsed >= 20 => {
+            for &owner in &state.buttons {
+                objects
+                    .get_mut(owner)
+                    .unwrap()
+                    .set_size(Vec2::new(160., 60.));
+            }
+            next = true;
+        }
+        14 if elapsed >= 12 => {
+            check_pivot_groups(&state, &gui, &nodes, Vec2::new(160., 60.));
             info!(
-                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members and retained geometry"
+                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members, pivoted size relations and retained geometry"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -219,6 +282,29 @@ fn drive(
     if next {
         state.step += 1;
         state.since = state.frame;
+    }
+}
+
+fn check_pivot_groups(
+    state: &State,
+    gui: &GuiQuery,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    size: Vec2,
+) {
+    for &owner in &state.buttons {
+        let root = gui.view(owner).unwrap();
+        let center = nodes.get(root).unwrap().1.transform_point2(Vec2::ZERO);
+        for name in ["pivot_group", "n1", "n2", "n3", "title"] {
+            let member = gui.child_by_name(owner, name).unwrap();
+            let transform = gui.transform(member).unwrap();
+            assert_eq!(transform.position(), Vec2::ZERO, "{name}");
+            assert_eq!(transform.size(), size, "{name}");
+            let actual = nodes.get(member).unwrap().1.transform_point2(Vec2::ZERO);
+            assert!(
+                actual.distance(center) <= 1.,
+                "{name}: render={actual:?}, expected={center:?}"
+            );
+        }
     }
 }
 

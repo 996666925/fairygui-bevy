@@ -728,7 +728,7 @@ mod layout_tests {
                 defs: vec![RelationDef {
                     relation_type: kind,
                     percent: false,
-                    axis: 0,
+                    axis: u8::from(!(kind <= 6 || kind == 14 || (16..=19).contains(&kind))),
                 }],
             });
     }
@@ -787,6 +787,136 @@ mod layout_tests {
         store.set_xy(group, 20., 30.);
         assert_eq!(store.position_of(first), Some(Point::new(120., 230.)));
         assert_eq!(store.position_of(second), Some(Point::new(170., 240.)));
+    }
+
+    #[test]
+    fn parent_width_relation_preserves_left_alignment_of_a_group_with_a_pivot() {
+        let mut store = ObjectStore::new();
+        let parent = store.create(ObjectType::Component);
+        store.set_size(parent, 300., 200.);
+        let group = store.create(ObjectType::Group);
+        store.set_parent(group, Some(parent));
+        store.set_size(group, 100., 40.);
+        store.set_xy(group, 25., 30.);
+        store.set_pivot(group, 0.5, 0.5, false);
+        store.set_group_layout_settings(
+            group,
+            GroupLayoutSettings {
+                layout: GroupLayoutType::Horizontal,
+                auto_size_disabled: true,
+                ..Default::default()
+            },
+        );
+        let member = store.create(ObjectType::Component);
+        store.set_parent(member, Some(parent));
+        store.set_size(member, 100., 40.);
+        store.set_xy(member, 25., 30.);
+        store.set_group(member, Some(group));
+        store.flush_group_layouts();
+        relation(&mut store, group, None, 0);
+        relation(&mut store, group, None, 14);
+        store.set_size(parent, 400., 200.);
+        store.flush_group_layouts();
+        assert_eq!(store.position_of(group), Some(Point::new(25., 30.)));
+        assert_eq!(store.position_of(member), Some(Point::new(25., 30.)));
+        assert_eq!(store.object(group).unwrap().width(), 200.);
+    }
+
+    #[test]
+    fn group_size_relations_and_pivots_match_original_alignment_traces() {
+        let mut store = ObjectStore::new();
+        let mut objects = Vec::new();
+        let mut target = None;
+        let mut states = 0;
+        for line in include_str!("../../tests/fixtures/group-pivot-alignment-reference.txt").lines()
+        {
+            if line.starts_with('#') || line.is_empty() {
+                continue;
+            }
+            let (command, expected) = line.split_once(" | ").unwrap_or((line, ""));
+            let values: Vec<f32> = command
+                .split_whitespace()
+                .skip(1)
+                .map(|v| v.parse().unwrap())
+                .collect();
+            if line.starts_with("case ") {
+                store = ObjectStore::new();
+                objects.clear();
+                let parent = store.create(ObjectType::Component);
+                store.set_size(parent, 300., 200.);
+                let t = if values[0] == 1. {
+                    parent
+                } else {
+                    let id = store.create(ObjectType::Component);
+                    store.set_parent(id, Some(parent));
+                    store.set_size(id, 300., 200.);
+                    id
+                };
+                target = Some(t);
+                let group = store.create(ObjectType::Group);
+                store.set_parent(group, Some(parent));
+                store.set_size(group, 100., 60.);
+                store.set_xy(group, 25., 30.);
+                store.set_pivot(group, values[1], values[1], values[3] == 1.);
+                store.set_group_layout_settings(
+                    group,
+                    GroupLayoutSettings {
+                        layout: GroupLayoutType::Horizontal,
+                        auto_size_disabled: true,
+                        ..Default::default()
+                    },
+                );
+                objects.push(group);
+                for (x, y, w, h) in [(25., 30., 40., 20.), (65., 40., 60., 30.)] {
+                    let id = store.create(ObjectType::Component);
+                    store.set_parent(id, Some(parent));
+                    store.set_size(id, w, h);
+                    store.set_xy(id, x, y);
+                    store.set_group(id, Some(group));
+                    objects.push(id);
+                }
+                // The native capture starts with unmodified exported geometry.
+                store.pending_group_layouts.clear();
+                let index = if t == parent {
+                    None
+                } else {
+                    store.child_index(t)
+                };
+                let align = values[2] as u8;
+                for kind in [
+                    align,
+                    if align == 0 {
+                        7
+                    } else if align == 3 {
+                        10
+                    } else {
+                        13
+                    },
+                    14,
+                    15,
+                ] {
+                    relation(&mut store, group, index, kind);
+                }
+            } else {
+                store.set_size(target.unwrap(), values[0], values[1]);
+                store.flush_group_layouts();
+                let expected: Vec<f32> = expected
+                    .split_whitespace()
+                    .map(|v| v.parse().unwrap())
+                    .collect();
+                let actual: Vec<f32> = objects
+                    .iter()
+                    .flat_map(|&id| {
+                        let o = store.object(id).unwrap();
+                        [o.x(), o.y(), o.width(), o.height()]
+                    })
+                    .collect();
+                assert_eq!(actual, expected, "{command} in state {states}");
+                assert_eq!(store.flush_group_layouts(), 0);
+                states += 1;
+            }
+        }
+        assert_eq!(states, 108);
     }
 
     #[test]

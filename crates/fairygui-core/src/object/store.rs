@@ -928,31 +928,113 @@ impl ObjectStore {
                 continue;
             }
 
-            let (mut new_x, mut new_y) = (x, y);
-            let (mut new_width, mut new_height) = (width, height);
             let target = self.objects.get(changed).unwrap();
-            relations.apply_on_target_resized_with_context(
-                &mut new_x,
-                &mut new_y,
-                &mut new_width,
-                &mut new_height,
-                crate::widget::relation::RelationResize::new(
-                    crate::widget::relation::RelationTarget {
-                        old_size: Point::new(target.width - d_width, target.height - d_height),
-                        new_size: Point::new(target.width, target.height),
-                        position: Point::new(target.x, target.y),
-                        is_parent: self.objects[sibling].parent == Some(changed),
-                        pivot: Point::new(target.pivot_x, target.pivot_y),
-                        pivot_as_anchor: target.pivot_as_anchor,
-                    },
-                    owner_pivot,
-                    owner_pivot_as_anchor,
-                ),
-            );
-
+            let target = crate::widget::relation::RelationTarget {
+                old_size: Point::new(target.width - d_width, target.height - d_height),
+                new_size: Point::new(target.width, target.height),
+                position: Point::new(target.x, target.y),
+                is_parent: self.objects[sibling].parent == Some(changed),
+                pivot: Point::new(target.pivot_x, target.pivot_y),
+                pivot_as_anchor: target.pivot_as_anchor,
+            };
+            self.relation_handling.insert(sibling);
+            // Native definitions invoke setters in order. Size setters already
+            // preserve pivots and the owner's center/right/bottom relations;
+            // replaying a precomputed final rectangle applies those shifts twice.
+            for item in relations.items {
+                let mut one = crate::widget::relation::Relations { items: vec![item] };
+                let defs = std::mem::take(&mut one.items[0].defs);
+                for def in defs {
+                    let object = &self.objects[sibling];
+                    let (old_x, old_y, old_width, old_height) =
+                        (object.x, object.y, object.width, object.height);
+                    let raw = object.requested_size();
+                    let (mut new_x, mut new_y) = (old_x, old_y);
+                    let (mut new_width, mut new_height) = (old_width, old_height);
+                    if def.relation_type == 14 {
+                        new_width = raw.width;
+                    } else if def.relation_type == 15 {
+                        new_height = raw.height;
+                    }
+                    one.items[0].defs.clear();
+                    one.items[0].defs.push(def.clone());
+                    one.apply_on_target_resized_with_context(
+                        &mut new_x,
+                        &mut new_y,
+                        &mut new_width,
+                        &mut new_height,
+                        crate::widget::relation::RelationResize::new(
+                            target,
+                            owner_pivot,
+                            owner_pivot_as_anchor,
+                        ),
+                    );
+                    match def.relation_type {
+                        14 | 15 => {
+                            let horizontal = def.relation_type == 14;
+                            self.set_size_internal(
+                                sibling,
+                                if horizontal { new_width } else { raw.width },
+                                if horizontal { raw.height } else { new_height },
+                                target.is_parent,
+                                false,
+                            );
+                            // Parent size relations preserve xMin/yMin for an
+                            // anchor pivot, including after size constraints.
+                            if target.is_parent && owner_pivot_as_anchor {
+                                let object = &self.objects[sibling];
+                                let (next_x, next_y) = if horizontal {
+                                    (old_x + (object.width - old_width) * owner_pivot.x, object.y)
+                                } else {
+                                    (
+                                        object.x,
+                                        old_y + (object.height - old_height) * owner_pivot.y,
+                                    )
+                                };
+                                self.set_xy(sibling, next_x, next_y);
+                            }
+                        }
+                        16..=23 => {
+                            let horizontal = def.axis == 0;
+                            self.set_size(
+                                sibling,
+                                if horizontal { new_width } else { raw.width },
+                                if horizontal { raw.height } else { new_height },
+                            );
+                            let object = &self.objects[sibling];
+                            // Extension definitions explicitly restore the
+                            // opposite edge after the native size setter.
+                            let (next_x, next_y) = if horizontal {
+                                (
+                                    new_x
+                                        + if owner_pivot_as_anchor {
+                                            (object.width - new_width) * owner_pivot.x
+                                        } else {
+                                            0.
+                                        },
+                                    object.y,
+                                )
+                            } else {
+                                (
+                                    object.x,
+                                    new_y
+                                        + if owner_pivot_as_anchor {
+                                            (object.height - new_height) * owner_pivot.y
+                                        } else {
+                                            0.
+                                        },
+                                )
+                            };
+                            self.set_xy(sibling, next_x, next_y);
+                        }
+                        _ => self.set_xy(sibling, new_x, new_y),
+                    }
+                }
+            }
+            let object = &self.objects[sibling];
+            let (new_x, new_y, new_width, new_height) =
+                (object.x, object.y, object.width, object.height);
             if new_x != x || new_y != y {
-                self.relation_handling.insert(sibling);
-                self.set_xy(sibling, new_x, new_y);
                 self.update_gear_relations(
                     sibling,
                     crate::widget::GearKind::Xy,
@@ -965,8 +1047,6 @@ impl ObjectStore {
                 }
             }
             if new_width != width || new_height != height {
-                self.relation_handling.insert(sibling);
-                self.set_size(sibling, new_width, new_height);
                 self.update_gear_relations(
                     sibling,
                     crate::widget::GearKind::Size,
