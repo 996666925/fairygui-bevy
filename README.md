@@ -988,6 +988,10 @@ fn play(mut gui: GuiMut, target: Entity) {
 `get_mut` 接受控件视图、根拥有者或窗口拥有者；对象尚未创建或已销毁时返回 `None`。
 操作立即修改模型，渲染及只读查询在插件同步后刷新。初始播放放在 `GuiSystems::Initialize`；
 该阶段已完成对象创建。独占系统和测试可用 `World::gui_mut`，使用方式相同。
+拥有者移除配置、换模板或销毁后，直接编辑、关联和拖放服务立即拒绝该别名，
+不会修改同步前仍保留的旧界面；新模板就绪后可继续用同一拥有者实体访问。
+`GuiMut`、`GuiDrag`、`GuiInput` 都会读取根／窗口配置；同一系统若还需要
+`Query<&mut FairyGuiRoot>` 或 `Query<&mut FairyGuiWindow>`，通过 `ParamSet` 分开借用。
 
 `object.tween(target, duration, ease)` 从调用时的当前值启动通用
 补间。`GuiTweenTarget` 支持位置、尺寸、缩放、透明度和旋转；`ease` 使用 FairyGUI

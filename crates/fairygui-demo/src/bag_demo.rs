@@ -79,8 +79,7 @@ fn open(
     buttons: Query<&OpenBag>,
     gui: GuiQuery,
     mut commands: Commands,
-    mut windows: Query<&mut FairyGuiWindow>,
-    mut edit: GuiMut,
+    mut edit: ParamSet<(Query<&mut FairyGuiWindow>, GuiMut)>,
 ) {
     let Ok(button) = buttons.get(event.entity) else {
         return;
@@ -88,10 +87,10 @@ fn open(
     if let Some(list) = gui.child_by_name(button.0, "list") {
         commands.entity(list).insert(inventory());
     }
-    if let Ok(mut window) = windows.get_mut(button.0) {
+    if let Ok(mut window) = edit.p0().get_mut(button.0) {
         window.visible = true;
     }
-    if let Some(mut window) = edit.get_mut(button.0) {
+    if let Some(mut window) = edit.p1().get_mut(button.0) {
         window.bring_window_to_front();
     }
 }

@@ -3,21 +3,61 @@ use super::*;
 use bevy::ecs::system::SystemParam;
 use fairygui_core::package::ObjectType;
 
+/// Resolve direct-service targets against the owner's current template. A view
+/// keeps its identity until disposal; an owner alias is invalid as soon as its
+/// source component is removed or points at a different template.
+pub(crate) fn resolve_object(
+    runtime: &GuiRuntime,
+    entity: Entity,
+    reference: Option<&GObjectRef>,
+    root: Option<&FairyGuiRoot>,
+    window: Option<&windows::FairyGuiWindow>,
+) -> Option<GObjectId> {
+    reference
+        .map(|reference| reference.0)
+        .or_else(|| {
+            root.filter(|source| runtime.ecs_root_source_matches(entity, source))
+                .and_then(|_| runtime.ecs_root_object(entity))
+        })
+        .or_else(|| {
+            window
+                .filter(|source| runtime.ecs_window_source_matches(entity, source))
+                .and_then(|_| runtime.ecs_window_object(entity))
+        })
+        .filter(|&object| runtime.store().contains(object))
+}
+
+#[derive(SystemParam, Debug)]
+pub(crate) struct GuiObjectResolver<'w, 's> {
+    references: Query<'w, 's, &'static GObjectRef>,
+    roots: Query<'w, 's, &'static FairyGuiRoot>,
+    windows: Query<'w, 's, &'static windows::FairyGuiWindow>,
+}
+impl GuiObjectResolver<'_, '_> {
+    pub(crate) fn object(&self, runtime: &GuiRuntime, entity: Entity) -> Option<GObjectId> {
+        resolve_object(
+            runtime,
+            entity,
+            self.references.get(entity).ok(),
+            self.roots.get(entity).ok(),
+            self.windows.get(entity).ok(),
+        )
+    }
+}
+
 /// Direct access to materialized GUI objects. Calls apply immediately; pending
 /// assets return `None`. Use writable ECS components for declarative properties.
+/// Root/window aliases require their current template to match the materialized
+/// view. Use ParamSet with mutable FairyGuiRoot/FairyGuiWindow queries, since
+/// this service reads those components to validate aliases at the time of use.
 #[derive(SystemParam, Debug)]
 pub struct GuiMut<'w, 's> {
     runtime: NonSendMut<'w, GuiRuntime>,
-    references: Query<'w, 's, &'static GObjectRef>,
+    resolver: GuiObjectResolver<'w, 's>,
 }
 impl GuiMut<'_, '_> {
     fn object_for_entity(&self, entity: Entity) -> Option<GObjectId> {
-        self.references
-            .get(entity)
-            .ok()
-            .map(|r| r.0)
-            .or_else(|| self.runtime.ecs_root_object(entity))
-            .or_else(|| self.runtime.ecs_window_object(entity))
+        self.resolver.object(&self.runtime, entity)
     }
     pub fn get_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>> {
         let object = self.object_for_entity(entity)?;
@@ -827,16 +867,13 @@ fn set_group(runtime: &mut GuiRuntime, member: GObjectId, group: Option<GObjectI
 }
 
 fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
-    world
-        .get::<GObjectRef>(entity)
-        .map(|r| r.0)
-        .or_else(|| world.get::<GuiRootInstance>(entity).map(|r| r.object))
-        .or_else(|| world.get_non_send::<GuiRuntime>()?.ecs_root_object(entity))
-        .or_else(|| {
-            world
-                .get_non_send::<GuiRuntime>()?
-                .ecs_window_object(entity)
-        })
+    resolve_object(
+        world.get_non_send::<GuiRuntime>()?,
+        entity,
+        world.get::<GObjectRef>(entity),
+        world.get::<FairyGuiRoot>(entity),
+        world.get::<windows::FairyGuiWindow>(entity),
+    )
 }
 impl GuiWorldExt for World {
     fn gui_set_group(&mut self, member: Entity, group: Option<Entity>) -> bool {

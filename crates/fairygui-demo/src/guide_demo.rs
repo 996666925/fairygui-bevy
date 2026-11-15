@@ -82,10 +82,9 @@ fn click(
 
 pub fn update(
     mut pages: Query<(Entity, &mut Guide)>,
-    mut roots: Query<&mut FairyGuiRoot>,
     windows: Query<&Window, With<PrimaryWindow>>,
     gui: GuiQuery,
-    mut objects: GuiMut,
+    mut edit: ParamSet<(Query<&mut FairyGuiRoot>, GuiMut)>,
 ) {
     let Ok(window) = windows.single() else { return };
     let size = Vec2::new(window.width(), window.height());
@@ -97,17 +96,18 @@ pub fn update(
                 continue;
             };
             if transform.size() != size {
-                objects.edit(target, |object: &mut GuiObjectMut| object.set_size(size));
+                edit.p1()
+                    .edit(target, |object: &mut GuiObjectMut| object.set_size(size));
                 resizing = true;
             }
             if transform.position() != Vec2::ZERO {
-                objects.edit(target, |object: &mut GuiObjectMut| {
+                edit.p1().edit(target, |object: &mut GuiObjectMut| {
                     object.set_position(Vec2::ZERO)
                 });
                 resizing = true;
             }
         }
-        if resizing && roots.get(guide.layer).is_ok_and(|layer| layer.active) {
+        if resizing && edit.p0().get(guide.layer).is_ok_and(|layer| layer.active) {
             guide.pending = true;
         }
         if !guide.pending || resizing {
@@ -125,13 +125,13 @@ pub fn update(
         else {
             continue;
         };
-        if let Ok(mut layer) = roots.get_mut(guide.layer) {
+        if let Ok(mut layer) = edit.p0().get_mut(guide.layer) {
             layer.active = true;
         }
-        objects.edit(hole, |object: &mut GuiObjectMut| {
+        edit.p1().edit(hole, |object: &mut GuiObjectMut| {
             object.set_size(Vec2::new(rect.width, rect.height))
         });
-        objects.edit(hole, |object: &mut GuiObjectMut| {
+        edit.p1().edit(hole, |object: &mut GuiObjectMut| {
             object.tween(GuiTweenTarget::Position(Vec2::new(rect.x, rect.y)), 0.5, 5)
         });
         guide.pending = false;

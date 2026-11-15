@@ -50,7 +50,6 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
-    mut gui_edit: GuiMut,
 ) {
     state.frame += 1;
     assert!(
@@ -71,7 +70,9 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
+            let mut display = *gui.display(menu).unwrap();
+            display.visible = false;
+            commands.entity(menu).insert(display);
             for (position, scale) in [(Vec2::new(100., 100.), 1.25), (Vec2::new(650., 100.), 1.)] {
                 let owner = commands
                     .spawn(

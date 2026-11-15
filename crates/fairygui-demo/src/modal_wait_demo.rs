@@ -65,14 +65,13 @@ pub fn bind(
 fn show(
     event: On<GuiClick>,
     buttons: Query<&Show>,
-    mut windows: Query<&mut FairyGuiWindow>,
-    mut gui: GuiMut,
+    mut edit: ParamSet<(Query<&mut FairyGuiWindow>, GuiMut)>,
 ) {
     if let Ok(button) = buttons.get(event.entity) {
-        if let Ok(mut window) = windows.get_mut(button.0) {
+        if let Ok(mut window) = edit.p0().get_mut(button.0) {
             window.visible = true;
         }
-        if let Some(mut window) = gui.get_mut(button.0) {
+        if let Some(mut window) = edit.p1().get_mut(button.0) {
             window.bring_window_to_front();
         }
     }

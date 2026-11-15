@@ -255,27 +255,16 @@ impl GuiInput<'_, '_> {
     }
 
     fn object(&self, entity: Entity) -> Option<GObjectId> {
-        self.objects
-            .get(entity)
-            .ok()
-            .map(|reference| reference.0)
-            .or_else(|| {
-                self.roots
-                    .get(entity)
-                    .ok()
-                    .map(|(_, source)| source)
-                    .filter(|source| self.runtime.ecs_root_source_matches(entity, source))
-                    .and_then(|_| self.runtime.ecs_root_object(entity))
-            })
-            .or_else(|| {
-                self.window_sources
-                    .get(entity)
-                    .ok()
-                    .map(|(_, source)| source)
-                    .filter(|source| self.runtime.ecs_window_source_matches(entity, source))
-                    .and_then(|_| self.runtime.ecs_window_object(entity))
-            })
-            .filter(|&object| self.runtime.store().contains(object))
+        crate::runtime::edit::resolve_object(
+            &self.runtime,
+            entity,
+            self.objects.get(entity).ok(),
+            self.roots.get(entity).ok().map(|(_, source)| source),
+            self.window_sources
+                .get(entity)
+                .ok()
+                .map(|(_, source)| source),
+        )
     }
     fn input(&self, entity: Entity) -> Option<(GObjectId, Entity)> {
         let input = self.runtime.store().input_field_of(self.object(entity)?)?;

@@ -564,3 +564,31 @@ fn ecs_drag_touch_owner_survives_another_finger_release_and_cancellation_cleans_
         }
     }
 }
+
+#[test]
+fn direct_drag_rejects_changed_or_removed_owner_templates_before_lifecycle_sync() {
+    for change in 0..3 {
+        let (mut app, _, owner, source, _) = fixture();
+        app.world_mut().entity_mut(source).remove::<GuiDragSource>();
+        mouse(&mut app, true);
+        match change {
+            0 => {
+                app.world_mut()
+                    .get_mut::<FairyGuiRoot>(owner)
+                    .unwrap()
+                    .item_name = "Demo_Text".into()
+            }
+            1 => {
+                app.world_mut().entity_mut(owner).remove::<FairyGuiRoot>();
+            }
+            _ => {
+                app.world_mut().despawn(owner);
+            }
+        }
+        assert!(!start(&mut app, owner, None), "change={change}");
+        assert!(!app.world().non_send::<GuiRuntime>().is_dragging());
+        // The capture remains usable through its explicit retained control view.
+        assert!(start(&mut app, source, None));
+        assert!(cancel(&mut app));
+    }
+}

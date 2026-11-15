@@ -31,11 +31,13 @@ pub struct GuiDropTarget;
 ///
 /// Like GuiMut, this parameter mutably borrows GuiRuntime. Use a ParamSet if a
 /// system also needs GuiMut, and release each borrow before using the other.
+/// Mutable FairyGuiRoot/FairyGuiWindow queries also require ParamSet: owner
+/// aliases are validated against their current template before capture is claimed.
 #[derive(SystemParam)]
 pub struct GuiDrag<'w, 's> {
     runtime: NonSendMut<'w, GuiRuntime>,
     input: ResMut<'w, InputRouter>,
-    objects: Query<'w, 's, &'static GObjectRef>,
+    resolver: edit::GuiObjectResolver<'w, 's>,
     windows: Query<'w, 's, (Entity, &'static Window, Has<PrimaryWindow>)>,
     settings: Res<'w, GuiInputSettings>,
     commands: Commands<'w, 's>,
@@ -57,13 +59,7 @@ impl GuiDrag<'_, '_> {
         configuration: GuiDragSource,
         touch_id: Option<u64>,
     ) -> bool {
-        let object = self
-            .objects
-            .get(source)
-            .ok()
-            .map(|reference| reference.0)
-            .or_else(|| self.runtime.ecs_root_object(source))
-            .or_else(|| self.runtime.ecs_window_object(source));
+        let object = self.resolver.object(&self.runtime, source);
         let Some(object) = object else {
             return false;
         };

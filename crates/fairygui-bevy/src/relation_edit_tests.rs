@@ -336,3 +336,111 @@ fn exported_chat_height_relation_uses_design_size_after_runtime_row_height_overr
     assert_eq!(gui.transform(owner).unwrap().size().y, 100.);
     assert_eq!(app.world().get::<Node>(view).unwrap().height, Val::Px(100.));
 }
+
+#[test]
+fn direct_edit_services_reject_replaced_removed_or_despawned_owner_aliases_before_sync() {
+    for window in [false, true] {
+        for change in 0..4 {
+            let (mut app, asset) = app();
+            let owner = if window {
+                app.world_mut()
+                    .spawn(FairyGuiWindow::new(asset.clone(), "Button1"))
+                    .id()
+            } else {
+                app.world_mut()
+                    .spawn(FairyGuiRoot::new(asset.clone(), "Button1"))
+                    .id()
+            };
+            app.update();
+            let old = if window {
+                app.world()
+                    .non_send::<GuiRuntime>()
+                    .ecs_window_object(owner)
+                    .unwrap()
+            } else {
+                app.world()
+                    .non_send::<GuiRuntime>()
+                    .ecs_root_object(owner)
+                    .unwrap()
+            };
+            let view = app.world().non_send::<GuiRuntime>().entity_of(old).unwrap();
+            let original = app
+                .world()
+                .non_send::<GuiRuntime>()
+                .store()
+                .object_text(old)
+                .unwrap()
+                .to_owned();
+            match change {
+                0 => {
+                    if window {
+                        app.world_mut()
+                            .get_mut::<FairyGuiWindow>(owner)
+                            .unwrap()
+                            .item_name = "Button2".into();
+                    } else {
+                        app.world_mut()
+                            .get_mut::<FairyGuiRoot>(owner)
+                            .unwrap()
+                            .item_name = "Button2".into();
+                    }
+                }
+                1 => {
+                    if window {
+                        app.world_mut().entity_mut(owner).remove::<FairyGuiWindow>();
+                    } else {
+                        app.world_mut().entity_mut(owner).remove::<FairyGuiRoot>();
+                    }
+                }
+                2 => {
+                    app.world_mut().despawn(owner);
+                }
+                _ => {
+                    let pending = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
+                    if window {
+                        app.world_mut()
+                            .get_mut::<FairyGuiWindow>(owner)
+                            .unwrap()
+                            .asset = pending;
+                    } else {
+                        app.world_mut()
+                            .get_mut::<FairyGuiRoot>(owner)
+                            .unwrap()
+                            .asset = pending;
+                    }
+                }
+            }
+            assert!(
+                app.world_mut().gui_mut(owner).is_none(),
+                "window={window}, change={change}"
+            );
+            assert!(
+                !app.world_mut()
+                    .gui_add_relation(view, owner, RelationType::Size, false)
+            );
+            let mut service = SystemState::<GuiMut>::new(app.world_mut());
+            let mut edit = service.get_mut(app.world_mut()).unwrap();
+            assert!(edit.get_mut(owner).is_none());
+            assert!(!edit.edit(owner, |object| object.set_text("wrong old template")));
+            assert!(!edit.add_relation(view, owner, RelationType::Size, false));
+            assert_eq!(
+                app.world()
+                    .non_send::<GuiRuntime>()
+                    .store()
+                    .object_text(old),
+                Some(original.as_str())
+            );
+            // A still-materialized old view remains an explicit, stable handle
+            // until scheduled lifecycle cleanup; only the owner alias is invalid.
+            assert!(app.world_mut().gui_mut(view).is_some());
+            app.update();
+            assert!(!app.world().non_send::<GuiRuntime>().store().contains(old));
+            assert!(app.world_mut().gui_mut(view).is_none());
+            if change == 0 {
+                assert!(app.world_mut().gui_mut(owner).is_some());
+            } else {
+                assert!(app.world_mut().gui_mut(owner).is_none());
+            }
+        }
+    }
+}

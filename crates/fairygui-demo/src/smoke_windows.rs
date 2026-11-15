@@ -41,7 +41,6 @@ fn drive(
     demo: Res<Demo>,
     gui: GuiQuery,
     states: Query<&GuiWindowState>,
-    mut sources: Query<&mut FairyGuiWindow>,
     existing: Query<()>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     assets: Res<AssetServer>,
@@ -51,7 +50,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
-    mut gui_edit: GuiMut,
+    mut edit: ParamSet<(Query<&mut FairyGuiWindow>, GuiMut)>,
 ) {
     state.frame += 1;
     assert!(
@@ -73,7 +72,8 @@ fn drive(
             let Some(menu) = demo.menu_owner.filter(|&owner| gui.view(owner).is_some()) else {
                 return;
             };
-            gui_edit.edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
+            edit.p1()
+                .edit(menu, |object: &mut GuiObjectMut| object.set_visible(false));
             let asset = assets.load("ui/Basics.fui");
             for (item, modal) in [("WindowA", false), ("WindowB", true)] {
                 let mut config = FairyGuiWindow::new(asset.clone(), item);
@@ -113,8 +113,8 @@ fn drive(
                 WindowB::bind(&gui, second.unwrap()).unwrap().root.entity(),
                 state.views[1]
             );
-            sources.get_mut(first).unwrap().visible = true;
-            gui_edit.edit(first, |object: &mut GuiObjectMut| {
+            edit.p0().get_mut(first).unwrap().visible = true;
+            edit.p1().edit(first, |object: &mut GuiObjectMut| {
                 object.set_position(Vec2::new(200., 130.))
             });
             next = true;
@@ -143,10 +143,10 @@ fn drive(
         5 if elapsed >= 8 => {
             let first = first.unwrap();
             assert!(!states.get(first).unwrap().is_showing());
-            assert!(!sources.get(first).unwrap().visible);
+            assert!(!edit.p0().get(first).unwrap().visible);
             assert_eq!(states.get(first).unwrap().view(), state.views[0]);
             assert!(existing.contains(state.views[0]));
-            sources.get_mut(first).unwrap().visible = true;
+            edit.p0().get_mut(first).unwrap().visible = true;
             next = true;
         }
         6 if elapsed >= 12 => {
@@ -181,7 +181,7 @@ fn drive(
         }
         10 if elapsed >= 8 => {
             assert!(!states.get(first.unwrap()).unwrap().is_dragging());
-            sources.get_mut(second.unwrap()).unwrap().visible = true;
+            edit.p0().get_mut(second.unwrap()).unwrap().visible = true;
             next = true;
         }
         11 if elapsed >= 12 => {
@@ -191,7 +191,7 @@ fn drive(
             next = true;
         }
         12 if elapsed >= 8 => {
-            gui_edit.get_mut(second.unwrap()).unwrap().center_window();
+            edit.p1().get_mut(second.unwrap()).unwrap().center_window();
             next = true;
         }
         13 if elapsed >= 8 => {
@@ -202,7 +202,7 @@ fn drive(
                     .length()
                     < 0.01
             );
-            sources.get_mut(second.unwrap()).unwrap().visible = false;
+            edit.p0().get_mut(second.unwrap()).unwrap().visible = false;
             next = true;
         }
         14 if elapsed >= 8 => {
