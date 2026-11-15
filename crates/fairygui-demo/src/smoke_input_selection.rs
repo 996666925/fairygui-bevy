@@ -13,8 +13,23 @@ struct State {
     value: String,
 }
 pub(super) fn install(app: &mut App) {
-    app.init_resource::<State>()
-        .add_systems(Update, drive.in_set(GuiSystems::Respond));
+    app.init_resource::<State>().add_systems(
+        Update,
+        (replace_ecs_text, drive)
+            .chain()
+            .in_set(GuiSystems::Respond),
+    );
+}
+
+fn replace_ecs_text(state: Res<State>, mut texts: Query<&mut GuiText>) {
+    // Apply an ordinary ECS edit immediately before the public selection call,
+    // without allowing the scheduled GUI property synchronization in between.
+    if state.step == 2
+        && state.frame - state.since >= 8
+        && let Some(input) = state.input
+    {
+        texts.get_mut(input).unwrap().set(&state.value);
+    }
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -83,7 +98,7 @@ fn drive(
             commands.entity(input).insert((
                 format,
                 transform,
-                GuiText::new(state.value.clone()),
+                GuiText::new("old placeholder"),
                 GuiTextInputSettings {
                     password: state.case == 1,
                     ..default()
@@ -182,7 +197,7 @@ fn drive(
         }
         9 if elapsed > 20 => {
             info!(
-                "demo smoke PASSED: public UTF-16 selection, reversed ranges, selected real password text, caret reveal, select all, refocus and ordinary/password/multiline geometry"
+                "demo smoke PASSED: same-frame ECS text edits, public UTF-16 selection, reversed ranges, selected real password text, caret reveal, select all, refocus and ordinary/password/multiline geometry"
             );
             exit.write(AppExit::Success);
             next = true;

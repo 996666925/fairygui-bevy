@@ -23,6 +23,35 @@ pub(crate) struct NativeValue<T: Property> {
     value: T,
 }
 
+impl<T: Property> NativeValue<T> {
+    /// Consume a component write before an immediate operation needs its value.
+    /// Keep unchanged projections pending for the scheduler to refresh; only
+    /// acknowledge explicit writes so a later native edit cannot replay them.
+    pub(crate) fn apply_pending(
+        &mut self,
+        value: &T,
+        object: GObjectId,
+        is_view: bool,
+        runtime: &mut GuiRuntime,
+    ) {
+        let Some(native) = T::read(runtime, object) else {
+            return;
+        };
+        let previous = if is_view || self.object == object {
+            &self.value
+        } else {
+            &native
+        };
+        if value != previous {
+            if *value != native {
+                value.apply(previous, &native, runtime, object);
+            }
+            self.object = object;
+            self.value = value.clone();
+        }
+    }
+}
+
 type PropertyEntities<T> = QueryState<
     Entity,
     (

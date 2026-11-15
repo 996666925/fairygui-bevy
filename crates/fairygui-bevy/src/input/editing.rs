@@ -60,7 +60,7 @@ fn byte_to_utf16(text: &str, index: usize) -> usize {
 /// submit prevention and scroll cancellation apply immediately; GuiInputState is
 /// the published snapshot. Like GuiMut, this mutably borrows GuiRuntime. Use a
 /// ParamSet when combining it with GuiMut or another GUI service in one system.
-/// Direct access to InputFocus, Window, EditableText, Text, FontCx or LayoutCx
+/// Direct access to InputFocus, Window, EditableText, Text, GuiText, FontCx or LayoutCx
 /// in that system may also need a ParamSet because this service borrows them too.
 #[derive(SystemParam)]
 pub struct GuiInput<'w, 's> {
@@ -70,8 +70,16 @@ pub struct GuiInput<'w, 's> {
     settings: Res<'w, GuiInputSettings>,
     windows: Query<'w, 's, (Entity, &'static Window, Has<PrimaryWindow>)>,
     objects: Query<'w, 's, &'static GObjectRef>,
-    roots: Query<'w, 's, &'static crate::FairyGuiRoot>,
-    window_sources: Query<'w, 's, &'static crate::FairyGuiWindow>,
+    roots: Query<'w, 's, (Entity, &'static crate::FairyGuiRoot)>,
+    window_sources: Query<'w, 's, (Entity, &'static crate::FairyGuiWindow)>,
+    text_properties: Query<
+        'w,
+        's,
+        (
+            &'static crate::GuiText,
+            &'static mut crate::properties::NativeValue<crate::GuiText>,
+        ),
+    >,
     editors: Query<'w, 's, (&'static mut EditableText, &'static mut InputEditPolicy)>,
     values: Query<
         'w,
@@ -125,7 +133,8 @@ impl GuiInput<'_, '_> {
     /// for inputs that cannot focus, missing editor resources, or active/pending
     /// IME composition, preserving that composition and the previous focus.
     /// Supersedes older pointer/navigation edits; pending text edits and paste
-    /// use this new selection. Explicit model text changes are synchronized first.
+    /// use this new selection. Explicit model and GuiText component changes on
+    /// the input, compound titles and their root/window owners synchronize first.
     pub fn set_selection(&mut self, entity: Entity, selection: GuiTextSelection) -> bool {
         let Some((input, view)) = self.input(entity) else {
             return false;
@@ -143,6 +152,7 @@ impl GuiInput<'_, '_> {
         if editor.is_composing() || policy.has_pending_ime(editor) {
             return false;
         }
+        self.sync_text_properties(input);
         {
             let (editor, _) = self.editors.get_mut(view).unwrap();
             let (state, text) = self.values.get_mut(view).unwrap();
@@ -196,6 +206,48 @@ impl GuiInput<'_, '_> {
         self.set_selection(entity, GuiTextSelection::new(0, usize::MAX))
     }
 
+    fn sync_text_properties(&mut self, input: GObjectId) {
+        // Consume compound titles from outermost to innermost. Unchanged title
+        // projections must never overwrite an explicit write on their wrapper.
+        let mut path = vec![input];
+        let mut parent = self.runtime.store().object(input).and_then(|o| o.parent());
+        while let Some(object) = parent {
+            if self.runtime.store().input_field_of(object) != Some(input) {
+                break;
+            }
+            path.push(object);
+            parent = self.runtime.store().object(object).and_then(|o| o.parent());
+        }
+        for object in path.into_iter().rev() {
+            let owners: Vec<_> = self
+                .roots
+                .iter()
+                .filter_map(|(entity, source)| {
+                    (self.runtime.ecs_root_source_matches(entity, source)
+                        && self.runtime.ecs_root_object(entity) == Some(object))
+                    .then_some(entity)
+                })
+                .chain(self.window_sources.iter().filter_map(|(entity, source)| {
+                    (self.runtime.ecs_window_source_matches(entity, source)
+                        && self.runtime.ecs_window_object(entity) == Some(object))
+                    .then_some(entity)
+                }))
+                .collect();
+            for owner in owners {
+                self.consume_text_property(owner, object, false);
+            }
+            if let Some(view) = self.runtime.entity_of(object) {
+                self.consume_text_property(view, object, true);
+            }
+        }
+    }
+
+    fn consume_text_property(&mut self, entity: Entity, object: GObjectId, is_view: bool) {
+        if let Ok((value, mut baseline)) = self.text_properties.get_mut(entity) {
+            baseline.apply_pending(value, object, is_view, &mut self.runtime);
+        }
+    }
+
     fn object(&self, entity: Entity) -> Option<GObjectId> {
         self.objects
             .get(entity)
@@ -205,6 +257,7 @@ impl GuiInput<'_, '_> {
                 self.roots
                     .get(entity)
                     .ok()
+                    .map(|(_, source)| source)
                     .filter(|source| self.runtime.ecs_root_source_matches(entity, source))
                     .and_then(|_| self.runtime.ecs_root_object(entity))
             })
@@ -212,6 +265,7 @@ impl GuiInput<'_, '_> {
                 self.window_sources
                     .get(entity)
                     .ok()
+                    .map(|(_, source)| source)
                     .filter(|source| self.runtime.ecs_window_source_matches(entity, source))
                     .and_then(|_| self.runtime.ecs_window_object(entity))
             })

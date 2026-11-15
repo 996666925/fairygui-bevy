@@ -1566,3 +1566,222 @@ fn direct_selection_rejects_old_picking_drag_edits_without_changing_other_bevy_e
         pending
     );
 }
+
+#[test]
+fn selection_consumes_same_frame_ecs_text_without_replaying_it_over_later_native_edits() {
+    use crate::{GuiText, properties::sync_property};
+    let (mut app, owner, view, _) = fixture();
+    sync_property::<GuiText>(app.world_mut());
+    app.world_mut()
+        .get_mut::<GuiText>(view)
+        .unwrap()
+        .set("A中😀Z");
+    with_input(&mut app, |input| {
+        assert!(input.set_selection(view, GuiTextSelection::new(4, 1)));
+        assert_eq!(input.selected_text(view), Some("中😀"));
+    });
+    assert_eq!(value(&app, view), "A中😀Z");
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object_text(owner),
+        Some("A中😀Z")
+    );
+    // The consumed ECS value must not be interpreted as another pending write
+    // after a newer direct edit in this same response phase.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "newer native value");
+    with_input(&mut app, |input| {
+        assert!(input.select_all(view));
+        assert_eq!(input.selected_text(view), Some("newer native value"));
+    });
+    sync_property::<GuiText>(app.world_mut());
+    app.update();
+    assert_eq!(value(&app, view), "newer native value");
+    assert_eq!(
+        app.world().get::<GuiText>(view).unwrap().value(),
+        "newer native value"
+    );
+    with_input(&mut app, |input| {
+        assert_eq!(input.selection(view).unwrap().range(), 0..18)
+    });
+}
+
+#[test]
+fn selection_consumes_nested_title_text_in_outer_to_inner_order_and_preserves_ime() {
+    use crate::{GuiText, properties::sync_property};
+    let (mut app, owner, _, window) = fixture();
+    let (outer, inner) = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let parent = runtime.store().object(owner).unwrap().parent().unwrap();
+        let store = runtime.store_mut();
+        let outer = store.create(fairygui_core::package::ObjectType::Label);
+        let inner = store.create(fairygui_core::package::ObjectType::Label);
+        store.set_parent(outer, Some(parent));
+        store.set_parent(inner, Some(outer));
+        store.set_name(inner, "title");
+        store.set_parent(owner, Some(inner));
+        store.set_name(owner, "title");
+        runtime.queue_subtree(outer);
+        (outer, inner)
+    };
+    app.update();
+    let (outer, inner, view) = {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        (
+            runtime.entity_of(outer).unwrap(),
+            runtime.entity_of(inner).unwrap(),
+            runtime.entity_of(owner).unwrap(),
+        )
+    };
+    sync_property::<GuiText>(app.world_mut());
+    // Calling the leaf also consumes an edited compound title above it.
+    app.world_mut()
+        .get_mut::<GuiText>(outer)
+        .unwrap()
+        .set("A中😀Z");
+    with_input(&mut app, |input| {
+        assert!(input.select_all(view));
+        assert_eq!(input.selected_text(view), Some("A中😀Z"));
+    });
+    sync_property::<GuiText>(app.world_mut());
+    app.world_mut()
+        .get_mut::<GuiText>(outer)
+        .unwrap()
+        .set("outer");
+    app.world_mut()
+        .get_mut::<GuiText>(inner)
+        .unwrap()
+        .set("inner");
+    app.world_mut()
+        .get_mut::<GuiText>(view)
+        .unwrap()
+        .set("leaf😀");
+    with_input(&mut app, |input| {
+        assert!(input.select_all(outer));
+        assert_eq!(input.selected_text(outer), Some("leaf😀"));
+    });
+    sync_property::<GuiText>(app.world_mut());
+    app.update();
+    assert_eq!(value(&app, view), "leaf😀");
+    with_input(&mut app, |input| {
+        assert!(input.set_caret_position(view, usize::MAX))
+    });
+    app.world_mut().write_message(Ime::Preedit {
+        window,
+        value: "预编辑".into(),
+        cursor: None,
+    });
+    app.update();
+    app.world_mut()
+        .get_mut::<GuiText>(view)
+        .unwrap()
+        .set("pending ECS text");
+    with_input(&mut app, |input| assert!(!input.select_all(view)));
+    assert!(
+        app.world()
+            .get::<EditableText>(view)
+            .unwrap()
+            .is_composing()
+    );
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object_text(owner),
+        Some("leaf😀")
+    );
+}
+
+#[test]
+fn selection_consumes_text_on_ready_root_and_window_owners_even_when_called_on_the_title() {
+    use crate::prelude::*;
+    use crate::properties::sync_property;
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        bevy::asset::AssetPlugin::default(),
+        FairyGuiPlugin,
+    ))
+    .init_resource::<ButtonInput<MouseButton>>()
+    .init_resource::<bevy::text::FontCx>()
+    .init_resource::<bevy::text::LayoutCx>()
+    .add_message::<bevy::input::mouse::MouseWheel>();
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: FuiPackage::parse(
+                "Basics",
+                include_bytes!("../../../fairygui-demo/assets/ui/Basics.fui"),
+            )
+            .unwrap(),
+            res_key: "ui/Basics".into(),
+        });
+    let root = app
+        .world_mut()
+        .spawn((
+            FairyGuiRoot::new(asset.clone(), "Button1"),
+            GuiText::new(""),
+        ))
+        .id();
+    let mut source = FairyGuiWindow::new(asset, "Button1");
+    source.center_on_create = false;
+    let window = app.world_mut().spawn((source, GuiText::new(""))).id();
+    app.update();
+    let inputs: Vec<_> = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        [root, window]
+            .into_iter()
+            .map(|entity| {
+                let parent = runtime
+                    .ecs_root_object(entity)
+                    .or_else(|| runtime.ecs_window_object(entity))
+                    .unwrap();
+                let store = runtime.store_mut();
+                let old = store.child_by_name(parent, "title").unwrap();
+                store.set_name(old, "old_title");
+                let input = store.create(fairygui_core::package::ObjectType::InputText);
+                store.set_name(input, "title");
+                store.set_parent(input, Some(parent));
+                store.set_size(input, 100., 30.);
+                runtime.queue_subtree(input);
+                input
+            })
+            .collect()
+    };
+    app.update();
+    app.update();
+    for (index, (entity, input)) in [root, window].into_iter().zip(inputs).enumerate() {
+        let title = app
+            .world()
+            .non_send::<GuiRuntime>()
+            .entity_of(input)
+            .unwrap();
+        sync_property::<GuiText>(app.world_mut());
+        app.world_mut()
+            .get_mut::<GuiText>(entity)
+            .unwrap()
+            .set("A中😀Z");
+        with_input(&mut app, |service| {
+            assert!(service.set_selection(title, GuiTextSelection::new(4, 1)));
+            assert_eq!(service.selected_text(entity), Some("中😀"));
+        });
+        app.update();
+        with_input(&mut app, |service| {
+            assert_eq!(service.selected_text(entity), Some("中😀"))
+        });
+        let replacement = format!("owner edit {index}");
+        app.world_mut()
+            .get_mut::<GuiText>(entity)
+            .unwrap()
+            .set(&replacement);
+        with_input(&mut app, |service| {
+            assert!(service.select_all(entity));
+            assert_eq!(service.selected_text(title), Some(replacement.as_str()));
+        });
+    }
+}
