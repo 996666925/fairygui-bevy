@@ -222,7 +222,9 @@ pub(crate) use text_input::InputEditPolicy;
 mod input_prompt;
 pub use input_prompt::InputPromptOwner;
 pub(crate) use input_prompt::{sync_input_prompts, update_prompt_visibility};
-pub(crate) use text_input::{apply_input_edits, sync_input_cursors, sync_input_policy};
+pub(crate) use text_input::{
+    apply_input_edits, apply_selection_edits, sync_input_cursors, sync_input_policy,
+};
 #[path = "input_password.rs"]
 mod input_password;
 pub(crate) use input_password::{

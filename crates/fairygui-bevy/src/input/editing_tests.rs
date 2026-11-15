@@ -1179,3 +1179,143 @@ fn explicit_blur_cancels_mouse_and_touch_selection_owners_before_refocus() {
     assert!(state.capture.as_ref().unwrap().editing.is_none());
     assert!(state.touches[&8].editing.is_none());
 }
+
+#[test]
+fn selection_autoscroll_uses_captured_mouse_or_touch_and_stops_at_bounds_and_reentry() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, owner, entity, window) = fixture();
+    app.world_mut()
+        .resource_mut::<InputFocus>()
+        .set(entity, FocusCause::Navigated);
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .resolution
+        .set_scale_factor_override(Some(2.));
+    app.world_mut().entity_mut(entity).insert((
+        ComputedNode {
+            size: Vec2::new(200., 100.),
+            ..default()
+        },
+        UiGlobalTransform::from(bevy::math::Affine2::from_translation(Vec2::new(300., 200.))),
+        bevy::text::TextLayoutInfo {
+            size: Vec2::new(1200., 800.),
+            ..default()
+        },
+    ));
+    {
+        let mut editor = app.world_mut().get_mut::<EditableText>(entity).unwrap();
+        editor.viewport.size = Vec2::new(200., 100.);
+        editor.viewport.offset = Vec2::ZERO;
+        editor.pending_edits.clear();
+    }
+    app.world_mut()
+        .resource_mut::<Time<Real>>()
+        .advance_by(std::time::Duration::from_secs_f32(0.1));
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.world_mut().resource_mut::<InputRouter>().capture = Some(crate::input::Capture {
+        window,
+        target: owner,
+        start: Vec2::ZERO,
+        last: Vec2::new(250., 160.),
+        moved: true,
+        dragged: true,
+        drop_started: false,
+        gesture: Gesture::None,
+        link: None,
+        editing: Some(entity),
+    });
+    // A generic picking scroll queued earlier must not apply a second step.
+    app.world_mut()
+        .get_mut::<EditableText>(entity)
+        .unwrap()
+        .pending_edits
+        .push(TextEdit::ScrollBy(Vec2::splat(999.)));
+    app.world_mut()
+        .run_system_once(crate::input::text_selection::autoscroll)
+        .unwrap();
+    let editor = app.world().get::<EditableText>(entity).unwrap();
+    assert!(matches!(editor.pending_edits.as_slice(),[
+        TextEdit::ScrollBy(delta),TextEdit::ExtendSelectionToPoint(point)
+    ] if delta.abs_diff_eq(Vec2::new(40.,20.),0.001) && point.abs_diff_eq(Vec2::new(240.,120.),0.001)));
+    // Reentry retains the current scroll and resolves inside the visible text.
+    app.world_mut()
+        .resource_mut::<InputRouter>()
+        .capture
+        .as_mut()
+        .unwrap()
+        .last = Vec2::new(150., 100.);
+    app.world_mut()
+        .get_mut::<EditableText>(entity)
+        .unwrap()
+        .viewport
+        .offset = Vec2::new(40., 20.);
+    app.world_mut()
+        .run_system_once(crate::input::text_selection::autoscroll)
+        .unwrap();
+    assert!(
+        matches!(app.world().get::<EditableText>(entity).unwrap().pending_edits.as_slice(),[
+        TextEdit::ExtendSelectionToPoint(point)
+    ] if point.abs_diff_eq(Vec2::new(140.,70.),0.001))
+    );
+    // A held touch continues scrolling even without new TouchInput messages.
+    app.world_mut().resource_mut::<InputRouter>().capture = None;
+    app.world_mut()
+        .resource_mut::<InputRouter>()
+        .touches
+        .insert(
+            5,
+            crate::input::TouchCapture {
+                window,
+                target: owner,
+                start: Vec2::ZERO,
+                last: Vec2::new(50., 40.),
+                moved: true,
+                dragged: true,
+                drop_started: false,
+                gesture: Gesture::None,
+                link: None,
+                editing: Some(entity),
+                hovered: None,
+            },
+        );
+    app.world_mut()
+        .run_system_once(crate::input::text_selection::autoscroll)
+        .unwrap();
+    assert!(
+        matches!(app.world().get::<EditableText>(entity).unwrap().pending_edits.as_slice(),[
+        TextEdit::ScrollBy(delta),TextEdit::ExtendSelectionToPoint(point)
+    ] if delta.abs_diff_eq(Vec2::new(-40.,-20.),0.001) && *point==Vec2::ZERO)
+    );
+    app.world_mut()
+        .get_mut::<EditableText>(entity)
+        .unwrap()
+        .viewport
+        .offset = Vec2::ZERO;
+    app.world_mut()
+        .run_system_once(crate::input::text_selection::autoscroll)
+        .unwrap();
+    assert!(
+        matches!(app.world().get::<EditableText>(entity).unwrap().pending_edits.as_slice(),[
+        TextEdit::ExtendSelectionToPoint(point)
+    ] if *point==Vec2::ZERO)
+    );
+    app.world_mut()
+        .get_mut::<EditableText>(entity)
+        .unwrap()
+        .pending_edits
+        .clear();
+    app.world_mut().get_mut::<Window>(window).unwrap().focused = false;
+    app.world_mut()
+        .run_system_once(crate::input::text_selection::autoscroll)
+        .unwrap();
+    assert!(
+        app.world()
+            .get::<EditableText>(entity)
+            .unwrap()
+            .pending_edits
+            .is_empty()
+    );
+}

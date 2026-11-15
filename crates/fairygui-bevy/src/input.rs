@@ -10,6 +10,7 @@ use slider::{pointer_down_stop, press_slider};
 #[cfg(test)]
 mod nested_scroll_tests;
 mod state;
+mod text_selection;
 mod touches;
 pub(crate) use state::sync_state as sync_input_state;
 pub use state::{GuiInputState, GuiPointerCapture, GuiPointerId};
@@ -384,6 +385,7 @@ pub fn register(app: &mut App) {
                 .in_set(crate::GuiSystems::Input),
         );
     editing::register(app);
+    text_selection::install(app);
     app.add_systems(
         Update,
         masks::sync
@@ -716,11 +718,12 @@ fn route_pointer(
                 && let Ok(mut editor) = editors.get_mut(entity)
                 && !editor.is_composing()
             {
-                let point = inverse.transform_point2(views.physical_position(
+                let local = inverse.transform_point2(views.physical_position(
                     entity,
                     position,
                     window.map_or(1., |(_, w, _)| w.scale_factor()),
-                )) - node.content_box().min
+                ));
+                let point = node.content_box().clamp_point(local) - node.content_box().min
                     + editor.viewport.offset;
                 editor.queue_edit(bevy::text::TextEdit::ExtendSelectionToPoint(point));
             }

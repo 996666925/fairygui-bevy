@@ -14,6 +14,9 @@ struct State {
     offset: Vec2,
     case: u8,
     baseline: Vec<(usize, usize)>,
+    scroll_offset: Vec2,
+    scroll_focus: usize,
+    autoscroll_case: u8,
 }
 
 pub(super) fn install(app: &mut App) {
@@ -60,11 +63,12 @@ fn drive(
         .ok()
         .and_then(Camera::physical_viewport_rect)
         .map_or(Vec2::ZERO, |rect| rect.min.as_vec2());
-    let point = |entity, x| {
+    let point2 = |entity, point: Vec2| {
         let (node, transform) = nodes.get(entity).unwrap();
-        (transform.transform_point2(node.content_box().min + Vec2::new(x, 24.)) + viewport_origin)
+        (transform.transform_point2(node.content_box().min + point) + viewport_origin)
             / window.scale_factor()
     };
+    let point = |entity, x| point2(entity, Vec2::new(x, 24.));
     let mut next = false;
     match state.step {
         0 if state.frame > 30 => {
@@ -310,8 +314,141 @@ fn drive(
             );
             if elapsed > 16 {
                 mouse.release(MouseButton::Left);
+                let entity = state.input.unwrap();
+                commands
+                    .entity(entity)
+                    .insert(GuiText::new("iW中文0123456789 ".repeat(40)));
+                let mut transform = *gui.transform(entity).unwrap();
+                transform.size = Vec2::new(200., 90.);
+                commands.entity(entity).insert(transform);
+                next = true;
+            }
+        }
+        15 if elapsed > 10 => {
+            editors
+                .get_mut(state.input.unwrap())
+                .unwrap()
+                .queue_edit(TextEdit::TextStart(false));
+            state.cursor = Some(point(state.input.unwrap(), 8.));
+            next = true;
+        }
+        16 if elapsed > 8 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        17 if elapsed > 4 => {
+            state.cursor = Some(if state.autoscroll_case == 2 {
+                point2(state.input.unwrap(), Vec2::new(70., 200.))
+            } else {
+                point(state.input.unwrap(), 400.)
+            });
+            next = true;
+        }
+        18 if elapsed > 4 => {
+            let editor = editors.get(state.input.unwrap()).unwrap();
+            state.scroll_offset = editor.viewport.offset;
+            state.scroll_focus = editor.editor.raw_selection().focus().index();
+            next = true;
+        }
+        19 if elapsed > 30 => {
+            let editor = editors.get(state.input.unwrap()).unwrap();
+            assert!(
+                if state.autoscroll_case == 2 {
+                    editor.viewport.offset.y > state.scroll_offset.y + 1.
+                } else {
+                    editor.viewport.offset.x > state.scroll_offset.x + 1.
+                },
+                "outside stationary drag must scroll: before={:?}, after={:?}",
+                state.scroll_offset,
+                editor.viewport.offset
+            );
+            assert!(
+                editor.editor.raw_selection().focus().index() > state.scroll_focus,
+                "outside stationary drag must extend the selection"
+            );
+            state.cursor = Some(point(state.input.unwrap(), 100.));
+            next = true;
+        }
+        20 if elapsed > 8 => {
+            state.scroll_offset = editors.get(state.input.unwrap()).unwrap().viewport.offset;
+            next = true;
+        }
+        21 if elapsed > 12 => {
+            assert!(
+                editors
+                    .get(state.input.unwrap())
+                    .unwrap()
+                    .viewport
+                    .offset
+                    .abs_diff_eq(state.scroll_offset, 0.01),
+                "reentry must stop automatic scrolling"
+            );
+            state.scroll_focus = editors
+                .get(state.input.unwrap())
+                .unwrap()
+                .editor
+                .raw_selection()
+                .focus()
+                .index();
+            state.cursor = Some(if state.autoscroll_case == 2 {
+                point2(state.input.unwrap(), Vec2::new(70., -150.))
+            } else {
+                point(state.input.unwrap(), -150.)
+            });
+            next = true;
+        }
+        22 if elapsed > 30 => {
+            let editor = editors.get(state.input.unwrap()).unwrap();
+            assert!(
+                if state.autoscroll_case == 2 {
+                    editor.viewport.offset.y < state.scroll_offset.y - 1.
+                } else {
+                    editor.viewport.offset.x < state.scroll_offset.x - 1.
+                },
+                "reverse drag must scroll back"
+            );
+            assert!(editor.editor.raw_selection().focus().index() < state.scroll_focus);
+            state.scroll_offset = editor.viewport.offset;
+            mouse.release(MouseButton::Left);
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(format!(
+                    "target/fairygui-demo-selection-autoscroll-{}.png",
+                    state.autoscroll_case
+                )));
+            next = true;
+        }
+        23 if elapsed > 12 => {
+            assert!(
+                editors
+                    .get(state.input.unwrap())
+                    .unwrap()
+                    .viewport
+                    .offset
+                    .abs_diff_eq(state.scroll_offset, 0.01),
+                "release must stop automatic scrolling"
+            );
+            if state.autoscroll_case < 2 {
+                state.autoscroll_case += 1;
+                let entity = state.input.unwrap();
+                commands
+                    .entity(entity)
+                    .insert(GuiTextInputSettings::default());
+                let mut format = gui.text_format(entity).unwrap().clone();
+                format.single_line = state.autoscroll_case != 2;
+                commands.entity(entity).insert((
+                    format,
+                    GuiText::new(if state.autoscroll_case == 2 {
+                        "line 中文 selection with wrapped words\n".repeat(40)
+                    } else {
+                        "iW中文0123456789 ".repeat(40)
+                    }),
+                ));
+                state.step = 15;
+                state.since = state.frame;
+            } else {
                 info!(
-                    "demo smoke PASSED: forward/reverse and password selection, shifted camera viewports, stationary hold, release, resize, select all and blur during capture"
+                    "demo smoke PASSED: ordinary/password/multiline drag autoscroll, reverse, reentry, release, shifted viewports, selection stability and blur"
                 );
                 exit.write(AppExit::Success);
                 next = true;

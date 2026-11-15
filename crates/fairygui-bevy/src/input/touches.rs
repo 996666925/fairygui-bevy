@@ -390,8 +390,8 @@ pub(super) fn route_touches(
             && let Ok(mut editor) = editors.get_mut(entity)
             && !editor.is_composing()
         {
-            let point = inverse.transform_point2(views.physical_position(entity, position, scale))
-                - node.content_box().min
+            let local = inverse.transform_point2(views.physical_position(entity, position, scale));
+            let point = node.content_box().clamp_point(local) - node.content_box().min
                 + editor.viewport.offset;
             editor.queue_edit(bevy::text::TextEdit::ExtendSelectionToPoint(point));
         }

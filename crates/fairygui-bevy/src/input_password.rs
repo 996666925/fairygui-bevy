@@ -197,6 +197,9 @@ pub(super) fn apply_projected_edit(
         .editor
         .driver(fonts, &mut layouts.0)
         .select_byte_range(start, end);
+    // Subsequent point edits in this batch must use the mask's post-scroll
+    // offset, not wait until the later draw-geometry publication pass.
+    source.viewport = target.viewport;
     true
 }
 

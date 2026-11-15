@@ -340,6 +340,60 @@ fn password_pointer_hits_use_mask_advances_and_stable_frames_preserve_layout_and
 }
 
 #[test]
+fn password_scroll_updates_source_offset_before_the_next_pointer_edit_in_the_same_batch() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, owner, entity) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, &"iW中😀".repeat(40));
+    {
+        let mut editor = app.world_mut().get_mut::<EditableText>(entity).unwrap();
+        editor.viewport.size = Vec2::new(90., 50.);
+        editor.editor.set_width(Some(90.));
+    }
+    app.update();
+    app.update();
+    queue(&mut app, entity, [TextEdit::TextStart(false)]);
+    let view = app.world().get::<InputPasswordView>(entity).unwrap().0;
+    app.world_mut()
+        .get_mut::<EditableText>(entity)
+        .unwrap()
+        .queue_edit(TextEdit::ScrollBy(Vec2::new(160., 0.)));
+    // Consume the edit without running prepare/publish_password_layout. The
+    // offset must be current before another pointer edit can inspect it.
+    app.world_mut().run_system_once(apply_input_edits).unwrap();
+    let source = app.world().get::<EditableText>(entity).unwrap();
+    assert!(source.viewport.offset.x > 150.);
+    assert_eq!(
+        source.viewport,
+        app.world().get::<EditableText>(view).unwrap().viewport
+    );
+    let offset = source.viewport.offset;
+    let y = app.world().get::<TextLayoutInfo>(view).unwrap().size.y * 0.5;
+    app.world_mut()
+        .get_mut::<EditableText>(entity)
+        .unwrap()
+        .queue_edit(TextEdit::MoveToPoint(offset + Vec2::new(10., y)));
+    app.world_mut().run_system_once(apply_input_edits).unwrap();
+    assert!(
+        app.world()
+            .get::<EditableText>(entity)
+            .unwrap()
+            .editor
+            .raw_selection()
+            .focus()
+            .index()
+            > 0
+    );
+    let source = app.world().get::<EditableText>(entity).unwrap();
+    assert_eq!(
+        source.viewport,
+        app.world().get::<EditableText>(view).unwrap().viewport
+    );
+}
+
+#[test]
 fn password_projection_applies_before_rich_and_bitmap_renderers_and_reclaims_owned_layouts() {
     let (mut app, owner, entity) = fixture();
     let view = app.world().get::<InputPasswordView>(entity).unwrap().0;

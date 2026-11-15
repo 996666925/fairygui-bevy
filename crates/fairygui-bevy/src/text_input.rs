@@ -177,24 +177,39 @@ pub(crate) fn sync_input_policy(
     }
 }
 
-/// Run after Bevy has synchronized editor styles/viewports, before its normal
-/// edit system. Only GUI editors with this policy have their queues consumed.
+/// Shared editor context for early validation and late selection scrolling.
+#[derive(bevy::ecs::system::SystemParam)]
 #[allow(clippy::type_complexity)]
-pub(crate) fn apply_input_edits(
-    mut inputs: Query<(
-        &mut EditableText,
-        &mut InputEditPolicy,
-        Option<&input_password::InputPasswordView>,
-        Option<&GObjectRef>,
-        Option<&mut InputTextState>,
-        Option<&mut Text>,
-    )>,
-    mut password_views: Query<&mut EditableText, Without<InputEditPolicy>>,
-    fonts: Option<ResMut<FontCx>>,
-    layouts: Option<ResMut<LayoutCx>>,
-    clipboard: Option<ResMut<Clipboard>>,
-    mut runtime: NonSendMut<GuiRuntime>,
-) {
+pub(crate) struct InputEdits<'w, 's> {
+    inputs: Query<
+        'w,
+        's,
+        (
+            &'static mut EditableText,
+            &'static mut InputEditPolicy,
+            Option<&'static input_password::InputPasswordView>,
+            Option<&'static GObjectRef>,
+            Option<&'static mut InputTextState>,
+            Option<&'static mut Text>,
+        ),
+    >,
+    password_views: Query<'w, 's, &'static mut EditableText, Without<InputEditPolicy>>,
+    fonts: Option<ResMut<'w, FontCx>>,
+    layouts: Option<ResMut<'w, LayoutCx>>,
+    clipboard: Option<ResMut<'w, Clipboard>>,
+    runtime: NonSendMut<'w, GuiRuntime>,
+}
+
+/// Run after editor styles/viewports, before Bevy's normal edit system.
+pub(crate) fn apply_input_edits(context: InputEdits) {
+    let InputEdits {
+        mut inputs,
+        mut password_views,
+        fonts,
+        layouts,
+        clipboard,
+        mut runtime,
+    } = context;
     let (Some(mut fonts), Some(mut layouts), Some(mut clipboard)) = (fonts, layouts, clipboard)
     else {
         return;
@@ -396,4 +411,10 @@ pub(crate) fn apply_input_edits(
             }
         }
     }
+}
+
+/// Consume pointer scrolling after Bevy's generic autoscroll has queued its
+/// actions. Kept separate from early prompt/visibility synchronization.
+pub(crate) fn apply_selection_edits(context: InputEdits) {
+    apply_input_edits(context);
 }
