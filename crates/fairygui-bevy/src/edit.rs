@@ -1,6 +1,7 @@
 //! Direct object editing for behavior such as playback and scrolling.
 use super::*;
 use bevy::ecs::system::SystemParam;
+use fairygui_core::package::ObjectType;
 
 /// Direct access to materialized GUI objects. Calls apply immediately; pending
 /// assets return `None`. Use writable ECS components for declarative properties.
@@ -33,6 +34,26 @@ impl GuiMut<'_, '_> {
         } else {
             false
         }
+    }
+
+    /// Join a ready sibling GGroup, or leave with None. Applies membership
+    /// immediately; Sync refreshes layout, display and hierarchy snapshots.
+    /// Returns whether changed. Unready/non-group/cross-parent targets and
+    /// membership cycles are rejected. Repeating an assignment is a no-op.
+    pub fn set_group(&mut self, member: Entity, group: Option<Entity>) -> bool {
+        let Some(member) = self.object_for_entity(member) else {
+            return false;
+        };
+        let group = match group {
+            Some(entity) => {
+                let Some(group) = self.object_for_entity(entity) else {
+                    return false;
+                };
+                Some(group)
+            }
+            None => None,
+        };
+        set_group(&mut self.runtime, member, group)
     }
 
     /// Retain a relation between ready view/root/window entities. Preserves the
@@ -758,6 +779,8 @@ impl GuiObjectMut<'_> {
 /// Direct object access for exclusive systems and tests.
 pub trait GuiWorldExt {
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>>;
+    /// Immediate equivalent of GuiMut::set_group for exclusive systems.
+    fn gui_set_group(&mut self, member: Entity, group: Option<Entity>) -> bool;
     /// Immediate equivalent of GuiMut::add_relation for exclusive systems.
     fn gui_add_relation(
         &mut self,
@@ -781,6 +804,28 @@ pub trait GuiWorldExt {
     fn gui_clear_relations_to(&mut self, owner: Entity, target: Entity) -> bool;
 }
 
+fn set_group(runtime: &mut GuiRuntime, member: GObjectId, group: Option<GObjectId>) -> bool {
+    let Some(object) = runtime.store().object(member) else {
+        return false;
+    };
+    if object.group() == group {
+        return false;
+    }
+    if let Some(group) = group {
+        let Some(target) = runtime.store().object(group) else {
+            return false;
+        };
+        if target.kind() != ObjectType::Group
+            || object.parent().is_none()
+            || object.parent() != target.parent()
+        {
+            return false;
+        }
+    }
+    runtime.store_mut().set_group(member, group);
+    runtime.store().object(member).unwrap().group() == group
+}
+
 fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
     world
         .get::<GObjectRef>(entity)
@@ -794,6 +839,23 @@ fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
         })
 }
 impl GuiWorldExt for World {
+    fn gui_set_group(&mut self, member: Entity, group: Option<Entity>) -> bool {
+        let Some(member) = world_object(self, member) else {
+            return false;
+        };
+        let group = match group {
+            Some(entity) => {
+                let Some(group) = world_object(self, entity) else {
+                    return false;
+                };
+                Some(group)
+            }
+            None => None,
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| set_group(&mut runtime, member, group))
+    }
+
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>> {
         let object = world_object(self, entity)?;
         let runtime = self.get_non_send_mut::<GuiRuntime>()?.into_inner();

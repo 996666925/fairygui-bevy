@@ -99,6 +99,8 @@ pub use visual_properties::{GuiColor, GuiImageFill, GuiImageFlip, GuiLoaderSetti
 #[cfg(test)]
 mod ecs_pull_tests;
 #[cfg(test)]
+mod group_edit_tests;
+#[cfg(test)]
 mod relation_edit_tests;
 pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;

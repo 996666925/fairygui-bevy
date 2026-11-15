@@ -503,6 +503,7 @@ pub struct GuiObjectInfo {
     tooltips: Option<String>,
     kind: ObjectType,
     parent: Option<Entity>,
+    group: Option<Entity>,
     children: Vec<Entity>,
     children_in_view: Option<Vec<Entity>>,
 }
@@ -530,6 +531,11 @@ impl GuiObjectInfo {
 
     pub fn parent(&self) -> Option<Entity> {
         self.parent
+    }
+
+    /// Logical GGroup membership; the group and member remain siblings.
+    pub fn group(&self) -> Option<Entity> {
+        self.group
     }
 
     pub fn children(&self) -> &[Entity] {
@@ -757,6 +763,29 @@ impl GuiQuery<'_, '_> {
     pub fn group_layout(&self, entity: Entity) -> Option<&crate::GuiGroupLayout> {
         self.group_layouts.get(self.view(entity)?).ok()
     }
+    /// Projected group membership. Refreshed with the logical hierarchy during Sync.
+    pub fn group(&self, entity: Entity) -> Option<Entity> {
+        self.get(entity)?.group()
+    }
+    /// Direct members in FairyGUI sibling order, including hidden members.
+    /// Nested groups are returned as members; their contents are not flattened.
+    /// Missing and non-group entities return None; an empty group yields no members.
+    pub fn group_members(&self, group: Entity) -> Option<impl Iterator<Item = Entity> + '_> {
+        let group = self.view(group)?;
+        let info = self.get(group)?;
+        if info.kind() != ObjectType::Group {
+            return None;
+        }
+        let siblings = info
+            .parent()
+            .and_then(|parent| self.get(parent))
+            .map_or(&[][..], GuiObjectInfo::children);
+        Some(siblings.iter().copied().filter(move |&entity| {
+            self.objects
+                .get(entity)
+                .is_ok_and(|info| info.group() == Some(group))
+        }))
+    }
     pub fn list_layout(&self, entity: Entity) -> Option<&crate::GuiListLayout> {
         self.list_layouts.get(self.view(entity)?).ok()
     }
@@ -952,6 +981,7 @@ pub(crate) fn sync_gui_objects(
             commands.entity(entity).insert(next);
         }
         let parent = object.parent().and_then(|id| runtime.entity_of(id));
+        let group = object.group().and_then(|id| runtime.entity_of(id));
         let children = object
             .children()
             .iter()
@@ -984,6 +1014,9 @@ pub(crate) fn sync_gui_objects(
             if current.parent != parent {
                 current.parent = parent;
             }
+            if current.group != group {
+                current.group = group;
+            }
             if current.children_in_view != children_in_view {
                 current.children_in_view = children_in_view;
             }
@@ -998,6 +1031,7 @@ pub(crate) fn sync_gui_objects(
                 tooltips: object.tooltips().map(str::to_owned),
                 kind: object.kind(),
                 parent,
+                group,
                 children: children.collect(),
                 children_in_view,
             });

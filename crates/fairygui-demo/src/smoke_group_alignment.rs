@@ -9,6 +9,7 @@ struct State {
     panels: Vec<Entity>,
     buttons: Vec<Entity>,
     member_sizes: Vec<(Vec2, Vec2)>,
+    detached_positions: Vec<Vec2>,
 }
 
 pub(super) fn install(app: &mut App) {
@@ -322,8 +323,81 @@ fn drive(
                 Vec2::new(340., 200.),
                 Vec2::new(17., 13.),
             );
+            let panels = state.panels.clone();
+            for owner in panels {
+                let movie = gui.child_by_name(owner, "n3").unwrap();
+                state
+                    .detached_positions
+                    .push(gui.transform(movie).unwrap().position());
+                assert!(objects.set_group(movie, None));
+                assert!(!objects.set_group(movie, None));
+            }
+            next = true;
+        }
+        18 if elapsed >= 12 => {
+            for (index, &owner) in state.panels.iter().enumerate() {
+                let group = gui.child_by_name(owner, "n4").unwrap();
+                let image = gui.child_by_name(owner, "n1").unwrap();
+                let movie = gui.child_by_name(owner, "n3").unwrap();
+                assert_eq!(gui.group(movie), None);
+                assert_eq!(
+                    gui.group_members(group).unwrap().collect::<Vec<_>>(),
+                    [image]
+                );
+                assert_eq!(
+                    gui.transform(movie).unwrap().position(),
+                    state.detached_positions[index]
+                );
+                let position = gui.transform(group).unwrap().position();
+                objects
+                    .get_mut(group)
+                    .unwrap()
+                    .set_position(position + Vec2::new(12., -8.));
+            }
+            next = true;
+        }
+        19 if elapsed >= 12 => {
+            for (index, &owner) in state.panels.iter().enumerate() {
+                let group = gui.child_by_name(owner, "n4").unwrap();
+                let movie = gui.child_by_name(owner, "n3").unwrap();
+                assert_eq!(
+                    gui.transform(movie).unwrap().position(),
+                    state.detached_positions[index]
+                );
+                check_projection(&gui, &nodes, owner);
+                assert!(objects.set_group(movie, Some(group)));
+                assert!(!objects.set_group(movie, Some(group)));
+            }
+            next = true;
+        }
+        20 if elapsed >= 12 => {
+            for &owner in &state.panels {
+                let group = gui.child_by_name(owner, "n4").unwrap();
+                let image = gui.child_by_name(owner, "n1").unwrap();
+                let movie = gui.child_by_name(owner, "n3").unwrap();
+                assert_eq!(gui.group(movie), Some(group));
+                assert_eq!(
+                    gui.group_members(group).unwrap().collect::<Vec<_>>(),
+                    [image, movie]
+                );
+                assert_eq!(
+                    gui.get(image).unwrap().parent(),
+                    gui.get(group).unwrap().parent()
+                );
+                assert_eq!(
+                    gui.get(movie).unwrap().parent(),
+                    gui.get(group).unwrap().parent()
+                );
+                check_projection(&gui, &nodes, owner);
+            }
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-group-membership.png"));
+            next = true;
+        }
+        21 if elapsed >= 20 => {
             info!(
-                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members, pivoted size relations, simultaneous size/position axis edits and retained geometry"
+                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members, pivoted size relations, simultaneous size/position axis edits, entity group membership and retained geometry"
             );
             exit.write(AppExit::Success);
             next = true;

@@ -674,6 +674,12 @@ fn bind_layout(gui: &mut GuiMut, owner: Entity, target: Entity) {
 指定后，空间充足且不受尺寸上限限制时，主格子吸收额外空间，其余成员保持尺寸。
 `main_grid_min_size` 默认 50，空间不足时按比例分配。反复缩放保留原比例，避免累计取整偏移。
 可通过 `gui.group_layout(entity)` 查询配置，或通过 `GuiObjectMut::set_group_layout` 即时修改。
+`gui.group(member)` 查询所属组合，`gui.group_members(group)` 按兄弟节点顺序遍历直接成员，
+包含隐藏成员；嵌套组合不会被展开。`gui.get(member).unwrap().group()` 也能读取所属组合。
+运行期通过 `GuiMut::set_group(member, Some(group))` 加入或切换组合，通过 `None` 退出；
+独占系统可调用 `world.gui_set_group(member, Some(group))`。接口返回归属是否发生变化，
+拒绝未就绪实体、非组合目标、跨父容器目标及循环归属。成员仍是原父容器的子节点，
+在 `GuiSystems::Respond` 中调用后，本帧同步会更新对齐、边界、可见性及查询快照。
 
 ```rust,ignore
 fn configure_group(mut groups: Query<&mut GuiGroupLayout>, target: Entity) {
