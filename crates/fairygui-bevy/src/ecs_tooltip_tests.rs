@@ -1,5 +1,6 @@
 use super::*;
 use crate::{FairyGuiPlugin, GuiObjectInfo, GuiTransform};
+use bevy::ecs::system::SystemState;
 use bevy::picking::hover::Hovered;
 use bevy::time::TimeUpdateStrategy;
 use bevy::ui::{ComputedStackIndex, RelativeCursorPosition};
@@ -48,10 +49,26 @@ fn load(app: &mut App, handle: &Handle<FuiAsset>) {
         )
         .unwrap();
 }
+fn with_tooltip(app: &mut App, edit: impl FnOnce(&mut GuiTooltip)) {
+    let mut state = SystemState::<GuiTooltip>::new(app.world_mut());
+    edit(&mut state.get_mut(app.world_mut()).unwrap());
+}
+fn hide(app: &mut App) {
+    with_tooltip(app, |tooltip| {
+        tooltip.hide();
+        assert!(!tooltip.is_requested() && !tooltip.is_showing());
+    });
+}
+fn show_view(app: &mut App, view: Entity, position: Option<Vec2>) {
+    with_tooltip(app, |tooltip| {
+        assert!(tooltip.show_view(view, position));
+        assert!(tooltip.is_requested());
+    });
+}
 fn show(app: &mut App, position: Option<Vec2>) {
-    app.world_mut().write_message(GuiTooltipCommand::Show {
-        text: "Tooltip text".into(),
-        position,
+    with_tooltip(app, |tooltip| {
+        assert!(tooltip.show("Tooltip text", position));
+        assert!(tooltip.is_requested());
     });
 }
 fn view(app: &App) -> Entity {
@@ -147,7 +164,7 @@ fn tooltip_waits_for_assets_positions_on_first_view_reuses_and_disposes() {
             .last_changed(),
         tick
     );
-    app.world_mut().write_message(GuiTooltipCommand::Hide);
+    hide(&mut app);
     app.update();
     assert!(!app.world().resource::<GuiTooltipState>().is_showing());
     assert_eq!(view(&app), pane);
@@ -162,7 +179,7 @@ fn tooltip_waits_for_assets_positions_on_first_view_reuses_and_disposes() {
     app.update();
     assert_eq!(view(&app), pane);
     assert_eq!(at(&app), Vec2::new(100., 120.));
-    app.world_mut().write_message(GuiTooltipCommand::Dispose);
+    with_tooltip(&mut app, |tooltip| tooltip.dispose());
     app.update();
     assert!(app.world().get_entity(pane).is_err());
     assert!(!app.world().non_send::<GuiRuntime>().store().contains(id));
@@ -302,7 +319,7 @@ fn tooltip_errors_retry_configuration_and_pending_hide_prevents_late_show() {
     let (mut app, asset, _) = fixture(false);
     show(&mut app, None);
     app.update();
-    app.world_mut().write_message(GuiTooltipCommand::Hide);
+    hide(&mut app);
     app.update();
     load(&mut app, &asset);
     app.update();
@@ -337,10 +354,7 @@ fn custom_child_tooltip_is_popup_independent_passes_input_and_dies_with_original
     let (mut app, asset, _) = fixture(true);
     let (owner, button) = control(&mut app, asset);
     app.world_mut().entity_mut(button).insert(GlobalZIndex(7));
-    app.world_mut().write_message(GuiTooltipCommand::ShowView {
-        view: button,
-        position: Some(Vec2::new(100., 100.)),
-    });
+    show_view(&mut app, button, Some(Vec2::new(100., 100.)));
     app.update();
     let runtime = app.world().non_send::<GuiRuntime>();
     let pane = app.world().get::<GObjectRef>(button).unwrap().0;
@@ -360,7 +374,7 @@ fn custom_child_tooltip_is_popup_independent_passes_input_and_dies_with_original
         .write_message(crate::GuiPopupCommand::HideAll);
     app.update();
     assert!(app.world().resource::<GuiTooltipState>().is_showing());
-    app.world_mut().write_message(GuiTooltipCommand::Hide);
+    hide(&mut app);
     app.update();
     assert_eq!(
         app.world().get::<GlobalZIndex>(button),
@@ -380,10 +394,7 @@ fn custom_root_request_waits_for_assets_and_cancels_on_replacement() {
         .world_mut()
         .spawn(FairyGuiRoot::new(asset.clone(), "Component3"))
         .id();
-    app.world_mut().write_message(GuiTooltipCommand::ShowView {
-        view: owner,
-        position: None,
-    });
+    show_view(&mut app, owner, None);
     frames(&mut app, 4);
     assert!(app.world().resource::<GuiTooltipState>().is_requested());
     load(&mut app, &asset);
@@ -391,7 +402,7 @@ fn custom_root_request_waits_for_assets_and_cancels_on_replacement() {
     let pane = app.world().get::<GuiRootView>(owner).unwrap().0;
     assert_eq!(view(&app), pane);
     assert!(app.world().resource::<GuiTooltipState>().is_showing());
-    app.world_mut().write_message(GuiTooltipCommand::Hide);
+    hide(&mut app);
     app.update();
     assert!(
         !app.world()
@@ -399,10 +410,7 @@ fn custom_root_request_waits_for_assets_and_cancels_on_replacement() {
             .unwrap()
             .on_stage()
     );
-    app.world_mut().write_message(GuiTooltipCommand::ShowView {
-        view: owner,
-        position: None,
-    });
+    show_view(&mut app, owner, None);
     app.update();
     app.world_mut().despawn(owner);
     app.update();
@@ -414,10 +422,7 @@ fn custom_root_request_waits_for_assets_and_cancels_on_replacement() {
         .world_mut()
         .spawn(FairyGuiRoot::new(pending.clone(), "Component3"))
         .id();
-    app.world_mut().write_message(GuiTooltipCommand::ShowView {
-        view: owner,
-        position: None,
-    });
+    show_view(&mut app, owner, None);
     app.update();
     assert!(app.world().resource::<GuiTooltipState>().is_requested());
     app.world_mut()
@@ -464,13 +469,10 @@ fn ancestor_tooltip_keeps_delay_across_children_and_cancels_on_blur_and_disposal
 }
 
 #[test]
-fn post_layout_tooltip_commands_show_before_the_same_frames_projection() {
-    fn show_in_post_layout(mut commands: Commands, mut once: Local<bool>) {
+fn post_layout_tooltip_calls_show_before_the_same_frames_projection() {
+    fn show_in_post_layout(mut tooltip: GuiTooltip, mut once: Local<bool>) {
         if !*once {
-            commands.write_message(GuiTooltipCommand::Show {
-                text: "Same frame".into(),
-                position: Some(Vec2::new(42., 56.)),
-            });
+            assert!(tooltip.show("Same frame", Some(Vec2::new(42., 56.))));
             *once = true;
         }
     }
@@ -489,4 +491,144 @@ fn post_layout_tooltip_commands_show_before_the_same_frames_projection() {
             .value(),
         "Same frame"
     );
+}
+
+#[test]
+fn direct_calls_validate_before_replacing_and_hide_and_dispose_immediately() {
+    let (mut app, _, _) = fixture(true);
+    show(&mut app, None);
+    app.update();
+    let pane = view(&app);
+    let object = app.world().get::<GObjectRef>(pane).unwrap().0;
+    let unrelated = app.world_mut().spawn_empty().id();
+    let stage = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .root_container()
+        .unwrap();
+    let stage_view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(stage)
+        .unwrap();
+    with_tooltip(&mut app, |tooltip| {
+        assert!(tooltip.is_showing());
+        assert!(!tooltip.show("Invalid", Some(Vec2::new(f32::NAN, 0.))));
+        assert!(!tooltip.show_view(pane, Some(Vec2::splat(f32::INFINITY))));
+        assert!(!tooltip.show_view(unrelated, None));
+        assert!(!tooltip.show_view(stage_view, None));
+        assert!(tooltip.is_showing() && tooltip.is_requested());
+        tooltip.hide();
+        assert!(!tooltip.is_showing() && !tooltip.is_requested());
+    });
+    assert!(
+        !app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .is_on_stage(object)
+    );
+    // A canceled or replaced request cannot be replayed by a later scheduler run.
+    with_tooltip(&mut app, |tooltip| {
+        assert!(tooltip.show("Discard", None));
+        tooltip.hide();
+        assert!(tooltip.show("Last request", Some(Vec2::splat(25.))));
+    });
+    app.update();
+    assert_eq!(view(&app), pane);
+    assert_eq!(at(&app), Vec2::splat(25.));
+    assert_eq!(
+        app.world().get::<crate::GuiText>(pane).unwrap().value(),
+        "Last request"
+    );
+    with_tooltip(&mut app, |tooltip| {
+        tooltip.dispose();
+        assert!(!tooltip.is_showing() && !tooltip.is_requested());
+    });
+    assert!(
+        !app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .contains(object)
+    );
+    app.update();
+    assert!(app.world().get_entity(pane).is_err());
+}
+
+#[test]
+fn typed_click_observer_can_show_a_tooltip_in_the_same_frame() {
+    let (mut app, asset, _) = fixture(true);
+    let (_, button) = control(&mut app, asset);
+    app.world_mut().entity_mut(button).observe(
+        |_: On<crate::GuiClick>, mut tooltip: GuiTooltip| {
+            assert!(tooltip.show("Clicked help", Some(Vec2::new(32., 48.))));
+            assert!(tooltip.is_requested());
+        },
+    );
+    hover(&mut app, Some(button));
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.update();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Left);
+    app.update();
+    assert!(app.world().resource::<GuiTooltipState>().is_showing());
+    assert_eq!(at(&app), Vec2::new(32., 48.));
+    assert_eq!(
+        app.world()
+            .get::<crate::GuiText>(view(&app))
+            .unwrap()
+            .value(),
+        "Clicked help"
+    );
+}
+
+#[test]
+fn direct_view_requests_reject_removed_and_despawned_owners_before_sync() {
+    let (mut app, asset, _) = fixture(true);
+    let root = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset.clone(), "Component3"))
+        .id();
+    let window = app
+        .world_mut()
+        .spawn(windows::FairyGuiWindow::new(asset, "Component3"))
+        .id();
+    app.update();
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .ecs_root_object(root)
+            .is_some()
+    );
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .ecs_window_object(window)
+            .is_some()
+    );
+    show(&mut app, None);
+    app.update();
+    let pane = view(&app);
+    app.world_mut().entity_mut(root).remove::<FairyGuiRoot>();
+    app.world_mut()
+        .entity_mut(window)
+        .remove::<windows::FairyGuiWindow>();
+    with_tooltip(&mut app, |tooltip| {
+        assert!(!tooltip.show_view(root, None));
+        assert!(!tooltip.show_view(window, None));
+        assert!(tooltip.is_showing());
+    });
+    app.world_mut().despawn(root);
+    app.world_mut().despawn(window);
+    with_tooltip(&mut app, |tooltip| {
+        assert!(!tooltip.show_view(root, None));
+        assert!(!tooltip.show_view(window, None));
+        assert!(tooltip.is_showing());
+    });
+    app.update();
+    assert_eq!(view(&app), pane);
+    assert!(app.world().resource::<GuiTooltipState>().is_showing());
 }

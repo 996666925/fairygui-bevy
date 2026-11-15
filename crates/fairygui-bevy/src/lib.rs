@@ -132,9 +132,7 @@ pub use popup::{GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState}
 pub use runtime::ecs_drag_drop::{GuiDrag, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget};
 pub use runtime::global_wait::{GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState};
 pub use runtime::object_drag::{GuiDragBounds, GuiDraggable, GuiObjectDragState};
-pub use runtime::tooltip::{
-    GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
-};
+pub use runtime::tooltip::{GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState};
 pub use runtime::windows::{FairyGuiWindow, GuiWindowState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
@@ -207,7 +205,7 @@ pub mod prelude {
         GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
         GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder,
         GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings,
-        GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips,
+        GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips,
         GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
         GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
@@ -280,7 +278,6 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiListItemClick>()
         .add_message::<GuiPullRelease>()
         .add_message::<GuiPopupCommand>()
-        .add_message::<GuiTooltipCommand>()
         .init_resource::<GuiDragState>()
         .init_resource::<GuiGlobalWaitSettings>()
         .init_resource::<GuiGlobalWaitState>()

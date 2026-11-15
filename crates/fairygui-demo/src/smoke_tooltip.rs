@@ -44,7 +44,7 @@ fn drive(
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
-    mut gui_edit: GuiMut,
+    mut tooltip: GuiTooltip,
 ) {
     state.frame += 1;
     assert!(
@@ -67,9 +67,9 @@ fn drive(
                 && nodes.get(button).is_ok_and(|(node, _)| node.size().x > 0.)
             {
                 state.button = Some(button);
-                gui_edit.edit(button, |object: &mut GuiObjectMut| {
-                    object.set_tooltips(Some("Hover for details".into()))
-                });
+                commands
+                    .entity(button)
+                    .insert(GuiTooltips(Some("Hover for details".into())));
                 state.cursor = Some(center(button));
                 next = true;
             }
@@ -105,10 +105,10 @@ fn drive(
         }
         3 if elapsed > 5 => {
             assert!(!tooltips.is_showing());
-            commands.write_message(GuiTooltipCommand::Show {
-                text: "Near the window edge".into(),
-                position: Some(Vec2::new(window.width() - 5., window.height() - 5.)),
-            });
+            assert!(tooltip.show(
+                "Near the window edge",
+                Some(Vec2::new(window.width() - 5., window.height() - 5.)),
+            ));
             next = true;
         }
         4 if elapsed > 5 => {
@@ -128,7 +128,7 @@ fn drive(
                 state.edge_captured = true;
                 state.since = state.frame;
             } else {
-                commands.write_message(GuiTooltipCommand::Hide);
+                tooltip.hide();
                 state.cursor = Some(center(state.button.unwrap()));
                 next = true;
             }
@@ -136,10 +136,10 @@ fn drive(
         5 if tooltips.is_showing() && tooltips.source() == state.button => {
             assert_eq!(tooltips.view(), state.pane);
             // Deliberately cover the button to verify picking passes through.
-            commands.write_message(GuiTooltipCommand::Show {
-                text: "Click through this tooltip".into(),
-                position: Some(state.cursor.unwrap() - Vec2::splat(10.)),
-            });
+            assert!(tooltip.show(
+                "Click through this tooltip",
+                Some(state.cursor.unwrap() - Vec2::splat(10.)),
+            ));
             next = true;
         }
         6 if elapsed > 6 => {
@@ -158,7 +158,7 @@ fn drive(
                 demo.open.is_some(),
                 "the button under the tooltip must receive the click"
             );
-            commands.write_message(GuiTooltipCommand::Dispose);
+            tooltip.dispose();
             next = true;
         }
         9 if elapsed > 5 => {

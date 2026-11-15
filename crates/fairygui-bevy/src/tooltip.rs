@@ -1,6 +1,7 @@
 //! Native delayed tooltips, independent of popups and window modality.
 use super::*;
 use crate::{GuiInputSettings, GuiInputState};
+use bevy::ecs::system::SystemParam;
 use bevy::window::PrimaryWindow;
 use fairygui_core::Point;
 
@@ -24,27 +25,121 @@ impl GuiTooltipSettings {
     }
 }
 
-#[derive(Message, Debug, Clone)]
-pub enum GuiTooltipCommand {
-    /// Show text with the default template. None places it at the current mouse
-    /// position plus (10, 20). Explicit positions are logical window coordinates.
-    Show {
-        text: String,
-        position: Option<Vec2>,
-    },
-    /// Adopt an existing root owner or control view as a custom tooltip. Asset
-    /// loading is retained for root owners; replacing/removing its source cancels.
-    /// Hide detaches it; its original ECS owner still owns its lifetime.
-    ShowView {
-        view: Entity,
-        position: Option<Vec2>,
-    },
-    /// Hide and retain the default template. Like native hideTooltips, this does
-    /// not cancel a hover delay that has not fired yet.
-    Hide,
-    /// Hide, dispose the default template and cancel the current hover delay.
-    /// Caller-owned custom views remain alive until their owner is removed.
-    Dispose,
+/// Direct tooltip access from systems and observers. Requests change immediately;
+/// pending assets materialize during Sync, including calls from PostLayout.
+/// GuiTooltipState is the published ECS snapshot. Like GuiMut, this parameter
+/// mutably borrows GuiRuntime: use a ParamSet when both are needed in one system.
+#[derive(SystemParam)]
+pub struct GuiTooltip<'w, 's> {
+    runtime: NonSendMut<'w, GuiRuntime>,
+    objects: Query<'w, 's, &'static GObjectRef>,
+    roots: Query<'w, 's, &'static FairyGuiRoot>,
+    windows: Query<'w, 's, &'static windows::FairyGuiWindow>,
+}
+impl std::fmt::Debug for GuiTooltip<'_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuiTooltip")
+            .field("requested", &self.is_requested())
+            .field("showing", &self.is_showing())
+            .finish_non_exhaustive()
+    }
+}
+impl GuiTooltip<'_, '_> {
+    /// Show text using the default template. None uses the mouse position plus
+    /// (10, 20) when the view becomes ready. Explicit positions are window logical
+    /// coordinates. Nonfinite positions return false without changing the tooltip.
+    pub fn show(&mut self, text: impl Into<String>, position: Option<Vec2>) -> bool {
+        if position.is_some_and(|position| !position.is_finite()) {
+            return false;
+        }
+        self.runtime.hide_tooltip();
+        self.runtime.tooltip.request = Some(Request::Text {
+            text: text.into(),
+            position,
+            source: None,
+        });
+        true
+    }
+    /// Adopt an existing root/window owner or control view. Unloaded owners retain
+    /// the request; replacing/removing their template cancels it. Hide detaches the
+    /// view, whose lifetime remains with its original ECS owner. Invalid entities,
+    /// the stage itself and nonfinite positions return false without changing it.
+    pub fn show_view(&mut self, view: Entity, position: Option<Vec2>) -> bool {
+        if position.is_some_and(|position| !position.is_finite()) {
+            return false;
+        }
+        let source = owner_template(view, &self.roots, &self.windows);
+        let object = self
+            .objects
+            .get(view)
+            .ok()
+            .map(|reference| reference.0)
+            .or_else(|| match source.as_ref() {
+                Some(GuiOwnerTemplate::Root(_)) => self.runtime.ecs_root_object(view),
+                Some(GuiOwnerTemplate::Window(_)) => self.runtime.ecs_window_object(view),
+                None => None,
+            });
+        if let Some(object) = object {
+            if !self.runtime.store.contains(object)
+                || self
+                    .runtime
+                    .root_container()
+                    .is_some_and(|stage| self.runtime.is_descendant_of_or_self(stage, object))
+            {
+                return false;
+            }
+        } else if source.is_none() {
+            return false;
+        }
+        self.runtime.hide_tooltip();
+        self.runtime.tooltip.request = Some(Request::View {
+            entity: view,
+            position,
+            source,
+        });
+        true
+    }
+    /// Hide now, retaining the default view and any hover delay not yet fired.
+    pub fn hide(&mut self) {
+        self.runtime.hide_tooltip();
+    }
+    /// Hide, destroy the default native view and cancel the current hover delay.
+    /// Bevy removes its entities during Sync; caller-owned custom views stay alive.
+    pub fn dispose(&mut self) {
+        self.runtime.hide_tooltip();
+        self.runtime.dispose_default_tooltip();
+        if let Some(hover) = &mut self.runtime.tooltip.hover {
+            hover.fired = true;
+        }
+    }
+    pub fn is_requested(&self) -> bool {
+        self.runtime.tooltip.request.is_some()
+    }
+    /// Read the live native state; GuiTooltipState is refreshed by the scheduler.
+    pub fn is_showing(&self) -> bool {
+        self.runtime.tooltip.shown.is_some_and(|pane| {
+            self.runtime.store.is_on_stage(pane) && self.runtime.store.display_visible(pane)
+        })
+    }
+}
+
+fn owner_template(
+    entity: Entity,
+    roots: &Query<&FairyGuiRoot>,
+    windows: &Query<&windows::FairyGuiWindow>,
+) -> Option<GuiOwnerTemplate> {
+    roots
+        .get(entity)
+        .ok()
+        .cloned()
+        .map(GuiOwnerTemplate::Root)
+        .or_else(|| {
+            windows
+                .get(entity)
+                .ok()
+                .cloned()
+                .map(GuiOwnerTemplate::Window)
+        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -105,7 +200,6 @@ struct Hover {
 }
 #[derive(Default)]
 pub(super) struct Tooltip {
-    cursor: bevy::ecs::message::MessageCursor<GuiTooltipCommand>,
     settings: GuiTooltipSettings,
     default_pane: Option<GObjectId>,
     shown: Option<GObjectId>,
@@ -231,7 +325,6 @@ fn tooltip_position(mut point: Vec2, size: Vec2, viewport: Vec2) -> Vec2 {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_tooltips(
-    messages: Res<Messages<GuiTooltipCommand>>,
     settings: Res<GuiTooltipSettings>,
     assets: Res<Assets<FuiAsset>>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
@@ -290,57 +383,6 @@ pub(crate) fn sync_tooltips(
         });
         refresh = true;
     }
-    let command_source = |entity| {
-        sources
-            .get(entity)
-            .ok()
-            .cloned()
-            .map(GuiOwnerTemplate::Root)
-            .or_else(|| {
-                window_sources
-                    .get(entity)
-                    .ok()
-                    .cloned()
-                    .map(GuiOwnerTemplate::Window)
-            })
-    };
-    let incoming: Vec<_> = runtime.tooltip.cursor.read(&messages).cloned().collect();
-    for message in &incoming {
-        let request = match message {
-            GuiTooltipCommand::Show { text, position } => Some(Request::Text {
-                text: text.clone(),
-                position: *position,
-                source: None,
-            }),
-            GuiTooltipCommand::ShowView { view, position } => Some(Request::View {
-                entity: *view,
-                position: *position,
-                source: command_source(*view),
-            }),
-            GuiTooltipCommand::Hide => {
-                runtime.hide_tooltip();
-                continue;
-            }
-            GuiTooltipCommand::Dispose => {
-                runtime.hide_tooltip();
-                runtime.dispose_default_tooltip();
-                if let Some(hover) = &mut runtime.tooltip.hover {
-                    hover.fired = true;
-                }
-                continue;
-            }
-        };
-        let position = match &request {
-            Some(Request::Text { position, .. } | Request::View { position, .. }) => *position,
-            None => None,
-        };
-        if position.is_some_and(|position| !position.is_finite()) {
-            continue;
-        }
-        runtime.hide_tooltip();
-        runtime.tooltip.request = request;
-        refresh = true;
-    }
     if window.is_some_and(|(_, window, _)| !window.focused) {
         runtime.hide_tooltip();
         return;
@@ -395,7 +437,7 @@ pub(crate) fn sync_tooltips(
             source,
         } => {
             if let Some(expected) = source.as_ref()
-                && command_source(entity)
+                && owner_template(entity, &sources, &window_sources)
                     .as_ref()
                     .is_none_or(|current| !current.same_template(expected))
             {
@@ -472,7 +514,7 @@ pub(crate) fn sync_tooltips(
     runtime.queue_subtree(pane);
 }
 
-/// Run after object commands and synchronous text sizing, before view projection.
+/// Run after object edits and synchronous text sizing, before view projection.
 pub(crate) fn reconcile_tooltips(mut runtime: NonSendMut<GuiRuntime>) {
     runtime.cleanup_tooltips();
     if let Some(Request::Text {

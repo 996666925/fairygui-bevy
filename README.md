@@ -1274,7 +1274,7 @@ ModalWaiting 示例进入时显示三秒全局等待，随后可以打开窗口�
 commands.insert_resource(GuiTooltipSettings::new(
     assets.load("ui/Common.fui"), "Tooltip",
 ));
-gui_edit.edit(button, |object: &mut GuiObjectMut| object.set_tooltips(Some("Open settings".into())));
+commands.entity(button).insert(GuiTooltips(Some("Open settings".into())));
 ```
 
 模板应有 text/title 属性，也支持已登记的 `ui://` 地址。编辑器导出的 `tooltips`
@@ -1283,16 +1283,28 @@ gui_edit.edit(button, |object: &mut GuiObjectMut| object.set_tooltips(Some("Open
 或销毁来源时隐藏。默认放在鼠标位置加 `(10, 20)`，按原版边缘规则调整，显示后
 不随鼠标移动。子控件共享最近祖先的提示，切换其内部子节点不会重置延迟。
 
-业务可发送 `GuiTooltipCommand::Show { text, position }` 立即显示，或用
-`ShowView { view, position }` 指定自定义根拥有者/控件视图。`position: None` 使用
+业务通过 `GuiTooltip` 系统参数直接控制提示：
+
+```rust,ignore
+fn show_help(_: On<GuiClick>, mut tooltip: GuiTooltip) {
+    tooltip.show("Open settings", Some(Vec2::new(40., 80.)));
+}
+```
+
+`show_view(entity, position)` 使用已有根拥有者、窗口拥有者或控件视图。`position: None` 使用
 鼠标偏移，显式位置为窗口逻辑坐标，经舞台坐标转换后定位。提示与 popup 栈独立，
 鼠标和触摸输入穿透提示；指针按下会隐藏当前提示，但保留尚未触发的悬停计时。
-`Hide` 保留默认模板，`Dispose` 还会回收它并取消当前悬停计时。自定义视图在隐藏后
-从舞台摘下，生命周期仍由原拥有者管理，所属页面销毁会回收已摘下的自定义子控件。
+`hide()` 立即摘下当前提示并保留默认模板，`dispose()` 还会回收它并取消当前悬停计时。
+`show` / `show_view` 返回是否接受请求，无效坐标或视图不会替换当前提示。
+自定义视图在隐藏后从舞台摘下，生命周期仍由原拥有者管理，所属页面销毁会回收
+已摘下的自定义子控件。
 
 `GuiTooltipState` 提供请求、实际显示、视图、悬停来源和错误状态；默认模板等待资产
-期间保留请求，配置更正后自动重试。命令可在 `Respond`、`Initialize` 或 `PostLayout`
-发送并在本帧处理。`--smoke-tooltip` 验证真实悬停、边缘定位、复用及提示覆盖按钮时
+期间保留请求，配置更正后自动重试。调用立即修改运行时请求，`is_requested()` 和
+`is_showing()` 读取即时状态；资源快照和 Bevy 视图在 Sync 刷新。可在 `Respond`、
+`Initialize` 或 `PostLayout` 调用并在本帧投影视图；隐藏或销毁会立即取消等待资产的
+请求。与 `GuiMut` 同时使用时，通过 `ParamSet<(GuiMut, GuiTooltip)>` 分别借用运行时。
+`--smoke-tooltip` 验证真实悬停、边缘定位、复用及提示覆盖按钮时
 的点击穿透。
 
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
