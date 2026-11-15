@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_group_alignment.rs"]
+mod group_alignment;
+pub(super) fn install_group_alignment(app: &mut App) {
+    group_alignment::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {

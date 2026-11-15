@@ -195,6 +195,9 @@ pub struct ObjectStore {
     dirty_ids: HashSet<GObjectId>,
     list_bounds: std::collections::HashMap<GObjectId, Size>,
     pending_list_layouts: HashSet<GObjectId>,
+    pending_group_layouts: HashSet<GObjectId>,
+    updating_groups: HashSet<GObjectId>,
+    moving_groups: HashSet<GObjectId>,
     laying_out_lists: HashSet<GObjectId>,
     tree_cell_indents: std::collections::HashMap<GObjectId, (GObjectId, u8)>,
     relation_handling: HashSet<GObjectId>,
@@ -480,6 +483,7 @@ impl ObjectStore {
         let Some(parent) = self.objects.get(child).and_then(|object| object.parent) else {
             return false;
         };
+        self.invalidate_member_group(child);
         self.preserve_selection_controller(child);
         if let Some(parent_object) = self.objects.get_mut(parent) {
             if let Some(pane) = parent_object
@@ -625,6 +629,9 @@ impl ObjectStore {
             object.dirty |= flags;
             self.dirty_ids.insert(id);
         }
+        if flags & (dirty::XY | dirty::SIZE | dirty::LOOK) != 0 {
+            self.invalidate_member_group(id);
+        }
     }
 
     /// 标记对象及其整棵子树需要同步。
@@ -659,6 +666,9 @@ impl ObjectStore {
             object.dirty |= flags;
         }
         self.dirty_ids.insert(id);
+        if flags & (dirty::XY | dirty::SIZE | dirty::LOOK) != 0 {
+            self.invalidate_member_group(id);
+        }
     }
 
     /// 设置位置。
@@ -675,11 +685,7 @@ impl ObjectStore {
         };
         if let Some(delta) = delta {
             self.touch(id, dirty::XY);
-            for member in self.group_members(id) {
-                if let Some(position) = self.position_of(member) {
-                    self.set_xy(member, position.x + delta.x, position.y + delta.y);
-                }
-            }
+            self.move_group_members(id, delta);
             self.update_gear_state(id, crate::widget::GearKind::Xy);
             self.apply_sibling_position_relations(id, delta.x, delta.y);
         }
@@ -705,7 +711,14 @@ impl ObjectStore {
 
         siblings.push(parent);
         for owner in siblings {
-            if owner == target || self.relation_handling.contains(&owner) {
+            if owner == target
+                || self.relation_handling.contains(&owner)
+                || self
+                    .objects
+                    .get(owner)
+                    .and_then(|o| o.group)
+                    .is_some_and(|group| self.updating_groups.contains(&group))
+            {
                 continue;
             }
             let Some((x, y, width, height, pivot, pivot_as_anchor, mut relations)) =
@@ -1295,9 +1308,11 @@ impl ObjectStore {
                 next = self.objects.get(candidate).and_then(|object| object.group);
             }
         }
+        self.invalidate_member_group(id);
         if let Some(object) = self.objects.get_mut(id) {
             object.group = group;
         }
+        self.invalidate_member_group(id);
         self.touch_display(id);
     }
 
@@ -1776,139 +1791,6 @@ impl ObjectStore {
 
         self.list_bounds.insert(list, layout.content);
         self.update_scroll_content_size(list, layout.content);
-
-        applied
-    }
-
-    // ---- 分组布局 ----
-
-    /// 对全部有排列方式的分组应用布局。
-    ///
-    /// 返回被重新排布的对象总数。界面构建完成后调用一次即可。
-    pub fn layout_all_groups(&mut self) -> usize {
-        let groups: Vec<GObjectId> = self
-            .objects
-            .iter()
-            .filter(|(_, object)| matches!(object.control, crate::widget::ControlData::Group(_)))
-            .map(|(id, _)| id)
-            .collect();
-
-        groups.iter().map(|id| self.layout_group(*id)).sum()
-    }
-
-    /// 对分组应用它的排列方式。
-    ///
-    /// 分组自己不绘制，它管理的是「父容器里归属它的那些对象」——
-    /// 判断依据是子对象的 `group` 字段是否指向它。
-    ///
-    /// 排列以**第一个成员当前的位置**为起点，`excludeInvisibles` 为真时
-    /// 跳过不可见的成员。返回被重新排布的对象数量。
-    pub fn layout_group(&mut self, group: GObjectId) -> usize {
-        let Some(parent) = self.objects.get(group).and_then(|object| object.parent) else {
-            return 0;
-        };
-
-        let (layout, line_gap, column_gap, exclude_invisibles) =
-            match self.objects.get(group).map(|object| &object.control) {
-                Some(crate::widget::ControlData::Group(data)) => (
-                    data.layout,
-                    data.line_gap as f32,
-                    data.column_gap as f32,
-                    data.exclude_invisibles,
-                ),
-                _ => return 0,
-            };
-
-        // 排列方式为 0 表示不自动排布。
-        if layout == 0 {
-            return 0;
-        }
-
-        let Some(parent_object) = self.objects.get(parent) else {
-            return 0;
-        };
-
-        let members: Vec<GObjectId> = parent_object
-            .children
-            .iter()
-            .copied()
-            .filter(|child| {
-                let Some(object) = self.objects.get(*child) else {
-                    return false;
-                };
-                if object.group != Some(group) {
-                    return false;
-                }
-                !exclude_invisibles || object.display_visible()
-            })
-            .collect();
-
-        if members.is_empty() {
-            return 0;
-        }
-
-        // 以第一个成员的位置为起点。
-        let Some(origin) = self.objects.get(members[0]).map(|o| (o.x(), o.y())) else {
-            return 0;
-        };
-
-        let sizes: Vec<(f32, f32)> = members
-            .iter()
-            .map(|id| {
-                self.objects
-                    .get(*id)
-                    .map_or((0.0, 0.0), |o| (o.width(), o.height()))
-            })
-            .collect();
-
-        let mut placements = Vec::with_capacity(members.len());
-        let (mut x, mut y) = origin;
-
-        match layout {
-            // 1：横向排列。
-            1 => {
-                for (width, _) in &sizes {
-                    placements.push((x, origin.1));
-                    x += width + column_gap;
-                }
-            }
-            // 2：纵向排列。
-            2 => {
-                for (_, height) in &sizes {
-                    placements.push((origin.0, y));
-                    y += height + line_gap;
-                }
-            }
-            // 3：网格排列。
-            3 => {
-                let parent_width = parent_object.width();
-                let mut line_height = 0.0f32;
-
-                for (width, height) in &sizes {
-                    if x > origin.0 && x + width > origin.0 + parent_width {
-                        x = origin.0;
-                        y += line_height + line_gap;
-                        line_height = 0.0;
-                    }
-                    placements.push((x, y));
-                    x += width + column_gap;
-                    line_height = line_height.max(*height);
-                }
-            }
-            _ => return 0,
-        }
-
-        let mut applied = 0;
-        for (id, (px, py)) in members.iter().zip(placements) {
-            let changed = self
-                .objects
-                .get(*id)
-                .is_some_and(|object| object.x() != px || object.y() != py);
-            if changed {
-                self.set_xy(*id, px, py);
-                applied += 1;
-            }
-        }
 
         applied
     }
@@ -4048,10 +3930,11 @@ mod tests {
             data.column_gap = 10;
         }
 
-        store.set_xy(members[0], 100.0, 50.0);
+        store.set_xy(group, 100.0, 50.0);
+        store.set_xy(members[0], 12.0, 50.0);
         assert!(store.layout_group(group) > 0);
 
-        // 第一个保持原位，随后依次右移一个「宽 + 间距」。
+        // 从组合位置开始排列，保留每个成员在垂直方向的偏移。
         assert_eq!(
             store.object(members[0]).unwrap().position(),
             crate::geom::Point::new(100.0, 50.0)

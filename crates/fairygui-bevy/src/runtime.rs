@@ -25,6 +25,9 @@ mod ecs_root_tests;
 pub mod edit;
 #[path = "global_wait.rs"]
 pub(crate) mod global_wait;
+#[cfg(test)]
+#[path = "group_tests.rs"]
+mod group_tests;
 #[path = "object_drag.rs"]
 pub(crate) mod object_drag;
 #[path = "root_mount.rs"]
@@ -3330,7 +3333,9 @@ pub(crate) fn sync_dirty(
         Option<&RichTextBlock>,
     )>,
 ) {
+    runtime.store_mut().flush_group_layouts();
     runtime.store_mut().flush_list_layouts();
+    runtime.store_mut().flush_group_layouts();
     let dirty_objects = runtime.store_mut().take_dirty();
     if dirty_objects.is_empty() {
         return;
@@ -3618,6 +3623,7 @@ pub fn sync_gui_font(font: Res<GuiFont>, mut runtime: NonSendMut<GuiRuntime>) {
 
 /// Refresh ordinary component panes after child geometry and ownership changes.
 pub(crate) fn sync_component_scroll_content(mut runtime: NonSendMut<GuiRuntime>) {
+    runtime.store_mut().flush_group_layouts();
     let panes: Vec<_> = runtime
         .store()
         .iter()

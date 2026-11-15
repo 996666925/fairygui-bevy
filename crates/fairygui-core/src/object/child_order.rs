@@ -35,6 +35,7 @@ impl ObjectStore {
             self.objects[parent].children.remove(current);
             self.objects[parent].children.insert(index, child);
             self.touch(parent, dirty::CHILDREN);
+            self.invalidate_member_group(child);
             self.refresh_list_selection_snapshot(parent);
             self.layout_list(parent);
             self.refresh_stage();
