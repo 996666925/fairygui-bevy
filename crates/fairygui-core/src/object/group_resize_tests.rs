@@ -305,3 +305,94 @@ fn reparented_groups_never_resize_cached_members_from_the_previous_container() {
         previous
     );
 }
+
+#[test]
+fn assigning_the_same_group_preserves_native_resize_ratios_and_member_edges() {
+    for horizontal in [true, false] {
+        for fixed in [false, true] {
+            let mut store = ObjectStore::new();
+            let parent = store.create(ObjectType::Component);
+            let group = store.create(ObjectType::Group);
+            store.set_parent(group, Some(parent));
+            store.set_size(group, 80., 80.);
+            store.set_group_layout_settings(
+                group,
+                GroupLayoutSettings {
+                    layout: if horizontal {
+                        GroupLayoutType::Horizontal
+                    } else {
+                        GroupLayoutType::Vertical
+                    },
+                    auto_size_disabled: fixed,
+                    column_gap: 7,
+                    line_gap: 7,
+                    ..Default::default()
+                },
+            );
+            let members: Vec<_> = [40., 60., 80.]
+                .into_iter()
+                .map(|extent| {
+                    let member = store.create(ObjectType::Image);
+                    store.set_parent(member, Some(parent));
+                    store.set_size(
+                        member,
+                        if horizontal { extent } else { 20. },
+                        if horizontal { 20. } else { extent },
+                    );
+                    store.set_group(member, Some(group));
+                    member
+                })
+                .collect();
+            store.flush_group_layouts();
+            if !fixed {
+                store.set_size(
+                    group,
+                    if horizontal { 80. } else { 20. },
+                    if horizontal { 20. } else { 80. },
+                );
+            }
+            for &member in &members {
+                store.set_group(member, Some(group));
+            }
+            store.flush_group_layouts();
+            store.set_size(
+                group,
+                if horizontal { 100. } else { 20. },
+                if horizontal { 20. } else { 100. },
+            );
+            let extents: Vec<_> = members
+                .iter()
+                .map(|&id| {
+                    let o = store.object(id).unwrap();
+                    if horizontal { o.width() } else { o.height() }
+                })
+                .collect();
+            // Original GObject.group ignores an unchanged assignment. GGroup
+            // therefore still allocates from the original 40:60:80 proportions.
+            assert_eq!(
+                extents,
+                [19., 29., 38.],
+                "horizontal={horizontal}, fixed={fixed}"
+            );
+            let starts: Vec<_> = members
+                .iter()
+                .map(|&id| {
+                    let o = store.object(id).unwrap();
+                    if horizontal { o.x() } else { o.y() }
+                })
+                .collect();
+            assert_eq!(starts, [0., 26., 62.]);
+            store.take_dirty();
+            for &member in &members {
+                store.set_group(member, Some(group));
+            }
+            assert_eq!(store.flush_group_layouts(), 0);
+            assert!(store.take_dirty().is_empty());
+            let ungrouped = store.create(ObjectType::Image);
+            store.take_dirty();
+            store.set_group(ungrouped, None);
+            assert_eq!(store.flush_group_layouts(), 0);
+            assert!(store.take_dirty().is_empty());
+        }
+    }
+}

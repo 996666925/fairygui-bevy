@@ -667,6 +667,7 @@ fn bind_layout(gui: &mut GuiMut, owner: Entity, target: Entity) {
 锚点轴心的成员保持关联边缘，组合边界也会同步更新。
 通过 `GuiTransform.position` 只修改一个坐标轴时，另一个轴保留关联更新后的当前位置；
 同一帧修改尺寸与位置时，也会保留未编辑轴的居中／右对齐补偿。
+重复设置相同的组合归属不会重置成员的原始尺寸比例，避免再次缩放时累积取整偏移。
 设置横向或纵向排列后，修改 `GuiTransform.size` 会按原比例调整成员，并应用成员的尺寸上下限；
 `auto_size_disabled = true` 时，内容变化后继续使用组合的固定尺寸分配空间。
 `main_grid_index` 是所有成员中的序号（包含被排除的隐藏成员），默认 `None`；

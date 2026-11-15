@@ -1162,6 +1162,14 @@ impl ObjectStore {
 
     /// 设置所属的组。
     pub fn set_group(&mut self, id: GObjectId, group: Option<GObjectId>) {
+        let Some(object) = self.objects.get(id) else {
+            return;
+        };
+        // Native GObject.group ignores an unchanged assignment. Invalidating
+        // here would replace cached proportions with already rounded sizes.
+        if object.group == group {
+            return;
+        }
         if let Some(group) = group {
             if !self
                 .objects
