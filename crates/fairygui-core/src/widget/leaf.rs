@@ -614,7 +614,7 @@ mod graph_tests {
 }
 
 /// 分组的数据。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct GroupData {
     /// 排列方式。
     pub layout: i32,
@@ -628,6 +628,22 @@ pub struct GroupData {
     pub auto_size_disabled: bool,
     /// 布局参考的主对象编号（格式 2 及以上）。
     pub main_grid_index: i32,
+    /// Minimum contribution of the main grid before it absorbs extra space.
+    pub main_grid_min_size: f32,
+}
+
+impl Default for GroupData {
+    fn default() -> Self {
+        Self {
+            layout: 0,
+            line_gap: 0,
+            column_gap: 0,
+            exclude_invisibles: false,
+            auto_size_disabled: false,
+            main_grid_index: -1,
+            main_grid_min_size: 50.,
+        }
+    }
 }
 
 /// 静态文本的数据。

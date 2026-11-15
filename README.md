@@ -609,6 +609,28 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 更换或解除控制器会清空关联页面 ID，同帧明确修改的页面 ID 会随后应用。
 移动按钮保留原控制器身份；原拥有者销毁后可设置新绑定。单独修改关联配置不会改变选择。
 
+组合通过 `GuiGroupLayout` 修改横向／纵向排列、间距、隐藏成员排除和固定尺寸策略；
+成员仍是同一父容器下的兄弟实体。横向排列保留成员的纵向位置，纵向排列保留横向位置，
+因此编辑器保存的左／居中／右对齐和关联不会被抹掉。组合移动会同步移动成员。
+设置横向或纵向排列后，修改 `GuiTransform.size` 会按原比例调整成员，并应用成员的尺寸上下限；
+`auto_size_disabled = true` 时，内容变化后继续使用组合的固定尺寸分配空间。
+`main_grid_index` 是所有成员中的序号（包含被排除的隐藏成员），默认 `None`；
+指定后，空间充足且不受尺寸上限限制时，主格子吸收额外空间，其余成员保持尺寸。
+`main_grid_min_size` 默认 50，空间不足时按比例分配。反复缩放保留原比例，避免累计取整偏移。
+可通过 `gui.group_layout(entity)` 查询配置，或通过 `GuiObjectMut::set_group_layout` 即时修改。
+
+```rust,ignore
+fn configure_group(mut groups: Query<&mut GuiGroupLayout>, target: Entity) {
+    if let Ok(mut layout) = groups.get_mut(target) {
+        layout.layout = GroupLayoutType::Horizontal;
+        layout.column_gap = 8;
+        layout.auto_size_disabled = true;
+        layout.exclude_invisibles = true;
+        layout.main_grid_index = Some(1);
+    }
+}
+```
+
 列表和树的 `GuiListLayout` 可直接修改布局类型、行列数、间距、对齐与自动拉伸。
 修改会重新布局普通列表及虚拟列表，并同步滚动内容范围；不合法的计数或虚拟几何会保留
 原布局。对齐量作用在列表内容容器上，行项目坐标仍保持原生局部坐标。

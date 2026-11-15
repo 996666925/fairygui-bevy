@@ -61,6 +61,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiButtonSettings>(world);
     sync_property::<GuiScrollSettings>(world);
     sync_property::<GuiListLayout>(world);
+    sync_property::<GuiGroupLayout>(world);
     sync_property::<GuiListSettings>(world);
     sync_property::<GuiListSelection>(world);
     sync_property::<GuiTreeNode>(world);
@@ -91,12 +92,12 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiComboBoxState>(world);
     // Row button edits also change a list's native selected indices.
     sync_property::<GuiListSelection>(world);
-    if world
-        .non_send_mut::<GuiRuntime>()
-        .store_mut()
-        .flush_list_layouts()
-        != 0
-    {
+    let changed_layout = {
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        let store = runtime.store_mut();
+        store.flush_group_layouts() + store.flush_list_layouts() + store.flush_group_layouts() != 0
+    };
+    if changed_layout {
         // All row edits have now been applied. Publish positions and automatic
         // widths again so earlier entity visits cannot expose stale geometry.
         sync_property::<GuiTransform>(world);

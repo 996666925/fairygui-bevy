@@ -44,6 +44,7 @@ mod properties;
 
 #[path = "groups.rs"]
 mod groups;
+pub use groups::{GroupLayoutSettings, GroupLayoutType};
 
 #[path = "buttons.rs"]
 mod buttons;
@@ -198,6 +199,8 @@ pub struct ObjectStore {
     pending_group_layouts: HashSet<GObjectId>,
     updating_groups: HashSet<GObjectId>,
     moving_groups: HashSet<GObjectId>,
+    resizing_groups: HashSet<GObjectId>,
+    group_percentages: std::collections::HashMap<GObjectId, groups::GroupPercentages>,
     laying_out_lists: HashSet<GObjectId>,
     tree_cell_indents: std::collections::HashMap<GObjectId, (GObjectId, u8)>,
     relation_handling: HashSet<GObjectId>,
@@ -376,6 +379,8 @@ impl ObjectStore {
             self.stage_roots.retain(|root| *root != child);
             self.staged.remove(&child);
             self.dirty_ids.remove(&child);
+            self.pending_group_layouts.remove(&child);
+            self.group_percentages.remove(&child);
             if self.root == Some(child) {
                 self.root = None;
             }
@@ -629,9 +634,7 @@ impl ObjectStore {
             object.dirty |= flags;
             self.dirty_ids.insert(id);
         }
-        if flags & (dirty::XY | dirty::SIZE | dirty::LOOK) != 0 {
-            self.invalidate_member_group(id);
-        }
+        self.invalidate_group_geometry(id, flags);
     }
 
     /// 标记对象及其整棵子树需要同步。
@@ -666,9 +669,7 @@ impl ObjectStore {
             object.dirty |= flags;
         }
         self.dirty_ids.insert(id);
-        if flags & (dirty::XY | dirty::SIZE | dirty::LOOK) != 0 {
-            self.invalidate_member_group(id);
-        }
+        self.invalidate_group_geometry(id, flags);
     }
 
     /// 设置位置。
@@ -791,6 +792,28 @@ impl ObjectStore {
     ///
     /// 容器尺寸变化会带动子对象的关联调整，与官方行为一致。
     pub fn set_size(&mut self, id: GObjectId, width: f32, height: f32) {
+        self.set_size_internal(id, width, height, false, None);
+    }
+
+    fn set_size_internal(
+        &mut self,
+        id: GObjectId,
+        width: f32,
+        height: f32,
+        ignore_pivot: bool,
+        group_raw_size: Option<Size>,
+    ) {
+        let raw_changed = self.objects.get(id).is_some_and(|o| {
+            group_raw_size.is_none()
+                && o.group_raw_size
+                    .is_some_and(|s| s != Size::new(width, height))
+        });
+        if let Some(object) = self.objects.get_mut(id) {
+            object.group_raw_size = group_raw_size;
+        }
+        if raw_changed {
+            self.invalidate_member_group(id);
+        }
         let Some((old_width, old_height)) = self
             .objects
             .get(id)
@@ -821,7 +844,9 @@ impl ObjectStore {
             } else {
                 let x = object.x - object.pivot_x * (width - old_width);
                 let y = object.y - object.pivot_y * (height - old_height);
-                self.set_xy(id, x, y);
+                if !ignore_pivot {
+                    self.set_xy(id, x, y);
+                }
                 self.objects
                     .get_mut(id)
                     .unwrap()
@@ -830,6 +855,7 @@ impl ObjectStore {
         }
 
         let (d_width, d_height) = (width - old_width, height - old_height);
+        self.resize_group_members(id, d_width, d_height);
         // Keep the owner's related right/center/bottom edge fixed when its own
         // intrinsic size changes (native RelationItem.applyOnSelfResized).
         if let Some(object) = self
@@ -1117,6 +1143,7 @@ impl ObjectStore {
         };
         if changed {
             self.touch(id, dirty::LOOK);
+            self.invalidate_group_geometry(id, dirty::XY);
         }
     }
 

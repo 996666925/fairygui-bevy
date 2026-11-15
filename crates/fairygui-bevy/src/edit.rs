@@ -77,6 +77,12 @@ impl GuiObjectMut<'_> {
             settings.apply(&native, &native, self.runtime, self.object);
         }
     }
+    pub fn set_group_layout(&mut self, layout: crate::GuiGroupLayout) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiGroupLayout::read(self.runtime, self.object) {
+            layout.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn set_list_layout(&mut self, layout: crate::GuiListLayout) {
         use crate::properties::Property;
         if let Some(native) = crate::GuiListLayout::read(self.runtime, self.object) {

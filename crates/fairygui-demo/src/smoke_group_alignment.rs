@@ -7,6 +7,7 @@ struct State {
     since: u32,
     step: u8,
     panels: Vec<Entity>,
+    member_sizes: Vec<(Vec2, Vec2)>,
 }
 
 pub(super) fn install(app: &mut App) {
@@ -108,8 +109,107 @@ fn drive(
                     80. + index as f32 * 20.,
                 );
             }
+            let panels = state.panels.clone();
+            for (index, owner) in panels.into_iter().enumerate() {
+                let group = gui.child_by_name(owner, "n4").unwrap();
+                let image = gui.child_by_name(owner, "n1").unwrap();
+                let movie = gui.child_by_name(owner, "n3").unwrap();
+                state.member_sizes.push((
+                    gui.transform(image).unwrap().size(),
+                    gui.transform(movie).unwrap().size(),
+                ));
+                let mut transform = *gui.transform(group).unwrap();
+                transform.size = Vec2::new(260., 120.);
+                commands.entity(group).insert((
+                    transform,
+                    GuiGroupLayout {
+                        layout: if index == 2 {
+                            GroupLayoutType::Vertical
+                        } else {
+                            GroupLayoutType::Horizontal
+                        },
+                        auto_size_disabled: true,
+                        main_grid_index: match index {
+                            1 => Some(1),
+                            2 => Some(0),
+                            _ => None,
+                        },
+                        column_gap: 7,
+                        line_gap: 9,
+                        ..default()
+                    },
+                ));
+            }
+            next = true;
+        }
+        5 if elapsed >= 12 => {
+            for (index, &owner) in state.panels.iter().enumerate() {
+                check_fixed(
+                    &gui,
+                    &nodes,
+                    owner,
+                    index,
+                    state.member_sizes[index],
+                    Vec2::new(260., 120.),
+                );
+                let group = gui.child_by_name(owner, "n4").unwrap();
+                let mut transform = *gui.transform(group).unwrap();
+                transform.size = Vec2::new(300., 160.);
+                commands.entity(group).insert(transform);
+            }
+            next = true;
+        }
+        6 if elapsed >= 12 => {
+            for (index, &owner) in state.panels.iter().enumerate() {
+                check_fixed(
+                    &gui,
+                    &nodes,
+                    owner,
+                    index,
+                    state.member_sizes[index],
+                    Vec2::new(300., 160.),
+                );
+            }
+            let owner = state.panels[1];
+            let group = gui.child_by_name(owner, "n4").unwrap();
+            let movie = gui.child_by_name(owner, "n3").unwrap();
+            let mut layout = *gui.group_layout(group).unwrap();
+            layout.exclude_invisibles = true;
+            let mut display = *gui.display(movie).unwrap();
+            display.visible = false;
+            commands.entity(group).insert(layout);
+            commands.entity(movie).insert(display);
+            next = true;
+        }
+        7 if elapsed >= 12 => {
+            let owner = state.panels[1];
+            let image = gui.child_by_name(owner, "n1").unwrap();
+            let movie = gui.child_by_name(owner, "n3").unwrap();
+            assert_eq!(gui.transform(image).unwrap().size().x, 300.);
+            assert!(!gui.display(movie).unwrap().display_visible());
+            let mut display = *gui.display(movie).unwrap();
+            display.visible = true;
+            commands.entity(movie).insert(display);
+            next = true;
+        }
+        8 if elapsed >= 12 => {
+            let owner = state.panels[1];
+            let image = gui.child_by_name(owner, "n1").unwrap();
+            let movie = gui.child_by_name(owner, "n3").unwrap();
+            assert_eq!(gui.transform(image).unwrap().size().x, 251.);
+            assert_eq!(gui.transform(movie).unwrap().size().x, 42.);
+            assert!(gui.display(movie).unwrap().display_visible());
+            for &owner in &state.panels {
+                check_projection(&gui, &nodes, owner);
+            }
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-group-resize.png"));
+            next = true;
+        }
+        9 if elapsed >= 20 => {
             info!(
-                "demo smoke PASSED: rendered group centering, member bounds changes, parent resizing and stable retained geometry"
+                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members and retained geometry"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -163,4 +263,74 @@ fn check(
     );
     let (node, _) = nodes.get(image).unwrap();
     assert!((node.size().x * node.inverse_scale_factor() - width).abs() < 0.5);
+}
+
+fn check_fixed(
+    gui: &GuiQuery,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    owner: Entity,
+    index: usize,
+    original: (Vec2, Vec2),
+    expected_size: Vec2,
+) {
+    let group = gui.child_by_name(owner, "n4").unwrap();
+    let image = gui.child_by_name(owner, "n1").unwrap();
+    let movie = gui.child_by_name(owner, "n3").unwrap();
+    let image_size = gui.transform(image).unwrap().size();
+    let movie_size = gui.transform(movie).unwrap().size();
+    let group_position = gui.transform(group).unwrap().position();
+    assert_eq!(gui.transform(group).unwrap().size(), expected_size);
+    assert_eq!(
+        group_position,
+        (gui.transform(owner).unwrap().size() - expected_size) * 0.5
+    );
+    if index == 2 {
+        assert_eq!(image_size.y + movie_size.y + 9., expected_size.y);
+        assert_eq!(movie_size.y, original.1.y);
+        assert_eq!(gui.transform(image).unwrap().position().y, group_position.y);
+        assert_eq!(
+            gui.transform(movie).unwrap().position().y,
+            group_position.y + image_size.y + 9.
+        );
+    } else {
+        assert_eq!(image_size.x + movie_size.x + 7., expected_size.x);
+        if index == 1 {
+            assert_eq!(image_size.x, original.0.x);
+        } else {
+            assert!(
+                (image_size.x
+                    - (expected_size.x - 7.) * original.0.x / (original.0.x + original.1.x))
+                    .abs()
+                    <= 1.
+            );
+        }
+        assert_eq!(gui.transform(image).unwrap().position().x, group_position.x);
+        assert_eq!(
+            gui.transform(movie).unwrap().position().x,
+            group_position.x + image_size.x + 7.
+        );
+    }
+    check_projection(gui, nodes, owner);
+}
+
+fn check_projection(
+    gui: &GuiQuery,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    owner: Entity,
+) {
+    let root = gui.view(owner).unwrap();
+    let (root_node, root_transform) = nodes.get(root).unwrap();
+    let root_size = gui.transform(root).unwrap().size();
+    for name in ["n4", "n1", "n3"] {
+        let child = gui.child_by_name(owner, name).unwrap();
+        let transform = gui.transform(child).unwrap();
+        let center = (transform.position() + transform.size() * 0.5 - root_size * 0.5)
+            / root_node.inverse_scale_factor();
+        let expected = root_transform.transform_point2(center);
+        let actual = nodes.get(child).unwrap().1.transform_point2(Vec2::ZERO);
+        assert!(
+            actual.distance(expected) <= 1.,
+            "group member {name}: render={actual:?}, expected={expected:?}"
+        );
+    }
 }

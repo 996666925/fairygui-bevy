@@ -79,6 +79,8 @@ pub struct GObject {
     pub(crate) y: f32,
     pub(crate) width: f32,
     pub(crate) height: f32,
+    /// Requested size before a group applies min/max limits.
+    pub(crate) group_raw_size: Option<Size>,
     pub(crate) init_width: f32,
     pub(crate) init_height: f32,
     pub(crate) min_width: f32,
@@ -153,6 +155,7 @@ impl GObject {
             y: 0.0,
             width: 0.0,
             height: 0.0,
+            group_raw_size: None,
             init_width: 0.0,
             init_height: 0.0,
             min_width: 0.0,

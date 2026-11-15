@@ -80,6 +80,9 @@ pub use button_properties::GuiButtonSettings;
 pub mod list;
 mod list_properties;
 pub use list_properties::GuiListLayout;
+mod group_properties;
+pub use fairygui_core::object::{GroupLayoutSettings, GroupLayoutType};
+pub use group_properties::GuiGroupLayout;
 mod list_settings;
 pub use list_settings::GuiListSettings;
 mod list_selection;
@@ -188,23 +191,23 @@ pub mod prelude {
     pub use crate::{
         BlendMode, ButtonMode, ChildrenRenderOrder, ColorFilterParams, FairyGuiPlugin,
         FairyGuiRoot, FairyGuiWindow, FillMethod, FlipType, FuiAsset, GObjectRef, GraphType,
-        GuiAnimationComplete, GuiAnimationPlaySettings, GuiAnimationState, GuiBlendMode,
-        GuiButtonSelected, GuiButtonSettings, GuiColor, GuiColorFilter, GuiComboBoxState,
-        GuiConfig, GuiControllerState, GuiControllers, GuiData, GuiDisplay, GuiDrag, GuiDragBounds,
-        GuiDragSource, GuiDragState, GuiDraggable, GuiDrop, GuiDropTarget, GuiEvent, GuiFont,
-        GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState, GuiGraph, GuiIcon,
-        GuiImageFill, GuiImageFlip, GuiInput, GuiInputSettings, GuiInputState, GuiLink,
-        GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
-        GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings, GuiListState,
-        GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
-        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
-        GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
-        GuiProgressTweenComplete, GuiProgressValue, GuiPullPart, GuiPullRelease, GuiQuery,
-        GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
-        GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder,
-        GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings,
-        GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips,
-        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GroupLayoutSettings, GroupLayoutType, GuiAnimationComplete, GuiAnimationPlaySettings,
+        GuiAnimationState, GuiBlendMode, GuiButtonSelected, GuiButtonSettings, GuiColor,
+        GuiColorFilter, GuiComboBoxState, GuiConfig, GuiControllerState, GuiControllers, GuiData,
+        GuiDisplay, GuiDrag, GuiDragBounds, GuiDragSource, GuiDragState, GuiDraggable, GuiDrop,
+        GuiDropTarget, GuiEvent, GuiFont, GuiGlobalWaitError, GuiGlobalWaitSettings,
+        GuiGlobalWaitState, GuiGraph, GuiGroupLayout, GuiIcon, GuiImageFill, GuiImageFlip,
+        GuiInput, GuiInputSettings, GuiInputState, GuiLink, GuiListContent, GuiListContentError,
+        GuiListContentState, GuiListItem, GuiListItemClick, GuiListLayout, GuiListRow,
+        GuiListSelection, GuiListSettings, GuiListState, GuiLoaderFailure, GuiLoaderSettings,
+        GuiLoaderState, GuiMenuAction, GuiMut, GuiObjectDragState, GuiObjectInfo, GuiObjectMut,
+        GuiOpaque, GuiPointerCapture, GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu,
+        GuiPopupState, GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullPart,
+        GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
+        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue,
+        GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput,
+        GuiTextInputSettings, GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState,
+        GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
         GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
         GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,

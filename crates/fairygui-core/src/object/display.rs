@@ -40,6 +40,7 @@ impl ObjectStore {
     }
 
     pub(crate) fn touch_display(&mut self, owner: GObjectId) {
+        self.invalidate_group_member_visibility(owner);
         let mut pending = vec![owner];
         let mut visited = HashSet::new();
         while let Some(id) = pending.pop() {
