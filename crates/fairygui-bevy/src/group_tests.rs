@@ -209,3 +209,118 @@ fn grouped_exported_size_relations_keep_member_edges_after_ecs_parent_resizing()
         }
     }
 }
+
+#[test]
+fn group_alignment_survives_an_ecs_edit_to_the_other_position_axis() {
+    use crate::{core::package::ObjectType, properties::sync_property};
+    for (resize_group, edit_alignment) in [(false, false), (true, false), (true, true)] {
+        for (horizontal, relation, factor) in [
+            (true, RelationType::LeftLeft, 0.),
+            (true, RelationType::CenterCenter, 0.5),
+            (true, RelationType::RightRight, 1.),
+            (false, RelationType::TopTop, 0.),
+            (false, RelationType::MiddleMiddle, 0.5),
+            (false, RelationType::BottomBottom, 1.),
+        ] {
+            let mut world = World::new();
+            world.init_non_send::<GuiRuntime>();
+            let (parent, group, member) = {
+                let mut runtime = world.non_send_mut::<GuiRuntime>();
+                let store = runtime.store_mut();
+                let parent = store.create(ObjectType::Component);
+                let group = store.create(ObjectType::Group);
+                let member = store.create(ObjectType::Image);
+                store.set_size(parent, 400., 300.);
+                for id in [group, member] {
+                    store.set_parent(id, Some(parent));
+                    store.set_size(id, 100., 40.);
+                    store.set_xy(id, 150., 130.);
+                }
+                store.set_group(member, Some(group));
+                store.set_group_layout_settings(
+                    group,
+                    fairygui_core::object::GroupLayoutSettings {
+                        layout: if horizontal {
+                            GroupLayoutType::Horizontal
+                        } else {
+                            GroupLayoutType::Vertical
+                        },
+                        auto_size_disabled: true,
+                        ..default()
+                    },
+                );
+                store.flush_group_layouts();
+                store.add_relation(group, parent, relation, false);
+                (parent, group, member)
+            };
+            // Parent is visited first. Its resize updates the native group position
+            // before the group's pending application edit is consumed.
+            let parent_entity = world.spawn(GObjectRef(parent)).id();
+            let group_entity = world.spawn(GObjectRef(group)).id();
+            let member_entity = world.spawn(GObjectRef(member)).id();
+            sync_property::<GuiTransform>(&mut world);
+            let resized = if resize_group {
+                group_entity
+            } else {
+                parent_entity
+            };
+            let delta = if resize_group { 40. } else { 200. };
+            if edit_alignment {
+                // The application position equals the position produced by the
+                // parent's resize, but must still win after our own resize.
+                let mut parent = world.get_mut::<GuiTransform>(parent_entity).unwrap();
+                if horizontal {
+                    parent.size.x += 200.;
+                } else {
+                    parent.size.y += 200.;
+                }
+                let mut group = world.get_mut::<GuiTransform>(group_entity).unwrap();
+                if horizontal {
+                    group.size.x += delta;
+                    group.position.x += 200. * factor;
+                } else {
+                    group.size.y += delta;
+                    group.position.y += 200. * factor;
+                }
+            } else if horizontal {
+                world.get_mut::<GuiTransform>(resized).unwrap().size.x += delta;
+                world
+                    .get_mut::<GuiTransform>(group_entity)
+                    .unwrap()
+                    .position
+                    .y += 17.;
+            } else {
+                world.get_mut::<GuiTransform>(resized).unwrap().size.y += delta;
+                world
+                    .get_mut::<GuiTransform>(group_entity)
+                    .unwrap()
+                    .position
+                    .x += 17.;
+            }
+            let aligned_delta = if edit_alignment {
+                200. * factor
+            } else if resize_group {
+                -delta * factor
+            } else {
+                delta * factor
+            };
+            let offset = if edit_alignment { 0. } else { 17. };
+            let expected = Vec2::new(150., 130.)
+                + if horizontal {
+                    Vec2::new(aligned_delta, offset)
+                } else {
+                    Vec2::new(offset, aligned_delta)
+                };
+            for _ in 0..3 {
+                sync_property::<GuiTransform>(&mut world);
+                for entity in [group_entity, member_entity] {
+                    assert_eq!(
+                        world.get::<GuiTransform>(entity).unwrap().position,
+                        expected,
+                        "relation={relation:?}, resize_group={resize_group}, edit_alignment={edit_alignment}"
+                    );
+                }
+            }
+        }
+    }
+}

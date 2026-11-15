@@ -271,8 +271,59 @@ fn drive(
         }
         14 if elapsed >= 12 => {
             check_pivot_groups(&state, &gui, &nodes, Vec2::new(160., 60.));
+            for &owner in &state.panels {
+                let group = gui.child_by_name(owner, "n4").unwrap();
+                let mut transform = *gui.transform(group).unwrap();
+                // Resizing moves the centered X through its self relation.
+                // An application Y edit must retain that updated X.
+                transform.size.x += 40.;
+                transform.position.y += 13.;
+                commands.entity(group).insert(transform);
+            }
+            next = true;
+        }
+        15 if elapsed >= 12 => {
+            check_axis_edits(
+                &state,
+                &gui,
+                &nodes,
+                Vec2::new(340., 160.),
+                Vec2::new(0., 13.),
+            );
+            for &owner in &state.panels {
+                let group = gui.child_by_name(owner, "n4").unwrap();
+                let mut transform = *gui.transform(group).unwrap();
+                transform.size.y += 40.;
+                transform.position.x += 17.;
+                commands.entity(group).insert(transform);
+            }
+            next = true;
+        }
+        16 if elapsed >= 12 => {
+            check_axis_edits(
+                &state,
+                &gui,
+                &nodes,
+                Vec2::new(340., 200.),
+                Vec2::new(17., 13.),
+            );
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-group-axis-alignment.png",
+                ));
+            next = true;
+        }
+        17 if elapsed >= 20 => {
+            check_axis_edits(
+                &state,
+                &gui,
+                &nodes,
+                Vec2::new(340., 200.),
+                Vec2::new(17., 13.),
+            );
             info!(
-                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members, pivoted size relations and retained geometry"
+                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members, pivoted size relations, simultaneous size/position axis edits and retained geometry"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -282,6 +333,25 @@ fn drive(
     if next {
         state.step += 1;
         state.since = state.frame;
+    }
+}
+
+fn check_axis_edits(
+    state: &State,
+    gui: &GuiQuery,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    size: Vec2,
+    offset: Vec2,
+) {
+    for &owner in &state.panels {
+        let group = gui.child_by_name(owner, "n4").unwrap();
+        let transform = gui.transform(group).unwrap();
+        assert_eq!(transform.size(), size);
+        assert_eq!(
+            transform.position(),
+            (gui.transform(owner).unwrap().size() - size) * 0.5 + offset
+        );
+        check_projection(gui, nodes, owner);
     }
 }
 

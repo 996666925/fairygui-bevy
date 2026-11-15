@@ -261,13 +261,23 @@ impl Property for GuiTransform {
             };
             runtime.store_mut().set_size(object, width, height);
         }
-        field!(self, previous, native, position, {
-            if self.position.is_finite() {
-                runtime
-                    .store_mut()
-                    .set_xy(object, self.position.x, self.position.y);
-            }
-        });
+        if self.position != previous.position && self.position.is_finite() {
+            // Resizing above or an earlier object's relation may already
+            // have moved this object. Preserve each axis the app did not
+            // edit, using the live position after those notifications.
+            let current = runtime.store().position_of(object).unwrap();
+            let x = if self.position.x != previous.position.x {
+                self.position.x
+            } else {
+                current.x
+            };
+            let y = if self.position.y != previous.position.y {
+                self.position.y
+            } else {
+                current.y
+            };
+            runtime.store_mut().set_xy(object, x, y);
+        }
         field!(self, previous, native, scale, {
             if self.scale.is_finite() {
                 runtime
