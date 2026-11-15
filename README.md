@@ -477,7 +477,9 @@ fn keep_editing(event: On<GuiEnter>, mut input: GuiInput) {
 `ParamSet` 分开借用这些共享状态。
 选区与光标仍使用 Bevy `EditableText`，失焦时清理当前组合输入及选区。
 输入框的字形、光标和选区统一由编辑器布局生成，避免静态文本布局覆盖拖选高亮。
-`--smoke-text-selection` 验证正反向拖选、中文/密码选区、按住不动、松开、改尺寸与全选。
+鼠标与触摸按 UI 相机视口换算选区坐标，失焦会结束本次拖选归属，重新聚焦不会恢复旧拖选。
+`--smoke-text-selection` 验证正反向拖选、中文/密码选区、按住不动、松开、改尺寸与全选，
+并比较相机视口偏移前后的选区范围，检查按住鼠标失焦后的选区清理。
 `--smoke-input-properties` 验证真实键盘/IME、直接焦点和回车取消，
 `--smoke-nested-scroll` 验证直接取消滚动手势时保留程序滚动动画。
 

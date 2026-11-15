@@ -1066,3 +1066,116 @@ fn caret_and_selection_paint_follow_effective_text_color_opacity_and_logical_pix
         0.
     );
 }
+
+#[test]
+fn mouse_drag_stops_editing_when_focus_moves_to_another_control() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, owner, entity, window) = fixture();
+    let other = app.world_mut().spawn_empty().id();
+    app.world_mut()
+        .resource_mut::<InputFocus>()
+        .set(other, FocusCause::Navigated);
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .set_cursor_position(Some(Vec2::new(40., 20.)));
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.world_mut().resource_mut::<InputRouter>().capture = Some(crate::input::Capture {
+        window,
+        target: owner,
+        start: Vec2::ZERO,
+        last: Vec2::ZERO,
+        moved: true,
+        dragged: true,
+        drop_started: false,
+        gesture: Gesture::None,
+        link: None,
+        editing: Some(entity),
+    });
+    app.world_mut()
+        .get_mut::<EditableText>(entity)
+        .unwrap()
+        .pending_edits
+        .clear();
+    app.world_mut()
+        .run_system_once(crate::input::route_pointer)
+        .unwrap();
+    assert!(
+        app.world()
+            .get::<EditableText>(entity)
+            .unwrap()
+            .pending_edits
+            .is_empty(),
+        "a captured mouse must not restore selection after focus was lost"
+    );
+    assert_eq!(app.world().resource::<InputFocus>().get(), Some(other));
+    app.world_mut()
+        .resource_mut::<InputFocus>()
+        .set(entity, FocusCause::Navigated);
+    app.world_mut()
+        .run_system_once(crate::input::route_pointer)
+        .unwrap();
+    assert!(
+        app.world()
+            .get::<EditableText>(entity)
+            .unwrap()
+            .pending_edits
+            .is_empty(),
+        "regaining focus must not restart an earlier pointer's drag selection"
+    );
+}
+
+#[test]
+fn explicit_blur_cancels_mouse_and_touch_selection_owners_before_refocus() {
+    let (mut app, owner, entity, window) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .request_input_focus(Some(owner));
+    app.update();
+    {
+        let mut state = app.world_mut().resource_mut::<InputRouter>();
+        state.capture = Some(crate::input::Capture {
+            window,
+            target: owner,
+            start: Vec2::ZERO,
+            last: Vec2::ZERO,
+            moved: true,
+            dragged: true,
+            drop_started: false,
+            gesture: Gesture::None,
+            link: None,
+            editing: Some(entity),
+        });
+        state.touches.insert(
+            8,
+            crate::input::TouchCapture {
+                window,
+                target: owner,
+                start: Vec2::ZERO,
+                last: Vec2::ZERO,
+                moved: true,
+                dragged: true,
+                drop_started: false,
+                gesture: Gesture::None,
+                link: None,
+                editing: Some(entity),
+                hovered: Some(owner),
+            },
+        );
+        state.text_press = Some((entity, Vec2::ZERO, 0., 2));
+    }
+    let mut services = SystemState::<GuiInput>::new(app.world_mut());
+    services.get_mut(app.world_mut()).unwrap().blur();
+    {
+        let state = app.world().resource::<InputRouter>();
+        assert!(state.capture.as_ref().unwrap().editing.is_none());
+        assert!(state.touches[&8].editing.is_none());
+        assert!(state.text_press.is_none());
+    }
+    assert!(services.get_mut(app.world_mut()).unwrap().focus(entity));
+    let state = app.world().resource::<InputRouter>();
+    assert!(state.capture.as_ref().unwrap().editing.is_none());
+    assert!(state.touches[&8].editing.is_none());
+}

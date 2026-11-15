@@ -3,26 +3,6 @@ use super::*;
 use bevy::input::touch::{TouchInput, TouchPhase};
 use fairygui_core::object::EventData;
 
-#[derive(bevy::ecs::system::SystemParam)]
-pub(super) struct TouchViews<'w, 's> {
-    targets: Query<'w, 's, &'static bevy::ui::ComputedUiTargetCamera>,
-    cameras: Query<'w, 's, &'static Camera>,
-}
-
-impl TouchViews<'_, '_> {
-    fn physical_position(&self, entity: Entity, position: Vec2, scale: f32) -> Vec2 {
-        let viewport_origin = self
-            .targets
-            .get(entity)
-            .ok()
-            .and_then(|target| target.get())
-            .and_then(|camera| self.cameras.get(camera).ok())
-            .and_then(Camera::physical_viewport_rect)
-            .map_or(Vec2::ZERO, |rect| rect.min.as_vec2());
-        position * scale - viewport_origin
-    }
-}
-
 fn touch_event(kind: EventKind, target: GObjectId, position: Vec2, id: u64) -> UiEvent {
     UiEvent::new(kind, target)
         .with_pointer(Point::new(position.x, position.y))
@@ -87,8 +67,8 @@ pub(super) fn route_touches(
     mut focus: ResMut<bevy::input_focus::InputFocus>,
     keys: Res<ButtonInput<bevy::input::keyboard::Key>>,
     mut editors: Query<&mut bevy::text::EditableText>,
-    views: TouchViews,
 ) {
+    let views = &hover.views;
     let window = windows.iter().find(|(entity, _, primary)| {
         settings
             .window
@@ -336,6 +316,12 @@ pub(super) fn route_touches(
         let Some(mut capture) = state.touches.remove(&event.id) else {
             continue;
         };
+        if capture
+            .editing
+            .is_some_and(|entity| focus.get() != Some(entity))
+        {
+            capture.editing = None;
+        }
         if capture.window != event.window {
             state.touches.insert(event.id, capture);
             continue;

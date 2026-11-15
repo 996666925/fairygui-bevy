@@ -244,11 +244,12 @@ impl GuiInput<'_, '_> {
                     .and_then(|o| o.control().as_text_field())
                     .map(|d| d.text.clone())
                     .unwrap_or_default();
-                if let Some(entity) = runtime.entity_of(old)
-                    && let Ok((mut editor, mut policy)) = editors.get_mut(entity)
-                {
-                    value = editor.value().to_string();
-                    policy.cancel_session(&mut editor);
+                if let Some(entity) = runtime.entity_of(old) {
+                    state.cancel_text_selection(entity);
+                    if let Ok((mut editor, mut policy)) = editors.get_mut(entity) {
+                        value = editor.value().to_string();
+                        policy.cancel_session(&mut editor);
+                    }
                 }
                 if let Some(object) = runtime.store().object(old) {
                     let editable = matches!(object.control(), fairygui_core::widget::ControlData::TextInput(d) if d.editable);

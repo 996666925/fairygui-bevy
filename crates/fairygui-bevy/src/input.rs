@@ -28,10 +28,31 @@ use fairygui_core::object::{EventKind, GObjectId, UiEvent};
 use gestures::{Gesture, PointerTransform};
 use std::collections::HashMap;
 
+/// UI transforms use physical coordinates relative to the camera viewport.
+#[derive(bevy::ecs::system::SystemParam)]
+struct PointerViews<'w, 's> {
+    targets: Query<'w, 's, &'static bevy::ui::ComputedUiTargetCamera>,
+    cameras: Query<'w, 's, &'static Camera>,
+}
+impl PointerViews<'_, '_> {
+    fn physical_position(&self, entity: Entity, position: Vec2, scale: f32) -> Vec2 {
+        let origin = self
+            .targets
+            .get(entity)
+            .ok()
+            .and_then(|target| target.get())
+            .and_then(|camera| self.cameras.get(camera).ok())
+            .and_then(Camera::physical_viewport_rect)
+            .map_or(Vec2::ZERO, |rect| rect.min.as_vec2());
+        position * scale - origin
+    }
+}
+
 #[derive(bevy::ecs::system::SystemParam)]
 struct PointerHover<'w, 's> {
     map: Option<Res<'w, HoverMap>>,
     parents: Query<'w, 's, &'static ChildOf>,
+    views: PointerViews<'w, 's>,
 }
 
 impl PointerHover<'_, '_> {
@@ -223,6 +244,21 @@ pub(crate) struct InputRouter {
     text_press: Option<(Entity, Vec2, f64, u8)>,
 }
 impl InputRouter {
+    fn cancel_text_selection(&mut self, entity: Entity) {
+        if let Some(capture) = &mut self.capture
+            && capture.editing == Some(entity)
+        {
+            capture.editing = None;
+        }
+        for capture in self.touches.values_mut() {
+            if capture.editing == Some(entity) {
+                capture.editing = None;
+            }
+        }
+        if self.text_press.is_some_and(|(old, ..)| old == entity) {
+            self.text_press = None;
+        }
+    }
     fn gesture_owners(&self, runtime: &GuiRuntime) -> Vec<GObjectId> {
         self.capture
             .iter()
@@ -541,6 +577,7 @@ fn route_pointer(
     mut editors: Query<&mut bevy::text::EditableText>,
     hover: PointerHover,
 ) {
+    let views = &hover.views;
     runtime
         .store_mut()
         .advance_button_feedback(time.delta_secs_f64());
@@ -568,7 +605,11 @@ fn route_pointer(
                         && masks::allowed(
                             &runtime,
                             object.0,
-                            cursor.unwrap() * window.map_or(1., |(_, w, _)| w.scale_factor()),
+                            views.physical_position(
+                                *entity,
+                                cursor.unwrap(),
+                                window.map_or(1., |(_, w, _)| w.scale_factor()),
+                            ),
                             &geometry,
                         )
                         && relative.is_none_or(|r| r.cursor_over())
@@ -645,6 +686,12 @@ fn route_pointer(
         dispatch(&mut runtime, EventKind::MouseMove, target, position);
     }
     if let Some(mut capture) = state.capture.take() {
+        if capture
+            .editing
+            .is_some_and(|entity| focus.get() != Some(entity))
+        {
+            capture.editing = None;
+        }
         if runtime.is_dragging() && runtime.drag_touch_id.is_none() {
             capture.gesture.finish(&mut runtime, time.delta_secs());
             capture.gesture = Gesture::None;
@@ -669,9 +716,11 @@ fn route_pointer(
                 && let Ok(mut editor) = editors.get_mut(entity)
                 && !editor.is_composing()
             {
-                let point = inverse
-                    .transform_point2(position * window.map_or(1., |(_, w, _)| w.scale_factor()))
-                    - node.content_box().min
+                let point = inverse.transform_point2(views.physical_position(
+                    entity,
+                    position,
+                    window.map_or(1., |(_, w, _)| w.scale_factor()),
+                )) - node.content_box().min
                     + editor.viewport.offset;
                 editor.queue_edit(bevy::text::TextEdit::ExtendSelectionToPoint(point));
             }
@@ -827,9 +876,11 @@ fn route_pointer(
                 && let Ok(mut editor) = editors.get_mut(entity)
                 && !editor.is_composing()
             {
-                let point = inverse
-                    .transform_point2(position * window.map_or(1., |(_, w, _)| w.scale_factor()))
-                    - node.content_box().min
+                let point = inverse.transform_point2(views.physical_position(
+                    entity,
+                    position,
+                    window.map_or(1., |(_, w, _)| w.scale_factor()),
+                )) - node.content_box().min
                     + editor.viewport.offset;
                 let now = time.elapsed_secs_f64();
                 let count = state

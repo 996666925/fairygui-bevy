@@ -13,6 +13,7 @@ struct State {
     selection: Option<(usize, usize)>,
     offset: Vec2,
     case: u8,
+    baseline: Vec<(usize, usize)>,
 }
 
 pub(super) fn install(app: &mut App) {
@@ -37,6 +38,7 @@ fn drive(
     layouts: Query<&TextLayoutInfo>,
     focus: Res<GuiInputState>,
     mut windows: Query<(Entity, &mut Window)>,
+    mut cameras: Query<&mut Camera, With<Camera2d>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
@@ -53,9 +55,14 @@ fn drive(
     };
     window.focused = true;
     let elapsed = state.frame - state.since;
+    let viewport_origin = cameras
+        .single()
+        .ok()
+        .and_then(Camera::physical_viewport_rect)
+        .map_or(Vec2::ZERO, |rect| rect.min.as_vec2());
     let point = |entity, x| {
         let (node, transform) = nodes.get(entity).unwrap();
-        transform.transform_point2(node.content_box().min + Vec2::new(x, 24.))
+        (transform.transform_point2(node.content_box().min + Vec2::new(x, 24.)) + viewport_origin)
             / window.scale_factor()
     };
     let mut next = false;
@@ -128,6 +135,16 @@ fn drive(
             let editor = editors.get(state.input.unwrap()).unwrap();
             let selection = editor.editor.raw_selection();
             state.selection = Some((selection.anchor().index(), selection.focus().index()));
+            if state.case < 3 {
+                let selected = state.selection.unwrap();
+                state.baseline.push(selected);
+            } else {
+                assert_eq!(
+                    state.selection.unwrap(),
+                    state.baseline[if state.case == 3 { 0 } else { 2 }],
+                    "camera viewport origin changed the selected text"
+                );
+            }
             state.offset = editor.viewport.offset;
             assert_ne!(
                 state.selection.unwrap().0,
@@ -202,12 +219,24 @@ fn drive(
                 !layouts.get(entity).unwrap().selection_rects.is_empty(),
                 "resize erased selection paint"
             );
-            if state.case < 2 {
+            if state.case < 4 {
                 state.case += 1;
                 commands.entity(entity).insert(GuiTextInputSettings {
-                    password: state.case == 2,
+                    password: matches!(state.case, 2 | 4),
                     ..default()
                 });
+                // Keep the physical field geometry comparable to the original
+                // drag while moving the camera's viewport within the window.
+                let mut transform = *gui.transform(entity).unwrap();
+                transform.size.x = 600.;
+                commands.entity(entity).insert(transform);
+                if state.case == 3 {
+                    cameras.single_mut().unwrap().viewport = Some(bevy::camera::Viewport {
+                        physical_position: UVec2::new(140, 80),
+                        physical_size: window.physical_size() - UVec2::new(140, 80),
+                        ..default()
+                    });
+                }
                 state.selection = None;
                 state.step = 2;
                 state.since = state.frame;
@@ -230,11 +259,63 @@ fn drive(
                 !layouts.get(entity).unwrap().selection_rects.is_empty(),
                 "select all paint disappeared"
             );
-            info!(
-                "demo smoke PASSED: forward/reverse mouse selection, Chinese and password text, stationary hold, persistent selection paint, release, resize and select all"
-            );
-            exit.write(AppExit::Success);
             next = true;
+        }
+        10 if elapsed > 8 => {
+            state.cursor = Some(point(state.input.unwrap(), 8.));
+            next = true;
+        }
+        11 if elapsed > 6 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        12 if elapsed > 4 => {
+            state.cursor = Some(point(state.input.unwrap(), 190.));
+            next = true;
+        }
+        13 if elapsed > 4 => {
+            assert!(
+                !editors
+                    .get(state.input.unwrap())
+                    .unwrap()
+                    .editor
+                    .raw_selection()
+                    .is_collapsed()
+            );
+            commands.queue(|world: &mut World| {
+                use bevy::ecs::system::RunSystemOnce;
+                world
+                    .run_system_once(|mut input: GuiInput| input.blur())
+                    .unwrap();
+            });
+            next = true;
+        }
+        14 if elapsed > 4 => {
+            assert_eq!(focus.focused_entity(), None);
+            assert!(
+                editors
+                    .get(state.input.unwrap())
+                    .unwrap()
+                    .editor
+                    .raw_selection()
+                    .is_collapsed(),
+                "held mouse restored a selection after blur"
+            );
+            assert!(
+                layouts
+                    .get(state.input.unwrap())
+                    .unwrap()
+                    .selection_rects
+                    .is_empty()
+            );
+            if elapsed > 16 {
+                mouse.release(MouseButton::Left);
+                info!(
+                    "demo smoke PASSED: forward/reverse and password selection, shifted camera viewports, stationary hold, release, resize, select all and blur during capture"
+                );
+                exit.write(AppExit::Success);
+                next = true;
+            }
         }
         _ => {}
     }
