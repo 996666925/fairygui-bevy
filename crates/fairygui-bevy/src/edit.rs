@@ -510,6 +510,21 @@ impl GuiObjectMut<'_> {
                 .add_list_selection_with_scroll(object, index, scroll_to_view);
         }
     }
+    /// Lock a scroll header in logical pixels; zero releases it. Call in Respond
+    /// to set the boundary before the first release animation tick. Returns
+    /// whether the lock changed; invalid sizes and non-scroll objects are ignored.
+    pub fn lock_scroll_header(&mut self, size: f32) -> bool {
+        self.runtime
+            .store_mut()
+            .lock_scroll_header(self.object, size)
+    }
+    /// Lock a scroll footer in logical pixels; zero releases it. Like header
+    /// locking, this applies immediately and reports whether the lock changed.
+    pub fn lock_scroll_footer(&mut self, size: f32) -> bool {
+        self.runtime
+            .store_mut()
+            .lock_scroll_footer(self.object, size)
+    }
     pub fn set_scroll_position(&mut self, position: Vec2, allow_bounce: bool) {
         let runtime = &mut *self.runtime;
         let object = self.object;

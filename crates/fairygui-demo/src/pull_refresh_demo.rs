@@ -1,4 +1,4 @@
-//! PullToRefreshDemo business timing using ECS entities, data and pull commands.
+//! PullToRefreshDemo business timing using ECS data and immediate scroll edits.
 use crate::demos;
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
@@ -29,12 +29,14 @@ fn page(controllers: &mut Query<&mut GuiControllers>, target: Entity, index: i32
         state.selected_index = index;
     }
 }
-fn lock(commands: &mut Commands, target: Entity, size: f32, header: bool) {
-    commands.write_message(if header {
-        GuiPullCommand::LockHeader { target, size }
-    } else {
-        GuiPullCommand::LockFooter { target, size }
-    });
+fn lock(gui: &mut GuiMut, target: Entity, size: f32, header: bool) {
+    if let Some(mut object) = gui.get_mut(target) {
+        if header {
+            object.lock_scroll_header(size);
+        } else {
+            object.lock_scroll_footer(size);
+        }
+    }
 }
 
 pub(crate) fn update(
@@ -44,6 +46,7 @@ pub(crate) fn update(
     mut releases: MessageReader<GuiPullRelease>,
     mut commands: Commands,
     time: Res<Time>,
+    mut edit: GuiMut,
 ) {
     let events: Vec<_> = releases.read().cloned().collect();
     let root = controller.root_owner;
@@ -103,10 +106,10 @@ pub(crate) fn update(
             }
             status = 2;
             page(&mut gui.p1(), header.entity, 2);
-            lock(&mut commands, first, header.source_size.y, true);
+            lock(&mut edit, first, header.source_size.y, true);
         } else if is_footer {
             page(&mut gui.p1(), footer.entity, 1);
-            lock(&mut commands, second, footer.source_size.y, false);
+            lock(&mut edit, second, footer.source_size.y, false);
         } else {
             continue;
         }
@@ -130,16 +133,16 @@ pub(crate) fn update(
                 .insert(content(count + 5, job.header));
             if job.header {
                 page(&mut gui.p1(), header.entity, 3);
-                lock(&mut commands, first, 35., true);
+                lock(&mut edit, first, 35., true);
                 job.completion = true;
                 job.due = time.elapsed_secs_f64() + 2.;
                 return true;
             }
             page(&mut gui.p1(), footer.entity, 0);
-            lock(&mut commands, second, 0., false);
+            lock(&mut edit, second, 0., false);
         } else {
             page(&mut gui.p1(), header.entity, 0);
-            lock(&mut commands, first, 0., true);
+            lock(&mut edit, first, 0., true);
         }
         false
     });

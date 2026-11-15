@@ -1099,18 +1099,17 @@ commands.spawn((
 
 下拉刷新消息 `GuiPullRelease.entity` 直接提供滚动容器实体。
 `GuiScrollState::header()`、`footer()` 提供刷新控件实体、当前尺寸和导出尺寸，
-另可读取刷新轴向及头尾锁定尺寸。在 `Respond` 发送专门的锁定命令：
+另可读取刷新轴向及头尾锁定尺寸。在 `Respond` 通过 `GuiMut` 直接锁定：
 
 ```rust,ignore
-commands.write_message(GuiPullCommand::LockHeader {
-    target: release.entity,
-    size: header.source_size.y,
-});
+gui_mut.get_mut(release.entity).unwrap()
+    .lock_scroll_header(header.source_size.y);
 ```
 
-`LockFooter` 同样按逻辑像素锁定尾部，尺寸为零时解锁。命令按发送顺序在 Respond
-之后、Advance 之前处理，让松手后的第一个滚动动画 tick 使用正确边界。目标须为
-已经构建的滚动容器视图或根拥有者；无效目标、负数及非有限尺寸会被忽略。
+`lock_scroll_footer` 同样按逻辑像素锁定尾部，尺寸为零时解锁。方法立即执行，
+在 Respond 调用会让松手后的第一个滚动动画 tick 使用正确边界。目标须为
+已经构建的滚动容器视图或根拥有者；`GuiMut::get_mut` 对未就绪目标返回 `None`。
+锁定方法在尺寸改变时返回 `true`，对非滚动对象、负数或非有限尺寸返回 `false`。
 下拉刷新示例的页面切换、延迟加载、增加普通行和解锁全部通过 ECS 完成。
 
 窗口用独立的 `FairyGuiWindow` 实体拥有资产和对象树：

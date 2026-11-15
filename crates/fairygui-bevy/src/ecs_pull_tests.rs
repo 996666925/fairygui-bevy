@@ -1,6 +1,6 @@
-use super::*;
 use crate::prelude::*;
 use bevy::ecs::system::SystemState;
+use bevy::prelude::*;
 use fairygui_core::{
     object::{EventKind, GObjectId},
     package::FuiPackage,
@@ -279,7 +279,6 @@ struct Responses(usize);
 fn respond(
     gui: GuiQuery,
     mut events: MessageReader<GuiPullRelease>,
-    mut commands: Commands,
     mut responses: ResMut<Responses>,
     mut gui_edit: crate::GuiMut,
 ) {
@@ -292,10 +291,12 @@ fn respond(
         assert_eq!(header.size.y, 90.);
         assert_eq!(header.source_size.y, 71.);
         assert_eq!(scroll.header_locked_size(), 0.);
-        commands.write_message(GuiPullCommand::LockHeader {
-            target: event.entity,
-            size: header.source_size.y,
-        });
+        assert!(
+            gui_edit
+                .get_mut(event.entity)
+                .unwrap()
+                .lock_scroll_header(header.source_size.y)
+        );
         gui_edit.edit(header.entity, |object: &mut crate::GuiObjectMut| {
             object.set_controller_page("c1", 2)
         });
@@ -305,7 +306,19 @@ fn respond(
 
 #[test]
 fn ecs_pull_response_applies_lock_before_first_release_tick_and_updates_entity_state() {
-    let (mut app, owner, list, view, _, footer_view) = fixture();
+    let (mut app, owner, list, view, footer_list, footer_view) = fixture();
+    assert!(
+        !app.world_mut()
+            .gui_mut(owner)
+            .unwrap()
+            .lock_scroll_header(71.)
+    );
+    assert!(
+        !app.world_mut()
+            .gui_mut(owner)
+            .unwrap()
+            .lock_scroll_footer(71.)
+    );
     app.init_resource::<Responses>()
         .add_systems(Update, respond.in_set(GuiSystems::Respond));
     let header = app
@@ -345,19 +358,57 @@ fn ecs_pull_response_applies_lock_before_first_release_tick_and_updates_entity_s
             .y,
         -71.
     );
-    // Message ordering, invalid input and disposed targets cannot alter a lock.
-    app.world_mut().write_message(GuiPullCommand::LockHeader {
-        target: view,
-        size: 35.,
-    });
-    for size in [-1., f32::NAN, f32::INFINITY] {
+    // Calls apply immediately, before another app update. Invalid sizes cannot
+    // overwrite a valid lock, and repeating a lock reports no change.
+    assert!(
         app.world_mut()
-            .write_message(GuiPullCommand::LockHeader { target: view, size });
+            .gui_mut(view)
+            .unwrap()
+            .lock_scroll_header(35.)
+    );
+    assert!(
+        !app.world_mut()
+            .gui_mut(view)
+            .unwrap()
+            .lock_scroll_header(35.)
+    );
+    for size in [-1., f32::NAN, f32::INFINITY] {
+        assert!(
+            !app.world_mut()
+                .gui_mut(view)
+                .unwrap()
+                .lock_scroll_header(size)
+        );
+        assert!(
+            !app.world_mut()
+                .gui_mut(footer_view)
+                .unwrap()
+                .lock_scroll_footer(size)
+        );
     }
-    app.world_mut().write_message(GuiPullCommand::LockFooter {
-        target: footer_view,
-        size: 71.,
-    });
+    assert!(
+        app.world_mut()
+            .gui_mut(footer_view)
+            .unwrap()
+            .lock_scroll_footer(71.)
+    );
+    let runtime = app.world().non_send::<GuiRuntime>();
+    assert_eq!(
+        runtime
+            .store()
+            .scroll_pane(list)
+            .unwrap()
+            .header_locked_size(),
+        35.
+    );
+    assert_eq!(
+        runtime
+            .store()
+            .scroll_pane(footer_list)
+            .unwrap()
+            .footer_locked_size(),
+        71.
+    );
     app.update();
     assert_eq!(
         app.world()
@@ -373,14 +424,18 @@ fn ecs_pull_response_applies_lock_before_first_release_tick_and_updates_entity_s
             .footer_locked_size(),
         71.
     );
-    app.world_mut().write_message(GuiPullCommand::LockHeader {
-        target: view,
-        size: 0.,
-    });
-    app.world_mut().write_message(GuiPullCommand::LockFooter {
-        target: footer_view,
-        size: 0.,
-    });
+    assert!(
+        app.world_mut()
+            .gui_mut(view)
+            .unwrap()
+            .lock_scroll_header(0.)
+    );
+    assert!(
+        app.world_mut()
+            .gui_mut(footer_view)
+            .unwrap()
+            .lock_scroll_footer(0.)
+    );
     app.update();
     app.update();
     app.update();
@@ -401,10 +456,7 @@ fn ecs_pull_response_applies_lock_before_first_release_tick_and_updates_entity_s
     assert!(!app.world().get::<GuiDisplay>(header).unwrap().on_stage());
     app.world_mut().despawn(owner);
     app.update();
-    app.world_mut().write_message(GuiPullCommand::LockHeader {
-        target: view,
-        size: 71.,
-    });
+    assert!(app.world_mut().gui_mut(view).is_none());
     app.update();
     assert!(app.world().get_entity(header).is_err());
 }

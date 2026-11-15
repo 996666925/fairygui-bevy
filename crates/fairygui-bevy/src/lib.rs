@@ -87,7 +87,8 @@ mod scroll_properties;
 pub use scroll_properties::GuiScrollSettings;
 mod visual_properties;
 pub use visual_properties::{GuiColor, GuiImageFill, GuiImageFlip, GuiLoaderSettings};
-pub mod pull;
+#[cfg(test)]
+mod ecs_pull_tests;
 pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;
 pub use runtime::root_mount::GuiRootMountState;
@@ -122,7 +123,6 @@ pub use list::{
     GuiListState, GuiVirtualList, GuiVirtualListState,
 };
 pub use popup::{GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState};
-pub use pull::GuiPullCommand;
 pub use runtime::ecs_drag_drop::{
     GuiDragCommand, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget,
 };
@@ -198,13 +198,13 @@ pub mod prelude {
         GuiListState, GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
         GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
         GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
-        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullCommand, GuiPullPart,
-        GuiPullRelease, GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView,
-        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue,
-        GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput,
-        GuiTextInputSettings, GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings,
-        GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
-        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullPart, GuiPullRelease,
+        GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
+        GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder,
+        GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings,
+        GuiTooltipCommand, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
         GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
         GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
@@ -271,7 +271,6 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiTextInput>()
         .add_message::<GuiListItemClick>()
         .add_message::<GuiPullRelease>()
-        .add_message::<GuiPullCommand>()
         .add_message::<GuiPopupCommand>()
         .add_message::<GuiTooltipCommand>()
         .add_message::<GuiDragCommand>()
@@ -289,8 +288,7 @@ impl Plugin for FairyGuiPlugin {
             Update,
             // Consume Respond edits before any clock advances. In particular,
             // an ECS pause must stop this tick instead of one tick later.
-            (properties::sync, pull::apply_pull_commands)
-                .chain()
+            properties::sync
                 .after(GuiSystems::Respond)
                 .before(GuiSystems::Advance),
         )
