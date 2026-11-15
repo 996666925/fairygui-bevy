@@ -1,5 +1,6 @@
 //! Actual window close picking, retained reopen, drag, modality and disposal.
 use super::*;
+use crate::ui::basics::{WindowA, WindowB};
 
 #[derive(Resource, Default)]
 struct State {
@@ -98,6 +99,20 @@ fn drive(
                     .all(|&owner| !states.get(owner).unwrap().is_showing())
             );
             let first = first.unwrap();
+            let typed = WindowA::bind(&gui, first).unwrap();
+            let frame = typed.frame.bind(&gui).unwrap();
+            assert_eq!(
+                Some(frame.close_button.entity()),
+                states.get(first).unwrap().close_button()
+            );
+            assert_eq!(
+                Some(frame.drag_area.entity()),
+                states.get(first).unwrap().drag_area()
+            );
+            assert_eq!(
+                WindowB::bind(&gui, second.unwrap()).unwrap().root.entity(),
+                state.views[1]
+            );
             sources.get_mut(first).unwrap().visible = true;
             gui_edit.edit(first, |object: &mut GuiObjectMut| {
                 object.set_position(Vec2::new(200., 130.))
@@ -109,7 +124,12 @@ fn drive(
             let state1 = states.get(first).unwrap();
             assert!(state1.is_showing());
             assert_eq!(state1.view(), state.views[0]);
-            state.cursor = Some(point(state1.close_button().unwrap(), &nodes, factor, false));
+            let frame = WindowA::bind(&gui, first)
+                .unwrap()
+                .frame
+                .bind(&gui)
+                .unwrap();
+            state.cursor = Some(point(frame.close_button.entity(), &nodes, factor, false));
             next = true;
         }
         3 if elapsed >= 4 => {

@@ -15,9 +15,54 @@ Cargo workspace，按「平台无关核心」与「Bevy 适配层」分层：
 | `crates/fairygui-core` | 平台无关运行时：字节流读取、`.fui` 包解析、对象模型、全部控件与行为。**不依赖 Bevy**。 |
 | `crates/fairygui-bevy` | Bevy 集成层：资产加载、对象树到实体树的生成与增量同步、输入桥接。所有易变的 `bevy_ui` API 收敛在 `backend` 模块。 |
 | `crates/fairygui-bevy-macros` | `GuiExtension` 派生宏：按资源地址自动绑定应用组件与子控件引用。 |
+| `crates/fairygui-build` | 构建期读取 `.fui`，生成类型化子控件、控制器页面枚举与过渡绑定，不依赖 Bevy。 |
 | `crates/fairygui-demo` | 可运行示例。 |
 
 依赖方向固定为 `fairygui-bevy` → `fairygui-core`，核心层永不反向依赖 Bevy。
+
+## 从 `.fui` 生成类型化绑定
+
+在应用的 `[build-dependencies]` 中加入 `fairygui-build`，在 `build.rs` 中配置包：
+
+```rust,ignore
+fn main() -> Result<(), fairygui_build::Error> {
+    fairygui_build::Bindings::new()
+        .package("assets/ui/Basics.fui")
+        .generate_to_out_dir("fairygui.rs")?;
+    Ok(())
+}
+```
+
+```rust,ignore
+mod ui {
+    include!(concat!(env!("OUT_DIR"), "/fairygui.rs"));
+}
+
+// 在 Initialize 或 Sync 后绑定，owner 也可以是已经就绪的窗口拥有者。
+let panel = ui::basics::DemoWindow::bind(&gui, owner)?;
+commands.entity(panel.n0.entity()).observe(open_window);
+// 导出子组件保持自己的类型，可继续绑定其内部字段：
+let button = panel.n0.bind(&gui)?;
+button.c_button.select(&mut controllers, ui::basics::Button1ButtonPage::Down)?;
+// FairyGuiRoot / FairyGuiWindow 可使用生成的 ITEM_NAME，无需手写资源名。
+let template = ui::basics::WindowA::ITEM_NAME;
+```
+
+每个包生成一个模块，每个组件生成一个可作为 ECS Component 的结构体。
+子控件使用 `GuiHandle<T>`，字段名来自编辑器；导出子组件的 `T` 是对应生成类型，
+内联控件使用 `binding::kind` 中的控件标记。控制器字段以 `c_` 开头，
+页面生成为每个控制器独立的枚举，通过 `GuiController::select` 修改
+`Query<&mut GuiControllers>`；过渡字段以 `t_` 开头，可通过句柄 `play` 播放。
+也可以用 `register_gui_extension::<ui::basics::DemoWindow>()` 自动把绑定挂在控件视图上。
+
+生成器处理关键字、数字、符号、Unicode 和归一化后的重名，保留原始资源名用于绑定。
+重复的原始子控件/控制器名会明确报错。跨包子组件需要一起配置 `.package(...)`。
+生成结果稳定，输入变化自动重新生成，输出不变时不重写文件。
+
+绑定会检查资源包/条目 ID、控件种类、必需子控件、控制器页面表和过渡名称；
+资源未加载或绑定与当前资源不匹配时返回 `GuiBindingError`。
+句柄保存普通 ECS 实体身份；销毁或替换界面后应重新绑定，不能继续使用旧句柄。
+分支或热更新改变了模板结构时也需要匹配的生成绑定；生成代码不提交进仓库。
 
 输入与帧调度的设计见 [架构说明](docs/architecture.md)。应用可通过
 `fairygui_bevy::prelude::*` 导入常用类型，将事件处理系统放入

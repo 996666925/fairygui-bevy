@@ -2662,6 +2662,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fairygui-build"
+version = "0.1.0"
+dependencies = [
+ "fairygui-core",
+ "syn 2.0.119",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "fairygui-core"
 version = "0.1.0"
 dependencies = [
@@ -2678,6 +2687,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "fairygui-bevy",
+ "fairygui-build",
  "fairygui-core",
  "tracing",
 ]

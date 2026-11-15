@@ -1,4 +1,5 @@
 //! Basics window buttons own retained native windows through ECS.
+use crate::ui::basics::{DemoWindow, WindowA, WindowB};
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 
@@ -13,13 +14,16 @@ pub fn bind(
     gui: GuiQuery,
 ) {
     for (page, source) in &pages {
-        if source.item_name != "Demo_Window" || gui.view(page).is_none() {
+        if source.item_name != DemoWindow::ITEM_NAME || gui.view(page).is_none() {
             continue;
         }
-        for (button_name, template, modal) in [("n0", "WindowA", false), ("n1", "WindowB", true)] {
-            let Some(button) = gui.child_by_name(page, button_name) else {
-                continue;
-            };
+        let Ok(ui) = DemoWindow::bind(&gui, page) else {
+            continue;
+        };
+        for (button, template, modal) in [
+            (ui.n0.entity(), WindowA::ITEM_NAME, false),
+            (ui.n1.entity(), WindowB::ITEM_NAME, true),
+        ] {
             let mut window = FairyGuiWindow::new(source.asset.clone(), template);
             window.visible = false;
             window.modal = modal;

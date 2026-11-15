@@ -27,6 +27,11 @@ mod scroll_pane_demo;
 mod smoke;
 mod tree_demo;
 mod window_demo;
+mod ui {
+    include!(concat!(env!("OUT_DIR"), "/fairygui.rs"));
+}
+#[cfg(test)]
+mod ui_binding_tests;
 
 /// 主菜单所在的包与界面名。
 const MENU_PACKAGE: &str = "ui/MainMenu.fui";

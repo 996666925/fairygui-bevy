@@ -13,5 +13,8 @@ fairygui-bevy.workspace = true
 fairygui-core.workspace = true
 tracing.workspace = true
 
+[build-dependencies]
+fairygui-build.workspace = true
+
 [lints]
 workspace = true

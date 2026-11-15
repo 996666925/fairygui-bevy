@@ -1,0 +1,17 @@
+[package]
+name = "fairygui-build"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Generate typed Bevy ECS bindings from FairyGUI .fui packages at build time"
+
+[dependencies]
+fairygui-core.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+syn = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

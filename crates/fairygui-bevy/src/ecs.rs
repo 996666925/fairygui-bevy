@@ -498,6 +498,8 @@ impl GuiTransform {
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct GuiObjectInfo {
     name: String,
+    package_id: Option<String>,
+    package_item_id: Option<String>,
     tooltips: Option<String>,
     kind: ObjectType,
     parent: Option<Entity>,
@@ -506,6 +508,14 @@ pub struct GuiObjectInfo {
 }
 
 impl GuiObjectInfo {
+    /// Package that supplies the control, including inline controls.
+    pub fn package_id(&self) -> Option<&str> {
+        self.package_id.as_deref()
+    }
+    /// Source template item; absent on inline controls.
+    pub fn package_item_id(&self) -> Option<&str> {
+        self.package_item_id.as_deref()
+    }
     pub fn tooltips(&self) -> Option<&str> {
         self.tooltips.as_deref()
     }
@@ -944,6 +954,12 @@ pub(crate) fn sync_gui_objects(
                 .collect::<Vec<_>>()
         });
         if let Some(mut current) = current {
+            if current.package_id.as_deref() != object.source_package_id() {
+                current.package_id = object.source_package_id().map(str::to_owned);
+            }
+            if current.package_item_id.as_deref() != object.package_item_id() {
+                current.package_item_id = object.package_item_id().map(str::to_owned);
+            }
             if current.tooltips.as_deref() != object.tooltips() {
                 current.tooltips = object.tooltips().map(str::to_owned);
             }
@@ -965,6 +981,8 @@ pub(crate) fn sync_gui_objects(
         } else {
             commands.entity(entity).insert(GuiObjectInfo {
                 name: object.name().to_owned(),
+                package_id: object.source_package_id().map(str::to_owned),
+                package_item_id: object.package_item_id().map(str::to_owned),
                 tooltips: object.tooltips().map(str::to_owned),
                 kind: object.kind(),
                 parent,

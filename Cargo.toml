@@ -4,6 +4,7 @@ members = [
     "crates/fairygui-core",
     "crates/fairygui-bevy",
     "crates/fairygui-bevy-macros",
+    "crates/fairygui-build",
     "crates/fairygui-demo",
 ]
 
@@ -23,6 +24,7 @@ categories = ["gui", "game-development"]
 fairygui-core = { path = "crates/fairygui-core", version = "0.1.0" }
 fairygui-bevy = { path = "crates/fairygui-bevy", version = "0.1.0" }
 fairygui-bevy-macros = { path = "crates/fairygui-bevy-macros", version = "0.1.0" }
+fairygui-build = { path = "crates/fairygui-build", version = "0.1.0" }
 
 # 第三方
 #

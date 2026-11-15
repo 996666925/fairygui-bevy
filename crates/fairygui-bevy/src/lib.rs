@@ -51,7 +51,11 @@
 
 pub mod animation;
 pub mod asset;
+pub mod binding;
 pub use animation::{GuiAnimationPlaySettings, GuiAnimationState};
+pub use binding::{
+    GuiBinding, GuiBindingError, GuiController, GuiHandle, GuiPage, GuiTransition, GuiType,
+};
 pub mod backend;
 pub mod combo;
 pub use combo::GuiComboBoxState;
@@ -211,6 +215,9 @@ pub mod prelude {
         ListLayoutSettings, ListLayoutType, ListSelectionMode, PopupMenuTemplates, TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
+    pub use crate::{
+        GuiBinding, GuiBindingError, GuiController, GuiHandle, GuiPage, GuiTransition, GuiType,
+    };
 }
 
 /// FairyGUI 集成插件。
