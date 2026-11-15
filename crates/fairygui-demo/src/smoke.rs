@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_relation_api.rs"]
+mod relation_api;
+pub(super) fn install_relation_api(app: &mut App) {
+    relation_api::install(app);
+}
 #[path = "smoke_relation_targets.rs"]
 mod relation_targets;
 pub(super) fn install_relation_targets(app: &mut App) {

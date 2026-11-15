@@ -46,6 +46,9 @@ mod masks;
 mod properties;
 #[path = "relation_targets.rs"]
 mod relation_targets;
+#[path = "relations.rs"]
+mod relations;
+pub use relations::RelationType;
 
 #[path = "groups.rs"]
 mod groups;

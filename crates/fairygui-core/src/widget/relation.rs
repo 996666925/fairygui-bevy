@@ -330,7 +330,7 @@ impl Relations {
                         18..=19 => {
                             let min = *x - *width * owner_pivot;
                             let edge = min + *width;
-                            *width += target_pos + edge * scale - edge;
+                            *width += target_pos + (edge - target_pos) * scale - edge;
                             *x = min + *width * owner_pivot;
                             continue;
                         }
@@ -344,7 +344,7 @@ impl Relations {
                         22..=23 => {
                             let min = *y - *height * owner_pivot;
                             let edge = min + *height;
-                            *height += target_pos + edge * scale - edge;
+                            *height += target_pos + (edge - target_pos) * scale - edge;
                             *y = min + *height * owner_pivot;
                             continue;
                         }

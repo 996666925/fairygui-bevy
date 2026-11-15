@@ -81,7 +81,7 @@ pub mod list;
 mod list_properties;
 pub use list_properties::GuiListLayout;
 mod group_properties;
-pub use fairygui_core::object::{GroupLayoutSettings, GroupLayoutType};
+pub use fairygui_core::object::{GroupLayoutSettings, GroupLayoutType, RelationType};
 pub use group_properties::GuiGroupLayout;
 mod list_settings;
 pub use list_settings::GuiListSettings;
@@ -98,6 +98,8 @@ mod visual_properties;
 pub use visual_properties::{GuiColor, GuiImageFill, GuiImageFlip, GuiLoaderSettings};
 #[cfg(test)]
 mod ecs_pull_tests;
+#[cfg(test)]
+mod relation_edit_tests;
 pub use progress::{GuiProgressState, GuiProgressTweenComplete};
 pub mod runtime;
 pub use events::*;
@@ -214,7 +216,8 @@ pub mod prelude {
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
         GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
         GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
-        ListLayoutSettings, ListLayoutType, ListSelectionMode, PopupMenuTemplates, TreeSettings,
+        ListLayoutSettings, ListLayoutType, ListSelectionMode, PopupMenuTemplates, RelationType,
+        TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
     pub use crate::{

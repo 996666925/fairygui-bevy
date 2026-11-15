@@ -10,14 +10,16 @@ pub struct GuiMut<'w, 's> {
     references: Query<'w, 's, &'static GObjectRef>,
 }
 impl GuiMut<'_, '_> {
-    pub fn get_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>> {
-        let object = self
-            .references
+    fn object_for_entity(&self, entity: Entity) -> Option<GObjectId> {
+        self.references
             .get(entity)
             .ok()
             .map(|r| r.0)
             .or_else(|| self.runtime.ecs_root_object(entity))
-            .or_else(|| self.runtime.ecs_window_object(entity))?;
+            .or_else(|| self.runtime.ecs_window_object(entity))
+    }
+    pub fn get_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>> {
+        let object = self.object_for_entity(entity)?;
         self.runtime.store().object(object)?;
         Some(GuiObjectMut {
             runtime: &mut self.runtime,
@@ -31,6 +33,82 @@ impl GuiMut<'_, '_> {
         } else {
             false
         }
+    }
+
+    /// Retain a relation between ready view/root/window entities. Preserves the
+    /// current offset and applies immediately. Duplicate definitions keep their
+    /// original percent policy. Missing, pending or self targets return false.
+    pub fn add_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+        percent: bool,
+    ) -> bool {
+        let Some((owner, target)) = self
+            .object_for_entity(owner)
+            .zip(self.object_for_entity(target))
+        else {
+            return false;
+        };
+        self.runtime
+            .store_mut()
+            .add_relation(owner, target, relation, percent)
+    }
+
+    /// Remove one type; Size removes both Width and Height. Returns whether changed.
+    pub fn remove_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+    ) -> bool {
+        let Some((owner, target)) = self
+            .object_for_entity(owner)
+            .zip(self.object_for_entity(target))
+        else {
+            return false;
+        };
+        self.runtime
+            .store_mut()
+            .remove_relation(owner, target, relation)
+    }
+
+    /// Check a retained type. Size requires both Width and Height.
+    pub fn has_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+    ) -> bool {
+        let Some((owner, target)) = self
+            .object_for_entity(owner)
+            .zip(self.object_for_entity(target))
+        else {
+            return false;
+        };
+        self.runtime
+            .store_mut()
+            .has_relation(owner, target, relation)
+    }
+
+    /// Clear every definition referring to one ready entity.
+    pub fn clear_relations_to(&mut self, owner: Entity, target: Entity) -> bool {
+        let Some((owner, target)) = self
+            .object_for_entity(owner)
+            .zip(self.object_for_entity(target))
+        else {
+            return false;
+        };
+        self.runtime.store_mut().clear_relations_to(owner, target)
+    }
+
+    /// Clear exported and runtime relations on one ready entity.
+    pub fn clear_relations(&mut self, owner: Entity) -> bool {
+        let Some(owner) = self.object_for_entity(owner) else {
+            return false;
+        };
+        self.runtime.store_mut().clear_relations(owner)
     }
 }
 /// An immediate mutable view of one native object.
@@ -46,6 +124,10 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    /// Unsubscribe this object from all exported and runtime relation targets.
+    pub fn clear_relations(&mut self) -> bool {
+        self.runtime.store_mut().clear_relations(self.object)
+    }
     /// Raise a ready native window without sending a lifecycle message.
     pub fn bring_window_to_front(&mut self) -> bool {
         self.runtime
@@ -676,18 +758,99 @@ impl GuiObjectMut<'_> {
 /// Direct object access for exclusive systems and tests.
 pub trait GuiWorldExt {
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>>;
+    /// Immediate equivalent of GuiMut::add_relation for exclusive systems.
+    fn gui_add_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+        percent: bool,
+    ) -> bool;
+    fn gui_remove_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+    ) -> bool;
+    fn gui_has_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+    ) -> bool;
+    fn gui_clear_relations_to(&mut self, owner: Entity, target: Entity) -> bool;
+}
+
+fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
+    world
+        .get::<GObjectRef>(entity)
+        .map(|r| r.0)
+        .or_else(|| world.get::<GuiRootInstance>(entity).map(|r| r.object))
+        .or_else(|| world.get_non_send::<GuiRuntime>()?.ecs_root_object(entity))
+        .or_else(|| {
+            world
+                .get_non_send::<GuiRuntime>()?
+                .ecs_window_object(entity)
+        })
 }
 impl GuiWorldExt for World {
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>> {
-        let object = self
-            .get::<GObjectRef>(entity)
-            .map(|r| r.0)
-            .or_else(|| self.get::<GuiRootInstance>(entity).map(|r| r.object))
-            .or_else(|| self.get_non_send::<GuiRuntime>()?.ecs_root_object(entity))
-            .or_else(|| self.get_non_send::<GuiRuntime>()?.ecs_window_object(entity))?;
+        let object = world_object(self, entity)?;
         let runtime = self.get_non_send_mut::<GuiRuntime>()?.into_inner();
         runtime.store().object(object)?;
         Some(GuiObjectMut { runtime, object })
+    }
+    fn gui_add_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+        percent: bool,
+    ) -> bool {
+        let Some((owner, target)) = world_object(self, owner).zip(world_object(self, target))
+        else {
+            return false;
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| {
+                runtime
+                    .store_mut()
+                    .add_relation(owner, target, relation, percent)
+            })
+    }
+    fn gui_remove_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+    ) -> bool {
+        let Some((owner, target)) = world_object(self, owner).zip(world_object(self, target))
+        else {
+            return false;
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| runtime.store_mut().remove_relation(owner, target, relation))
+    }
+    fn gui_has_relation(
+        &mut self,
+        owner: Entity,
+        target: Entity,
+        relation: crate::RelationType,
+    ) -> bool {
+        let Some((owner, target)) = world_object(self, owner).zip(world_object(self, target))
+        else {
+            return false;
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| runtime.store_mut().has_relation(owner, target, relation))
+    }
+    fn gui_clear_relations_to(&mut self, owner: Entity, target: Entity) -> bool {
+        let Some((owner, target)) = world_object(self, owner).zip(world_object(self, target))
+        else {
+            return false;
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| runtime.store_mut().clear_relations_to(owner, target))
     }
 }
 impl GuiRuntime {

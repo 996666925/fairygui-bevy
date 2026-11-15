@@ -631,6 +631,27 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 父级透明度、混合模式和重叠控件分别参与正常合成。Visible 溢出及禁止裁剪的滚动容器忽略该效果。
 宽度必须有限且非负，无效写入会恢复原值。即时修改可调用 `GuiObjectMut::set_clip_softness`。
 
+运行时关联直接用 ECS 实体和 `RelationType` 建立，无须使用核心对象编号：
+
+```rust,ignore
+fn bind_layout(gui: &mut GuiMut, owner: Entity, target: Entity) {
+    gui.add_relation(owner, target, RelationType::CenterCenter, false);
+    gui.add_relation(owner, target, RelationType::Size, false);
+}
+```
+
+关联保留建立时的相对偏移；目标可以是控件视图、根拥有实体或窗口拥有实体。
+`percent` 为真时按目标尺寸比例变化，重复添加同一种关联保留原有比例策略；
+需要更改策略时先 `remove_relation` 再添加。`has_relation` 查询指定类型；
+`remove_relation` 移除指定类型，`Size` 同时展开为宽、高；`clear_relations_to` 清空某个目标，
+`clear_relations` 清空对象上的全部关联，包括资源导出的关联。
+增删和清空操作立即更新模型，放入 `GuiSystems::Respond` 后在本帧同步投影；返回值表示是否改变了定义。
+尚未加载完成、无效实体或自身目标的添加返回 `false`，不会排队重试。
+独占系统可使用 `World::gui_add_relation`、`gui_remove_relation`、`gui_has_relation`、
+`gui_clear_relations_to`，或 `world.gui_mut(owner).unwrap().clear_relations()`。
+目标重排或换父节点后保留原对象身份，销毁后不会跟随复用其位置的新对象。
+`--smoke-relation-api` 验证动态增删、根／视图别名、渲染位置和目标销毁。
+
 组合通过 `GuiGroupLayout` 修改横向／纵向排列、间距、隐藏成员排除和固定尺寸策略；
 成员仍是同一父容器下的兄弟实体。横向排列保留成员的纵向位置，纵向排列保留横向位置，
 因此编辑器保存的左／居中／右对齐和关联不会被抹掉。组合移动会同步移动成员。

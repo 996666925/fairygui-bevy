@@ -217,6 +217,8 @@ fn main() -> AppExit {
         smoke::install_size_constraints(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-soft-clip") {
         smoke::install_soft_clip(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-relation-api") {
+        smoke::install_relation_api(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-group-alignment") {
         smoke::install_group_alignment(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-opaque") {

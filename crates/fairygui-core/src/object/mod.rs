@@ -17,7 +17,7 @@ pub use object::{BlendMode, GObject, GObjectId};
 pub use store::{
     AnimationCommand, AnimationPlaySettings, CoordinateTransform, DisplayLockToken, GearTween,
     GroupLayoutSettings, GroupLayoutType, ListInteractionSettings, ListLayoutSettings, ObjectStore,
-    SizeConstraints, TreeSettings, VirtualItemFactory, VirtualItemProvider, VirtualItemRenderer,
-    VirtualListError, VirtualListInfo, dirty,
+    RelationType, SizeConstraints, TreeSettings, VirtualItemFactory, VirtualItemProvider,
+    VirtualItemRenderer, VirtualListError, VirtualListInfo, dirty,
 };
 pub(crate) use store::{NestedHandle, TransitionId};
