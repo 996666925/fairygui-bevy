@@ -112,6 +112,7 @@ pub(crate) fn sync_input_policy(
         &mut TextLayout,
         Option<&mut InputEditPolicy>,
     )>,
+    static_inputs: Query<(), With<bevy::ui::widget::TextNodeFlags>>,
 ) {
     for (entity, owner, mut editor, mut layout, policy) in &mut inputs {
         let Some(ControlData::TextInput(data)) =
@@ -119,6 +120,13 @@ pub(crate) fn sync_input_policy(
         else {
             continue;
         };
+        // Reinserted Text/EditableText required components can restore these
+        // flags. Only the editor may publish geometry for an editable GUI node.
+        if static_inputs.contains(entity) {
+            commands
+                .entity(entity)
+                .remove::<bevy::ui::widget::TextNodeFlags>();
+        }
         // Native TextInputAdapter always selects its single-line password element.
         let multiline = !data.text_field.single_line && !data.password;
         let mut next_layout = backend::text_layout_for(&data.text_field);

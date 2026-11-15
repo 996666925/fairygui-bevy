@@ -162,6 +162,12 @@ mod gear_updates;
 mod grayed;
 #[path = "smoke_input_events.rs"]
 mod input_events;
+#[path = "smoke_text_selection.rs"]
+mod text_selection;
+
+pub(super) fn install_text_selection(app: &mut App) {
+    text_selection::install(app);
+}
 #[path = "smoke_input_policy.rs"]
 mod input_policy;
 #[path = "smoke_list_bars.rs"]

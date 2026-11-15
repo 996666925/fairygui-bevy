@@ -37,6 +37,63 @@ fn fixture(restrict: Option<&str>, max: i32, single: bool) -> (App, GObjectId, E
     app.update();
     (app, owner, entity)
 }
+
+#[test]
+fn editable_inputs_keep_one_layout_owner_when_static_text_is_reinserted() {
+    let (mut app, _, entity) = fixture(None, 0, true);
+    assert!(
+        app.world()
+            .get::<bevy::ui::widget::TextNodeFlags>(entity)
+            .is_none()
+    );
+    assert!(app.world().get::<Text>(entity).is_some());
+    assert!(
+        app.world()
+            .get::<bevy::text::ComputedTextBlock>(entity)
+            .is_some()
+    );
+    edit(
+        &mut app,
+        entity,
+        [TextEdit::Insert("Hello 中文".into()), TextEdit::SelectAll],
+    );
+    let selection = app
+        .world()
+        .get::<EditableText>(entity)
+        .unwrap()
+        .editor
+        .raw_selection();
+    let expected = (selection.anchor().index(), selection.focus().index());
+    assert_ne!(expected.0, expected.1);
+    // A caller may restore required static layout flags through a Text bundle.
+    app.world_mut()
+        .entity_mut(entity)
+        .insert(bevy::ui::widget::TextNodeFlags::default());
+    app.update();
+    assert!(
+        app.world()
+            .get::<bevy::ui::widget::TextNodeFlags>(entity)
+            .is_none()
+    );
+    let selection = app
+        .world()
+        .get::<EditableText>(entity)
+        .unwrap()
+        .editor
+        .raw_selection();
+    assert_eq!(
+        (selection.anchor().index(), selection.focus().index()),
+        expected
+    );
+    assert_eq!(
+        app.world()
+            .get::<EditableText>(entity)
+            .unwrap()
+            .editor
+            .selected_text(),
+        Some("Hello 中文")
+    );
+}
 fn edit(app: &mut App, entity: Entity, actions: impl IntoIterator<Item = TextEdit>) {
     app.world_mut()
         .get_mut::<EditableText>(entity)

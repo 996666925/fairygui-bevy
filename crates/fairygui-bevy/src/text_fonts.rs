@@ -309,6 +309,11 @@ pub(super) fn spawn_text(
                     display: source.to_owned(),
                 },
             ));
+            // Text mirrors the native value and supplies extraction metadata,
+            // while EditableText owns glyph/caret/selection geometry. Keeping
+            // the static layout flags lets text_system clear the editor's
+            // selection_rects whenever the node or text style changes.
+            root.remove::<bevy::ui::widget::TextNodeFlags>();
         }
         Vec::new()
     }

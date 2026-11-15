@@ -1,0 +1,247 @@
+//! Pointer selection must remain stable while the pointer is held still.
+use super::*;
+use bevy::text::{EditableText, TextEdit, TextLayoutInfo};
+
+#[derive(Resource, Default)]
+struct State {
+    frame: u32,
+    since: u32,
+    step: u8,
+    owner: Option<Entity>,
+    input: Option<Entity>,
+    cursor: Option<Vec2>,
+    selection: Option<(usize, usize)>,
+    offset: Vec2,
+    case: u8,
+}
+
+pub(super) fn install(app: &mut App) {
+    app.init_resource::<State>().add_systems(
+        PreUpdate,
+        drive
+            .after(InputSystems)
+            .before(bevy::input_focus::InputFocusSystems::Dispatch)
+            .before(UiSystems::Focus)
+            .before(PickingSystems::ProcessInput),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn drive(
+    mut state: ResMut<State>,
+    demo: Res<Demo>,
+    assets: Res<AssetServer>,
+    gui: GuiQuery,
+    nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
+    mut editors: Query<&mut EditableText>,
+    layouts: Query<&TextLayoutInfo>,
+    focus: Res<GuiInputState>,
+    mut windows: Query<(Entity, &mut Window)>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
+    mut pointers: MessageWriter<PointerInput>,
+    mut commands: Commands,
+    mut exit: MessageWriter<AppExit>,
+) {
+    state.frame += 1;
+    assert!(
+        state.frame < 1600,
+        "text selection timeout at step {}",
+        state.step
+    );
+    let Ok((window_entity, mut window)) = windows.single_mut() else {
+        return;
+    };
+    window.focused = true;
+    let elapsed = state.frame - state.since;
+    let point = |entity, x| {
+        let (node, transform) = nodes.get(entity).unwrap();
+        transform.transform_point2(node.content_box().min + Vec2::new(x, 24.))
+            / window.scale_factor()
+    };
+    let mut next = false;
+    match state.step {
+        0 if state.frame > 30 => {
+            let Some(menu) = demo.menu_owner.and_then(|owner| gui.view(owner)) else {
+                return;
+            };
+            let mut display = *gui.display(menu).unwrap();
+            display.visible = false;
+            commands.entity(menu).insert(display);
+            state.owner = Some(
+                commands
+                    .spawn(
+                        FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Demo_Text")
+                            .with_position(Vec2::new(70., 80.)),
+                    )
+                    .id(),
+            );
+            next = true;
+        }
+        1 if elapsed > 12 && gui.view(state.owner.unwrap()).is_some() => {
+            let owner = state.owner.unwrap();
+            let input = gui.child_by_name(owner, "n22").unwrap();
+            for &child in gui.get(owner).unwrap().children() {
+                let mut display = *gui.display(child).unwrap();
+                display.visible = child == input;
+                commands.entity(child).insert(display);
+            }
+            let mut format = gui.text_format(input).unwrap().clone();
+            format.font = None;
+            format.font_size = 32;
+            format.single_line = true;
+            format.auto_size = 0;
+            format.vertical_align = 1;
+            let mut transform = *gui.transform(input).unwrap();
+            transform.position = Vec2::new(30., 40.);
+            transform.size = Vec2::new(600., 90.);
+            commands.entity(input).insert((
+                format,
+                transform,
+                GuiText::new("Hello 中文 selection sample 0123456789"),
+                GuiTextInputSettings::default(),
+            ));
+            state.input = Some(input);
+            next = true;
+        }
+        2 if elapsed > 12 => {
+            let mut editor = editors.get_mut(state.input.unwrap()).unwrap();
+            editor.queue_edit(TextEdit::TextStart(false));
+            state.cursor = Some(point(
+                state.input.unwrap(),
+                if state.case == 1 { 190. } else { 8. },
+            ));
+            next = true;
+        }
+        3 if elapsed > 6 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        4 if elapsed > 4 => {
+            assert_eq!(focus.focused_entity(), state.input);
+            state.cursor = Some(point(
+                state.input.unwrap(),
+                if state.case == 1 { 8. } else { 190. },
+            ));
+            next = true;
+        }
+        5 if elapsed > 4 => {
+            let editor = editors.get(state.input.unwrap()).unwrap();
+            let selection = editor.editor.raw_selection();
+            state.selection = Some((selection.anchor().index(), selection.focus().index()));
+            state.offset = editor.viewport.offset;
+            assert_ne!(
+                state.selection.unwrap().0,
+                state.selection.unwrap().1,
+                "drag must select text"
+            );
+            if state.case == 1 {
+                assert!(
+                    state.selection.unwrap().0 > state.selection.unwrap().1,
+                    "reverse drag direction"
+                );
+            }
+            assert!(
+                !layouts
+                    .get(state.input.unwrap())
+                    .unwrap()
+                    .selection_rects
+                    .is_empty()
+            );
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(format!(
+                    "target/fairygui-demo-text-selection-{}.png",
+                    state.case
+                )));
+            next = true;
+        }
+        6 => {
+            let entity = state.input.unwrap();
+            let editor = editors.get(entity).unwrap();
+            let selection = editor.editor.raw_selection();
+            assert_eq!(
+                Some((selection.anchor().index(), selection.focus().index())),
+                state.selection,
+                "stationary drag changed selection: frame={}, offset={:?}, initial_offset={:?}",
+                state.frame,
+                editor.viewport.offset,
+                state.offset
+            );
+            assert!(
+                !layouts.get(entity).unwrap().selection_rects.is_empty(),
+                "selection paint disappeared"
+            );
+            if elapsed > 16 {
+                mouse.release(MouseButton::Left);
+                next = true;
+            }
+        }
+        7 if elapsed > 8 => {
+            let editor = editors.get(state.input.unwrap()).unwrap();
+            let selection = editor.editor.raw_selection();
+            assert_eq!(
+                Some((selection.anchor().index(), selection.focus().index())),
+                state.selection,
+                "release must retain selection"
+            );
+            let mut transform = *gui.transform(state.input.unwrap()).unwrap();
+            transform.size.x += 20.;
+            commands.entity(state.input.unwrap()).insert(transform);
+            next = true;
+        }
+        8 if elapsed > 8 => {
+            let entity = state.input.unwrap();
+            let editor = editors.get(entity).unwrap();
+            let selection = editor.editor.raw_selection();
+            assert_eq!(
+                Some((selection.anchor().index(), selection.focus().index())),
+                state.selection,
+                "resize must retain selection"
+            );
+            assert!(
+                !layouts.get(entity).unwrap().selection_rects.is_empty(),
+                "resize erased selection paint"
+            );
+            if state.case < 2 {
+                state.case += 1;
+                commands.entity(entity).insert(GuiTextInputSettings {
+                    password: state.case == 2,
+                    ..default()
+                });
+                state.selection = None;
+                state.step = 2;
+                state.since = state.frame;
+            } else {
+                editors
+                    .get_mut(entity)
+                    .unwrap()
+                    .queue_edit(TextEdit::SelectAll);
+                next = true;
+            }
+        }
+        9 if elapsed > 8 => {
+            let entity = state.input.unwrap();
+            let editor = editors.get(entity).unwrap();
+            assert_eq!(
+                editor.editor.selected_text().unwrap(),
+                editor.editor.raw_text()
+            );
+            assert!(
+                !layouts.get(entity).unwrap().selection_rects.is_empty(),
+                "select all paint disappeared"
+            );
+            info!(
+                "demo smoke PASSED: forward/reverse mouse selection, Chinese and password text, stationary hold, persistent selection paint, release, resize and select all"
+            );
+            exit.write(AppExit::Success);
+            next = true;
+        }
+        _ => {}
+    }
+    if next {
+        state.step += 1;
+        state.since = state.frame;
+    }
+    window.set_cursor_position(state.cursor);
+    move_pointer(window_entity, state.cursor, &mut pointers);
+}
