@@ -3,6 +3,7 @@ use crate::{prelude::*, runtime::GuiRuntime};
 use bevy::ecs::query::QueryState;
 use bevy::prelude::*;
 use fairygui_core::{object::GObjectId, widget::ControlData};
+use std::collections::HashMap;
 
 pub(crate) trait Property:
     Component<Mutability = bevy::ecs::component::Mutable> + Clone + PartialEq
@@ -49,6 +50,38 @@ impl<T: Property> NativeValue<T> {
             self.object = object;
             self.value = value.clone();
         }
+    }
+}
+
+/// Baselines acknowledged by an immediate service before the entity has its
+/// NativeValue component. Shared across systems until normal projection installs
+/// the baseline, so a second immediate call cannot replay the consumed write.
+#[derive(Resource)]
+pub(crate) struct InitialNativeValues<T: Property>(HashMap<Entity, NativeValue<T>>);
+
+impl<T: Property> Default for InitialNativeValues<T> {
+    fn default() -> Self {
+        Self(HashMap::new())
+    }
+}
+
+impl<T: Property> InitialNativeValues<T> {
+    pub(crate) fn apply_pending(
+        &mut self,
+        entity: Entity,
+        value: &T,
+        object: GObjectId,
+        is_view: bool,
+        runtime: &mut GuiRuntime,
+    ) {
+        let Some(native) = T::read(runtime, object) else {
+            return;
+        };
+        let baseline = self.0.entry(entity).or_insert_with(|| NativeValue {
+            object,
+            value: native.clone(),
+        });
+        baseline.apply_pending(value, object, is_view, runtime);
     }
 }
 
@@ -162,6 +195,10 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
                 .or_else(|| runtime.ecs_root_object(entity))
                 .or_else(|| runtime.ecs_window_object(entity));
             let Some(object) = object else { continue };
+            let initial = world
+                .get_resource_mut::<InitialNativeValues<T>>()
+                .and_then(|mut values| values.0.remove(&entity))
+                .filter(|baseline| reference.is_some() || baseline.object == object);
             let Some(native) = snapshot::<T>(world, object) else {
                 if value.is_some() || stored.is_some() {
                     world.entity_mut(entity).remove::<(T, NativeValue<T>)>();
@@ -171,13 +208,19 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
             if !T::ready(world, entity, object) {
                 continue;
             }
-            let baseline = stored
+            let baseline = initial
                 .as_ref()
-                // View components are projections of their current binding.
-                // Root/window owners instead retain application configuration
-                // when replacing their underlying native model.
-                .filter(|(id, _)| reference.is_some() || *id == object)
-                .map_or(&native, |(_, value)| value);
+                .map(|baseline| &baseline.value)
+                .or_else(|| {
+                    stored
+                        .as_ref()
+                        // View components are projections of their current binding.
+                        // Root/window owners instead retain application configuration
+                        // when replacing their underlying native model.
+                        .filter(|(id, _)| reference.is_some() || *id == object)
+                        .map(|(_, value)| value)
+                })
+                .unwrap_or(&native);
             let next = if let Some(value) = &value
                 && *value != native
                 && value != baseline
@@ -207,6 +250,13 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
             }
         }
     });
+    if world.contains_resource::<InitialNativeValues<T>>() {
+        world.resource_scope(|world, mut values: Mut<InitialNativeValues<T>>| {
+            values
+                .0
+                .retain(|&entity, _| world.get::<T>(entity).is_some());
+        });
+    }
 }
 
 macro_rules! field {

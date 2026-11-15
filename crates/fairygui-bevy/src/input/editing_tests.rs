@@ -1723,14 +1723,11 @@ fn selection_consumes_text_on_ready_root_and_window_owners_even_when_called_on_t
         });
     let root = app
         .world_mut()
-        .spawn((
-            FairyGuiRoot::new(asset.clone(), "Button1"),
-            GuiText::new(""),
-        ))
+        .spawn(FairyGuiRoot::new(asset.clone(), "Button1"))
         .id();
     let mut source = FairyGuiWindow::new(asset, "Button1");
     source.center_on_create = false;
-    let window = app.world_mut().spawn((source, GuiText::new(""))).id();
+    let window = app.world_mut().spawn(source).id();
     app.update();
     let inputs: Vec<_> = {
         let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
@@ -1762,10 +1759,10 @@ fn selection_consumes_text_on_ready_root_and_window_owners_even_when_called_on_t
             .entity_of(input)
             .unwrap();
         sync_property::<GuiText>(app.world_mut());
+        assert!(app.world().get::<GuiText>(entity).is_none());
         app.world_mut()
-            .get_mut::<GuiText>(entity)
-            .unwrap()
-            .set("A中😀Z");
+            .entity_mut(entity)
+            .insert(GuiText::new("A中😀Z"));
         with_input(&mut app, |service| {
             assert!(service.set_selection(title, GuiTextSelection::new(4, 1)));
             assert_eq!(service.selected_text(entity), Some("中😀"));
@@ -1784,4 +1781,45 @@ fn selection_consumes_text_on_ready_root_and_window_owners_even_when_called_on_t
             assert_eq!(service.selected_text(title), Some(replacement.as_str()));
         });
     }
+}
+
+#[test]
+fn selection_consumes_initial_text_without_a_property_baseline_and_never_replays_it() {
+    use crate::{GuiText, properties::sync_property};
+    let (mut app, owner, view, _) = fixture();
+    // Reproduce a newly attached property before the first baseline projection.
+    app.world_mut()
+        .entity_mut(view)
+        .remove::<(GuiText, crate::properties::NativeValue<GuiText>)>();
+    assert!(
+        app.world()
+            .get::<crate::properties::NativeValue<GuiText>>(view)
+            .is_none()
+    );
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiText::new("A中😀Z"));
+    with_input(&mut app, |input| {
+        assert!(input.set_selection(view, GuiTextSelection::new(4, 1)));
+        assert_eq!(input.selected_text(view), Some("中😀"));
+    });
+    // A different system parameter instance sees the same acknowledged write.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "later direct value");
+    with_input(&mut app, |input| {
+        assert!(input.select_all(view));
+        assert_eq!(input.selected_text(view), Some("later direct value"));
+    });
+    sync_property::<GuiText>(app.world_mut());
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiText>(view).unwrap().value(),
+        "later direct value"
+    );
+    assert_eq!(value(&app, view), "later direct value");
+    with_input(&mut app, |input| {
+        assert_eq!(input.selection(view).unwrap().range(), 0..18)
+    });
 }

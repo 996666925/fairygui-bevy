@@ -521,3 +521,84 @@ fn progress_range_merge_keeps_tween_samples_target_and_single_completion() {
     assert_eq!(app.world().resource::<Completed>().0, vec![80.]);
     assert_eq!(range(&app, view), (10., 200.));
 }
+
+#[test]
+fn initial_text_acknowledgements_follow_rebinding_without_replaying_old_writes() {
+    use crate::{
+        core::package::ObjectType,
+        properties::{InitialNativeValues, NativeValue, sync_property},
+    };
+    let mut world = World::new();
+    world.init_non_send::<GuiRuntime>();
+    world.init_resource::<InitialNativeValues<GuiText>>();
+    let (first, second) = {
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        let first = runtime.store_mut().create(ObjectType::Text);
+        let second = runtime.store_mut().create(ObjectType::Text);
+        runtime.store_mut().set_object_text(second, "second object");
+        (first, second)
+    };
+    let entity = world
+        .spawn((GObjectRef(first), GuiText::new("first edit")))
+        .id();
+    world.resource_scope(|world, mut initial: Mut<InitialNativeValues<GuiText>>| {
+        initial.apply_pending(
+            entity,
+            &GuiText::new("first edit"),
+            first,
+            true,
+            &mut world.non_send_mut::<GuiRuntime>(),
+        );
+    });
+    assert_eq!(
+        world.non_send::<GuiRuntime>().store().object_text(first),
+        Some("first edit")
+    );
+    assert!(world.get::<NativeValue<GuiText>>(entity).is_none());
+    // Rebinding a view retains the same unchanged projection. That text belongs
+    // to the previous object and must refresh from its newly bound target.
+    world.entity_mut(entity).insert(GObjectRef(second));
+    world.resource_scope(|world, mut initial: Mut<InitialNativeValues<GuiText>>| {
+        initial.apply_pending(
+            entity,
+            &GuiText::new("first edit"),
+            second,
+            true,
+            &mut world.non_send_mut::<GuiRuntime>(),
+        );
+    });
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(
+        world.get::<GuiText>(entity).unwrap().value(),
+        "second object"
+    );
+    assert_eq!(
+        world.non_send::<GuiRuntime>().store().object_text(second),
+        Some("second object")
+    );
+    assert!(world.get::<NativeValue<GuiText>>(entity).is_some());
+    // Acknowledgements for removed entities cannot attach to later generations.
+    let gone = world
+        .spawn((GObjectRef(first), GuiText::new("disposed edit")))
+        .id();
+    world.resource_scope(|world, mut initial: Mut<InitialNativeValues<GuiText>>| {
+        initial.apply_pending(
+            gone,
+            &GuiText::new("disposed edit"),
+            first,
+            true,
+            &mut world.non_send_mut::<GuiRuntime>(),
+        );
+    });
+    world.despawn(gone);
+    world
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(first, "fresh value");
+    let replacement = world.spawn(GObjectRef(first)).id();
+    sync_property::<GuiText>(&mut world);
+    assert_eq!(
+        world.get::<GuiText>(replacement).unwrap().value(),
+        "fresh value"
+    );
+}

@@ -361,6 +361,7 @@ struct TouchCapture {
 
 pub fn register(app: &mut App) {
     app.init_resource::<GuiInputSettings>()
+        .init_resource::<crate::properties::InitialNativeValues<crate::GuiText>>()
         .init_resource::<InputRouter>()
         .init_resource::<GuiInputState>()
         .add_message::<bevy::input::touch::TouchInput>()

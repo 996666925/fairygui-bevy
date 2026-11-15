@@ -77,9 +77,10 @@ pub struct GuiInput<'w, 's> {
         's,
         (
             &'static crate::GuiText,
-            &'static mut crate::properties::NativeValue<crate::GuiText>,
+            Option<&'static mut crate::properties::NativeValue<crate::GuiText>>,
         ),
     >,
+    initial_text: ResMut<'w, crate::properties::InitialNativeValues<crate::GuiText>>,
     editors: Query<'w, 's, (&'static mut EditableText, &'static mut InputEditPolicy)>,
     values: Query<
         'w,
@@ -243,8 +244,13 @@ impl GuiInput<'_, '_> {
     }
 
     fn consume_text_property(&mut self, entity: Entity, object: GObjectId, is_view: bool) {
-        if let Ok((value, mut baseline)) = self.text_properties.get_mut(entity) {
-            baseline.apply_pending(value, object, is_view, &mut self.runtime);
+        if let Ok((value, baseline)) = self.text_properties.get_mut(entity) {
+            if let Some(mut baseline) = baseline {
+                baseline.apply_pending(value, object, is_view, &mut self.runtime);
+            } else {
+                self.initial_text
+                    .apply_pending(entity, value, object, is_view, &mut self.runtime);
+            }
         }
     }
 
