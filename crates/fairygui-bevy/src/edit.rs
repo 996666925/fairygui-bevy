@@ -76,6 +76,20 @@ impl GuiMut<'_, '_> {
         }
     }
 
+    /// Swap two ready siblings using native sorting restrictions. Both view
+    /// entities and current root/window owners are accepted. Applies immediately;
+    /// Sync publishes the logical and paint order without rebuilding views.
+    /// Returns whether order changed; stale, pending or unrelated targets fail.
+    pub fn swap_children(&mut self, first: Entity, second: Entity) -> bool {
+        let Some((first, second)) = self
+            .object_for_entity(first)
+            .zip(self.object_for_entity(second))
+        else {
+            return false;
+        };
+        self.runtime.store_mut().swap_children(first, second)
+    }
+
     /// Join a ready sibling GGroup, or leave with None. Applies membership
     /// immediately; Sync refreshes layout, display and hierarchy snapshots.
     /// Returns whether changed. Unready/non-group/cross-parent targets and
@@ -346,18 +360,6 @@ impl GuiObjectMut<'_> {
         self.runtime
             .store_mut()
             .set_child_index_before(self.object, index)
-    }
-    /// Swap two materialized siblings using native sorting restrictions.
-    /// Returns false for unrelated, missing or unchanged objects.
-    pub fn swap_with(&mut self, other: Entity) -> bool {
-        let other = self
-            .runtime
-            .entities
-            .iter()
-            .find_map(|(&object, &entity)| (entity == other).then_some(object))
-            .or_else(|| self.runtime.ecs_root_object(other))
-            .or_else(|| self.runtime.ecs_window_object(other));
-        other.is_some_and(|other| self.runtime.store_mut().swap_children(self.object, other))
     }
     pub fn text(&self) -> Option<&str> {
         self.runtime.store().object_text(self.object)
@@ -819,6 +821,8 @@ impl GuiObjectMut<'_> {
 /// Direct object access for exclusive systems and tests.
 pub trait GuiWorldExt {
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>>;
+    /// Immediate equivalent of GuiMut::swap_children for exclusive systems.
+    fn gui_swap_children(&mut self, first: Entity, second: Entity) -> bool;
     /// Immediate equivalent of GuiMut::set_group for exclusive systems.
     fn gui_set_group(&mut self, member: Entity, group: Option<Entity>) -> bool;
     /// Immediate equivalent of GuiMut::add_relation for exclusive systems.
@@ -876,6 +880,15 @@ fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
     )
 }
 impl GuiWorldExt for World {
+    fn gui_swap_children(&mut self, first: Entity, second: Entity) -> bool {
+        let Some((first, second)) = world_object(self, first).zip(world_object(self, second))
+        else {
+            return false;
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| runtime.store_mut().swap_children(first, second))
+    }
+
     fn gui_set_group(&mut self, member: Entity, group: Option<Entity>) -> bool {
         let Some(member) = world_object(self, member) else {
             return false;

@@ -56,6 +56,162 @@ fn assert_order(app: &mut App, owner: Entity, expected: &[Entity]) {
     }
 }
 
+fn mounted_siblings() -> (App, Entity, Entity, Entity) {
+    let (mut app, parent, _) = fixture();
+    let asset = app
+        .world()
+        .get::<FairyGuiRoot>(parent)
+        .unwrap()
+        .asset
+        .clone();
+    let first = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset.clone(), "Button1").with_parent(parent))
+        .id();
+    let second = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "Button1").with_parent(parent))
+        .id();
+    app.update();
+    (app, parent, first, second)
+}
+
+fn swap(app: &mut App, first: Entity, second: Entity, system_param: bool) -> bool {
+    if system_param {
+        SystemState::<GuiMut>::new(app.world_mut())
+            .get_mut(app.world_mut())
+            .unwrap()
+            .swap_children(first, second)
+    } else {
+        app.world_mut().gui_swap_children(first, second)
+    }
+}
+
+#[test]
+fn swapping_rejects_stale_owners_and_missing_view_references_before_sync() {
+    for system_param in [false, true] {
+        for change in 0..6 {
+            let (mut app, _, first, second) = mounted_siblings();
+            let first_view = app.world().get::<GuiRootView>(first).unwrap().0;
+            let second_view = app.world().get::<GuiRootView>(second).unwrap().0;
+            let first_index = app.world_mut().gui_mut(first).unwrap().child_index();
+            let second_index = app.world_mut().gui_mut(second).unwrap().child_index();
+            let target = if change < 4 { second } else { second_view };
+            match change {
+                0 => {
+                    app.world_mut()
+                        .get_mut::<FairyGuiRoot>(second)
+                        .unwrap()
+                        .item_name = "Button2".into()
+                }
+                1 => {
+                    app.world_mut().entity_mut(second).remove::<FairyGuiRoot>();
+                }
+                2 => {
+                    app.world_mut().despawn(second);
+                }
+                3 => {
+                    let pending = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
+                    app.world_mut()
+                        .get_mut::<FairyGuiRoot>(second)
+                        .unwrap()
+                        .asset = pending;
+                }
+                4 => {
+                    app.world_mut()
+                        .entity_mut(second_view)
+                        .remove::<GObjectRef>();
+                }
+                _ => {
+                    app.world_mut().despawn(second_view);
+                }
+            }
+            assert!(
+                !swap(&mut app, first, target, system_param),
+                "change={change}"
+            );
+            assert!(
+                !swap(&mut app, target, first, system_param),
+                "change={change}"
+            );
+            assert_eq!(
+                app.world_mut().gui_mut(first).unwrap().child_index(),
+                first_index
+            );
+            if change < 4 {
+                // Explicit old views retain their identity until lifecycle cleanup.
+                assert_eq!(
+                    app.world_mut().gui_mut(second_view).unwrap().child_index(),
+                    second_index
+                );
+                assert!(swap(&mut app, first_view, second_view, system_param));
+            }
+        }
+    }
+}
+
+#[test]
+fn entity_swaps_publish_retained_order_and_accept_owner_view_combinations() {
+    let (mut app, parent, first, second) = mounted_siblings();
+    let first_view = app.world().get::<GuiRootView>(first).unwrap().0;
+    let second_view = app.world().get::<GuiRootView>(second).unwrap().0;
+    let mut expected = SystemState::<GuiQuery>::new(app.world_mut())
+        .get(app.world())
+        .unwrap()
+        .get(parent)
+        .unwrap()
+        .children()
+        .to_vec();
+    for system_param in [false, true] {
+        for (a, b) in [
+            (first, second),
+            (first_view, second),
+            (first, second_view),
+            (first_view, second_view),
+        ] {
+            assert!(swap(&mut app, a, b, system_param));
+            let index_a = expected.iter().position(|&e| e == first_view).unwrap();
+            let index_b = expected.iter().position(|&e| e == second_view).unwrap();
+            expected.swap(index_a, index_b);
+            // The model changes synchronously, while ECS snapshots publish on Sync.
+            assert_eq!(
+                app.world_mut().gui_mut(first).unwrap().child_index(),
+                Some(index_b)
+            );
+            app.update();
+            assert_order(&mut app, parent, &expected);
+            assert_eq!(app.world().get::<GuiRootView>(first).unwrap().0, first_view);
+            assert_eq!(
+                app.world().get::<GuiRootView>(second).unwrap().0,
+                second_view
+            );
+        }
+        assert!(!swap(&mut app, first, first_view, system_param));
+        assert!(!swap(&mut app, first, parent, system_param));
+        assert!(!swap(&mut app, Entity::PLACEHOLDER, first, system_param));
+        let pending = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
+        let unready = app
+            .world_mut()
+            .spawn(FairyGuiRoot::new(pending, "Button1").with_parent(parent))
+            .id();
+        assert!(!swap(&mut app, first, unready, system_param));
+        assert_order(&mut app, parent, &expected);
+    }
+    // Native sorted children retain their slots even for an accepted entity pair.
+    app.world_mut().entity_mut(first).insert(GuiSortingOrder(7));
+    app.world_mut()
+        .entity_mut(second)
+        .insert(GuiSortingOrder(9));
+    app.update();
+    expected.retain(|&view| view != first_view && view != second_view);
+    expected.extend([first_view, second_view]);
+    assert_order(&mut app, parent, &expected);
+    for system_param in [false, true] {
+        assert!(!swap(&mut app, first, second, system_param));
+    }
+    assert_order(&mut app, parent, &expected);
+}
+
 #[test]
 fn sorting_components_and_direct_indices_keep_logical_order_and_paint_order_in_sync() {
     let (mut app, owner, mut expected) = fixture();
@@ -105,12 +261,12 @@ fn sorting_components_and_direct_indices_keep_logical_order_and_paint_order_in_s
             .last_changed(),
         tick
     );
-    assert!(app.world_mut().gui_mut(a).unwrap().swap_with(expected[0]));
+    assert!(app.world_mut().gui_swap_children(a, expected[0]));
     let last_ordinary = expected.len() - 2;
     expected.swap(0, last_ordinary);
     app.update();
     assert_order(&mut app, owner, &expected);
-    assert!(!app.world_mut().gui_mut(a).unwrap().swap_with(owner));
+    assert!(!app.world_mut().gui_swap_children(a, owner));
 }
 
 #[test]

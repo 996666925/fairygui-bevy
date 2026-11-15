@@ -304,14 +304,17 @@ fn prioritize(mut priorities: Query<&mut GuiSortingOrder>, button: Entity) {
 fn reorder(mut gui: GuiMut, button: Entity, sibling: Entity) {
     if let Some(mut object) = gui.get_mut(button) {
         object.set_child_index(0);
-        object.swap_with(sibling);
     }
+    gui.swap_children(button, sibling);
 }
 ```
 
 `set_child_index` 将普通控件移动到指定索引，超出普通节点区域会收拢到该区域末尾；
 有非零优先级的控件忽略此操作。`set_child_index_before` 的索引以移动前的子节点序列为准，
-向后移动时先减一。`swap_with` 按原版的两次索引设置执行，并遵守双方的排序限制。
+向后移动时先减一。`GuiMut::swap_children(first, second)` 按原版的两次索引设置执行，
+并遵守双方的排序限制。两个参数均接受视图实体或当前根／窗口拥有者；未就绪、
+已换模板或销毁的拥有者、非兄弟节点及无顺序变化返回 `false`。交换立即生效，
+同步后刷新查询与绘制顺序。独占系统可用 `World::gui_swap_children`。
 `gui.child_index(entity)`、`gui.sorting_order(entity)` 和 `GuiObjectInfo::children()`
 提供同步后的逻辑层级。绘制顺序和鼠标命中同时更新，保留已有实体及 observer；
 列表选中项随对象保留，并更新其索引。`GuiSortingOrder` 可随等待资源的根拥有者一起挂载。

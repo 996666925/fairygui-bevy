@@ -144,10 +144,7 @@ fn drive(
         }
         12 if elapsed >= 5 => {
             assert_eq!(clicks.0[2], gui.view(state.buttons[0]).unwrap());
-            objects
-                .get_mut(state.buttons[1])
-                .unwrap()
-                .swap_with(gui.view(state.buttons[0]).unwrap());
+            assert!(objects.swap_children(state.buttons[1], state.buttons[0]));
             next = true;
         }
         13 if elapsed >= 4 => {
