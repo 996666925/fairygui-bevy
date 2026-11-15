@@ -527,6 +527,7 @@ pub struct GuiRuntime {
     /// 当前的弹出菜单。数据部分跨次保留，切换的只是承载对象。
     popup_menu: fairygui_core::popup::PopupMenu,
     popups: Vec<GObjectId>,
+    pub(crate) pending_popups: Vec<crate::popup::PendingPopup>,
     retained_combos: HashMap<GObjectId, popup_widgets::RetainedCombo>,
     retained_menu: Option<popup_menu::RetainedMenu>,
     pending_menu_click: Option<popup_menu::PendingMenuClick>,
@@ -758,6 +759,12 @@ impl GuiRuntime {
     pub fn ecs_root_object(&self, owner: Entity) -> Option<GObjectId> {
         let handle = self.ecs_roots.get(&owner)?.handle?;
         self.root_object(handle)
+    }
+
+    pub(crate) fn ecs_root_source_matches(&self, owner: Entity, source: &FairyGuiRoot) -> bool {
+        self.ecs_roots.get(&owner).is_some_and(|binding| {
+            binding.asset == source.asset && binding.item_name == source.item_name
+        })
     }
 
     /// Resolve the manual root slot for an ECS-owned UI root.

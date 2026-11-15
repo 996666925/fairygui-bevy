@@ -219,6 +219,7 @@ pub(super) fn install_windows(app: &mut App) {
 #[derive(Resource, Default)]
 struct Smoke {
     transition_only: bool,
+    popup_only: bool,
     frames: u32,
     step: u32,
     entry: usize,
@@ -311,6 +312,16 @@ pub(super) fn install_transition(app: &mut App) {
     smoke.entry = 1;
     smoke.transition_entry = 0;
     smoke.transition_only = true;
+}
+
+pub(super) fn install_popup(app: &mut App) {
+    install(app);
+    let mut smoke = app.world_mut().resource_mut::<Smoke>();
+    smoke.popup_only = true;
+    smoke.basics_entry = demos::BASICS_PAGES
+        .iter()
+        .position(|page| *page == "Popup")
+        .unwrap();
 }
 
 pub(super) fn install_scroll_view(app: &mut App) {
@@ -1168,6 +1179,13 @@ fn drive(
                                 "later-created page must not intercept a popup row"
                             );
                         }
+                        if matches!(smoke.menu_stage, 7 | 14) {
+                            assert_eq!(
+                                input_state.hovered(),
+                                smoke.menu_view,
+                                "the checked row must be hovered before pressing it"
+                            );
+                        }
                         mouse.press(MouseButton::Left);
                         smoke.button_since = smoke.frames;
                         smoke.menu_stage += 1;
@@ -1236,11 +1254,18 @@ fn drive(
                         smoke.button_since = smoke.frames;
                         smoke.menu_stage = 7;
                     }
-                    9 if time.elapsed_secs() - smoke.menu_since >= 0.15 => {
+                    // The driver runs before runtime input. On slow frames the
+                    // elapsed delay can pass before the first post-release input
+                    // update; leave that update a full frame to publish its action.
+                    9 if time.elapsed_secs() - smoke.menu_since >= 0.15
+                        && smoke.frames - smoke.button_since >= 2 =>
+                    {
                         let action = controller
                             .last_menu_action
                             .as_ref()
-                            .expect("application received menu action");
+                            .unwrap_or_else(|| panic!("application received no menu action: open={}, hovered={:?}, cursor={:?}, frames={}",
+                                runtime.is_popup_menu_open(), input_state.hovered(), smoke.cursor,
+                                smoke.frames - smoke.button_since));
                         assert_eq!(action.action, Some(demos::BASICS_MENU_ACTION + 1));
                         assert_eq!(action.name, "toggle");
                         assert_eq!(action.caption, "Toggle option");
@@ -1274,7 +1299,9 @@ fn drive(
                         smoke.button_since = smoke.frames;
                         smoke.menu_stage = 14;
                     }
-                    16 if time.elapsed_secs() - smoke.menu_since >= 0.15 => {
+                    16 if time.elapsed_secs() - smoke.menu_since >= 0.15
+                        && smoke.frames - smoke.button_since >= 2 =>
+                    {
                         let action = controller.last_menu_action.as_ref().unwrap();
                         assert!(!action.checked);
                         assert_eq!(Some(action.item), smoke.menu_item);
@@ -1287,6 +1314,15 @@ fn drive(
                     _ => {}
                 }
                 move_pointer(window_entity, window.cursor_position(), &mut pointers);
+                return;
+            }
+            if smoke.popup_only && page == "Popup" {
+                assert_eq!(smoke.popup_stage, 10);
+                assert_eq!(smoke.menu_stage, 17);
+                info!(
+                    "demo smoke PASSED: real popup navigation, linked popup press/close/outside handling, direct menu observers, disabled and hidden rows, checked state and retained view reuse"
+                );
+                exit.write(AppExit::Success);
                 return;
             }
             if page == "Text" && smoke.link_stage < 10 {

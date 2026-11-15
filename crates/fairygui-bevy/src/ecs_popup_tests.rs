@@ -42,23 +42,25 @@ fn load(app: &mut App, asset: &Handle<FuiAsset>, basics: bool) {
         .unwrap();
 }
 
-fn send(app: &mut App, command: GuiPopupCommand) {
-    app.world_mut().write_message(command);
+fn with_popup(app: &mut App, edit: impl FnOnce(&mut GuiPopup)) {
+    let mut state = SystemState::<GuiPopup>::new(app.world_mut());
+    edit(&mut state.get_mut(app.world_mut()).unwrap());
+    state.apply(app.world_mut());
 }
-
-fn menu(source: Entity) -> GuiPopupCommand {
-    GuiPopupCommand::ShowMenu {
-        source,
-        position: Vec2::new(30., 40.),
-        menu: GuiPopupMenu::new(
-            "PopupMenu",
-            "PopupMenuItem",
-            vec![MenuItem {
-                checkable: true,
-                ..MenuItem::action("toggle", "Toggle", 73)
-            }],
-        ),
-    }
+fn menu() -> GuiPopupMenu {
+    GuiPopupMenu::new(
+        "PopupMenu",
+        "PopupMenuItem",
+        vec![MenuItem {
+            checkable: true,
+            ..MenuItem::action("toggle", "Toggle", 73)
+        }],
+    )
+}
+fn show_menu(app: &mut App, source: Entity) {
+    with_popup(app, |popup| {
+        assert!(popup.show_menu(source, menu(), Vec2::new(30., 40.)));
+    });
 }
 
 #[test]
@@ -112,14 +114,9 @@ fn anchored_popup_uses_live_anchor_geometry_directions_and_retained_owner_views(
         if let Some(mut object) = app.world_mut().gui_mut(anchor) {
             object.set_position(position)
         }
-        send(
-            &mut app,
-            GuiPopupCommand::ShowAnchored {
-                popup,
-                anchor,
-                direction,
-            },
-        );
+        with_popup(&mut app, |popups| {
+            assert!(popups.show_anchored(popup, anchor, direction));
+        });
         app.update();
         let mut query = SystemState::<GuiQuery>::new(app.world_mut());
         let gui = query.get(app.world()).unwrap();
@@ -141,13 +138,9 @@ fn ecs_popup_roots_wait_for_assets_retain_views_and_close_the_stack_above_a_targ
         .world_mut()
         .spawn(FairyGuiRoot::new(asset.clone(), "CloseButton"))
         .id();
-    send(
-        &mut app,
-        GuiPopupCommand::Show {
-            popup: first,
-            position: Vec2::new(21., 32.),
-        },
-    );
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(first, Vec2::new(21., 32.)));
+    });
     for _ in 0..5 {
         app.update();
     }
@@ -173,20 +166,18 @@ fn ecs_popup_roots_wait_for_assets_retain_views_and_close_the_stack_above_a_targ
         .world_mut()
         .spawn(FairyGuiRoot::new(asset, "CloseButton"))
         .id();
-    send(
-        &mut app,
-        GuiPopupCommand::Show {
-            popup: second,
-            position: Vec2::new(50., 60.),
-        },
-    );
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(second, Vec2::new(50., 60.)));
+    });
     app.update();
     let second_view = app.world().get::<GuiRootView>(second).unwrap().0;
     assert_eq!(
         app.world().resource::<GuiPopupState>().stack(),
         &[first_view, second_view]
     );
-    send(&mut app, GuiPopupCommand::Hide { popup: first });
+    with_popup(&mut app, |popups| {
+        assert!(popups.hide(first));
+    });
     app.update();
     assert!(app.world().resource::<GuiPopupState>().stack().is_empty());
     assert!(query.get(app.world()).unwrap().view(first).is_some());
@@ -206,13 +197,9 @@ fn ecs_popup_roots_wait_for_assets_retain_views_and_close_the_stack_above_a_targ
             .unwrap()
             .on_stage()
     );
-    send(
-        &mut app,
-        GuiPopupCommand::Show {
-            popup: first_view,
-            position: Vec2::new(70., 80.),
-        },
-    );
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(first_view, Vec2::new(70., 80.)));
+    });
     app.update();
     assert_eq!(
         app.world().resource::<GuiPopupState>().stack(),
@@ -232,12 +219,14 @@ fn ecs_popup_pending_requests_cancel_on_hide_replacement_removal_and_disposal() 
             .world_mut()
             .spawn(FairyGuiRoot::new(asset.clone(), "Demo_Popup"))
             .id();
-        send(&mut app, menu(owner));
+        show_menu(&mut app, owner);
         app.update();
         match cancel {
-            0 => send(&mut app, GuiPopupCommand::HideAll),
-            1 => send(&mut app, GuiPopupCommand::Hide { popup: owner }),
-            2 => send(&mut app, GuiPopupCommand::DisposeMenu),
+            0 => with_popup(&mut app, |popups| popups.hide_all()),
+            1 => with_popup(&mut app, |popups| {
+                assert!(popups.hide(owner));
+            }),
+            2 => with_popup(&mut app, |popups| popups.dispose_menu()),
             3 => {
                 app.world_mut()
                     .get_mut::<FairyGuiRoot>(owner)
@@ -282,13 +271,23 @@ fn ecs_popup_menu_resolves_the_source_package_and_reuses_checked_rows_until_disp
         .world_mut()
         .spawn(FairyGuiRoot::new(asset.clone(), "Demo_Popup"))
         .id();
-    send(&mut app, menu(source));
+    show_menu(&mut app, source);
     for _ in 0..4 {
         app.update();
     }
     load(&mut app, &asset, true);
     app.update();
     let content = app.world().resource::<GuiPopupState>().menu().unwrap();
+    with_popup(&mut app, |popups| {
+        assert!(popups.is_menu_open());
+        assert!(!popups.show_menu(
+            source,
+            GuiPopupMenu::new("Missing", "PopupMenuItem", vec![]),
+            Vec2::ZERO
+        ));
+        assert!(!popups.show_menu(source, menu(), Vec2::splat(f32::INFINITY)));
+        assert!(popups.is_menu_open());
+    });
     let mut query = SystemState::<GuiQuery>::new(app.world_mut());
     assert!(query.get(app.world()).unwrap().get(content).is_some());
     let row = {
@@ -312,7 +311,7 @@ fn ecs_popup_menu_resolves_the_source_package_and_reuses_checked_rows_until_disp
         mut messages: MessageReader<crate::GuiMenuAction>,
         state: Res<GuiPopupState>,
         mut received: ResMut<Received>,
-        mut commands: Commands,
+        mut popups: GuiPopup,
     ) {
         for action in messages.read() {
             assert!(state.menu().is_none());
@@ -320,9 +319,7 @@ fn ecs_popup_menu_resolves_the_source_package_and_reuses_checked_rows_until_disp
             assert!(action.checked);
             assert_eq!(action.action, Some(73));
             received.0 = true;
-            commands.write_message(GuiPopupCommand::ReopenMenu {
-                position: Vec2::new(90., 100.),
-            });
+            assert!(popups.reopen_menu(Vec2::new(90., 100.)));
         }
     }
     app.init_resource::<Received>()
@@ -346,9 +343,9 @@ fn ecs_popup_menu_resolves_the_source_package_and_reuses_checked_rows_until_disp
             .position(),
         Vec2::new(90., 100.)
     );
-    send(&mut app, GuiPopupCommand::HideAll);
+    with_popup(&mut app, |popups| popups.hide_all());
     app.update();
-    send(&mut app, menu(source));
+    show_menu(&mut app, source);
     app.update();
     assert_eq!(
         app.world().resource::<GuiPopupState>().menu(),
@@ -375,20 +372,212 @@ fn ecs_popup_menu_resolves_the_source_package_and_reuses_checked_rows_until_disp
             .last_changed(),
         unchanged
     );
-    send(
-        &mut app,
-        GuiPopupCommand::ReopenMenu {
-            position: Vec2::splat(f32::NAN),
-        },
-    );
+    with_popup(&mut app, |popups| {
+        assert!(!popups.reopen_menu(Vec2::splat(f32::NAN)));
+    });
     app.update();
     assert_eq!(
         app.world().resource::<GuiPopupState>().menu(),
         Some(content)
     );
-    send(&mut app, GuiPopupCommand::DisposeMenu);
+    with_popup(&mut app, |popups| popups.dispose_menu());
     app.update();
     assert!(app.world().resource::<GuiPopupState>().menu().is_none());
     assert!(query.get(app.world()).unwrap().get(content).is_none());
     assert!(query.get(app.world()).unwrap().get(row_view).is_none());
+}
+
+#[test]
+fn ready_popups_change_the_native_stack_immediately_and_reject_invalid_arguments() {
+    let (mut app, asset) = fixture();
+    load(&mut app, &asset, false);
+    let first = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset.clone(), "CloseButton"))
+        .id();
+    let second = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "CloseButton"))
+        .id();
+    app.update();
+    let first_view = app.world().get::<GuiRootView>(first).unwrap().0;
+    let second_view = app.world().get::<GuiRootView>(second).unwrap().0;
+    let first_id = app.world().get::<GObjectRef>(first_view).unwrap().0;
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(first, Vec2::ZERO));
+    });
+    app.update();
+    let stage = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .root_container()
+        .unwrap();
+    let stage_view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(stage)
+        .unwrap();
+    let unrelated = app.world_mut().spawn_empty().id();
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(first, Vec2::new(15., 25.)));
+        assert!(popups.is_open(first) && popups.is_open(first_view));
+        assert!(popups.show(second_view, Vec2::new(35., 45.)));
+        assert!(popups.is_open(second));
+        assert!(!popups.show(first, Vec2::splat(f32::NAN)));
+        assert!(!popups.show(unrelated, Vec2::ZERO));
+        assert!(!popups.show(stage_view, Vec2::ZERO));
+        assert!(!popups.show_anchored(second, unrelated, GuiPopupDirection::Up));
+        assert!(popups.is_open(first) && popups.is_open(second));
+        assert!(popups.hide(first));
+        assert!(!popups.is_open(first) && !popups.is_open(second));
+        assert!(!popups.hide(first));
+    });
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .popup_stack()
+            .is_empty()
+    );
+    assert!(
+        !app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .is_on_stage(first_id)
+    );
+    app.update();
+    assert!(app.world().resource::<GuiPopupState>().stack().is_empty());
+    assert!(app.world().get_entity(first_view).is_ok());
+}
+
+#[test]
+fn pending_shows_keep_only_latest_intent_and_new_requests_survive_owner_reinsertion() {
+    let (mut app, asset) = fixture();
+    let source = FairyGuiRoot::new(asset.clone(), "CloseButton");
+    let owner = app.world_mut().spawn(source.clone()).id();
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(owner, Vec2::splat(10.)));
+        assert!(popups.is_pending(owner));
+        assert!(popups.show(owner, Vec2::splat(20.)));
+    });
+    assert_eq!(app.world().non_send::<GuiRuntime>().pending_popups.len(), 1);
+    app.update();
+    app.world_mut()
+        .entity_mut(owner)
+        .remove::<FairyGuiRoot>()
+        .insert(source);
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(owner, Vec2::splat(30.)));
+    });
+    app.update();
+    with_popup(&mut app, |popups| assert!(popups.is_pending(owner)));
+    load(&mut app, &asset, false);
+    app.update();
+    with_popup(&mut app, |popups| {
+        assert!(!popups.is_pending(owner));
+        assert!(popups.is_open(owner));
+    });
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    assert_eq!(
+        app.world()
+            .get::<crate::GuiTransform>(view)
+            .unwrap()
+            .position(),
+        Vec2::splat(30.)
+    );
+}
+
+#[test]
+fn a_show_after_template_replacement_waits_for_the_new_native_object() {
+    let (mut app, asset) = fixture();
+    load(&mut app, &asset, false);
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "CloseButton"))
+        .id();
+    app.update();
+    let old_view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .item_name = "Main".into();
+    with_popup(&mut app, |popups| {
+        assert!(popups.show(owner, Vec2::new(12., 34.)));
+        assert!(popups.is_pending(owner));
+        assert!(!popups.is_open(old_view));
+    });
+    app.update();
+    let new_view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    assert_ne!(new_view, old_view);
+    assert!(app.world().get_entity(old_view).is_err());
+    assert!(app.world().resource::<GuiPopupState>().is_open(new_view));
+    assert_eq!(
+        app.world()
+            .get::<crate::GuiTransform>(new_view)
+            .unwrap()
+            .position(),
+        Vec2::new(12., 34.)
+    );
+}
+
+#[test]
+fn a_new_window_menu_request_survives_reinsertion_before_asset_loading() {
+    let (mut app, asset) = fixture();
+    let source = FairyGuiWindow::new(asset.clone(), "WindowA");
+    let owner = app.world_mut().spawn(source.clone()).id();
+    show_menu(&mut app, owner);
+    app.update();
+    app.world_mut()
+        .entity_mut(owner)
+        .remove::<FairyGuiWindow>()
+        .insert(source);
+    with_popup(&mut app, |popups| {
+        assert!(popups.show_menu(owner, menu(), Vec2::new(90., 100.)));
+    });
+    app.update();
+    load(&mut app, &asset, true);
+    app.update();
+    let menu = app.world().resource::<GuiPopupState>().menu().unwrap();
+    assert_eq!(
+        app.world()
+            .get::<crate::GuiTransform>(menu)
+            .unwrap()
+            .position(),
+        Vec2::new(90., 100.)
+    );
+    with_popup(&mut app, |popups| {
+        assert!(popups.is_menu_open());
+        assert!(!popups.is_pending(owner));
+    });
+}
+
+#[test]
+fn post_layout_menu_calls_materialize_and_project_in_the_same_frame() {
+    #[derive(Resource)]
+    struct Source(Entity);
+    fn open(source: Res<Source>, mut popup: GuiPopup, mut once: Local<bool>) {
+        if !*once {
+            assert!(popup.show_menu(source.0, menu(), Vec2::new(50., 60.)));
+            assert!(popup.is_menu_open());
+            *once = true;
+        }
+    }
+    let (mut app, asset) = fixture();
+    load(&mut app, &asset, true);
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "Demo_Popup"))
+        .id();
+    app.insert_resource(Source(owner))
+        .add_systems(Update, open.in_set(GuiSystems::PostLayout));
+    app.update();
+    let menu = app.world().resource::<GuiPopupState>().menu().unwrap();
+    let node = app.world().get::<Node>(menu).unwrap();
+    assert_eq!((node.left, node.top), (Val::Px(50.), Val::Px(60.)));
+    let id = app.world().get::<GObjectRef>(menu).unwrap().0;
+    with_popup(&mut app, |popups| {
+        popups.dispose_menu();
+        assert!(!popups.is_menu_open());
+    });
+    assert!(!app.world().non_send::<GuiRuntime>().store().contains(id));
+    assert!(app.world().get_entity(menu).is_err());
 }

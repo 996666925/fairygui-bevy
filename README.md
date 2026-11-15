@@ -70,42 +70,53 @@ let template = ui::basics::WindowA::ITEM_NAME;
 entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输入窗口，
 `GuiInputState` 提供悬停、指针捕获与游戏输入仲裁状态。
 
-弹出菜单可用 `show_popup_menu_items` 配置稳定名称、动作编号、图标、勾选状态和
+弹出菜单可用 `GuiPopup::show_menu` 配置稳定名称、动作编号、图标、勾选状态和
 分隔项模板；业务系统读取 `GuiMenuAction`，消息在点击 100 ms 后、菜单关闭后发布。
 支持按名称动态编辑与增删、保留对象复用，详见 [菜单生命周期](docs/popup-lifecycle.md)。
 
-业务系统也可用 `GuiPopupCommand` 消息管理弹出层，无需借用运行时：
+业务系统通过 `GuiPopup` 系统参数直接管理弹出层：
 
 ```rust,ignore
 use fairygui_bevy::core::popup::MenuItem;
 
-commands.write_message(GuiPopupCommand::ShowMenu {
-    source: page_entity,
-    menu: GuiPopupMenu::new("PopupMenu", "PopupMenuItem", vec![
-        MenuItem::action("save", "保存", 1),
-    ]),
-    position: Vec2::new(100., 200.),
-});
+fn open_menu(event: On<GuiClick>, mut popups: GuiPopup) {
+    popups.show_menu(
+        event.entity,
+        GuiPopupMenu::new("PopupMenu", "PopupMenuItem", vec![
+            MenuItem::action("save", "保存", 1),
+        ]),
+        Vec2::new(100., 200.),
+    );
+}
 ```
 
-`source` 接受根拥有者或控件视图实体，模板名在其来源包内解析；模板也可以使用
-已登记包的 `ui://` 地址。`Show` 显示已有的根/控件；`Hide` 收起该弹出层及其上层，
-`HideAll` 收起全部弹出层，隐藏后保留对象和视图。运行时保留一个菜单配置；
-`ReopenMenu` 保留勾选与动态编辑，`DisposeMenu` 回收菜单及其视图。
-`GuiPopupState` 资源提供从底到顶的控件实体 `stack()` 和当前菜单 `menu()`，
-在输入事件发布前与 Sync 结束时更新，业务可据此查询控件或挂载 observer。
+`show_menu` 的来源接受根拥有者、窗口拥有者或控件视图，模板名在其来源包内解析；
+模板也可以使用已登记包的 `ui://` 地址。`show(entity, position)` 显示已有根/控件；
+`hide(entity)` 收起该弹出层及其上层，`hide_all()` 收起全部弹出层，隐藏后保留对象和视图。
+运行时保留一个菜单配置；`reopen_menu(position)` 保留勾选与动态编辑，`dispose_menu()`
+回收菜单及其视图。无效坐标、实体或已就绪时无法解析的模板返回 `false`，不会替换
+可用菜单；待加载时返回是否接受请求。
+原生窗口通过 `FairyGuiWindow.visible` 显示和隐藏，不能作为普通 popup 重复入栈。
+
+已就绪对象立即修改原生弹出栈，`is_open(entity)` / `is_menu_open()` 读取即时状态；
+Bevy 视图在 Sync 投影。`GuiPopupState` 资源提供从底到顶的控件实体 `stack()` 和
+当前菜单 `menu()`，在输入事件发布前与 Sync 结束时更新，业务可据此查询控件或挂载
+observer。与 `GuiMut` 同时使用时，通过 `ParamSet<(GuiMut, GuiPopup)>` 分别借用运行时。
 
 位置采用舞台逻辑像素，视口使用 `GuiInputSettings` 选择的窗口；无窗口应用默认
-1280×720，已有舞台则沿用其尺寸。等待 `.fui` 的根拥有者可提前接收显示请求，
-资产就绪后执行；根被替换、移除或销毁会取消等待请求。`HideAll` 同时取消全部
-等待显示，`Hide` 取消对应目标的等待显示，`DisposeMenu` 取消等待中的菜单显示。
-对象属性在 Sync 中同步，随后处理 `GuiPopupCommand`；
-同一类消息保持顺序。
+1280×720，已有舞台则沿用其尺寸。等待 `.fui` 的拥有者可提前接收显示请求，
+`is_pending(owner)` 查询是否等待；资产就绪后执行。新显示请求替换同一目标的旧位置，
+新菜单请求替换等待中的旧菜单。拥有者被替换、移除或销毁会取消旧请求；重新挂载后
+发起的新请求属于新的拥有者配置。`hide_all()` 同时取消全部等待显示，`hide(entity)`
+取消对应目标的等待显示，`dispose_menu()` 取消等待中的菜单显示。
 
-`ShowAnchored { popup, anchor, direction }` 根据锚点控件当帧的逻辑坐标放置已有
+`show_anchored(popup, anchor, direction)` 根据锚点控件当前的原生逻辑坐标放置已有
 弹出层。`GuiPopupDirection::Auto` 在下方空间不足时翻到上方，`Up` / `Down`
 指定方向；保留原版的横向溢出调整和向上放置时的 1 像素间隔。
-锚点在显示请求执行时必须已创建；弹出根本身等待资产的规则与 `Show` 一致。
+锚点在显示请求执行时必须已创建；弹出根本身等待资产的规则与 `show` 一致。
+属性组件的修改在 Sync 应用，依赖新布局的显示可放在 `GuiSystems::PostLayout`。
+`--smoke-popup` 验证真实菜单导航、弹层开关、无效菜单项、勾选状态和视图复用；
+`--smoke-chat` 覆盖表情弹层的锚点定位与页面销毁回收。
 
 下拉框及菜单的组件、列表项和分隔项模板可使用其他已登记包的 `ui://` 地址，
 嵌套子组件也按声明的源包构造并使用各自图集；依赖通过 `register_package` 登记。
@@ -1231,7 +1242,7 @@ Bag 示例也通过子实体拥有 `BagWin` 窗口，每次打开生成 45 条�
 关闭等待会撤下面板并保留对象和实体，再次等待复用它；隐藏窗口会同时结束等待。
 替换面板模板回收旧面板，销毁窗口也会回收已经撤下的面板。菜单的 `ShowMenu.source`
 现在同样接受窗口拥有者，并按窗口资产来源解析模板、保留资产等待请求；普通弹层的
-Show/Hide 使用 `GuiPopupCommand`，原生窗口的显示直接修改 `FairyGuiWindow.visible`。
+显示和隐藏弹层使用 `GuiPopup`，原生窗口的显示直接修改 `FairyGuiWindow.visible`。
 ModalWaiting 示例中的 Open Window / Refresh 按钮通过 ECS 驱动三秒等待，专项窗口
 回归可运行 `--smoke-window-wait`。普通文字按原版不作为鼠标命中目标，父控件仍可
 接收点击；富文本链接与输入框继续使用各自的交互路径。

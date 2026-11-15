@@ -394,7 +394,9 @@ fn combo_popup_direction_uses_native_up_one_down_two_codes() {
     open(&mut app, owner);
     let pane = snapshot(&mut app, owner).dropdown().unwrap();
     assert!(app.world().get::<GuiTransform>(pane).unwrap().position().y < 200.);
-    app.world_mut().write_message(GuiPopupCommand::HideAll);
+    app.world_mut()
+        .run_system_once(|mut popup: crate::GuiPopup| popup.hide_all())
+        .unwrap();
     app.update();
     send(&mut app, owner, |object: &mut crate::GuiObjectMut| {
         object.set_combo_popup_direction(GuiPopupDirection::Down)
@@ -419,7 +421,9 @@ fn combo_popup_reuses_views_refreshes_options_on_reopen_and_is_disposed_with_own
     let state = snapshot(&mut app, owner);
     assert!(state.is_open());
     let (dropdown, list) = (state.dropdown().unwrap(), state.list().unwrap());
-    app.world_mut().write_message(GuiPopupCommand::HideAll);
+    app.world_mut()
+        .run_system_once(|mut popup: crate::GuiPopup| popup.hide_all())
+        .unwrap();
     app.update();
     assert!(!snapshot(&mut app, owner).is_open());
     send(&mut app, owner, |object: &mut crate::GuiObjectMut| {

@@ -137,6 +137,11 @@ impl GuiRuntime {
             .object
             .filter(|&id| self.store.contains(id))
     }
+    pub(crate) fn ecs_window_source_matches(&self, owner: Entity, source: &FairyGuiWindow) -> bool {
+        self.ecs_windows
+            .get(&owner)
+            .is_some_and(|binding| binding.source.same_template(source))
+    }
     pub(crate) fn is_ecs_window_object(&self, object: GObjectId) -> bool {
         self.ecs_windows
             .values()
@@ -203,7 +208,7 @@ impl GuiRuntime {
         self.show_window_modal_wait(index, request);
     }
 }
-pub(super) fn viewport(
+pub(crate) fn viewport(
     runtime: &mut GuiRuntime,
     windows: &Query<(Entity, &Window, Has<PrimaryWindow>)>,
     settings: &GuiInputSettings,

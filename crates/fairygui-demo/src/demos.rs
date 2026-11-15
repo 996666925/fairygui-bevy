@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use fairygui_bevy::{
-    FairyGuiRoot, GuiListSelection, GuiMenuAction, GuiMut, GuiObjectMut, GuiPopupCommand,
-    GuiPopupMenu, GuiQuery, GuiRootInstance, GuiTransitionComplete, GuiTransitionHook,
+    FairyGuiRoot, GuiListSelection, GuiMenuAction, GuiMut, GuiObjectMut, GuiPopup, GuiPopupMenu,
+    GuiQuery, GuiRootInstance, GuiTransitionComplete, GuiTransitionHook,
 };
 use fairygui_core::object::GObjectId;
 
@@ -359,7 +359,6 @@ pub fn navigate_basics(
     if listener != BASICS_BACK && page.is_none() {
         return false;
     }
-    commands.write_message(GuiPopupCommand::HideAll);
     controller.last_menu_action = None;
     if let Some(owner) = controller.basics_page_owner.take() {
         commands.entity(owner).despawn();
@@ -396,7 +395,7 @@ pub fn navigate_basics(
 /// interpreting the runtime's raw event queue.
 pub fn show_basics_menu(
     event: On<fairygui_bevy::GuiClick>,
-    mut commands: Commands,
+    mut popups: GuiPopup,
     controller: Res<DemoController>,
     gui: GuiQuery,
 ) {
@@ -430,11 +429,11 @@ pub fn show_basics_menu(
         },
         MenuItem::action("last", "Item 4", BASICS_MENU_ACTION + 3),
     ];
-    commands.write_message(GuiPopupCommand::ShowMenu {
-        source: page,
-        menu: GuiPopupMenu::new("PopupMenu", "PopupMenuItem", items),
+    popups.show_menu(
+        page,
+        GuiPopupMenu::new("PopupMenu", "PopupMenuItem", items),
         position,
-    });
+    );
 }
 
 pub fn handle_menu_actions(

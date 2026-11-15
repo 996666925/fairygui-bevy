@@ -245,6 +245,8 @@ fn main() -> AppExit {
         smoke::install_combo(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-tooltip") {
         smoke::install_tooltip(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-popup") {
+        smoke::install_popup(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-chat") {
         smoke::install_chat(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-item-provider") {
@@ -567,11 +569,11 @@ fn bind_demo_observers(
 fn close_demo(
     _event: On<GuiClick>,
     mut commands: Commands,
-    mut objects: GuiMut,
+    mut edit: ParamSet<(GuiMut, GuiPopup)>,
     mut demo: ResMut<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
-    commands.write_message(GuiPopupCommand::HideAll);
+    edit.p1().hide_all();
     demos::dispose_dynamic_roots(&mut commands, &mut controller);
     // 销毁演示界面，收起关闭按钮，把菜单放回来。
     if let Some((owner, _, _)) = demo.open.take() {
@@ -582,12 +584,13 @@ fn close_demo(
     controller.root_owner = None;
     controller.elapsed = 0.0;
     if let Some(target) = demo.close_owner {
-        objects.edit(target, |object: &mut GuiObjectMut| {
+        edit.p0().edit(target, |object: &mut GuiObjectMut| {
             object.set_visible(false)
         });
     }
     if let Some(target) = demo.menu_owner {
-        objects.edit(target, |object: &mut GuiObjectMut| object.set_visible(true));
+        edit.p0()
+            .edit(target, |object: &mut GuiObjectMut| object.set_visible(true));
     }
     info!("已退回主菜单");
 }
@@ -621,7 +624,7 @@ fn navigate_basics_action(
     actions: Query<&DemoAction>,
     mut commands: Commands,
     gui: GuiQuery,
-    mut objects: GuiMut,
+    mut edit: ParamSet<(GuiMut, GuiPopup)>,
     demo: Res<Demo>,
     mut controller: ResMut<demos::DemoController>,
 ) {
@@ -631,14 +634,16 @@ fn navigate_basics_action(
     let Some((_, handle, _)) = &demo.open else {
         return;
     };
-    demos::navigate_basics(
+    if demos::navigate_basics(
         &mut commands,
         &gui,
         &mut controller,
         handle.clone(),
         action.0,
-        &mut objects,
-    );
+        &mut edit.p0(),
+    ) {
+        edit.p1().hide_all();
+    }
 }
 
 fn play_transition_action(

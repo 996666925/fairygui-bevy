@@ -220,17 +220,13 @@ fn emoji_clicked(
     event: On<GuiClick>,
     owners: Query<&Owner>,
     pages: Query<&Chat>,
-    mut commands: Commands,
+    mut popups: GuiPopup,
 ) {
     let Ok(owner) = owners.get(event.entity) else {
         return;
     };
     let Ok(chat) = pages.get(owner.0) else { return };
-    commands.write_message(GuiPopupCommand::ShowAnchored {
-        popup: chat.emoji,
-        anchor: event.entity,
-        direction: GuiPopupDirection::Up,
-    });
+    popups.show_anchored(chat.emoji, event.entity, GuiPopupDirection::Up);
 }
 fn choose_emoji(
     event: On<GuiListItemClick>,

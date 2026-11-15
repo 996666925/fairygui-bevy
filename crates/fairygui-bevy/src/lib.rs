@@ -128,7 +128,7 @@ pub use list::{
     GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListRow,
     GuiListState, GuiVirtualList, GuiVirtualListState,
 };
-pub use popup::{GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState};
+pub use popup::{GuiPopup, GuiPopupDirection, GuiPopupMenu, GuiPopupState};
 pub use runtime::ecs_drag_drop::{GuiDrag, GuiDragSource, GuiDragState, GuiDrop, GuiDropTarget};
 pub use runtime::global_wait::{GuiGlobalWaitError, GuiGlobalWaitSettings, GuiGlobalWaitState};
 pub use runtime::object_drag::{GuiDragBounds, GuiDraggable, GuiObjectDragState};
@@ -200,9 +200,9 @@ pub mod prelude {
         GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings, GuiListState,
         GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
         GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
-        GuiPointerId, GuiPopupCommand, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
-        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullPart, GuiPullRelease,
-        GuiQuery, GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
+        GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
+        GuiProgressTweenComplete, GuiProgressValue, GuiPullPart, GuiPullRelease, GuiQuery,
+        GuiRenderOrder, GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime,
         GuiScrollSettings, GuiScrollState, GuiSliderState, GuiSliderValue, GuiSortingOrder,
         GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings,
         GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips,
@@ -277,7 +277,6 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiTextInput>()
         .add_message::<GuiListItemClick>()
         .add_message::<GuiPullRelease>()
-        .add_message::<GuiPopupCommand>()
         .init_resource::<GuiDragState>()
         .init_resource::<GuiGlobalWaitSettings>()
         .init_resource::<GuiGlobalWaitState>()
@@ -468,7 +467,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::root_mount::sync_mounts,
                 input::apply_scroll_drag_commands,
                 properties::sync,
-                popup::apply_popup_commands,
+                popup::sync_pending_popups,
                 runtime::global_wait::sync_global_wait,
                 runtime::tooltip::sync_tooltips,
             )

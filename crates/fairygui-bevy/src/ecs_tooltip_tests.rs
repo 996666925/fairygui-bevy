@@ -1,5 +1,6 @@
 use super::*;
 use crate::{FairyGuiPlugin, GuiObjectInfo, GuiTransform};
+use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::system::SystemState;
 use bevy::picking::hover::Hovered;
 use bevy::time::TimeUpdateStrategy;
@@ -371,7 +372,8 @@ fn custom_child_tooltip_is_popup_independent_passes_input_and_dies_with_original
         assert!(!crate::input::eligible(runtime, id));
     }
     app.world_mut()
-        .write_message(crate::GuiPopupCommand::HideAll);
+        .run_system_once(|mut popup: crate::GuiPopup| popup.hide_all())
+        .unwrap();
     app.update();
     assert!(app.world().resource::<GuiTooltipState>().is_showing());
     hide(&mut app);

@@ -1,6 +1,7 @@
 use super::*;
 use crate::GuiTransform;
 use crate::{FairyGuiPlugin, GuiQuery, GuiWorldExt};
+use bevy::ecs::system::RunSystemOnce;
 use bevy::ecs::system::SystemState;
 
 fn app(loaded: bool) -> (App, Handle<FuiAsset>) {
@@ -609,22 +610,28 @@ fn ecs_modal_wait_template_replacement_failure_and_cross_package_retry_keep_owne
 
 #[test]
 fn ecs_window_menu_sources_wait_for_assets_and_cancel_replaced_or_removed_requests() {
-    use crate::{GuiPopupCommand, GuiPopupMenu, GuiPopupState};
+    use crate::{GuiPopup, GuiPopupMenu, GuiPopupState};
     let (mut app, asset) = app(false);
     let owner = app
         .world_mut()
         .spawn(FairyGuiWindow::new(asset.clone(), "WindowA"))
         .id();
-    let menu = |source| GuiPopupCommand::ShowMenu {
-        source,
-        position: Vec2::new(40., 50.),
-        menu: GuiPopupMenu::new(
+    fn menu() -> GuiPopupMenu {
+        GuiPopupMenu::new(
             "PopupMenu",
             "PopupMenuItem",
             vec![fairygui_core::popup::MenuItem::action("save", "Save", 1)],
-        ),
-    };
-    app.world_mut().write_message(menu(owner));
+        )
+    }
+    assert!(
+        app.world_mut()
+            .run_system_once(move |mut popup: GuiPopup| popup.show_menu(
+                owner,
+                menu(),
+                Vec2::new(40., 50.)
+            ))
+            .unwrap()
+    );
     app.update();
     assert!(app.world().resource::<GuiPopupState>().menu().is_none());
     load(&mut app, &asset);
@@ -640,13 +647,16 @@ fn ecs_window_menu_sources_wait_for_assets_and_cancel_replaced_or_removed_reques
             .unwrap()
             .is_showing()
     );
-    app.world_mut().write_message(GuiPopupCommand::DisposeMenu);
+    app.world_mut()
+        .run_system_once(|mut popup: GuiPopup| popup.dispose_menu())
+        .unwrap();
     app.update();
     // Showing a window through a plain popup must not duplicate its root entry.
-    app.world_mut().write_message(GuiPopupCommand::Show {
-        popup: owner,
-        position: Vec2::ZERO,
-    });
+    assert!(
+        !app.world_mut()
+            .run_system_once(move |mut popup: GuiPopup| popup.show(owner, Vec2::ZERO))
+            .unwrap()
+    );
     app.update();
     assert!(app.world().resource::<GuiPopupState>().stack().is_empty());
     assert!(
@@ -659,7 +669,15 @@ fn ecs_window_menu_sources_wait_for_assets_and_cancel_replaced_or_removed_reques
         let (mut app, asset) = self::app(false);
         let source = FairyGuiWindow::new(asset.clone(), "WindowA");
         let owner = app.world_mut().spawn(source.clone()).id();
-        app.world_mut().write_message(menu(owner));
+        assert!(
+            app.world_mut()
+                .run_system_once(move |mut popup: GuiPopup| popup.show_menu(
+                    owner,
+                    menu(),
+                    Vec2::new(40., 50.)
+                ))
+                .unwrap()
+        );
         app.update();
         match replacement {
             0 => {
