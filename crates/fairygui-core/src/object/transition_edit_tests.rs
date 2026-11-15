@@ -374,6 +374,7 @@ fn relation_layout_shifts_absolute_definitions_and_preserves_percent_endpoints()
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 6,
                     percent: false,
@@ -413,6 +414,7 @@ fn relation_changes_during_sampling_reach_later_items_before_their_tweener_is_cr
             to_parent: true,
             to_child: false,
             target_index: None,
+            binding: None,
             defs: vec![crate::widget::relation::RelationDef {
                 relation_type: 6,
                 percent: false,

@@ -554,6 +554,13 @@ fn build_component(
             .setup(&mut buffer, package.string_table(), true)?;
     }
 
+    // Bind against serialized order before any controller changes display order.
+    for &child in &children {
+        let descendants = store.object(child).unwrap().children().to_vec();
+        store.bind_exported_relation_targets(child, &children, &descendants);
+    }
+    store.bind_exported_relation_targets(object, &[], &children);
+
     // ---- 块 5：过渡动画 ----
     if buffer.seek(0, 5)? {
         let count = buffer.read_i16()?.max(0) as usize;

@@ -44,6 +44,8 @@ mod loader_component_tests;
 mod masks;
 #[path = "properties.rs"]
 mod properties;
+#[path = "relation_targets.rs"]
+mod relation_targets;
 
 #[path = "groups.rs"]
 mod groups;
@@ -207,6 +209,7 @@ pub struct ObjectStore {
     laying_out_lists: HashSet<GObjectId>,
     tree_cell_indents: std::collections::HashMap<GObjectId, (GObjectId, u8)>,
     relation_handling: HashSet<GObjectId>,
+    relation_dependents: std::collections::HashMap<GObjectId, Vec<GObjectId>>,
     syncing_list_controllers: HashSet<GObjectId>,
     selection_controllers: std::collections::HashMap<GObjectId, (GObjectId, usize)>,
     scroll_page_controllers: std::collections::HashMap<GObjectId, (GObjectId, usize)>,
@@ -317,6 +320,10 @@ impl ObjectStore {
         self.dispose_transitions_in(id);
 
         let removed_set: HashSet<GObjectId> = removed.iter().copied().collect();
+        self.relation_dependents.retain(|target, owners| {
+            owners.retain(|owner| !removed_set.contains(owner));
+            !removed_set.contains(target) && !owners.is_empty()
+        });
         self.pull_releases
             .retain(|(owner, _)| !removed_set.contains(owner));
         self.virtual_states
@@ -456,6 +463,9 @@ impl ObjectStore {
             self.detach_from_stage(child);
         }
         self.detach_from_parent(child);
+        if let Some(parent) = parent {
+            self.bind_container_relations(parent);
+        }
 
         if let Some(object) = self.objects.get_mut(child) {
             object.parent = parent;
@@ -491,6 +501,8 @@ impl ObjectStore {
         let Some(parent) = self.objects.get(child).and_then(|object| object.parent) else {
             return false;
         };
+        self.bind_container_relations(parent);
+        self.bind_relation_targets(child);
         self.invalidate_member_group(child);
         self.preserve_selection_controller(child);
         if let Some(parent_object) = self.objects.get_mut(parent) {
@@ -699,22 +711,8 @@ impl ObjectStore {
         if dx == 0.0 && dy == 0.0 {
             return;
         }
-        let Some(parent) = self.objects.get(target).and_then(|object| object.parent) else {
-            return;
-        };
-        let Some(target_index) = self.child_index(target) else {
-            return;
-        };
-        let Some(mut siblings) = self
-            .objects
-            .get(parent)
-            .map(|object| object.children.clone())
-        else {
-            return;
-        };
-
-        siblings.push(parent);
-        for owner in siblings {
+        let owners = self.related_owners(target);
+        for owner in owners {
             if owner == target
                 || self.relation_handling.contains(&owner)
                 || self
@@ -741,10 +739,14 @@ impl ObjectStore {
                 continue;
             };
             relations.items.retain(|item| {
-                !item.to_parent
-                    && item.to_child == (owner == parent)
-                    && item.target_index == Some(target_index)
+                item.binding
+                    .is_some_and(|binding| binding.target == Some(target) && binding.track_position)
             });
+            // Movement subscription is fixed at binding time, independent of
+            // the target's current relationship to this owner.
+            for item in &mut relations.items {
+                item.to_parent = false;
+            }
             if relations.is_empty() {
                 continue;
             }
@@ -888,122 +890,16 @@ impl ObjectStore {
         }
         // 自己的尺寸变化会同时影响两批对象：挂在子对象上的「相对父节点」关联，
         // 以及挂在兄弟对象上的「以自己为目标」关联。
-        self.apply_child_relations(id, d_width, d_height);
-        self.apply_sibling_relations(id, d_width, d_height);
+        self.apply_target_size_relations(id, d_width, d_height);
         self.refresh_progress_object(id);
         self.refresh_slider_object(id);
         self.update_gear_state(id, crate::widget::GearKind::Size);
     }
 
-    /// 容器尺寸变化后，让子对象的关联调整位置与尺寸。
-    ///
-    /// 只处理直接子对象；子对象若是容器，其自身尺寸变化会再次触发这一过程。
-    fn apply_child_relations(&mut self, container: GObjectId, d_width: f32, d_height: f32) {
-        let Some(children) = self
-            .objects
-            .get(container)
-            .map(|object| object.children.clone())
-        else {
-            return;
-        };
-
-        for child in children {
-            if self.relation_handling.contains(&child) {
-                continue;
-            }
-            // 先把需要的数据取出来，避免后续改动时反复借用。
-            let Some((x, y, width, height, owner_pivot, owner_pivot_as_anchor, mut relations)) =
-                self.objects.get(child).map(|object| {
-                    (
-                        object.x,
-                        object.y,
-                        object.width,
-                        object.height,
-                        Point::new(object.pivot_x, object.pivot_y),
-                        object.pivot_as_anchor,
-                        object.relations.clone(),
-                    )
-                })
-            else {
-                continue;
-            };
-
-            // 容器尺寸变化只会影响「相对父节点」的那些关联。
-            relations.items.retain(|item| item.to_parent);
-
-            if relations.is_empty() {
-                continue;
-            }
-
-            let (mut new_x, mut new_y) = (x, y);
-            let (mut new_width, mut new_height) = (width, height);
-            let target = self.objects.get(container).unwrap();
-            relations.apply_on_target_resized_with_context(
-                &mut new_x,
-                &mut new_y,
-                &mut new_width,
-                &mut new_height,
-                crate::widget::relation::RelationResize::new(
-                    crate::widget::relation::RelationTarget {
-                        old_size: Point::new(target.width - d_width, target.height - d_height),
-                        new_size: Point::new(target.width, target.height),
-                        pivot: Point::new(target.pivot_x, target.pivot_y),
-                        pivot_as_anchor: target.pivot_as_anchor,
-                        is_parent: true,
-                        ..crate::widget::relation::RelationTarget::default()
-                    },
-                    owner_pivot,
-                    owner_pivot_as_anchor,
-                ),
-            );
-
-            if new_x != x || new_y != y {
-                self.relation_handling.insert(child);
-                self.set_xy(child, new_x, new_y);
-                self.update_gear_relations(
-                    child,
-                    crate::widget::GearKind::Xy,
-                    new_x - x,
-                    new_y - y,
-                );
-                self.update_transition_relations(container, child, new_x - x, new_y - y);
-            }
-            if new_width != width || new_height != height {
-                self.relation_handling.insert(child);
-                self.set_size(child, new_width, new_height);
-                self.update_gear_relations(
-                    child,
-                    crate::widget::GearKind::Size,
-                    new_width - width,
-                    new_height - height,
-                );
-            }
-            self.relation_handling.remove(&child);
-        }
-    }
-
-    /// 某个对象的尺寸变化后，让「以它为目标的兄弟关联」跟着调整。
-    ///
-    /// 关联的目标有两种：父节点，或容器内的某个兄弟对象。前者在容器尺寸变化时
-    /// 处理（见 [`Self::apply_child_relations`]），后者在这里处理。描述里记的是
-    /// 目标在容器内的编号，因此要先算出自己当前的位置。
-    fn apply_sibling_relations(&mut self, changed: GObjectId, d_width: f32, d_height: f32) {
-        let Some(parent) = self.objects.get(changed).and_then(|object| object.parent) else {
-            return;
-        };
-        let Some(changed_index) = self.child_index(changed) else {
-            return;
-        };
-        let Some(mut siblings) = self
-            .objects
-            .get(parent)
-            .map(|object| object.children.clone())
-        else {
-            return;
-        };
-
-        siblings.push(parent);
-        for sibling in siblings {
+    /// Notify retained relation targets, including targets now in another parent.
+    fn apply_target_size_relations(&mut self, changed: GObjectId, d_width: f32, d_height: f32) {
+        let owners = self.related_owners(changed);
+        for sibling in owners {
             if sibling == changed || self.relation_handling.contains(&sibling) {
                 continue;
             }
@@ -1024,11 +920,9 @@ impl ObjectStore {
                 continue;
             };
 
-            // 只保留「目标正是发生变化的那位兄弟」的关联。
             relations.items.retain(|item| {
-                !item.to_parent
-                    && item.to_child == (sibling == parent)
-                    && item.target_index == Some(changed_index)
+                item.binding
+                    .is_some_and(|binding| binding.target == Some(changed))
             });
             if relations.is_empty() {
                 continue;
@@ -1047,9 +941,9 @@ impl ObjectStore {
                         old_size: Point::new(target.width - d_width, target.height - d_height),
                         new_size: Point::new(target.width, target.height),
                         position: Point::new(target.x, target.y),
+                        is_parent: self.objects[sibling].parent == Some(changed),
                         pivot: Point::new(target.pivot_x, target.pivot_y),
                         pivot_as_anchor: target.pivot_as_anchor,
-                        ..crate::widget::relation::RelationTarget::default()
                     },
                     owner_pivot,
                     owner_pivot_as_anchor,
@@ -3506,6 +3400,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 3,
                     percent: true,
@@ -3516,6 +3411,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 14,
                     percent: true,
@@ -3552,6 +3448,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(0),
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
                     percent: true,
@@ -3562,6 +3459,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(0),
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 14,
                     percent: true,
@@ -3594,6 +3492,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 14,
                     percent: true,
@@ -3627,6 +3526,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(0),
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
                     percent: false,
@@ -3638,6 +3538,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(0),
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 17,
                     percent: false,
@@ -3666,6 +3567,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(1),
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
                     percent: false,
@@ -3677,6 +3579,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(0),
+                binding: None,
                 defs: vec![crate::widget::relation::RelationDef {
                     relation_type: 0,
                     percent: false,
@@ -4324,6 +4227,7 @@ mod tests {
             to_parent: false,
             to_child: true,
             target_index: Some(0),
+            binding: None,
             defs: vec![RelationDef {
                 relation_type: 15,
                 percent: false,
@@ -4358,6 +4262,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: vec![RelationDef {
                     relation_type: kind,
                     percent: false,

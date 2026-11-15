@@ -40,10 +40,18 @@ pub struct RelationItem {
     pub to_child: bool,
     /// 目标在容器内的位置。目标是父节点时为 `None`。
     ///
-    /// 相对兄弟对象的关联用它匹配发生尺寸变化的目标。
+    /// 只在构建时解析；运行期通知使用 binding 中的稳定对象身份。
     pub target_index: Option<usize>,
+    /// Resolved exactly once; a dead target never falls back to an index.
+    pub(crate) binding: Option<RelationBinding>,
     /// 关联定义。
     pub defs: Vec<RelationDef>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RelationBinding {
+    pub target: Option<crate::object::GObjectId>,
+    pub track_position: bool,
 }
 
 /// 一个对象上的全部关联。
@@ -161,6 +169,7 @@ impl Relations {
                     to_parent: true,
                     to_child: false,
                     target_index: None,
+                    binding: None,
                     defs: Vec::new(),
                 }
             } else {
@@ -170,6 +179,7 @@ impl Relations {
                     // 目标编号的含义取决于是谁的关联，这里只记录编号，
                     // 由调用方结合 `parent_to_child` 解释。
                     target_index: Some(target_index.max(0) as usize),
+                    binding: None,
                     defs: Vec::new(),
                 }
             };
@@ -585,6 +595,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: defs(0),
             }],
         };
@@ -601,6 +612,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: defs(6),
             }],
         };
@@ -617,6 +629,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: defs(WIDTH),
             }],
         };
@@ -634,6 +647,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: defs(3),
             }],
         };
@@ -647,6 +661,7 @@ mod tests {
                 to_parent: true,
                 to_child: false,
                 target_index: None,
+                binding: None,
                 defs: defs(10),
             }],
         };
@@ -673,6 +688,7 @@ mod tests {
                     to_parent: true,
                     to_child: false,
                     target_index: None,
+                    binding: None,
                     defs: vec![RelationDef {
                         relation_type: kind,
                         percent: true,
@@ -712,6 +728,7 @@ mod tests {
                     to_parent: true,
                     to_child: false,
                     target_index: None,
+                    binding: None,
                     defs: vec![RelationDef {
                         relation_type,
                         percent: true,
@@ -751,6 +768,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(0),
+                binding: None,
                 defs: vec![RelationDef {
                     relation_type: 0,
                     percent: true,
@@ -787,6 +805,7 @@ mod tests {
                     to_parent: false,
                     to_child: false,
                     target_index: Some(0),
+                    binding: None,
                     defs: vec![RelationDef {
                         relation_type: kind,
                         percent: false,
@@ -824,6 +843,7 @@ mod tests {
                 to_parent: false,
                 to_child: false,
                 target_index: Some(0),
+                binding: None,
                 defs: vec![RelationDef {
                     relation_type: 17,
                     percent: false,

@@ -30,6 +30,9 @@ pub(crate) mod global_wait;
 mod group_tests;
 #[path = "object_drag.rs"]
 pub(crate) mod object_drag;
+#[cfg(test)]
+#[path = "relation_target_tests.rs"]
+mod relation_target_tests;
 #[path = "root_mount.rs"]
 pub(crate) mod root_mount;
 pub use edit::{GuiMut, GuiObjectMut, GuiWorldExt};

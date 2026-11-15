@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_relation_targets.rs"]
+mod relation_targets;
+pub(super) fn install_relation_targets(app: &mut App) {
+    relation_targets::install(app);
+}
 #[path = "smoke_size_constraints.rs"]
 mod size_constraints;
 pub(super) fn install_size_constraints(app: &mut App) {

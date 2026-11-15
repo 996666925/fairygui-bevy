@@ -32,6 +32,7 @@ impl ObjectStore {
         let current = self.child_index(child)?;
         let index = index.min(self.objects[parent].children.len().saturating_sub(1));
         if current != index {
+            self.bind_container_relations(parent);
             self.objects[parent].children.remove(current);
             self.objects[parent].children.insert(index, child);
             self.touch(parent, dirty::CHILDREN);

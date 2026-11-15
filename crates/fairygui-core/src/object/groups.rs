@@ -724,6 +724,7 @@ mod layout_tests {
                 to_parent: target.is_none(),
                 to_child: false,
                 target_index: target,
+                binding: None,
                 defs: vec![RelationDef {
                     relation_type: kind,
                     percent: false,

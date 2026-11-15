@@ -32,6 +32,7 @@ fn size_limits_pivots_and_self_relations_match_original_runtime_methods() {
                     to_parent: true,
                     to_child: false,
                     target_index: None,
+                    binding: None,
                     defs: vec![
                         RelationDef {
                             relation_type: kind,
@@ -84,6 +85,7 @@ fn updating_constraints_restores_the_request_and_notifies_dependents_with_effect
             to_parent: true,
             to_child: false,
             target_index: None,
+            binding: None,
             defs: vec![RelationDef {
                 relation_type: 6,
                 percent: false,
