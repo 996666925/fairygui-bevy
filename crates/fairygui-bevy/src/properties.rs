@@ -192,9 +192,13 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
             let value = value.cloned();
             let stored = stored.map(|p| (p.object, p.value.clone()));
             let runtime = world.get_non_send::<GuiRuntime>().unwrap();
-            let object = reference
-                .or_else(|| runtime.ecs_root_object(entity))
-                .or_else(|| runtime.ecs_window_object(entity));
+            let object = crate::runtime::edit::resolve_object(
+                runtime,
+                entity,
+                world.get::<GObjectRef>(entity),
+                world.get::<FairyGuiRoot>(entity),
+                world.get::<FairyGuiWindow>(entity),
+            );
             let Some(object) = object else { continue };
             let initial = world
                 .get_resource_mut::<InitialNativeValues<T>>()

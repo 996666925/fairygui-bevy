@@ -1008,6 +1008,8 @@ fn play(mut gui: GuiMut, target: Entity) {
 该阶段已完成对象创建。独占系统和测试可用 `World::gui_mut`，使用方式相同。
 拥有者移除配置、换模板或销毁后，直接编辑、关联和拖放服务立即拒绝该别名，
 不会修改同步前仍保留的旧界面；新模板就绪后可继续用同一拥有者实体访问。
+可写属性组件也只同步到当前模板；拥有者换模板或等待新资源期间保留应用写入，
+新对象创建后再应用，避免文字、外观和几何更新提前影响旧视图。
 `GuiMut`、`GuiDrag`、`GuiInput` 都会读取根／窗口配置；同一系统若还需要
 `Query<&mut FairyGuiRoot>` 或 `Query<&mut FairyGuiWindow>`，通过 `ParamSet` 分开借用。
 

@@ -602,3 +602,121 @@ fn initial_text_acknowledgements_follow_rebinding_without_replaying_old_writes()
         "fresh value"
     );
 }
+
+#[test]
+fn owner_property_writes_wait_for_the_current_template_without_editing_the_old_view() {
+    use crate::properties::sync_property;
+    for window in [false, true] {
+        for change in 0..3 {
+            let (mut app, root, asset) = fixture("Button1", true);
+            let owner = if window {
+                app.world_mut().despawn(root);
+                let owner = app
+                    .world_mut()
+                    .spawn(FairyGuiWindow::new(asset, "Button1"))
+                    .id();
+                app.update();
+                owner
+            } else {
+                root
+            };
+            let old_view = app.world().get::<GuiRootView>(owner).unwrap().0;
+            let old = app.world().get::<GObjectRef>(old_view).unwrap().0;
+            let original = app
+                .world()
+                .non_send::<GuiRuntime>()
+                .store()
+                .object_text(old)
+                .unwrap()
+                .to_owned();
+            let pending = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
+            if window {
+                match change {
+                    0 => {
+                        app.world_mut()
+                            .get_mut::<FairyGuiWindow>(owner)
+                            .unwrap()
+                            .item_name = "Button2".into()
+                    }
+                    1 => {
+                        app.world_mut()
+                            .get_mut::<FairyGuiWindow>(owner)
+                            .unwrap()
+                            .asset = pending.clone()
+                    }
+                    _ => {
+                        app.world_mut().entity_mut(owner).remove::<FairyGuiWindow>();
+                    }
+                }
+            } else {
+                match change {
+                    0 => {
+                        app.world_mut()
+                            .get_mut::<FairyGuiRoot>(owner)
+                            .unwrap()
+                            .item_name = "Button2".into()
+                    }
+                    1 => {
+                        app.world_mut()
+                            .get_mut::<FairyGuiRoot>(owner)
+                            .unwrap()
+                            .asset = pending.clone()
+                    }
+                    _ => {
+                        app.world_mut().entity_mut(owner).remove::<FairyGuiRoot>();
+                    }
+                }
+            }
+            app.world_mut()
+                .entity_mut(owner)
+                .insert(GuiText::new("new template text"));
+            sync_property::<GuiText>(app.world_mut());
+            assert_eq!(
+                app.world()
+                    .non_send::<GuiRuntime>()
+                    .store()
+                    .object_text(old),
+                Some(original.as_str()),
+                "window={window}, change={change}"
+            );
+            assert_eq!(
+                app.world().get::<GuiText>(owner).unwrap().value(),
+                "new template text"
+            );
+            // An explicit old view is still editable until lifecycle disposal.
+            app.world_mut()
+                .get_mut::<GuiText>(old_view)
+                .unwrap()
+                .set("explicit old view edit");
+            sync_property::<GuiText>(app.world_mut());
+            assert_eq!(
+                app.world()
+                    .non_send::<GuiRuntime>()
+                    .store()
+                    .object_text(old),
+                Some("explicit old view edit")
+            );
+            assert_eq!(
+                app.world().get::<GuiText>(owner).unwrap().value(),
+                "new template text"
+            );
+            app.update();
+            assert!(app.world().get_entity(old_view).is_err());
+            if change == 1 {
+                assert!(app.world().get::<GuiRootView>(owner).is_none());
+                load(&mut app, &pending);
+                app.update();
+            }
+            if change != 2 {
+                let new_view = app.world().get::<GuiRootView>(owner).unwrap().0;
+                assert_ne!(new_view, old_view);
+                assert_eq!(
+                    app.world().get::<GuiText>(new_view).unwrap().value(),
+                    "new template text"
+                );
+            } else {
+                assert!(app.world().get::<GuiRootView>(owner).is_none());
+            }
+        }
+    }
+}
