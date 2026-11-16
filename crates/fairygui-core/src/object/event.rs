@@ -18,6 +18,7 @@ use crate::object::GObjectId;
 pub enum EventKind {
     // ---- 指针 ----
     Click,
+    DoubleClick,
     RightClick,
     RightMouseDown,
     RightMouseUp,
@@ -149,6 +150,9 @@ pub struct UiEvent {
     pub pointer: Option<Point>,
     /// Touch identifier; absent for mouse, keyboard and programmatic events.
     pub touch_id: Option<u64>,
+    /// Native release count: 1 or 2 for a physical click, 0 for other events.
+    /// Further rapid releases retain 2; this is not an unbounded tap counter.
+    pub click_count: u8,
     /// 附加数据。
     pub data: EventData,
     /// 是否为冒泡阶段。
@@ -164,6 +168,7 @@ impl UiEvent {
             current_target: target,
             pointer: None,
             touch_id: None,
+            click_count: 0,
             data: EventData::None,
             bubbling: false,
         }
@@ -179,6 +184,15 @@ impl UiEvent {
     pub fn with_touch(mut self, id: u64) -> Self {
         self.touch_id = Some(id);
         self
+    }
+
+    pub fn with_click_count(mut self, count: u8) -> Self {
+        self.click_count = count;
+        self
+    }
+
+    pub fn is_double_click(&self) -> bool {
+        self.click_count == 2
     }
 
     /// 设置附加数据。

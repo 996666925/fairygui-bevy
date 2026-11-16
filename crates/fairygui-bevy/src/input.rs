@@ -1,6 +1,7 @@
 //! Pointer targets, independent captures and exclusive widget gesture owners.
 //! Read `GuiInputState` after `GuiSystems::Input` to arbitrate game input.
 mod actions;
+mod clicks;
 pub(crate) mod editing;
 pub use editing::{GuiInput, GuiTextSelection};
 mod gestures;
@@ -35,8 +36,17 @@ struct PointerViews<'w, 's> {
     targets: Query<'w, 's, &'static bevy::ui::ComputedUiTargetCamera>,
     cameras: Query<'w, 's, &'static Camera>,
     inputs: Query<'w, 's, (), With<crate::runtime::InputPresentation>>,
+    clock: Option<Res<'w, Time<Real>>>,
 }
 impl PointerViews<'_, '_> {
+    fn time_ms(&self, fallback: &Time) -> f64 {
+        self.clock
+            .as_ref()
+            .map_or(fallback.elapsed_secs_f64(), |clock| {
+                clock.elapsed_secs_f64()
+            })
+            * 1000.
+    }
     fn physical_position(&self, entity: Entity, position: Vec2, scale: f32) -> Vec2 {
         let origin = self
             .targets
@@ -236,6 +246,7 @@ impl Default for GuiInputSettings {
 /// Native pointer and editing history; application systems read GuiInputState.
 #[derive(Resource, Debug, Default)]
 pub(crate) struct InputRouter {
+    clicks: clicks::ClickTracker,
     hovered: Option<GObjectId>,
     capture: Option<Capture>,
     right_capture: Option<RightCapture>,
@@ -597,6 +608,8 @@ fn route_pointer(
     hover: PointerHover,
 ) {
     let views = &hover.views;
+    let click_time = views.time_ms(&time);
+    state.clicks.expire(click_time);
     runtime
         .store_mut()
         .advance_button_feedback(time.delta_secs_f64());
@@ -762,6 +775,21 @@ fn route_pointer(
             state.capture = Some(capture);
         } else {
             capture.gesture.finish(&mut runtime, time.delta_secs());
+            let click = state.clicks.end(
+                capture.window,
+                None,
+                fairygui_core::pointer::ClickRelease {
+                    time_ms: click_time,
+                    start: Point::new(capture.start.x, capture.start.y),
+                    position: Point::new(position.x, position.y),
+                    button: 0,
+                    has_target: runtime.store().object(capture.target).is_some(),
+                    cancelled: !valid
+                        || !mouse.just_released(MouseButton::Left)
+                        || capture.moved
+                        || runtime.is_dragging(),
+                },
+            );
             if runtime.store().object(capture.target).is_some() {
                 let release_position = if valid { position } else { capture.last };
                 dispatch(
@@ -783,6 +811,7 @@ fn route_pointer(
             if valid
                 && mouse.just_released(MouseButton::Left)
                 && !capture.moved
+                && !click.cancelled
                 && hit == Some(capture.target)
                 && !runtime.is_dragging()
             {
@@ -796,7 +825,11 @@ fn route_pointer(
                             .with_data(fairygui_core::object::EventData::Text(link.href)),
                     );
                 }
-                dispatch(&mut runtime, EventKind::Click, capture.target, position);
+                runtime.dispatch_event(
+                    UiEvent::new(EventKind::Click, capture.target)
+                        .with_pointer(Point::new(position.x, position.y))
+                        .with_click_count(click.count),
+                );
                 apply_click(
                     &mut runtime,
                     &mut commands,
@@ -805,7 +838,15 @@ fn route_pointer(
                     keys.pressed(bevy::input::keyboard::Key::Shift),
                     keys.pressed(bevy::input::keyboard::Key::Control),
                     None,
+                    click.count,
                 );
+                if click.count == 2 {
+                    runtime.dispatch_event(
+                        UiEvent::new(EventKind::DoubleClick, capture.target)
+                            .with_pointer(Point::new(position.x, position.y))
+                            .with_click_count(2),
+                    );
+                }
             }
         }
     }
@@ -824,6 +865,21 @@ fn route_pointer(
             capture.last = position;
             state.right_capture = Some(capture);
         } else {
+            let click = state.clicks.end(
+                capture.window,
+                None,
+                fairygui_core::pointer::ClickRelease {
+                    time_ms: click_time,
+                    start: Point::new(capture.start.x, capture.start.y),
+                    position: Point::new(position.x, position.y),
+                    button: 2,
+                    has_target: runtime.store().object(capture.target).is_some(),
+                    cancelled: !valid
+                        || !mouse.just_released(MouseButton::Right)
+                        || capture.moved
+                        || runtime.is_dragging(),
+                },
+            );
             if runtime.store().object(capture.target).is_some() {
                 let release_position = if valid { position } else { capture.last };
                 dispatch(
@@ -844,14 +900,14 @@ fn route_pointer(
             if valid
                 && mouse.just_released(MouseButton::Right)
                 && !capture.moved
+                && !click.cancelled
                 && hit == Some(capture.target)
                 && !runtime.is_dragging()
             {
-                dispatch(
-                    &mut runtime,
-                    EventKind::RightClick,
-                    capture.target,
-                    position,
+                runtime.dispatch_event(
+                    UiEvent::new(EventKind::RightClick, capture.target)
+                        .with_pointer(Point::new(position.x, position.y))
+                        .with_click_count(click.count),
                 );
             }
         }
@@ -1076,6 +1132,7 @@ fn apply_click(
     shift: bool,
     ctrl: bool,
     touch_id: Option<u64>,
+    click_count: u8,
 ) {
     let mut button = Some(target);
     while let Some(id) = button {
@@ -1123,6 +1180,7 @@ fn apply_click(
             shift,
             ctrl,
             touch_id,
+            click_count,
         );
     }
 }

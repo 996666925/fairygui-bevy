@@ -368,3 +368,12 @@ index tables and lengths are rebuilt; other resource records, controllers,
 relations, images and atlas references remain unchanged. Tests parse with the
 `Basics` resource prefix so existing atlas filenames remain valid. This is a
 derived behavioral fixture, not a new editor export or native framebuffer trace.
+
+`click-reference.txt` executes unchanged LayaAir 3.3 `TouchInfo.end()` with
+deterministic performance.now and minimal Point/Event hosts. It records 110 cases
+and 231 releases: count, cancellation, stored time, position and button. The
+header hashes the complete extracted TouchInfo class. Coverage includes strict
+350 ms/10-pixel repeat boundaries, inclusive release distance, per-axis distance,
+button changes, repeated clicks, absent targets, explicit cancellation and the
+native zero-time startup sentinel. It does not exercise browser/OS input or
+native clickTest recipient selection. See docs/button-interaction.md.

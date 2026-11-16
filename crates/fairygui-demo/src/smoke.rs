@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_double_click.rs"]
+mod double_click;
+pub(super) fn install_double_click(app: &mut App) {
+    double_click::install(app);
+}
 #[path = "smoke_input_presentations.rs"]
 mod input_presentations;
 pub(super) fn install_input_presentations(app: &mut App) {

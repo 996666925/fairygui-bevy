@@ -48,6 +48,14 @@ pub struct GuiEvent {
     route: Arc<[(Entity, GObjectId)]>,
 }
 impl GuiEvent {
+    pub fn click_count(&self) -> u8 {
+        self.event.click_count
+    }
+
+    pub fn is_double_click(&self) -> bool {
+        self.event.is_double_click()
+    }
+
     /// Construct a direct notification for one entity. To capture the native
     /// logical bubbling path, enqueue through GuiRuntime::dispatch_event.
     fn new(entity: Entity, event: UiEvent) -> Self {
@@ -139,7 +147,7 @@ macro_rules! event_types {
     };
 }
 event_types! {
-    GuiClick => Click, GuiRightClick => RightClick,
+    GuiClick => Click, GuiDoubleClick => DoubleClick, GuiRightClick => RightClick,
     GuiRightMouseDown => RightMouseDown, GuiRightMouseUp => RightMouseUp,
     GuiMouseMove => MouseMove, GuiMouseDrag => MouseDrag, GuiMouseDragEnd => MouseDragEnd,
     GuiLinkEvent => Link, GuiMouseDown => MouseDown, GuiMouseUp => MouseUp,

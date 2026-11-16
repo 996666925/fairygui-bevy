@@ -123,3 +123,41 @@ a linked popup was produced. Capture: `target/fairygui-demo-button-fire-down.png
 
 Menus, combos and ordinary popups share the retained stack in `popup-lifecycle.md`.
 No complete native button/popup pixel parity is claimed.
+
+## Physical double clicks
+
+Observe `GuiDoubleClick` directly, alongside `GuiClick` or `GuiRightClick`.
+`event.click_count()` exposes 1/2 and `event.is_double_click()` exposes the native
+flag. `GuiListItemClick.event` carries the original release count as well.
+Other events and explicitly constructed events default to zero.
+
+The native `TouchInfo.end()` bookkeeping uses a strict 350 ms interval and strict
+10-pixel distance on each axis between releases. Targets are not part of this
+comparison. Third and later rapid releases retain count 2. Mouse buttons share
+one history: changing button breaks a pair. A right double click remains a
+RightClick with count 2; it does not dispatch DoubleClick. Touch histories use
+their physical IDs. The Bevy adapter additionally isolates windows and uses
+`Time<Real>` so virtual pause/time scaling cannot distort physical clicks.
+Expired histories are reclaimed after the native interval.
+
+The adapter dispatches ordinary Click, runs its existing built-in behavior once,
+then dispatches DoubleClick. Each dispatch captures and bubbles its own logical
+path. Stopping ordinary Click propagation does not stop DoubleClick propagation.
+Selection, sounds and list-row actions are not executed again for DoubleClick.
+Existing click eligibility, drag-threshold settings, modal gates and capture
+cancellation still apply. These changes do not replace the existing recipient
+policy with native clickTest ancestor fallback. Native OS touch cancellation
+records end bookkeeping but suppresses click dispatch; invalidated captures
+cancel the history. The zero-time startup/cancellation sentinel follows native
+code, including its early-origin edge case.
+
+`fairygui-core/tests/fixtures/click-reference.txt` records 110 cases and 231
+release states from unmodified LayaAir 3.3 `TouchInfo`; its header hashes the
+extracted source. The host supplies Point/Event and a deterministic clock, without
+running a browser or synthesizing OS input. Core tests compare counts,
+cancellation, stored times, positions and buttons. Adapter tests cover typed
+propagation, boundaries, changed recipients, drag cancellation, touch IDs, OS
+cancellation, right clicks, list selection and real-time clock choice.
+`--smoke-double-click` exercises actual Bevy picking, mouse/touch clicks, typed
+observers and ancestor bubbling on a retained Check button; it verifies one
+toggle per ordinary click and captures `target/fairygui-demo-double-click.png`.

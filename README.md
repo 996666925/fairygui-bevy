@@ -442,7 +442,7 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 
 | 操作 | observer 参数 |
 | --- | --- |
-| 点击、右键点击 | `On<GuiClick>`、`On<GuiRightClick>` |
+| 点击、双击、右键点击 | `On<GuiClick>`、`On<GuiDoubleClick>`、`On<GuiRightClick>` |
 | 按下、拖动、松开 | `On<GuiMouseDown>`、`On<GuiMouseDrag>`、`On<GuiMouseUp>` |
 | 触摸开始、移动、结束 | `On<GuiTouchBegin>`、`On<GuiTouchMove>`、`On<GuiTouchEnd>` |
 | 悬停进入、离开 | `On<GuiRollOver>`、`On<GuiRollOut>` |
@@ -455,6 +455,14 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 
 全部类型由 prelude 和 `fairygui_bevy::events` 导出。一次原生通知只触发对应的类型，
 没有额外的通用 observer 事件流；`GuiEvent` 是具体事件共享的数据结构。
+
+`GuiDoubleClick` 在同次普通点击及控件内置处理之后独立冒泡，不重复切换按钮或列表选择。
+`event.click_count()` 返回物理点击次数（1 或 2），`event.is_double_click()` 判断双击；
+普通点击、双击、右键点击及 `GuiListItemClick.event` 保留这一信息。右键不另发 `GuiDoubleClick`。
+按原版释放规则，间隔严格小于 350 ms 且横纵距离各小于 10 像素时计数为 2，
+连续第三次点击仍为 2，判定不要求前后命中同一对象。鼠标按键共用历史，不同窗口和触摸 ID 隔离，
+使用实际时间；既有拖动取消、模态与命中规则继续约束点击。详见 [按钮交互](docs/button-interaction.md)。
+
 冒泡的 `event.entity` 表示当前接收实体，`target` 是原始目标的视图实体（没有
 对应视图时为 `None`）。可沿 `GuiObjectInfo::parent()` 判断点击是否来自某个子控件，
 无需借用运行时解析原生对象 ID。

@@ -2019,6 +2019,7 @@ impl GuiRuntime {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_list_item_click(
         &mut self,
         target: GObjectId,
@@ -2026,6 +2027,7 @@ impl GuiRuntime {
         shift: bool,
         ctrl: bool,
         touch_id: Option<u64>,
+        click_count: u8,
     ) {
         let Some((list, item, index)) = self.store.list_item_of(target) else {
             return;
@@ -2033,6 +2035,7 @@ impl GuiRuntime {
         let mut event =
             fairygui_core::object::UiEvent::new(fairygui_core::object::EventKind::ClickItem, list)
                 .with_pointer(pointer)
+                .with_click_count(click_count)
                 .with_data(fairygui_core::object::EventData::Item(index.to_string()));
         event.touch_id = touch_id;
         self.events.push(event.clone());

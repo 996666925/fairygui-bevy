@@ -24,6 +24,7 @@ pub mod geom;
 pub mod graph;
 pub mod object;
 pub mod package;
+pub mod pointer;
 pub mod pool;
 pub mod popup;
 pub mod root;

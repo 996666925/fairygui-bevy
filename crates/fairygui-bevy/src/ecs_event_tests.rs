@@ -32,6 +32,7 @@ fn fixture() -> Fixture {
         app.world_mut()
             .spawn(GObjectRef(id))
             .observe(received::<GuiClick>)
+            .observe(received::<GuiDoubleClick>)
             .observe(received::<GuiMouseMove>)
             .observe(received::<GuiMouseDown>)
             .observe(received::<GuiCustomEvent>)
@@ -41,6 +42,7 @@ fn fixture() -> Fixture {
         .world_mut()
         .spawn_empty()
         .observe(received::<GuiClick>)
+        .observe(received::<GuiDoubleClick>)
         .observe(received::<GuiMouseMove>)
         .observe(received::<GuiMouseDown>)
         .observe(received::<GuiCustomEvent>)
@@ -55,6 +57,49 @@ fn fixture() -> Fixture {
         views,
         decoration,
     }
+}
+
+#[test]
+fn double_click_observer_uses_its_own_bubbling_dispatch_and_preserves_click_metadata() {
+    let mut f = fixture();
+    f.app
+        .world_mut()
+        .entity_mut(f.views[2])
+        .observe(|mut event: On<GuiClick>| {
+            event.propagate(false);
+        });
+    for kind in [EventKind::Click, EventKind::DoubleClick] {
+        f.app
+            .world_mut()
+            .non_send_mut::<GuiRuntime>()
+            .dispatch_event(
+                UiEvent::new(kind, f.ids[2])
+                    .with_touch(8)
+                    .with_click_count(2),
+            );
+    }
+    f.app.update();
+    let events = &f.app.world().resource::<Received>().0;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e.event.kind == EventKind::DoubleClick)
+            .count(),
+        3
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e.event.kind == EventKind::Click)
+            .count(),
+        1
+    );
+    assert!(
+        events
+            .iter()
+            .all(|e| e.is_double_click() && e.click_count() == 2 && e.event.touch_id == Some(8))
+    );
+    assert!(events.iter().all(|e| e.entity != f.decoration));
 }
 fn dispatch(f: &mut Fixture, kind: EventKind) {
     f.app

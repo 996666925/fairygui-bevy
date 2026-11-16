@@ -69,6 +69,7 @@ pub(super) fn route_touches(
     mut editors: Query<&mut bevy::text::EditableText>,
 ) {
     let views = &hover.views;
+    let click_time = views.time_ms(&time);
     let window = windows.iter().find(|(entity, _, primary)| {
         settings
             .window
@@ -87,6 +88,18 @@ pub(super) fn route_touches(
         .collect();
     for id in cancelled {
         let capture = state.touches.remove(&id).unwrap();
+        state.clicks.end(
+            capture.window,
+            Some(id),
+            fairygui_core::pointer::ClickRelease {
+                time_ms: click_time,
+                start: Point::new(capture.start.x, capture.start.y),
+                position: Point::new(capture.last.x, capture.last.y),
+                button: 0,
+                has_target: false,
+                cancelled: true,
+            },
+        );
         finish(&mut runtime, &capture, id, time.delta_secs());
         roll_out(&mut runtime, &capture, id);
         update_button_from_pointers(&mut runtime, &state, capture.target);
@@ -422,9 +435,25 @@ pub(super) fn route_touches(
         }
         capture.last = position;
         if matches!(event.phase, TouchPhase::Ended | TouchPhase::Canceled) {
+            let click = state.clicks.end(
+                capture.window,
+                Some(event.id),
+                fairygui_core::pointer::ClickRelease {
+                    time_ms: click_time,
+                    start: Point::new(capture.start.x, capture.start.y),
+                    position: Point::new(position.x, position.y),
+                    button: 0,
+                    has_target: runtime.store().object(capture.target).is_some(),
+                    // Native OS touch cancellation still runs end() bookkeeping;
+                    // it only skips click dispatch. Movement/drop cancellation is
+                    // separately reflected by clickCancelled.
+                    cancelled: capture.moved,
+                },
+            );
             finish(&mut runtime, &capture, event.id, 0.0);
             if event.phase == TouchPhase::Ended
                 && !capture.moved
+                && !click.cancelled
                 && hit == Some(capture.target)
                 && eligible(&runtime, capture.target)
                 && !runtime.is_dragging()
@@ -439,12 +468,9 @@ pub(super) fn route_touches(
                             .with_data(EventData::Text(link.href.clone())),
                     );
                 }
-                emit(
-                    &mut runtime,
-                    EventKind::Click,
-                    capture.target,
-                    position,
-                    event.id,
+                runtime.dispatch_event(
+                    touch_event(EventKind::Click, capture.target, position, event.id)
+                        .with_click_count(click.count),
                 );
                 apply_click(
                     &mut runtime,
@@ -454,7 +480,14 @@ pub(super) fn route_touches(
                     keys.pressed(bevy::input::keyboard::Key::Shift),
                     keys.pressed(bevy::input::keyboard::Key::Control),
                     Some(event.id),
+                    click.count,
                 );
+                if click.count == 2 {
+                    runtime.dispatch_event(
+                        touch_event(EventKind::DoubleClick, capture.target, position, event.id)
+                            .with_click_count(2),
+                    );
+                }
             }
             roll_out(&mut runtime, &capture, event.id);
             if owns_drop {

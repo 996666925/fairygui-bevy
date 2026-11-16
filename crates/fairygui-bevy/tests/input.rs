@@ -5,6 +5,8 @@ mod bar_visibility;
 mod button_effects;
 #[path = "input/button_fire.rs"]
 mod button_fire;
+#[path = "input/double_click.rs"]
+mod double_click;
 #[path = "input/list_selection.rs"]
 mod list_selection;
 #[path = "input/opaque.rs"]

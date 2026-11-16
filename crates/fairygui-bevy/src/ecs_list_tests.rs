@@ -474,6 +474,7 @@ fn virtual_item_entity_observer_gets_the_clicked_row_without_selection_and_appli
             true,
             true,
             Some(7),
+            2,
         );
     app.update();
     let events = &app.world().resource::<ItemEvents>().0;
@@ -481,6 +482,7 @@ fn virtual_item_entity_observer_gets_the_clicked_row_without_selection_and_appli
     let event = &events[0];
     assert_eq!((event.entity, event.item, event.index), (view, row, index));
     assert!(event.shift && event.ctrl);
+    assert!(event.event.is_double_click());
     assert_eq!(event.event.touch_id, Some(7));
     assert!(!event.event.bubbling);
     assert_eq!(
