@@ -634,3 +634,154 @@ fn direct_view_requests_reject_removed_and_despawned_owners_before_sync() {
     assert_eq!(view(&app), pane);
     assert!(app.world().resource::<GuiTooltipState>().is_showing());
 }
+
+#[test]
+fn pending_custom_tooltip_is_canceled_when_its_owner_component_is_reinserted() {
+    for window in [false, true] {
+        let (mut app, asset, _) = fixture(false);
+        let owner = if window {
+            app.world_mut()
+                .spawn(windows::FairyGuiWindow::new(asset.clone(), "Component3"))
+                .id()
+        } else {
+            app.world_mut()
+                .spawn(FairyGuiRoot::new(asset.clone(), "Component3"))
+                .id()
+        };
+        show_view(&mut app, owner, None);
+        app.update();
+        if window {
+            let source = app
+                .world()
+                .get::<windows::FairyGuiWindow>(owner)
+                .unwrap()
+                .clone();
+            app.world_mut()
+                .entity_mut(owner)
+                .remove::<windows::FairyGuiWindow>()
+                .insert(source);
+        } else {
+            let source = app.world().get::<FairyGuiRoot>(owner).unwrap().clone();
+            app.world_mut()
+                .entity_mut(owner)
+                .remove::<FairyGuiRoot>()
+                .insert(source);
+        }
+        load(&mut app, &asset);
+        app.update();
+        let state = app.world().resource::<GuiTooltipState>();
+        assert!(
+            !state.is_requested() && !state.is_showing(),
+            "window={window}"
+        );
+    }
+}
+
+#[test]
+fn post_layout_custom_tooltip_waits_for_the_owners_current_template() {
+    #[derive(Resource)]
+    struct Target(Entity);
+    fn replace(
+        target: Res<Target>,
+        mut edit: ParamSet<(Query<&mut FairyGuiRoot>, GuiTooltip)>,
+        mut once: Local<bool>,
+    ) {
+        if !*once {
+            edit.p0().get_mut(target.0).unwrap().item_name = "Button1".into();
+            assert!(edit.p1().show_view(target.0, Some(Vec2::new(80., 90.))));
+            *once = true;
+        }
+    }
+    let (mut app, asset, _) = fixture(true);
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "Component3"))
+        .id();
+    app.update();
+    let old = app.world().get::<GuiRootView>(owner).unwrap().0;
+    app.insert_resource(Target(owner))
+        .add_systems(Update, replace.in_set(crate::GuiSystems::PostLayout));
+    app.update();
+    assert!(!app.world().resource::<GuiTooltipState>().is_showing());
+    assert!(app.world().resource::<GuiTooltipState>().is_requested());
+    app.update();
+    let new = app.world().get::<GuiRootView>(owner).unwrap().0;
+    assert_ne!(old, new);
+    assert_eq!(view(&app), new);
+    assert!(app.world().resource::<GuiTooltipState>().is_showing());
+    assert_eq!(at(&app), Vec2::new(80., 90.));
+}
+
+#[test]
+fn post_layout_custom_tooltip_after_reinsertion_uses_only_the_new_instance() {
+    #[derive(Resource)]
+    struct Replace {
+        owner: Entity,
+        window: bool,
+        done: bool,
+    }
+    fn reinsert(world: &mut World) {
+        let state = world.resource::<Replace>();
+        if state.done {
+            return;
+        }
+        let owner = state.owner;
+        if state.window {
+            let source = world.get::<windows::FairyGuiWindow>(owner).unwrap().clone();
+            world
+                .entity_mut(owner)
+                .remove::<windows::FairyGuiWindow>()
+                .insert(source);
+        } else {
+            let source = world.get::<FairyGuiRoot>(owner).unwrap().clone();
+            world
+                .entity_mut(owner)
+                .remove::<FairyGuiRoot>()
+                .insert(source);
+        }
+        let mut state = SystemState::<GuiTooltip>::new(world);
+        assert!(
+            state
+                .get_mut(world)
+                .unwrap()
+                .show_view(owner, Some(Vec2::new(36., 48.)))
+        );
+        world.resource_mut::<Replace>().done = true;
+    }
+    for window in [false, true] {
+        let (mut app, asset, _) = fixture(true);
+        let owner = if window {
+            app.world_mut()
+                .spawn(windows::FairyGuiWindow::new(asset, "Component3"))
+                .id()
+        } else {
+            app.world_mut()
+                .spawn(FairyGuiRoot::new(asset, "Component3"))
+                .id()
+        };
+        app.update();
+        let old = app.world().get::<GuiRootView>(owner).unwrap().0;
+        app.insert_resource(Replace {
+            owner,
+            window,
+            done: false,
+        })
+        .add_systems(Update, reinsert.in_set(crate::GuiSystems::PostLayout));
+        app.update();
+        let state = app.world().resource::<GuiTooltipState>();
+        assert!(
+            state.is_requested() && !state.is_showing(),
+            "window={window}"
+        );
+        app.update();
+        let new = app.world().get::<GuiRootView>(owner).unwrap().0;
+        assert_ne!(new, old);
+        assert!(app.world().get_entity(old).is_err());
+        assert_eq!(view(&app), new);
+        assert!(app.world().resource::<GuiTooltipState>().is_showing());
+        assert_eq!(at(&app), Vec2::new(36., 48.));
+        app.update();
+        assert_eq!(view(&app), new);
+        assert!(app.world().resource::<GuiTooltipState>().is_showing());
+    }
+}

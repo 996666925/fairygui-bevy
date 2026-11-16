@@ -469,7 +469,11 @@ impl Plugin for FairyGuiPlugin {
                 properties::sync,
                 popup::sync_pending_popups,
                 runtime::global_wait::sync_global_wait,
-                runtime::tooltip::sync_tooltips,
+                (
+                    runtime::tooltip::prepare_owner_tooltips,
+                    runtime::tooltip::sync_tooltips,
+                )
+                    .chain(),
             )
                 .chain()
                 .in_set(SyncPhase::Materialize)

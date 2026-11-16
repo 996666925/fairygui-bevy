@@ -35,6 +35,8 @@ pub struct GuiTooltip<'w, 's> {
     objects: Query<'w, 's, &'static GObjectRef>,
     roots: Query<'w, 's, &'static FairyGuiRoot>,
     windows: Query<'w, 's, &'static windows::FairyGuiWindow>,
+    removed_roots: RemovedComponents<'w, 's, FairyGuiRoot>,
+    removed_windows: RemovedComponents<'w, 's, windows::FairyGuiWindow>,
 }
 impl std::fmt::Debug for GuiTooltip<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -69,16 +71,26 @@ impl GuiTooltip<'_, '_> {
             return false;
         }
         let source = owner_template(view, &self.roots, &self.windows);
-        let object = self
-            .objects
-            .get(view)
-            .ok()
-            .map(|reference| reference.0)
-            .or_else(|| match source.as_ref() {
-                Some(GuiOwnerTemplate::Root(_)) => self.runtime.ecs_root_object(view),
-                Some(GuiOwnerTemplate::Window(_)) => self.runtime.ecs_window_object(view),
-                None => None,
-            });
+        let (recent_removal, removals_before) = match source.as_ref() {
+            Some(GuiOwnerTemplate::Root(_)) => {
+                crate::ecs::removal_status(&self.removed_roots, view)
+            }
+            Some(GuiOwnerTemplate::Window(_)) => {
+                crate::ecs::removal_status(&self.removed_windows, view)
+            }
+            None => (false, 0),
+        };
+        let object = (!recent_removal)
+            .then(|| {
+                edit::resolve_object(
+                    &self.runtime,
+                    view,
+                    self.objects.get(view).ok(),
+                    self.roots.get(view).ok(),
+                    self.windows.get(view).ok(),
+                )
+            })
+            .flatten();
         if let Some(object) = object {
             if !self.runtime.store.contains(object)
                 || self
@@ -96,6 +108,8 @@ impl GuiTooltip<'_, '_> {
             entity: view,
             position,
             source,
+            removals_before,
+            wait_for_owner_sync: recent_removal,
         });
         true
     }
@@ -191,6 +205,8 @@ enum Request {
         entity: Entity,
         position: Option<Vec2>,
         source: Option<GuiOwnerTemplate>,
+        removals_before: usize,
+        wait_for_owner_sync: bool,
     },
 }
 struct Hover {
@@ -323,6 +339,18 @@ fn tooltip_position(mut point: Vec2, size: Vec2, viewport: Vec2) -> Vec2 {
     point
 }
 
+/// Owner lifecycle runs before this barrier. Requests made after a component
+/// reinsertion must not adopt the previous instance during PostLayout projection.
+pub(crate) fn prepare_owner_tooltips(mut runtime: NonSendMut<GuiRuntime>) {
+    if let Some(Request::View {
+        wait_for_owner_sync,
+        ..
+    }) = &mut runtime.tooltip.request
+    {
+        *wait_for_owner_sync = false;
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_tooltips(
     settings: Res<GuiTooltipSettings>,
@@ -332,11 +360,41 @@ pub(crate) fn sync_tooltips(
     state: Res<GuiInputState>,
     time: Res<Time>,
     objects: Query<&GObjectRef>,
-    roots: Query<&GuiRootInstance>,
     sources: Query<&FairyGuiRoot>,
     window_sources: Query<&windows::FairyGuiWindow>,
+    mut removed_roots: RemovedComponents<FairyGuiRoot>,
+    mut removed_windows: RemovedComponents<windows::FairyGuiWindow>,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
+    let removed_roots: Vec<_> = removed_roots
+        .read_with_id()
+        .map(|(entity, id)| (entity, id.id))
+        .collect();
+    let removed_windows: Vec<_> = removed_windows
+        .read_with_id()
+        .map(|(entity, id)| (entity, id.id))
+        .collect();
+    if let Some(Request::View {
+        entity,
+        source: Some(expected),
+        removals_before,
+        ..
+    }) = runtime.tooltip.request.as_ref()
+    {
+        let removed = match expected {
+            GuiOwnerTemplate::Root(_) => &removed_roots,
+            GuiOwnerTemplate::Window(_) => &removed_windows,
+        };
+        if removed
+            .iter()
+            .any(|&(owner, id)| owner == *entity && id >= *removals_before)
+            || owner_template(*entity, &sources, &window_sources)
+                .as_ref()
+                .is_none_or(|current| !current.same_template(expected))
+        {
+            runtime.hide_tooltip();
+        }
+    }
     runtime.cleanup_tooltips();
     let mut refresh = false;
     if runtime.tooltip.settings != *settings {
@@ -390,6 +448,15 @@ pub(crate) fn sync_tooltips(
     let Some(request) = runtime.tooltip.request.clone() else {
         return;
     };
+    if matches!(
+        request,
+        Request::View {
+            wait_for_owner_sync: true,
+            ..
+        }
+    ) {
+        return;
+    }
     if runtime.tooltip.shown.is_some() && !refresh {
         return;
     }
@@ -435,22 +502,16 @@ pub(crate) fn sync_tooltips(
             entity,
             position,
             source,
+            ..
         } => {
-            if let Some(expected) = source.as_ref()
-                && owner_template(entity, &sources, &window_sources)
-                    .as_ref()
-                    .is_none_or(|current| !current.same_template(expected))
-            {
-                runtime.hide_tooltip();
-                return;
-            }
-            let object = objects
-                .get(entity)
-                .map(|id| id.0)
-                .or_else(|_| roots.get(entity).map(|instance| instance.object))
-                .ok()
-                .or_else(|| runtime.ecs_window_object(entity));
-            let Some(pane) = object.filter(|pane| runtime.store.contains(*pane)) else {
+            let object = edit::resolve_object(
+                &runtime,
+                entity,
+                objects.get(entity).ok(),
+                sources.get(entity).ok(),
+                window_sources.get(entity).ok(),
+            );
+            let Some(pane) = object else {
                 if source.is_none() {
                     runtime.hide_tooltip();
                     runtime.tooltip.error = Some(GuiTooltipError::InvalidView(entity));

@@ -549,6 +549,22 @@ impl GuiObjectInfo {
     }
 }
 
+// Capture the removal stream boundary without consuming it. A request issued
+// after remove+insert belongs to the new component, even with identical templates.
+pub(crate) fn removal_status<T: Component>(
+    removed: &RemovedComponents<T>,
+    owner: Entity,
+) -> (bool, usize) {
+    removed.messages().map_or((false, 0), |messages| {
+        let count = messages.oldest_message_count() + messages.len();
+        let recent = messages.get_cursor().read(messages).any(|removed| {
+            let entity: Entity = removed.clone().into();
+            entity == owner
+        });
+        (recent, count)
+    })
+}
+
 /// Read FairyGUI identities and find control entities using only ECS queries.
 ///
 /// Every method accepts either a root owner or a control view entity. Hierarchy
