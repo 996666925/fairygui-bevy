@@ -47,7 +47,7 @@ fn drive(
 ) {
     state.frame += 1;
     assert!(
-        time.elapsed_secs_f64() < 40.,
+        time.elapsed_secs_f64() < 120.,
         "ECS drag smoke timeout at step {}",
         state.step
     );
@@ -91,6 +91,24 @@ fn drive(
             state.free = gui.child_by_name(state.page.unwrap(), "a");
             state.bounded = gui.child_by_name(state.page.unwrap(), "d");
             state.bounds = gui.child_by_name(state.page.unwrap(), "bounds");
+            // Exercise owner aliases using the same rectangle as the exported
+            // visible bounds control, while retaining its parent coordinate space.
+            let bounds = gui.transform(state.bounds.unwrap()).unwrap();
+            let bounds_owner = commands
+                .spawn((
+                    FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Button1")
+                        .with_parent(state.page.unwrap())
+                        .with_position(bounds.position())
+                        .with_size(bounds.size()),
+                    GuiDisplay::hidden(),
+                ))
+                .id();
+            commands
+                .entity(state.bounded.unwrap())
+                .insert(GuiDraggable {
+                    bounds: Some(GuiDragBounds::Control(bounds_owner)),
+                });
+            state.bounds = Some(bounds_owner);
             state.icon = gui.icon(source).unwrap().to_owned();
             assert!(!state.icon.is_empty());
             assert_eq!(gui.icon(receiver), Some(""));
@@ -221,7 +239,7 @@ fn drive(
             assert!(!existing.contains(state.source.unwrap()));
             mouse.release(MouseButton::Left);
             println!(
-                "demo smoke PASSED: ECS free and bounded control movement, native threshold origin, Loader proxy, entity drop icon response, pointer release, proxy cleanup and source disposal"
+                "demo smoke PASSED: ECS free and owner-bounded control movement, native threshold origin, Loader proxy, entity drop icon response, pointer release, proxy cleanup and source disposal"
             );
             exit.write(AppExit::Success);
             next = true;

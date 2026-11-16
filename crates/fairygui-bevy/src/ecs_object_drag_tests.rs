@@ -229,6 +229,88 @@ fn draggable_control_bounds_and_live_stage_bounds_clamp_and_component_removal_ca
 }
 
 #[test]
+fn draggable_bounds_accept_root_and_window_owners_and_reject_stale_templates() {
+    for window_bounds in [false, true] {
+        let (mut app, window, page, control, _) = fixture();
+        app.world_mut()
+            .get_mut::<Window>(window)
+            .unwrap()
+            .resolution
+            .set(12000., 12000.);
+        let asset = app.world().get::<FairyGuiRoot>(page).unwrap().asset.clone();
+        let owner = if window_bounds {
+            let mut source = crate::FairyGuiWindow::new(asset, "WindowA");
+            source.center_on_create = false;
+            app.world_mut().spawn(source).id()
+        } else {
+            app.world_mut()
+                .spawn(FairyGuiRoot::new(asset, "Button1"))
+                .id()
+        };
+        app.update();
+        {
+            let mut bounds = app.world_mut().gui_mut(owner).unwrap();
+            bounds.set_position(Vec2::new(30., 40.));
+            bounds.set_size(Vec2::new(400., 300.));
+            bounds.set_scale(Vec2::new(1.5, 2.));
+        }
+        app.world_mut().entity_mut(control).insert(GuiDraggable {
+            bounds: Some(GuiDragBounds::Control(owner)),
+        });
+        app.update();
+        let object = app.world().get::<GObjectRef>(control).unwrap().0;
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert_eq!(
+            runtime
+                .object_drag_bindings
+                .get(&object)
+                .and_then(|binding| binding.bounds),
+            Some(fairygui_core::Rect::new(30., 40., 600., 600.)),
+            "window={window_bounds}"
+        );
+        mouse(&mut app, true);
+        move_mouse(&mut app, window, Vec2::splat(40.));
+        assert!(
+            app.world()
+                .get::<GuiObjectDragState>(control)
+                .unwrap()
+                .is_dragging()
+        );
+        move_mouse(&mut app, window, Vec2::splat(9000.));
+        let runtime = app.world().non_send::<GuiRuntime>();
+        let moving = runtime.store().object(object).unwrap();
+        assert_eq!(moving.x() + moving.width(), 630.);
+        assert_eq!(moving.y() + moving.height(), 640.);
+        // Removal + identical reinsertion must stop the active gesture before
+        // lifecycle cleanup creates the next bounds instance.
+        if window_bounds {
+            let source = app
+                .world()
+                .get::<crate::FairyGuiWindow>(owner)
+                .unwrap()
+                .clone();
+            app.world_mut()
+                .entity_mut(owner)
+                .remove::<crate::FairyGuiWindow>()
+                .insert(source);
+        } else {
+            let source = app.world().get::<FairyGuiRoot>(owner).unwrap().clone();
+            app.world_mut()
+                .entity_mut(owner)
+                .remove::<FairyGuiRoot>()
+                .insert(source);
+        }
+        use bevy::ecs::system::RunSystemOnce;
+        app.world_mut()
+            .run_system_once(prepare_object_drags)
+            .unwrap();
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert!(!runtime.object_drag_bindings.contains_key(&object));
+        assert!(!runtime.active_object_drags.contains_key(&object));
+    }
+}
+
+#[test]
 fn draggable_hidden_offstage_modal_and_reparented_sources_stop_without_resuming() {
     for policy in 0..5 {
         let (mut app, window, page, control, _) = fixture();

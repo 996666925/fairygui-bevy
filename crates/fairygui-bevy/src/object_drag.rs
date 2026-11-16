@@ -17,8 +17,9 @@ pub struct GuiDraggable {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GuiDragBounds {
     Stage(fairygui_core::geom::Rect),
-    /// A control view's rectangle, converted to stage coordinates each frame.
-    /// Missing/unresolvable bounds disable movement until the target is ready.
+    /// A control view or current root/window owner's rectangle, converted to
+    /// stage coordinates each frame. Missing/unresolvable bounds disable
+    /// movement until ready; invalidation ends an active gesture.
     Control(Entity),
 }
 
@@ -56,6 +57,7 @@ pub(crate) fn prepare_object_drags(
         Option<&GuiDraggable>,
         Has<GuiDragSource>,
     )>,
+    resolver: edit::GuiObjectResolver,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     runtime.object_drag_bindings.clear();
@@ -72,10 +74,10 @@ pub(crate) fn prepare_object_drags(
                 None => Some(None),
                 Some(GuiDragBounds::Stage(rect)) => Some(Some(rect)),
                 Some(GuiDragBounds::Control(entity)) => {
-                    controls.get(entity).ok().and_then(|(_, reference, ..)| {
-                        let object = runtime.store().object(reference.0)?;
+                    resolver.object(&runtime, entity).and_then(|target| {
+                        let object = runtime.store().object(target)?;
                         let rect = runtime.store().local_to_global_rect(
-                            reference.0,
+                            target,
                             fairygui_core::geom::Rect::new(0., 0., object.width(), object.height()),
                         )?;
                         let rect = if let Some(stage) = runtime.root_container() {

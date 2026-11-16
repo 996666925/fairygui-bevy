@@ -611,7 +611,9 @@ commands.entity(bounded).insert(GuiDraggable {
 ```
 
 `GuiDragBounds::Stage(rect)` 使用固定舞台逻辑坐标；`Control(entity)` 随边界控件的
-位置和尺寸更新。`GuiObjectDragState` 提供拖动中和所属触摸 ID；在控件上观察
+位置、尺寸、缩放和坐标变换更新，接受视图、根拥有者或窗口拥有者。
+边界未就绪时等待；换模板、移除配置或销毁后取消正在进行的拖动，新边界就绪后需重新按下。
+`GuiObjectDragState` 提供拖动中和所属触摸 ID；在控件上观察
 `GuiDragStart`、`GuiDragMove`、`GuiDragEnd` 响应生命周期。超过阈值时记录
 起点，从后续位移开始移动，位置遵循原版整数取整，超大控件固定到边界起点。
 移除组件或失去输入资格会结束拖动；同一控件只允许一个指针操作。Basics 的 A
