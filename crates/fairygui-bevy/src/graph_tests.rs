@@ -127,16 +127,17 @@ fn changing_polygon_to_basic_or_empty_releases_surface_and_invalid_geometry_is_b
         );
     app.update();
     assert!(app.world().get_entity(surface).is_err());
-    assert!(
-        app.world()
-            .get::<GraphRender>(root)
-            .unwrap()
-            .surface
-            .is_none()
-    );
+    let rectangle = app
+        .world()
+        .get::<GraphRender>(root)
+        .unwrap()
+        .surface
+        .unwrap();
+    assert_ne!(rectangle, surface);
+    assert!(app.world().get::<BackgroundColor>(root).is_none());
     assert_eq!(
         app.world()
-            .get::<BackgroundColor>(root)
+            .get::<BackgroundColor>(rectangle)
             .unwrap()
             .0
             .to_linear(),

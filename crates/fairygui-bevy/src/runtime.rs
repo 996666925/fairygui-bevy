@@ -2530,22 +2530,8 @@ fn spawn_object(
 
     // Fill masks crop the drawn image via UiMaterial; layout/input stay full-size.
 
-    // Rectangles use their node; circles/polygons receive drawing surfaces in Sync.
-    let graph = match gobject.control() {
-        ControlData::Graph(data) if data.graph_kind() == fairygui_core::widget::GraphType::Rect => {
-            Some(backend::graph_style(data))
-        }
-        _ => None,
-    };
-
-    // 矩形与描边都是节点自身的属性：圆角决定是直角还是圆角矩形，
-    // 边框宽度决定描边画不画得出来（宽度为零就没有线）。
-    if let Some(style) = &graph {
-        if style.stroke_width > 0.0 {
-            node.border = UiRect::all(Val::Px(style.stroke_width));
-        }
-        node.border_radius = style.radius;
-    }
+    // Graph paint belongs to independent surfaces. CSS borders on this logical
+    // view would enlarge small controls and offset every application child.
 
     let name = if gobject.name().is_empty() {
         gobject.kind().as_str().to_string()
@@ -2577,12 +2563,6 @@ fn spawn_object(
     if let Some(selection) = store.list_selections(object) {
         entity.insert(GuiListSelection(selection));
     }
-    // 图形控件的外观：填充走背景色，描边走边框，形状由圆角决定。
-    if let Some(style) = &graph {
-        entity.insert(BackgroundColor(style.fill));
-        entity.insert(BorderColor::all(style.stroke));
-    }
-
     // 图片：直接以子区域方式引用图集纹理。
     if matches!(gobject.control(), ControlData::Image(_))
         && let Some(item_id) = gobject.package_item_id()

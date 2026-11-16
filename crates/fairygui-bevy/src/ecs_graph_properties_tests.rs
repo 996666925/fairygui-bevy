@@ -56,6 +56,113 @@ fn surface(app: &mut App, graph: Entity) -> Option<Entity> {
 }
 
 #[test]
+fn graph_strokes_preserve_logical_layout_size_and_application_child_origin() {
+    use bevy::camera::{ComputedCameraValues, RenderTargetInfo, Viewport};
+    for scale in [1., 2.] {
+        let (mut app, owner, asset) = fixture(false);
+        app.init_asset::<TextureAtlasLayout>().add_plugins((
+            bevy::input::InputPlugin,
+            bevy::transform::TransformPlugin,
+            bevy::text::TextPlugin,
+            bevy::picking::PickingPlugin,
+            bevy::picking::InteractionPlugin,
+            bevy::ui::UiPlugin,
+        ));
+        app.world_mut().resource_mut::<UiScale>().0 = scale;
+        app.world_mut().spawn((
+            Camera2d,
+            Camera {
+                computed: ComputedCameraValues {
+                    target_info: Some(RenderTargetInfo {
+                        physical_size: UVec2::new(1280, 720),
+                        scale_factor: 1.,
+                    }),
+                    ..default()
+                },
+                viewport: Some(Viewport {
+                    physical_size: UVec2::new(1280, 720),
+                    ..default()
+                }),
+                ..default()
+            },
+        ));
+        load(&mut app, &asset);
+        app.update();
+        let graph = graph(&mut app, owner);
+        let child = app
+            .world_mut()
+            .spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(7.),
+                    top: Val::Px(11.),
+                    width: Val::Px(4.),
+                    height: Val::Px(6.),
+                    ..default()
+                },
+                ChildOf(graph),
+            ))
+            .id();
+        {
+            let mut style = app.world_mut().get_mut::<GuiGraph>(graph).unwrap();
+            style.kind = GraphType::Rect;
+            style.line_size = 10;
+            style.line_color = Color::WHITE;
+            style.fill_color = Color::srgb(1., 0., 0.);
+        }
+        for size in [
+            Vec2::new(100., 80.),
+            Vec2::new(2., 3.),
+            Vec2::new(0., 40.),
+            Vec2::new(40., 0.),
+            Vec2::new(60., 70.),
+        ] {
+            app.world_mut().get_mut::<GuiTransform>(graph).unwrap().size = size;
+            app.update();
+            let node = app.world().get::<ComputedNode>(graph).unwrap();
+            let actual = node.size() * node.inverse_scale_factor();
+            assert!(
+                actual.abs_diff_eq(size, 0.01),
+                "scale={scale}, declared={size:?}, actual={actual:?}"
+            );
+            let parent_transform = app.world().get::<UiGlobalTransform>(graph).unwrap();
+            let expected = parent_transform.transform_point2(
+                node.border_box().min + Vec2::new(7., 11.) / node.inverse_scale_factor(),
+            );
+            let child_node = app.world().get::<ComputedNode>(child).unwrap();
+            let actual = app
+                .world()
+                .get::<UiGlobalTransform>(child)
+                .unwrap()
+                .transform_point2(child_node.border_box().min);
+            assert!(
+                actual.abs_diff_eq(expected, 0.6),
+                "scale={scale}, size={size:?}, child={actual:?}, expected={expected:?}"
+            );
+            if size.min_element() > 0. {
+                let paint = surface(&mut app, graph).unwrap();
+                let expected = app
+                    .world()
+                    .get::<UiGlobalTransform>(graph)
+                    .unwrap()
+                    .translation;
+                let actual = app
+                    .world()
+                    .get::<UiGlobalTransform>(paint)
+                    .unwrap()
+                    .translation;
+                assert!(
+                    actual.abs_diff_eq(expected, 0.6),
+                    "scale={scale}, size={size:?}, paint center={actual:?}, expected={expected:?}"
+                );
+            } else {
+                assert!(surface(&mut app, graph).is_none());
+            }
+        }
+    }
+}
+
+#[test]
 fn initialize_graph_configuration_preserves_native_nan_defaults_and_stable_geometry_snapshots() {
     fn initialize(
         roots: Query<Entity, Added<GuiRootView>>,
@@ -313,11 +420,7 @@ fn semi_transparent_graph_fill_owns_alpha_and_redraws_reset_subsequent_opacity_e
             0.5
         );
         if matches!(kind, GraphType::Rect | GraphType::Ellipse) {
-            let drawn = if kind == GraphType::Rect {
-                graph
-            } else {
-                surface(&mut app, graph).unwrap()
-            };
+            let drawn = surface(&mut app, graph).unwrap();
             assert_eq!(
                 app.world()
                     .get::<BackgroundColor>(drawn)

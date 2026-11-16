@@ -130,7 +130,7 @@ pub(crate) fn sync_graphs(
     materials: Option<ResMut<Assets<PolygonMaterial>>>,
     buffers: Option<ResMut<Assets<ShaderBuffer>>>,
     roots: Query<(Entity, &GObjectRef, Option<&GraphRender>), Without<GraphSurface>>,
-    mut circles: Query<(&mut BackgroundColor, &mut BorderColor), With<GraphSurface>>,
+    mut basic_surfaces: Query<(&mut BackgroundColor, &mut BorderColor), With<GraphSurface>>,
 ) {
     let (Some(mut materials), Some(mut buffers)) = (materials, buffers) else {
         return;
@@ -153,9 +153,9 @@ pub(crate) fn sync_graphs(
                 material.uniform.fill = fill;
                 material.uniform.stroke = stroke;
             }
-            if data.graph_kind() == GraphType::Ellipse
+            if data.graph_kind().is_basic_shape()
                 && let Some(surface) = previous.and_then(|old| old.surface)
-                && let Ok((mut background, mut border)) = circles.get_mut(surface)
+                && let Ok((mut background, mut border)) = basic_surfaces.get_mut(surface)
             {
                 let fill = Color::linear_rgba(fill.x, fill.y, fill.z, fill.w);
                 let stroke =
@@ -169,7 +169,7 @@ pub(crate) fn sync_graphs(
             }
             continue;
         }
-        if data.graph_kind() == GraphType::Ellipse {
+        if data.graph_kind().is_basic_shape() {
             commands
                 .entity(entity)
                 .remove::<(BackgroundColor, BorderColor)>();
@@ -180,8 +180,17 @@ pub(crate) fn sync_graphs(
                     node.border = UiRect::ZERO;
                     node.border_radius = BorderRadius::ZERO;
                 });
-            let bounds = fairygui_core::graph::circle_bounds(size);
-            let old_circle = previous
+            let bounds = if data.graph_kind() == GraphType::Ellipse {
+                fairygui_core::graph::circle_bounds(size)
+            } else {
+                (size.width > 0. && size.height > 0.).then_some(fairygui_core::geom::Rect::new(
+                    0.,
+                    0.,
+                    size.width,
+                    size.height,
+                ))
+            };
+            let old_basic = previous
                 .filter(|old| old.material.is_none())
                 .and_then(|old| old.surface);
             if let Some(old) = previous
@@ -191,21 +200,28 @@ pub(crate) fn sync_graphs(
                 commands.entity(old).despawn();
             }
             let surface = bounds.map(|bounds| {
-                let canvas = Vec4::new(bounds.x, bounds.y, bounds.width, bounds.height);
+                let style = backend::graph_style(data);
+                // Taffy cannot make a border box narrower than its two borders.
+                // Keep that paint overflow centered on the declared rectangle;
+                // it must never enlarge or shift the logical view itself.
+                let width = bounds.width.max(style.stroke_width * 2.);
+                let height = bounds.height.max(style.stroke_width * 2.);
+                let canvas = Vec4::new(
+                    bounds.x + (bounds.width - width) * 0.5,
+                    bounds.y + (bounds.height - height) * 0.5,
+                    width,
+                    height,
+                );
                 let mut node = surface_node(canvas);
-                node.border = UiRect::all(Val::Px(if data.has_stroke() {
-                    data.line_size as f32
-                } else {
-                    0.
-                }));
-                node.border_radius = BorderRadius::MAX;
-                let surface = old_circle.unwrap_or_else(|| {
+                node.border = UiRect::all(Val::Px(style.stroke_width));
+                node.border_radius = style.radius;
+                let surface = old_basic.unwrap_or_else(|| {
                     commands
                         .spawn((
                             GObjectRef(object.0),
                             ChildOf(entity),
                             ZIndex(-1),
-                            Name::new("FairyGUI circle surface"),
+                            Name::new("FairyGUI shape surface"),
                             bevy::picking::hover::Hovered::default(),
                             bevy::picking::Pickable {
                                 should_block_lower: false,
@@ -224,7 +240,7 @@ pub(crate) fn sync_graphs(
                 surface
             });
             if bounds.is_none()
-                && let Some(old) = old_circle
+                && let Some(old) = old_basic
             {
                 commands.entity(old).despawn();
             }
@@ -243,28 +259,14 @@ pub(crate) fn sync_graphs(
             if let Some(surface) = previous.and_then(|old| old.surface) {
                 commands.entity(surface).despawn();
             }
-            let style = backend::graph_style(data);
-            commands.entity(entity).insert((
-                BackgroundColor(if data.graph_kind().is_basic_shape() {
-                    style.fill
-                } else {
-                    Color::NONE
-                }),
-                BorderColor::all(style.stroke),
-            ));
-            // Only shape-owned fields change; layout/transform remain authoritative.
-            let border = if data.graph_kind().is_basic_shape() {
-                style.stroke_width
-            } else {
-                0.0
-            };
-            let radius = style.radius;
+            commands.entity(entity).insert(BackgroundColor(Color::NONE));
+            commands.entity(entity).remove::<BorderColor>();
             commands
                 .entity(entity)
                 .entry::<Node>()
                 .and_modify(move |mut node| {
-                    node.border = UiRect::all(Val::Px(border));
-                    node.border_radius = radius;
+                    node.border = UiRect::ZERO;
+                    node.border_radius = BorderRadius::ZERO;
                 });
             commands.entity(entity).insert(GraphRender {
                 data: data.clone(),

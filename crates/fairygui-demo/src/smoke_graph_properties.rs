@@ -63,6 +63,38 @@ fn click_at(
         expected,
     });
 }
+
+fn check_graph_layout(
+    graph: Entity,
+    child: Entity,
+    paint: Option<Entity>,
+    size: Vec2,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+) {
+    let (node, transform) = nodes.get(graph).unwrap();
+    let physical_size = size / node.inverse_scale_factor();
+    assert!(
+        node.size().abs_diff_eq(physical_size, 1.),
+        "graph layout was enlarged by its stroke"
+    );
+    let expected = transform
+        .transform_point2(node.border_box().min + Vec2::new(7., 11.) / node.inverse_scale_factor());
+    let (child_node, child_transform) = nodes.get(child).unwrap();
+    let actual = child_transform.transform_point2(child_node.border_box().min);
+    assert!(
+        actual.abs_diff_eq(expected, 1.),
+        "graph stroke shifted its application child: {actual:?} != {expected:?}"
+    );
+    if let Some(paint) = paint {
+        let (_, paint_transform) = nodes.get(paint).unwrap();
+        assert!(
+            paint_transform
+                .translation
+                .abs_diff_eq(transform.translation, 1.),
+            "graph paint must stay centered on its logical view"
+        );
+    }
+}
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn drive(
     mut state: ResMut<State>,
@@ -188,7 +220,21 @@ fn drive(
                 commands.entity(back).observe(clicked);
                 state.front = Some(front);
                 state.back = Some(back);
-                state.child = Some(commands.spawn((Node::default(), ChildOf(front))).id());
+                state.child = Some(
+                    commands
+                        .spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(7.),
+                                top: Val::Px(11.),
+                                width: Val::Px(4.),
+                                height: Val::Px(6.),
+                                ..default()
+                            },
+                            ChildOf(front),
+                        ))
+                        .id(),
+                );
                 next = true;
             }
             2 if elapsed >= 12 => {
@@ -346,7 +392,14 @@ fn drive(
             }
             13 if elapsed >= 12 => {
                 assert!(!entities.contains(state.drawing.unwrap()));
-                assert!(drawing(state.front.unwrap(), &faces).is_none());
+                state.drawing = Some(drawing(state.front.unwrap(), &faces).unwrap());
+                check_graph_layout(
+                    state.front.unwrap(),
+                    state.child.unwrap(),
+                    state.drawing,
+                    Vec2::new(220., 140.),
+                    &nodes,
+                );
                 commands
                     .spawn(Screenshot::primary_window())
                     .observe(save_to_disk(
@@ -470,7 +523,15 @@ fn drive(
             26 if elapsed >= 8 => {
                 let front = state.front.unwrap();
                 assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.25);
-                assert_eq!(backgrounds.get(front).unwrap().0.to_srgba().alpha, 0.25);
+                let surface = drawing(front, &faces).unwrap();
+                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.25);
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    ui.p0().transform(front).unwrap().size(),
+                    &nodes,
+                );
                 commands
                     .spawn(Screenshot::primary_window())
                     .observe(save_to_disk(
@@ -479,10 +540,70 @@ fn drive(
                 next = true;
             }
             27 if elapsed >= 8 => {
-                commands.entity(state.owner.unwrap()).despawn();
+                let front = state.front.unwrap();
+                ui.p1().get_mut(front).unwrap().line_size = 10;
+                let mut transforms = ui.p2();
+                let mut transform = transforms.get_mut(front).unwrap();
+                transform.size = Vec2::new(2., 3.);
+                transform.rotation = 17.;
+                transform.scale = Vec2::new(1.2, 0.8);
+                transform.pivot = Vec2::splat(0.5);
                 next = true;
             }
             28 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(2., 3.),
+                    &nodes,
+                );
+                next = true;
+            }
+            29 => {
+                ui.p2().get_mut(state.front.unwrap()).unwrap().size = Vec2::new(0., 40.);
+                next = true;
+            }
+            30 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert!(drawing(front, &faces).is_none());
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    None,
+                    Vec2::new(0., 40.),
+                    &nodes,
+                );
+                next = true;
+            }
+            31 => {
+                ui.p2().get_mut(state.front.unwrap()).unwrap().size = Vec2::new(60., 70.);
+                next = true;
+            }
+            32 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(
+                        "target/fairygui-demo-graph-properties-layout.png",
+                    ));
+                next = true;
+            }
+            33 if elapsed >= 8 => {
+                commands.entity(state.owner.unwrap()).despawn();
+                next = true;
+            }
+            34 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -492,7 +613,7 @@ fn drive(
                 }
                 assert_eq!(clicks.0.len(), 8);
                 println!(
-                    "demo smoke PASSED: writable ECS graph shape/style/color, native expanded circle and out-of-rectangle hits, concave pass-through, regular polygon NaN distances/resize, rounded DrawPath hit policy, Empty transparency, native fill alpha and redraw resets, retained polygon surface and disposal"
+                    "demo smoke PASSED: graph shapes and contour hits, native fill alpha and redraw resets, stroke-free logical layout and child origin, centered thick strokes, zero-size recovery, transformed layout and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;
