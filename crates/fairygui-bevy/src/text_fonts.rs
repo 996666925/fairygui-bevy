@@ -21,12 +21,56 @@ pub(crate) struct TextFontBinding {
     default_font: Option<Handle<Font>>,
     raster: bevy::text::FontSource,
     request: Option<Handle<Font>>,
+    editing: bool,
 }
 
 impl TextFontBinding {
     pub(super) fn raster(&self) -> &bevy::text::FontSource {
         &self.raster
     }
+
+    pub(super) fn editing(&self) -> bool {
+        self.editing
+    }
+
+    fn for_input_focus(mut self, editing: bool) -> Self {
+        self.editing = editing && (self.bitmap.is_some() || self.rich);
+        if self.editing {
+            self.bitmap = None;
+            self.rich = false;
+        }
+        self
+    }
+}
+
+/// A materialized native input can acquire focus before its canvas renderer is
+/// replaced by the plain editing surface.
+#[derive(Component, Debug)]
+pub(crate) struct InputPresentation;
+
+#[derive(Component)]
+struct SuspendedInputEditor(bevy::text::EditableText);
+
+fn prepare_editor(commands: &mut Commands, entity: Entity, source: &str) {
+    let source = source.to_owned();
+    commands.queue(move |world: &mut World| {
+        if world.get::<bevy::text::EditableText>(entity).is_none() {
+            let editor = world
+                .entity_mut(entity)
+                .take::<SuspendedInputEditor>()
+                .map_or_else(|| bevy::text::EditableText::new(&source), |saved| saved.0);
+            world.entity_mut(entity).insert(editor);
+        }
+        if let Some(mut editor) = world.get_mut::<bevy::text::EditableText>(entity) {
+            if editor.editor.raw_text() != source {
+                editor.editor.set_text(&source);
+            }
+            // A new TextLayoutInfo needs glyphs even when the editor's text and
+            // selected range have not changed across a renderer replacement.
+            let scale = editor.editor.get_scale();
+            editor.editor.set_scale(scale);
+        }
+    });
 }
 
 fn raster_font(
@@ -153,6 +197,7 @@ fn binding(
         default_font: font.cloned(),
         raster,
         request,
+        editing: false,
     }
 }
 
@@ -168,7 +213,7 @@ pub(super) fn display_text(object: &fairygui_core::GObject, text: &str) -> Strin
     }
 }
 
-pub(super) fn template_text(object: &fairygui_core::GObject, text: &str) -> String {
+pub(crate) fn template_text(object: &fairygui_core::GObject, text: &str) -> String {
     object
         .control()
         .as_text_field()
@@ -222,19 +267,25 @@ pub(super) fn spawn_text(
     image_assets: &Assets<Image>,
     font: Option<&Handle<Font>>,
     text: &str,
+    editing: bool,
 ) -> Vec<Entity> {
     let data = object.control().as_text_field().unwrap();
     let input_text = matches!(object.control(), ControlData::TextInput(_))
         .then(|| fairygui_core::text::input::normalize_input_lines(text, !data.single_line));
     let text = input_text.as_deref().unwrap_or(text);
-    let selected = binding(object, asset, assets, font, text, asset_server, None);
+    let selected = binding(object, asset, assets, font, text, asset_server, None)
+        .for_input_focus(editing && matches!(object.control(), ControlData::TextInput(_)));
+    if matches!(object.control(), ControlData::TextInput(_)) {
+        commands.entity(entity).insert(InputPresentation);
+    }
     let display = display_text(object, text);
     let source = template_text(object, text);
     let text = display.as_str();
-    if let Some((source, bitmap)) = data
-        .font
-        .as_deref()
-        .and_then(|name| resolve_bitmap_font(asset, assets, name))
+    if !selected.editing
+        && let Some((source, bitmap)) = data
+            .font
+            .as_deref()
+            .and_then(|name| resolve_bitmap_font(asset, assets, name))
     {
         if data.ubb_enabled || data.html_enabled {
             bitmap_rich_text::spawn(
@@ -311,10 +362,7 @@ pub(super) fn spawn_text(
             root.insert(Underline);
         }
         if let ControlData::TextInput(input) = object.control() {
-            let mut editable = bevy::text::EditableText::new(&source);
-            editable.allow_newlines = !data.single_line;
             root.insert((
-                editable,
                 bevy::text::TextCursorStyle {
                     color: backend::to_bevy_color(data.color),
                     ..default()
@@ -330,6 +378,7 @@ pub(super) fn spawn_text(
             // the static layout flags lets text_system clear the editor's
             // selection_rects whenever the node or text style changes.
             root.remove::<bevy::ui::widget::TextNodeFlags>();
+            prepare_editor(commands, entity, &source);
         }
         Vec::new()
     }
@@ -376,7 +425,8 @@ pub(crate) fn sync_text_fonts(
             &text,
             &asset_server,
             Some(&fonts),
-        );
+        )
+        .for_input_focus(runtime.focused_input() == Some(owner.0));
         if *previous == next {
             continue;
         }
@@ -417,6 +467,17 @@ pub(crate) fn sync_text_fonts(
         // Bevy required components outlive removal of Text. Reclaim paragraph
         // geometry/measure state too, or old raster glyphs and intrinsic sizing
         // can remain active beside the new bitmap quads.
+        let suspend = matches!(object.control(), ControlData::TextInput(_))
+            && (next.bitmap.is_some() || next.rich);
+        if suspend {
+            commands.queue(move |world: &mut World| {
+                if let Some(editor) = world.entity_mut(entity).take::<bevy::text::EditableText>() {
+                    world
+                        .entity_mut(entity)
+                        .insert(SuspendedInputEditor(editor));
+                }
+            });
+        }
         commands
             .entity(entity)
             .remove::<(
@@ -427,16 +488,12 @@ pub(crate) fn sync_text_fonts(
                 bevy::text::LineHeight,
                 bevy::text::LetterSpacing,
                 Underline,
-                bevy::text::EditableText,
-                InputTextState,
-                InputEditPolicy,
                 bevy::text::TextCursorStyle,
             )>()
             .remove::<(
                 ComputedTextBlock,
                 bevy::text::TextLayoutInfo,
                 bevy::ui::widget::TextNodeFlags,
-                bevy::ui::ContentSize,
                 FontHinting,
                 BitmapGlyphs,
                 BitmapDecorations,
@@ -446,7 +503,10 @@ pub(crate) fn sync_text_fonts(
                 crate::runtime::text_measure::fit::FontMetrics,
                 crate::runtime::text_measure::fit::RasterFit,
                 crate::runtime::text_measure::ellipsis::EllipsisState,
-            )>();
+            )>()
+            // Bevy's layout query requires ContentSize even for bitmap nodes.
+            // Reset the old text measure without removing the node from layout.
+            .insert(bevy::ui::ContentSize::default());
         node.padding = UiRect::ZERO;
         let images = spawn_text(
             &mut commands,
@@ -459,6 +519,7 @@ pub(crate) fn sync_text_fonts(
             &image_assets,
             runtime.font.as_ref(),
             &text,
+            runtime.focused_input() == Some(owner.0),
         );
         let parent = object.parent().and_then(|id| runtime.entity_of(id));
         for image in images {

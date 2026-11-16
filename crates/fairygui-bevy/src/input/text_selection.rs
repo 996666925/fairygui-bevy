@@ -2,6 +2,120 @@
 use super::*;
 use bevy::text::{EditableText, TextEdit, TextLayout, TextLayoutInfo};
 
+#[derive(Debug)]
+pub(super) struct PendingPress {
+    pub entity: Entity,
+    pub window: Entity,
+    pub position: Vec2,
+    pub extend: bool,
+    pub clicks: u8,
+}
+
+/// A bitmap/styled input first replaces its canvas renderer. Resolve the initial
+/// press against that frame's editing viewport, never the old glyph geometry.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn apply_pending_press(
+    mut state: ResMut<InputRouter>,
+    focus: Res<bevy::input_focus::InputFocus>,
+    runtime: NonSend<GuiRuntime>,
+    views: PointerViews,
+    windows: Query<&Window>,
+    mut editors: Query<
+        (
+            &GObjectRef,
+            &mut EditableText,
+            &ComputedNode,
+            &UiGlobalTransform,
+            &TextLayout,
+            Option<&crate::runtime::InputPasswordView>,
+        ),
+        With<crate::runtime::InputEditPolicy>,
+    >,
+    masks: Query<&EditableText, Without<crate::runtime::InputEditPolicy>>,
+    fonts: Option<ResMut<bevy::text::FontCx>>,
+    layouts: Option<ResMut<bevy::text::LayoutCx>>,
+) {
+    let Some(press) = state.pending_text_press.take() else {
+        return;
+    };
+    if focus.get() != Some(press.entity) {
+        return;
+    }
+    let Ok(window) = windows.get(press.window) else {
+        return;
+    };
+    let Ok((owner, mut editor, node, transform, text_layout, password)) =
+        editors.get_mut(press.entity)
+    else {
+        return;
+    };
+    if !window.focused || !eligible(&runtime, owner.0) || editor.is_composing() {
+        return;
+    }
+    let Some(inverse) = transform.try_inverse() else {
+        return;
+    };
+    let (Some(mut fonts), Some(mut layouts)) = (fonts, layouts) else {
+        return;
+    };
+    editor.editor.refresh_layout(&mut fonts, &mut layouts.0);
+    let display = password
+        .and_then(|view| masks.get(view.0).ok())
+        .unwrap_or(&editor);
+    let Some(layout) = display.editor.try_layout() else {
+        return;
+    };
+    let info = TextLayoutInfo {
+        size: Vec2::new(layout.full_width(), layout.height()),
+        scale_factor: layout.scale(),
+        ..default()
+    };
+    let Some(object) = runtime.store().object(owner.0) else {
+        return;
+    };
+    let Some(data) = object.control().as_text_field() else {
+        return;
+    };
+    let gutter =
+        if !matches!(data.auto_size, 3 | 4) && runtime.text_measurer.borrow().contains(owner.0) {
+            2.
+        } else {
+            0.
+        };
+    // Center/right and vertical alignment change when raw markup replaces the
+    // short canvas text. Predict the final inset from the new editor layout.
+    let mut projected = *node;
+    crate::backend::align_text_block(
+        object,
+        data,
+        &info,
+        text_layout,
+        &mut Node::default(),
+        &mut projected,
+        gutter,
+    );
+    let size = projected.content_box().size();
+    if editor.viewport.size != size {
+        editor.viewport.size = size;
+        editor.editor.set_width(Some(size.x));
+    }
+    let point = inverse.transform_point2(views.physical_position(
+        press.entity,
+        press.position,
+        window.scale_factor(),
+    )) - projected.content_box().min
+        + editor.viewport.offset;
+    editor.queue_edit(if press.extend {
+        TextEdit::ShiftClickExtension(point)
+    } else if press.clicks == 2 {
+        TextEdit::SelectWordAtPoint(point)
+    } else if press.clicks == 3 {
+        TextEdit::SelectAll
+    } else {
+        TextEdit::MoveToPoint(point)
+    });
+}
+
 fn scroll_axis(overflow: f32, size: f32, dt: f32) -> f32 {
     if size <= 0. || overflow == 0. {
         return 0.;
@@ -117,7 +231,11 @@ pub(super) fn autoscroll(
 pub(super) fn install(app: &mut App) {
     app.add_systems(
         PostUpdate,
-        (autoscroll, crate::runtime::apply_selection_edits)
+        (
+            apply_pending_press,
+            autoscroll,
+            crate::runtime::apply_selection_edits,
+        )
             .chain()
             .in_set(bevy::text::EditableTextSystems)
             .after(crate::runtime::prepare_password_layout)

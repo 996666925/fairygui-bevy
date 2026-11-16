@@ -80,13 +80,15 @@ pub(crate) fn sync_input_prompts(
         let own = runtime
             .asset_handle_for(owner.0)
             .and_then(|h| assets.get(&h));
-        let bitmap = own.and_then(|asset| {
-            input
-                .text_field
-                .font
-                .as_deref()
-                .and_then(|name| text_fonts::resolve_bitmap_font(asset, &assets, name))
-        });
+        let bitmap = own
+            .filter(|_| font.is_none_or(|font| !font.editing()))
+            .and_then(|asset| {
+                input
+                    .text_field
+                    .font
+                    .as_deref()
+                    .and_then(|name| text_fonts::resolve_bitmap_font(asset, &assets, name))
+            });
         let mut data = input.text_field.clone();
         data.text.clear();
         let snapshot = PromptSnapshot {

@@ -86,6 +86,28 @@ input and before UI measurement. Unchanged paragraph geometry reuses its cached 
 Bevy refreshes equivalent shaping data; paint-change notifications stay intact. Text inputs retain editor
 geometry so caret/selection behavior remains consistent.
 
+Bitmap and styled input fields follow Laya TextInputAdapter's focus lifecycle:
+the canvas display is replaced by a plain editing surface while focused, then
+restored on blur. Markup is edited as raw source; bitmap glyphs and rich spans do
+not coexist with the active editor. The logical object and Bevy entity stay the
+same, and application children survive both transitions. The bitmap editor uses
+the configured ordinary GUI font fallback. Passwords keep the real buffer and
+publish only their masked editing geometry.
+Renderer replacement clears the previous intrinsic text measure while retaining
+Bevy's required `ContentSize` component, so bitmap nodes remain in layout and
+receive position/size changes before they are first focused.
+
+Programmatic activation precedes keyboard/IME dispatch. A first pointer press
+uses the newly projected editing viewport; selection requests on a canvas-only
+view complete during GUI synchronization before editable drawing. Suspended
+editors retain their caret/selection. Model edits while suspended take precedence
+on reactivation. Active font/style changes retain selection and IME, and blur
+cancels pending input operations through the existing native session cleanup.
+`--smoke-input-presentations` exercises bitmap, bitmap rich, raster rich and
+bitmap password input surfaces, first-click caret placement, selected paint,
+text and IME commits, restoration and disposal. This uses Bevy's editor, not DOM
+input rendering or a styled WYSIWYG editor.
+
 Glyph coverage depends on Bevy/Swash and can differ from browser Canvas even with
 the same font file. These rules do not claim browser framebuffer parity.
 

@@ -204,12 +204,21 @@ pub(super) fn route_touches(
                 .collect();
             let input = raw_hit
                 .filter(|(entity, owner, ..)| {
-                    editors.contains(*entity)
+                    (editors.contains(*entity) || views.inputs.contains(*entity))
                         && runtime.store().input_field_of(owner.0) == Some(owner.0)
                 })
                 .map(|(entity, ..)| entity);
             if let Some(entity) = input {
                 focus.set(entity, bevy::input_focus::FocusCause::Pressed);
+                if !editors.contains(entity) {
+                    state.pending_text_press = Some(text_selection::PendingPress {
+                        entity,
+                        window: window_entity,
+                        position,
+                        extend: false,
+                        clicks: 1,
+                    });
+                }
                 if let Ok((transform, node)) = geometry.get(entity)
                     && let Some(inverse) = transform.try_inverse()
                     && let Ok(mut editor) = editors.get_mut(entity)

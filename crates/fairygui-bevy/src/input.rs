@@ -34,6 +34,7 @@ use std::collections::HashMap;
 struct PointerViews<'w, 's> {
     targets: Query<'w, 's, &'static bevy::ui::ComputedUiTargetCamera>,
     cameras: Query<'w, 's, &'static Camera>,
+    inputs: Query<'w, 's, (), With<crate::runtime::InputPresentation>>,
 }
 impl PointerViews<'_, '_> {
     fn physical_position(&self, entity: Entity, position: Vec2, scale: f32) -> Vec2 {
@@ -243,9 +244,24 @@ pub(crate) struct InputRouter {
     focused: Option<GObjectId>,
     focused_entity: Option<Entity>,
     text_press: Option<(Entity, Vec2, f64, u8)>,
+    pending_text_press: Option<text_selection::PendingPress>,
+    pending_selection: Option<(Entity, GuiTextSelection)>,
 }
 impl InputRouter {
     fn cancel_text_selection(&mut self, entity: Entity) {
+        if self
+            .pending_selection
+            .is_some_and(|(view, _)| view == entity)
+        {
+            self.pending_selection = None;
+        }
+        if self
+            .pending_text_press
+            .as_ref()
+            .is_some_and(|press| press.entity == entity)
+        {
+            self.pending_text_press = None;
+        }
         if let Some(capture) = &mut self.capture
             && capture.editing == Some(entity)
         {
@@ -869,12 +885,31 @@ fn route_pointer(
     {
         let input = raw_hit
             .filter(|(entity, owner, ..)| {
-                editors.contains(*entity)
+                (editors.contains(*entity) || views.inputs.contains(*entity))
                     && runtime.store().input_field_of(owner.0) == Some(owner.0)
             })
             .map(|(entity, ..)| entity);
         if let Some(entity) = input {
             focus.set(entity, bevy::input_focus::FocusCause::Pressed);
+            let now = time.elapsed_secs_f64();
+            let count = state
+                .text_press
+                .filter(|(old, xy, then, _)| {
+                    *old == entity
+                        && now - then <= 0.3
+                        && xy.distance(position) <= settings.drag_threshold.max(0.)
+                })
+                .map_or(1, |(_, _, _, count)| count % 3 + 1);
+            state.text_press = Some((entity, position, now, count));
+            if !editors.contains(entity) {
+                state.pending_text_press = Some(text_selection::PendingPress {
+                    entity,
+                    window: window_entity,
+                    position,
+                    extend: keys.pressed(bevy::input::keyboard::Key::Shift),
+                    clicks: count,
+                });
+            }
             if let Ok((transform, node)) = geometry.get(entity)
                 && let Some(inverse) = transform.try_inverse()
                 && let Ok(mut editor) = editors.get_mut(entity)
@@ -886,16 +921,6 @@ fn route_pointer(
                     window.map_or(1., |(_, w, _)| w.scale_factor()),
                 )) - node.content_box().min
                     + editor.viewport.offset;
-                let now = time.elapsed_secs_f64();
-                let count = state
-                    .text_press
-                    .filter(|(old, xy, then, _)| {
-                        *old == entity
-                            && now - then <= 0.3
-                            && xy.distance(position) <= settings.drag_threshold.max(0.)
-                    })
-                    .map_or(1, |(_, _, _, count)| count % 3 + 1);
-                state.text_press = Some((entity, position, now, count));
                 let edit = if keys.pressed(bevy::input::keyboard::Key::Shift) {
                     bevy::text::TextEdit::ShiftClickExtension(point)
                 } else if count == 2 {

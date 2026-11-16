@@ -117,7 +117,7 @@ fn plain_and_rich_views_switch_to_both_foreign_font_families_and_back_without_lo
                 .get::<bevy::text::TextLayoutInfo>(entity)
                 .is_none()
         );
-        assert!(app.world().get::<bevy::ui::ContentSize>(entity).is_none());
+        assert!(app.world().get::<bevy::ui::ContentSize>(entity).is_some());
         assert!(app.world().get::<RichTextBlock>(entity).is_none());
         assert_eq!(
             app.world().get::<Node>(entity).unwrap().padding,

@@ -543,6 +543,12 @@ fn keep_editing(event: On<GuiEnter>, mut input: GuiInput) {
 `GuiInputState::focused_entity()` 是输入阶段与 Sync 结束时刷新的快照。IME 窗口状态
 和光标位置在 PostUpdate 同步。可在 Respond、Initialize、PostLayout 中调用；与
 `GuiMut` 同时使用时通过 `ParamSet<(GuiMut, GuiInput)>` 分别借用运行时。
+
+位图字体和带样式的输入框也支持聚焦编辑：聚焦时按原版机制切换到普通编辑层，
+失焦后恢复位图或富文本显示。标记按原始字符串编辑，位图编辑使用配置的普通 GUI 字体；
+密码框继续只显示遮罩。切换保留逻辑对象、实体和应用子节点，活动编辑中的字体／样式修改保留选区与 IME。
+首次鼠标／触摸点击按新编辑布局定位，程序聚焦在键盘／IME 分发前准备编辑器。
+`--smoke-input-presentations` 覆盖这几种显示方式的切换、选区绘制和提交。
 同一系统还直接访问 `InputFocus`、`EditableText`、`Text`、`FontCx`、`LayoutCx`、修改 `GuiText` 或 `Window` 时，也要通过
 `ParamSet` 分开借用这些共享状态。
 通过 `GuiInput` 操作光标和选区，业务层无需访问 `EditableText`：
@@ -562,6 +568,8 @@ let selected = input.selected_text(editor);
 支持输入框、复合标题及根／窗口拥有者上的文本写入。复合标题按从外到内顺序消费，
 内层显式写入优先；消费后的属性不会在后续同步中重放，覆盖更新的原生文本。
 已就绪拥有者首次附加 `GuiText` 时也可立即设置选区，无需再等一帧建立属性基线。
+位图／富文本画布首次激活时，设置请求会在后续 GUI 同步阶段准备编辑层后应用，
+因此该阶段之前的选区查询可能返回 `None`；失焦会取消尚未应用的请求。
 `Commands` 中尚未应用的组件写入需要先等待 deferred 应用。旧的指针／导航操作不会覆盖新选区，
 等待中的键入或粘贴会作用于新选区。设置操作返回是否接受，未就绪、不可聚焦及活动／等待中的 IME
 组合输入返回 `false`；活动组合输入期间，选区和选中文本查询返回 `None`，保留预编辑。

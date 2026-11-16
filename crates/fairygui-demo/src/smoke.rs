@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_input_presentations.rs"]
+mod input_presentations;
+pub(super) fn install_input_presentations(app: &mut App) {
+    input_presentations::install(app);
+}
 #[path = "smoke_async_lists.rs"]
 mod async_lists;
 pub(super) fn install_async_lists(app: &mut App) {

@@ -449,6 +449,7 @@ impl Plugin for FairyGuiPlugin {
                 (
                     runtime::sync_text_fonts,
                     runtime::sync_input_policy,
+                    input::editing::apply_pending_selection,
                     runtime::sync_input_prompts,
                     runtime::sync_password_views,
                 )
@@ -636,6 +637,19 @@ impl Plugin for FairyGuiPlugin {
         app.init_resource::<runtime::GuiFont>();
 
         input::register(app);
+        // Programmatic focus can be acquired before KeyboardInput/IME dispatch.
+        // Canvas-only inputs need their plain editor in that same frame.
+        app.add_systems(
+            PreUpdate,
+            (
+                runtime::sync_text_fonts.run_if(input::editing::needs_input_presentation),
+                runtime::sync_input_policy,
+                input::editing::apply_pending_selection,
+            )
+                .chain()
+                .after(input::editing::reconcile_focus)
+                .before(bevy::input_focus::InputFocusSystems::Dispatch),
+        );
         compositor::install(app);
     }
 }

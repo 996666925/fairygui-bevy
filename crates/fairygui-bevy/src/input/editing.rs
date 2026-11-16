@@ -82,6 +82,7 @@ pub struct GuiInput<'w, 's> {
     >,
     initial_text: ResMut<'w, crate::properties::InitialNativeValues<crate::GuiText>>,
     editors: Query<'w, 's, (&'static mut EditableText, &'static mut InputEditPolicy)>,
+    presentations: Query<'w, 's, (), With<crate::runtime::InputPresentation>>,
     values: Query<
         'w,
         's,
@@ -136,15 +137,25 @@ impl GuiInput<'_, '_> {
     /// Supersedes older pointer/navigation edits; pending text edits and paste
     /// use this new selection. Explicit model and GuiText component changes on
     /// the input, compound titles and their root/window owners synchronize first.
+    /// On a canvas-only bitmap/styled input, activation and this selection finish
+    /// during GUI synchronization, before the frame's editable draw layout.
     pub fn set_selection(&mut self, entity: Entity, selection: GuiTextSelection) -> bool {
         let Some((input, view)) = self.input(entity) else {
             return false;
         };
-        if !self.can_focus(input, view)
-            || self.fonts.is_none()
-            || self.layouts.is_none()
-            || !self.values.contains(view)
-        {
+        if !self.can_focus(input, view) || self.fonts.is_none() || self.layouts.is_none() {
+            return false;
+        }
+        if !self.editors.contains(view) {
+            self.sync_text_properties(input);
+            if !self.focus(entity) {
+                return false;
+            }
+            self.state.cancel_text_selection(view);
+            self.state.pending_selection = Some((view, selection));
+            return true;
+        }
+        if !self.values.contains(view) {
             return false;
         }
         let Ok((editor, policy)) = self.editors.get(view) else {
@@ -294,7 +305,9 @@ impl GuiInput<'_, '_> {
             .iter()
             .find(|(entity, _, primary)| selected_window(*entity, *primary, &self.settings))
             .is_none_or(|(_, window, _)| window.focused);
-        window_active && eligible(&self.runtime, input) && self.editors.contains(view)
+        window_active
+            && eligible(&self.runtime, input)
+            && (self.editors.contains(view) || self.presentations.contains(view))
     }
     /// End the GUI editing session now, preserving another Bevy widget's focus.
     /// Pending GUI focus acquisition is canceled too.
@@ -382,6 +395,30 @@ pub(crate) fn reconcile_focus(mut input: GuiInput) {
     input.reconcile();
 }
 
+/// Native input activation is asynchronous too. Apply a selection requested on
+/// its canvas presentation as soon as the editing surface has been projected.
+pub(crate) fn apply_pending_selection(mut input: GuiInput) {
+    let Some((entity, selection)) = input.state.pending_selection.take() else {
+        return;
+    };
+    if input.focused_entity() == Some(entity) {
+        input.set_selection(entity, selection);
+    }
+}
+
+pub(crate) fn needs_input_presentation(
+    focus: Res<InputFocus>,
+    canvas: Query<
+        (),
+        (
+            With<crate::runtime::InputPresentation>,
+            Without<EditableText>,
+        ),
+    >,
+) -> bool {
+    focus.get().is_some_and(|entity| canvas.contains(entity))
+}
+
 impl GuiInput<'_, '_> {
     fn reconcile(&mut self) {
         let Self {
@@ -391,6 +428,7 @@ impl GuiInput<'_, '_> {
             windows,
             objects,
             editors,
+            presentations,
             runtime,
             ..
         } = self;
@@ -431,9 +469,9 @@ impl GuiInput<'_, '_> {
         let next = candidate.filter(|&owner| {
             window_active
                 && eligible(runtime, owner)
-                && runtime
-                    .entity_of(owner)
-                    .is_some_and(|entity| editors.contains(entity))
+                && runtime.entity_of(owner).is_some_and(|entity| {
+                    editors.contains(entity) || presentations.contains(entity)
+                })
                 && runtime.store().input_field_of(owner) == Some(owner)
         });
         if next.is_none()
@@ -468,9 +506,27 @@ impl GuiInput<'_, '_> {
             runtime.focused_input = next;
             if let Some(owner) = next
                 && let Some(entity) = runtime.entity_of(owner)
-                && let Ok((editor, _)) = editors.get(entity)
             {
-                runtime.emit_input_event(EventKind::FocusIn, owner, &editor.value().to_string());
+                let value = editors
+                    .get(entity)
+                    .map(|(editor, _)| editor.value().to_string())
+                    .unwrap_or_else(|_| {
+                        let data = runtime
+                            .store()
+                            .object(owner)
+                            .unwrap()
+                            .control()
+                            .as_text_field()
+                            .unwrap();
+                        fairygui_core::text::input::normalize_input_lines(
+                            &crate::runtime::template_text(
+                                runtime.store().object(owner).unwrap(),
+                                &runtime.translate(&data.text),
+                            ),
+                            !data.single_line,
+                        )
+                    });
+                runtime.emit_input_event(EventKind::FocusIn, owner, &value);
             }
         }
         state.focused = next;

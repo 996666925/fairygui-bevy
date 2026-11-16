@@ -4,6 +4,9 @@ use bevy::ecs::system::SystemState;
 use bevy::input_focus::{InputDispatchPlugin, InputFocusPlugin};
 use fairygui_core::package::FuiPackage;
 
+#[path = "presentation_tests.rs"]
+mod presentations;
+
 fn fixture() -> (App, GObjectId, Entity, Entity) {
     let mut app = App::new();
     app.add_plugins((
@@ -81,6 +84,7 @@ fn fixture() -> (App, GObjectId, Entity, Entity) {
                 runtime::sync_dirty,
                 runtime::sync_text_fonts,
                 runtime::sync_input_policy,
+                apply_pending_selection,
                 runtime::sync_password_views,
                 runtime::sync_stage_hierarchy,
                 reconcile_focus,
@@ -96,6 +100,17 @@ fn fixture() -> (App, GObjectId, Entity, Entity) {
             (runtime::apply_input_edits, runtime::sync_input_cursors).chain(),
         );
     crate::input::register(&mut app);
+    app.add_systems(
+        PreUpdate,
+        (
+            runtime::sync_text_fonts.run_if(needs_input_presentation),
+            runtime::sync_input_policy,
+            apply_pending_selection,
+        )
+            .chain()
+            .after(reconcile_focus)
+            .before(InputFocusSystems::Dispatch),
+    );
     app.update();
     app.update();
     let entity = app

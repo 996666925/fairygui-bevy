@@ -252,6 +252,7 @@ pub(crate) use appearance::tint;
 #[path = "text_fonts.rs"]
 mod text_fonts;
 pub(crate) use text_fonts::sync_text_fonts;
+pub(crate) use text_fonts::{InputPresentation, template_text};
 #[path = "text_input.rs"]
 mod text_input;
 pub(crate) use text_input::InputEditPolicy;
@@ -1970,7 +1971,8 @@ impl GuiRuntime {
 
     /// Request input focus (or None to release GUI input focus) during Respond.
     /// Compound controls forward to their input title. Hidden/off-stage/modal-
-    /// blocked fields and unsupported rich/bitmap editors cannot acquire focus.
+    /// blocked fields cannot acquire focus. Styled/bitmap fields use a plain
+    /// editing surface for the duration of their focus session.
     pub fn request_input_focus(&mut self, input: Option<GObjectId>) -> bool {
         let input = if let Some(input) = input {
             let Some(input) = self.store.input_field_of(input) else {
@@ -2919,6 +2921,7 @@ fn spawn_object(
             image_assets,
             font,
             &text,
+            false,
         );
         for image in images {
             if let Some(parent) = parent {
