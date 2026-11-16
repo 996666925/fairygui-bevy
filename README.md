@@ -320,6 +320,21 @@ fn reorder(mut gui: GuiMut, button: Entity, sibling: Entity) {
 列表选中项随对象保留，并更新其索引。`GuiSortingOrder` 可随等待资源的根拥有者一起挂载。
 `--smoke-child-order` 使用重叠按钮验证优先级、重排、交换和真实点击目标。
 
+按钮的 `linkedPopup` 使用实体引用组件，按下时自动切换普通弹层或窗口：
+
+```rust,ignore
+let mut source = FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Component12");
+source.active = false;
+let popup = commands.spawn(source).id();
+commands.entity(button).insert(GuiButtonPopup(Some(popup)));
+```
+
+组件可挂在按钮视图或按钮根拥有者上；视图配置优先。目标接受控件视图、根拥有者和
+窗口拥有者，未加载时等待，模板替换后自动重绑。自引用、舞台或无效目标不生效。
+`GuiButtonPopup(None)` 禁用绑定；移除组件解除该组件管理的绑定，移除视图配置后
+恢复拥有者配置。绑定在当前指针输入前应用；打开后保留原版定位、弹层栈和窗口
+切换规则，隐藏及再次打开复用同一视图。`--smoke-popup` 验证实际点击和实体绑定。
+
 容器的绘制顺序通过 `GuiRenderOrder` 修改，与逻辑层级分开：
 
 ```rust,ignore

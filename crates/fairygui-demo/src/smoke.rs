@@ -293,7 +293,7 @@ struct Smoke {
     button_scale: Vec2,
     button_since: u32,
     popup_stage: u8,
-    popup_root: Option<usize>,
+    popup_owner: Option<Entity>,
     popup_entity: Option<Entity>,
     combo_stage: u8,
     combo_dropdown: Option<GObjectId>,
@@ -1118,16 +1118,13 @@ fn drive(
                 match smoke.popup_stage {
                     0 => {
                         let handle = runtime.asset_handle_for(root).unwrap();
-                        let asset = assets.get(&handle).unwrap();
-                        let index = runtime
-                            .create_root(handle, &asset.package, "Component12")
-                            .unwrap();
-                        runtime.set_root_attached(index, false);
-                        let popup = runtime.root_object(index).unwrap();
-                        runtime
-                            .store_mut()
-                            .set_button_linked_popup(button, Some(popup));
-                        smoke.popup_root = Some(index);
+                        let mut source = FairyGuiRoot::new(handle, "Component12");
+                        source.active = false;
+                        let popup = commands.spawn(source).id();
+                        commands
+                            .entity(runtime.entity_of(button).unwrap())
+                            .insert(GuiButtonPopup(Some(popup)));
+                        smoke.popup_owner = Some(popup);
                         let (_, transform) = nodes.get(runtime.entity_of(button).unwrap()).unwrap();
                         smoke.cursor = Some(transform.transform_point2(Vec2::ZERO) / scale_factor);
                         window.set_cursor_position(smoke.cursor);
@@ -1140,7 +1137,7 @@ fn drive(
                         smoke.popup_stage += 1;
                     }
                     2 | 6 if smoke.frames - smoke.button_since >= 8 => {
-                        let popup = runtime.root_object(smoke.popup_root.unwrap()).unwrap();
+                        let popup = runtime.ecs_root_object(smoke.popup_owner.unwrap()).unwrap();
                         assert_eq!(
                             runtime.popup_stack(),
                             &[popup],
@@ -1180,11 +1177,13 @@ fn drive(
                     9 if smoke.frames - smoke.button_since >= 8 => {
                         assert!(runtime.popup_stack().is_empty());
                         mouse.release(MouseButton::Left);
-                        runtime.store_mut().set_button_linked_popup(button, None);
-                        runtime.remove_root(&mut commands, smoke.popup_root.take().unwrap());
+                        commands
+                            .entity(runtime.entity_of(button).unwrap())
+                            .remove::<GuiButtonPopup>();
+                        commands.entity(smoke.popup_owner.take().unwrap()).despawn();
                         smoke.popup_stage = 10;
                         println!(
-                            "demo smoke: linked popup opened on press, closed without reopening, reused its view and closed on outside press"
+                            "demo smoke: ECS linked popup opened on press, closed without reopening, reused its view and closed on outside press"
                         );
                     }
                     _ => {}
