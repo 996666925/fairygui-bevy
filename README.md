@@ -441,6 +441,25 @@ fn on_child(mut event: On<GuiClick>) {
 `GuiListItemClick`、`GuiTextInput` 或 `GuiLink`。按钮选择、列表选择和控件值在发布通知前
 刷新，observer 对组件的修改仍在同帧 Sync 生效。
 `GuiClick::new(entity, object_id)` 等构造器创建只投递给一个实体的直接通知。
+业务自定义通知可直接指定实体，无需取得原生对象 ID：
+
+```rust,ignore
+fn notify(mut gui: GuiMut, target: Entity) {
+    gui.dispatch_custom(target, "saved", GuiEventData::Text("slot-1".into()));
+}
+
+fn on_saved(event: On<GuiCustomEvent>) {
+    info!("{}: {:?}", event.name(), event.event.data);
+}
+```
+
+`dispatch_custom` 接受控件视图、根或窗口拥有者；未就绪、已换模板或销毁的目标返回
+`false`，不会延迟重试。派发时按当前模型保存逻辑冒泡路径，在下一次
+`GuiSystems::Publish` 发布一次 `GuiCustomEvent`，后续换父节点不会改变该路径。
+在 Publish 阶段的 GUI observer 中派发的新通知会在下一帧发布，传播控制互相独立。
+该操作只发送通知；
+业务自定义的 Bevy 事件仍可直接使用 `Commands::trigger`。独占系统使用
+`World::gui_dispatch_custom`，载荷类型 `GuiEventData` 由 prelude 导出。
 `--smoke-observer-events` 验证实际复选框点击、停止/继续冒泡、共享载荷和同帧文字更新。
 
 `GuiInputState::hovered()`、`captured()`、`captured_touch(id)` 和

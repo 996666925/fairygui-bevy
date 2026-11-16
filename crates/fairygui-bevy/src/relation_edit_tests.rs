@@ -431,11 +431,16 @@ fn direct_edit_services_reject_replaced_removed_or_despawned_owner_aliases_befor
             );
             assert!(
                 !app.world_mut()
+                    .gui_dispatch_custom(owner, "stale", GuiEventData::None)
+            );
+            assert!(
+                !app.world_mut()
                     .gui_add_relation(view, owner, RelationType::Size, false)
             );
             let mut service = SystemState::<GuiMut>::new(app.world_mut());
             let mut edit = service.get_mut(app.world_mut()).unwrap();
             assert!(edit.get_mut(owner).is_none());
+            assert!(!edit.dispatch_custom(owner, "stale", GuiEventData::None));
             assert!(!edit.edit(owner, |object| object.set_text("wrong old template")));
             assert!(!edit.add_relation(view, owner, RelationType::Size, false));
             assert_eq!(

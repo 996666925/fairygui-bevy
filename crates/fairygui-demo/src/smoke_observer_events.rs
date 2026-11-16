@@ -1,6 +1,5 @@
 //! Real checkbox input with Bevy-controlled logical event propagation.
 use super::*;
-use fairygui_core::object::EventData;
 
 #[derive(Resource, Default)]
 struct State {
@@ -15,22 +14,30 @@ struct State {
 struct Events {
     selected: Vec<bool>,
     parent_clicks: usize,
+    custom_parent: Vec<String>,
+    owner_custom: usize,
 }
 fn child(
     mut event: On<GuiClick>,
     mut gui: ParamSet<(GuiQuery, Query<&mut GuiText>)>,
     selected: Query<&GuiButtonSelected>,
     mut events: ResMut<Events>,
+    mut objects: GuiMut,
 ) {
     assert_eq!(event.target, Some(event.entity));
     assert!(!event.event.bubbling);
     let checked = selected.get(event.entity).unwrap().0;
+    assert!(objects.dispatch_custom(
+        event.entity,
+        "checked",
+        GuiEventData::Text(format!("checked:{checked}"))
+    ));
     events.selected.push(checked);
     if events.selected.len() == 1 {
         event.propagate(false);
-        event.event.data = EventData::Text("stopped".into());
+        event.event.data = GuiEventData::Text("stopped".into());
     } else {
-        event.event.data = EventData::Text("shared".into());
+        event.event.data = GuiEventData::Text("shared".into());
     }
     let label = {
         let query = gui.p0();
@@ -42,6 +49,29 @@ fn child(
         .unwrap()
         .set(format!("Local: {checked}"));
 }
+fn custom_child(mut event: On<GuiCustomEvent>) {
+    assert_eq!(event.name(), "checked");
+    assert!(!event.event.bubbling);
+    let GuiEventData::Text(value) = &event.event.data else {
+        panic!("missing custom payload")
+    };
+    event.event.data = GuiEventData::Text(format!("forwarded {value}"));
+}
+fn custom_parent(event: On<GuiCustomEvent>, mut events: ResMut<Events>) {
+    if event.name() == "owner-ready" {
+        assert_eq!(event.target, Some(event.entity));
+        assert!(!event.event.bubbling);
+        events.owner_custom += 1;
+    } else {
+        assert_eq!(event.name(), "checked");
+        assert!(event.event.bubbling);
+        assert_ne!(event.target, Some(event.entity));
+        let GuiEventData::Text(value) = &event.event.data else {
+            panic!("missing custom payload")
+        };
+        events.custom_parent.push(value.clone());
+    }
+}
 fn parent(
     event: On<GuiClick>,
     mut gui: ParamSet<(GuiQuery, Query<&mut GuiText>)>,
@@ -49,7 +79,7 @@ fn parent(
 ) {
     assert!(event.event.bubbling);
     assert_ne!(event.target, Some(event.entity));
-    assert_eq!(event.event.data, EventData::Text("shared".into()));
+    assert_eq!(event.event.data, GuiEventData::Text("shared".into()));
     events.parent_clicks += 1;
     let label = gui.p0().child_by_name(event.entity, "n8").unwrap();
     gui.p1().get_mut(label).unwrap().set("Parent: false");
@@ -114,10 +144,16 @@ fn drive(
             let Some(button) = gui.child_by_name(state.owner.unwrap(), "n4") else {
                 return;
             };
-            commands.entity(button).observe(child);
+            commands.entity(button).observe(child).observe(custom_child);
             commands
                 .entity(gui.view(state.owner.unwrap()).unwrap())
-                .observe(parent);
+                .observe(parent)
+                .observe(custom_parent);
+            assert!(gui_edit.dispatch_custom(
+                state.owner.unwrap(),
+                "owner-ready",
+                GuiEventData::None
+            ));
             state.button = Some(button);
             state.cursor = Some(
                 nodes.get(button).unwrap().1.transform_point2(Vec2::ZERO) / window.scale_factor(),
@@ -135,6 +171,8 @@ fn drive(
         4 if elapsed >= 6 => {
             assert_eq!(events.selected, [true]);
             assert_eq!(events.parent_clicks, 0);
+            assert_eq!(events.owner_custom, 1);
+            assert_eq!(events.custom_parent, ["forwarded checked:true"]);
             let label = gui.child_by_name(state.owner.unwrap(), "n8").unwrap();
             assert_eq!(gui.text(label), Some("Local: true"));
             commands
@@ -148,6 +186,10 @@ fn drive(
         8 if elapsed >= 6 => {
             assert_eq!(events.selected, [true, false]);
             assert_eq!(events.parent_clicks, 1);
+            assert_eq!(
+                events.custom_parent,
+                ["forwarded checked:true", "forwarded checked:false"]
+            );
             let label = gui.child_by_name(state.owner.unwrap(), "n8").unwrap();
             assert_eq!(gui.text(label), Some("Parent: false"));
             commands
@@ -162,7 +204,7 @@ fn drive(
         10 if elapsed >= 4 => {
             assert!(!existing.contains(state.button.unwrap()));
             println!(
-                "demo smoke PASSED: actual checkbox picking, current selection snapshots, child observer propagation stop, shared payload at parent, same-frame commands, repeated independent events and disposal"
+                "demo smoke PASSED: actual checkbox picking, current selection snapshots, propagation stop, shared payload, entity custom dispatch from views/owners, next-frame nested events, retained text updates and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

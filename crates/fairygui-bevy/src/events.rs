@@ -8,6 +8,8 @@ use bevy::{
     },
     prelude::*,
 };
+/// Payload shared by native and application-defined GUI notifications.
+pub use fairygui_core::object::EventData as GuiEventData;
 use fairygui_core::object::{EventKind, GObjectId, UiEvent};
 use std::{
     ops::{Deref, DerefMut},

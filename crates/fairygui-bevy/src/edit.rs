@@ -76,6 +76,24 @@ impl GuiMut<'_, '_> {
         }
     }
 
+    /// Capture a custom notification's logical bubbling path now and publish it
+    /// as GuiCustomEvent at the next GuiSystems::Publish. Accepts ready views or
+    /// current root/window owners. Returns false for unavailable/stale entities;
+    /// no retry is queued. Dispatch from a Publish-stage observer publishes on
+    /// the next frame.
+    pub fn dispatch_custom(
+        &mut self,
+        entity: Entity,
+        name: impl Into<String>,
+        data: crate::GuiEventData,
+    ) -> bool {
+        let Some(object) = self.object_for_entity(entity) else {
+            return false;
+        };
+        dispatch_custom(&mut self.runtime, object, name.into(), data);
+        true
+    }
+
     /// Swap two ready siblings using native sorting restrictions. Both view
     /// entities and current root/window owners are accepted. Applies immediately;
     /// Sync publishes the logical and paint order without rebuilding views.
@@ -821,6 +839,13 @@ impl GuiObjectMut<'_> {
 /// Direct object access for exclusive systems and tests.
 pub trait GuiWorldExt {
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>>;
+    /// Equivalent of GuiMut::dispatch_custom for exclusive systems.
+    fn gui_dispatch_custom(
+        &mut self,
+        entity: Entity,
+        name: impl Into<String>,
+        data: crate::GuiEventData,
+    ) -> bool;
     /// Immediate equivalent of GuiMut::swap_children for exclusive systems.
     fn gui_swap_children(&mut self, first: Entity, second: Entity) -> bool;
     /// Immediate equivalent of GuiMut::set_group for exclusive systems.
@@ -846,6 +871,18 @@ pub trait GuiWorldExt {
         relation: crate::RelationType,
     ) -> bool;
     fn gui_clear_relations_to(&mut self, owner: Entity, target: Entity) -> bool;
+}
+
+fn dispatch_custom(
+    runtime: &mut GuiRuntime,
+    object: GObjectId,
+    name: String,
+    data: crate::GuiEventData,
+) {
+    runtime.dispatch_event(
+        fairygui_core::object::UiEvent::new(fairygui_core::object::EventKind::Other(name), object)
+            .with_data(data),
+    );
 }
 
 fn set_group(runtime: &mut GuiRuntime, member: GObjectId, group: Option<GObjectId>) -> bool {
@@ -880,6 +917,22 @@ fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
     )
 }
 impl GuiWorldExt for World {
+    fn gui_dispatch_custom(
+        &mut self,
+        entity: Entity,
+        name: impl Into<String>,
+        data: crate::GuiEventData,
+    ) -> bool {
+        let Some(object) = world_object(self, entity) else {
+            return false;
+        };
+        let Some(mut runtime) = self.get_non_send_mut::<GuiRuntime>() else {
+            return false;
+        };
+        dispatch_custom(&mut runtime, object, name.into(), data);
+        true
+    }
+
     fn gui_swap_children(&mut self, first: Entity, second: Entity) -> bool {
         let Some((first, second)) = world_object(self, first).zip(world_object(self, second))
         else {

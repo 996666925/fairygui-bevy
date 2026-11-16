@@ -100,6 +100,117 @@ fn one_event_traverses_logical_recipients_and_updates_both_entity_and_native_met
 }
 
 #[test]
+fn entity_custom_dispatch_captures_its_path_and_preserves_each_payload() {
+    use crate::{GuiMut, GuiWorldExt};
+    use bevy::ecs::system::SystemState;
+    let mut f = fixture();
+    for system_param in [false, true] {
+        let data = GuiEventData::Text(format!("payload {system_param}"));
+        if system_param {
+            let mut state = SystemState::<GuiMut>::new(f.app.world_mut());
+            assert!(
+                state
+                    .get_mut(f.app.world_mut())
+                    .unwrap()
+                    .dispatch_custom(f.views[2], "saved", data)
+            );
+        } else {
+            assert!(
+                f.app
+                    .world_mut()
+                    .gui_dispatch_custom(f.views[2], "saved", data)
+            );
+        }
+    }
+    assert!(f.app.world().resource::<Received>().0.is_empty());
+    // Neither Bevy ChildOf nor a native reparent after dispatch can reroute it.
+    f.app
+        .world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_parent(f.ids[2], None);
+    f.app.update();
+    let events = &f.app.world().resource::<Received>().0;
+    assert_eq!(events.len(), 6);
+    for (group, system_param) in events.as_chunks::<3>().0.iter().zip([false, true]) {
+        assert_eq!(
+            group.iter().map(|e| e.entity).collect::<Vec<_>>(),
+            f.views.into_iter().rev().collect::<Vec<_>>()
+        );
+        for event in group {
+            assert_eq!(event.target, Some(f.views[2]));
+            assert_eq!(event.event.kind, EventKind::Other("saved".into()));
+            assert_eq!(
+                event.event.data,
+                GuiEventData::Text(format!("payload {system_param}"))
+            );
+            assert_eq!(event.event.pointer, None);
+            assert_eq!(event.event.touch_id, None);
+        }
+    }
+    assert!(
+        !f.app
+            .world_mut()
+            .gui_dispatch_custom(f.decoration, "invalid", GuiEventData::None)
+    );
+    f.app.world_mut().despawn(f.views[2]);
+    let mut state = SystemState::<GuiMut>::new(f.app.world_mut());
+    assert!(!state.get_mut(f.app.world_mut()).unwrap().dispatch_custom(
+        f.views[2],
+        "gone",
+        GuiEventData::None
+    ));
+    assert!(!World::new().gui_dispatch_custom(
+        Entity::PLACEHOLDER,
+        "no runtime",
+        GuiEventData::None
+    ));
+}
+
+#[test]
+fn custom_dispatch_from_an_observer_publishes_next_frame_with_independent_propagation() {
+    use crate::{GuiMut, GuiWorldExt};
+    let mut f = fixture();
+    f.app.world_mut().entity_mut(f.views[2]).observe(
+        |mut event: On<GuiCustomEvent>, mut gui: GuiMut| {
+            if event.name() == "outer" {
+                event.propagate(false);
+                assert!(gui.dispatch_custom(
+                    event.entity,
+                    "inner",
+                    GuiEventData::Text("next frame".into())
+                ));
+            }
+        },
+    );
+    assert!(
+        f.app
+            .world_mut()
+            .gui_dispatch_custom(f.views[2], "outer", GuiEventData::None)
+    );
+    f.app.update();
+    let events = &f.app.world().resource::<Received>().0;
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].entity, f.views[2]);
+    assert_eq!(events[0].event.kind, EventKind::Other("outer".into()));
+    f.app.update();
+    let events = &f.app.world().resource::<Received>().0;
+    assert_eq!(events.len(), 4);
+    assert_eq!(
+        events[1..].iter().map(|e| e.entity).collect::<Vec<_>>(),
+        f.views.into_iter().rev().collect::<Vec<_>>()
+    );
+    assert!(
+        events[1..]
+            .iter()
+            .all(|e| e.event.kind == EventKind::Other("inner".into())
+                && e.event.data == GuiEventData::Text("next frame".into()))
+    );
+    f.app.update();
+    assert_eq!(f.app.world().resource::<Received>().0.len(), 4);
+}
+
+#[test]
 fn observers_can_mutate_the_shared_payload_and_stop_only_the_current_dispatch() {
     let mut f = fixture();
     f.app
