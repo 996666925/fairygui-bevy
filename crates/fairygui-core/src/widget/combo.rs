@@ -10,6 +10,10 @@ use crate::geom::{Point, Size};
 use crate::object::GObjectId;
 use crate::widget::ComponentData;
 
+#[cfg(test)]
+#[path = "combo_instance_tests.rs"]
+mod instance_tests;
+
 /// 展开中的下拉弹层。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComboPopup {
@@ -177,7 +181,8 @@ impl ComboBoxData {
 
 /// 读取下拉框的实例数据（父容器中的块 6）。
 pub(crate) fn read_combo(
-    data: &mut ComboBoxData,
+    store: &mut crate::object::ObjectStore,
+    object: GObjectId,
     buffer: &mut ByteBuffer<'_>,
     table: &StringTable,
     begin_pos: usize,
@@ -185,59 +190,76 @@ pub(crate) fn read_combo(
     if !buffer.seek(begin_pos, 6)? {
         return Ok(());
     }
-
-    // Instance blocks start with the declared object type, before the item count.
     if crate::package::ObjectType::from_code(buffer.read_u8()?)
         != crate::package::ObjectType::ComboBox
     {
         return Ok(());
     }
-
     let count = buffer.read_i16()?.max(0) as usize;
-    for _ in 0..count {
+    for index in 0..count {
         let next_pos = i32::from(buffer.read_i16()?);
         let end = buffer.resolve_relative(next_pos)?;
-
-        data.items.push(buffer.read_s(table)?.unwrap_or_default());
-        data.values.push(buffer.read_s(table)?.unwrap_or_default());
+        let caption = buffer.read_s(table)?.unwrap_or_default();
+        let value = buffer.read_s(table)?.unwrap_or_default();
         let icon = buffer.read_s(table)?;
-        if icon.is_some() {
-            let icons = data.icons.get_or_insert_with(Vec::new);
-            icons.resize(data.items.len(), None);
-            *icons.last_mut().unwrap() = icon;
+        let crate::widget::ControlData::ComboBox(data) =
+            &mut store.object_mut(object).unwrap().control
+        else {
+            unreachable!()
+        };
+        if data.items.len() <= index {
+            data.items.resize(index + 1, String::new());
         }
-
+        if data.values.len() <= index {
+            data.values.resize(index + 1, String::new());
+        }
+        data.items[index] = caption;
+        data.values[index] = value;
+        if let Some(icon) = icon {
+            let icons = data.icons.get_or_insert_with(Vec::new);
+            if icons.len() <= index {
+                icons.resize(index + 1, None);
+            }
+            icons[index] = Some(icon);
+        }
         buffer.set_position(end);
     }
-
-    if let Some(title) = buffer.read_s(table)? {
-        data.selected_index = data
-            .items
-            .iter()
-            .position(|item| *item == title)
-            .map_or(-1, |index| index as i32);
-        data.title = title;
+    let title = buffer.read_s(table)?;
+    let crate::widget::ControlData::ComboBox(data) = &mut store.object_mut(object).unwrap().control
+    else {
+        unreachable!()
+    };
+    let title = if let Some(title) = title {
+        data.selected_index = data.index_of(&title).map_or(-1, |index| index as i32);
+        Some(title)
     } else if let Some(first) = data.items.first() {
         data.selected_index = 0;
-        data.title = first.clone();
+        Some(first.clone())
     } else {
         data.selected_index = -1;
+        None
+    };
+    if let Some(title) = title {
+        store.set_object_text(object, &title);
     }
-
-    data.icon = buffer.read_s(table)?;
-
+    if let Some(icon) = buffer.read_s(table)? {
+        store.apply_icon_to(object, &icon);
+    }
     if buffer.read_bool()? {
-        data.title_color = Some(read_color(buffer)?);
+        store.set_control_color(object, read_color(buffer)?, None);
     }
-
     let visible_item_count = buffer.read_i32()?;
+    let direction = buffer.read_i8()?;
+    let controller = buffer.read_i16()?;
+    let crate::widget::ControlData::ComboBox(data) = &mut store.object_mut(object).unwrap().control
+    else {
+        unreachable!()
+    };
     if visible_item_count > 0 {
         data.visible_item_count = visible_item_count;
     }
-
-    data.popup_direction = i32::from(buffer.read_i8()?);
-    data.selection_controller = i32::from(buffer.read_i16()?);
-
+    data.popup_direction = i32::from(direction);
+    store.set_combo_instance_controller(object, controller);
     Ok(())
 }
 
@@ -300,8 +322,14 @@ mod tests {
             bytes.extend_from_slice(&10i32.to_be_bytes());
             bytes.push(0); // automatic popup direction
             bytes.extend_from_slice(&(-1i16).to_be_bytes());
-            let mut combo = ComboBoxData::default();
-            read_combo(&mut combo, &mut ByteBuffer::new(&bytes), &table, 0).unwrap();
+            let mut store = crate::object::ObjectStore::new();
+            let object = store.create(crate::package::ObjectType::ComboBox);
+            read_combo(&mut store, object, &mut ByteBuffer::new(&bytes), &table, 0).unwrap();
+            let crate::widget::ControlData::ComboBox(combo) =
+                store.object(object).unwrap().control()
+            else {
+                unreachable!()
+            };
             if has_icon {
                 assert_eq!(combo.icons, Some(vec![None, Some("icon".into())]));
             } else {

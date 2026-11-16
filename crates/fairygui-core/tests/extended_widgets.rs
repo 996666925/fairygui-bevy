@@ -8,6 +8,61 @@ const MAIN_MENU: &[u8] = include_bytes!("fixtures/MainMenu.fui");
 const BASICS: &[u8] = include_bytes!("fixtures/Basics.fui");
 
 #[test]
+fn combo_instance_styles_and_initial_parent_selection_reach_actual_titles() {
+    let (package, mut store, root) = build(
+        "ComboInstance",
+        include_bytes!("fixtures/ComboInstance.fui"),
+        "Main",
+    );
+    for (name, text, index, color) in [
+        ("direct", "Second", 1, [51, 153, 204]),
+        ("nested", "First", 0, [102, 204, 153]),
+        ("preserved", "Base", -1, [18, 52, 86]),
+        ("empty", "", -1, [204, 102, 51]),
+        ("bound", "Second", 1, [204, 153, 51]),
+    ] {
+        let combo = store.child_by_name(root, name).unwrap();
+        let mut title = store.child_by_name(combo, "title").unwrap();
+        if name == "nested" {
+            title = store.child_by_name(title, "title").unwrap();
+        }
+        assert_eq!(
+            store.object_text(title),
+            Some(text),
+            "{name}: visible title"
+        );
+        assert_eq!(store.object_text(combo), Some(text), "{name}: public text");
+        let ControlData::ComboBox(data) = store.object(combo).unwrap().control() else {
+            unreachable!()
+        };
+        assert_eq!(data.selected_index, index, "{name}: initial selection");
+        assert_eq!(
+            store.object_color(title),
+            Some(fairygui_core::color::Color::from_rgba8(
+                color[0], color[1], color[2], 255
+            )),
+            "{name}: title color"
+        );
+    }
+    let bound = store.child_by_name(root, "bound").unwrap();
+    assert_eq!(store.combo_selection_controller(bound), Some("pages"));
+    store.set_controller_page_index(root, "pages", 0);
+    assert_eq!(store.object_text(bound), Some("First"));
+    let template = create_from_package(
+        &mut store,
+        &package,
+        package.item_index_by_name("Nested").unwrap(),
+        &LoadContext::none(),
+    )
+    .unwrap();
+    assert_eq!(store.object_text(template), Some("Base"));
+    assert_eq!(
+        store.object_color(template),
+        Some(fairygui_core::color::Color::from_rgba8(18, 52, 86, 255))
+    );
+}
+
+#[test]
 fn button_instance_styles_reach_nested_titles_before_initial_controller_application() {
     let (package, mut store, root) = build(
         "ButtonInstance",

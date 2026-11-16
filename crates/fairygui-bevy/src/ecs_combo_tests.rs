@@ -3,6 +3,76 @@ use crate::prelude::*;
 use bevy::ecs::system::{RunSystemOnce, SystemState};
 use fairygui_core::{object::EventKind, package::FuiPackage};
 
+#[test]
+fn exported_combo_instance_colors_and_parent_selection_are_correct_on_the_first_frame() {
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        bevy::asset::AssetPlugin::default(),
+        FairyGuiPlugin,
+    ))
+    .init_resource::<ButtonInput<MouseButton>>()
+    .add_message::<bevy::input::mouse::MouseWheel>();
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: FuiPackage::parse(
+                "ComboInstance",
+                include_bytes!("../../fairygui-core/tests/fixtures/ComboInstance.fui"),
+            )
+            .unwrap(),
+            res_key: "ui/ComboInstance".into(),
+        });
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let mut queries = SystemState::<GuiQuery>::new(app.world_mut());
+    let gui = queries.get(app.world()).unwrap();
+    for (name, text, index, color) in [
+        ("direct", "Second", 1, Color::srgb_u8(51, 153, 204)),
+        ("nested", "First", 0, Color::srgb_u8(102, 204, 153)),
+        ("preserved", "Base", -1, Color::srgb_u8(18, 52, 86)),
+        ("bound", "Second", 1, Color::srgb_u8(204, 153, 51)),
+    ] {
+        let combo = gui.child_by_name(owner, name).unwrap();
+        let mut title = gui.child_by_name(combo, "title").unwrap();
+        if name == "nested" {
+            title = gui.child_by_name(title, "title").unwrap();
+        }
+        assert_eq!(gui.text(title), Some(text), "{name}");
+        assert_eq!(
+            gui.combo_box(combo).unwrap().selected_index(),
+            index,
+            "{name}"
+        );
+        assert_eq!(gui.color(title), Some(color), "{name}");
+        assert_eq!(
+            app.world().get::<TextColor>(title).unwrap().0,
+            color,
+            "{name}: Bevy text"
+        );
+    }
+    let combo = gui.child_by_name(owner, "nested").unwrap();
+    let label = gui.child_by_name(combo, "title").unwrap();
+    let title = gui.child_by_name(label, "title").unwrap();
+    app.world_mut()
+        .get_mut::<GuiComboBoxState>(combo)
+        .unwrap()
+        .selected_index = 1;
+    app.world_mut().get_mut::<GuiColor>(combo).unwrap().0 = Color::srgb_u8(204, 102, 51);
+    for _ in 0..3 {
+        app.update();
+        let gui = queries.get(app.world()).unwrap();
+        assert_eq!(gui.child_by_name(label, "title"), Some(title));
+        assert_eq!(gui.text(title), Some("Second"));
+        assert_eq!(gui.color(title), Some(Color::srgb_u8(204, 102, 51)));
+        assert_eq!(
+            app.world().get::<TextColor>(title).unwrap().0,
+            Color::srgb_u8(204, 102, 51)
+        );
+    }
+}
+
 fn load(app: &mut App, handle: &Handle<FuiAsset>) {
     app.world_mut()
         .resource_mut::<Assets<FuiAsset>>()

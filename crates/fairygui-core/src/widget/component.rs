@@ -479,9 +479,6 @@ fn build_component(
                         ctx.scroll_defaults,
                     )?;
                 }
-                ControlData::ComboBox(data) => {
-                    super::combo::read_combo(data, &mut buffer, table, child_pos)?;
-                }
                 _ => {}
             }
         }
@@ -490,6 +487,13 @@ fn build_component(
         // parent controllers are applied. Null values retain resource defaults.
         let kind = store.object(child).unwrap().kind();
         match store.object(child).unwrap().control() {
+            ControlData::ComboBox(_) => super::combo::read_combo(
+                store,
+                child,
+                &mut buffer,
+                package.string_table(),
+                child_pos,
+            )?,
             ControlData::Button(_) => super::extend::setup_button(
                 store,
                 child,

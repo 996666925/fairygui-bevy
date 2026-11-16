@@ -7,6 +7,18 @@ use crate::widget::ControlData;
 mod tests;
 
 impl ObjectStore {
+    /// Instance records bind by index before the parent's controllers are installed.
+    /// A negative index retains the template's existing reference.
+    pub(crate) fn set_combo_instance_controller(&mut self, id: GObjectId, index: i16) {
+        if index >= 0
+            && let Some(ControlData::ComboBox(data)) =
+                self.objects.get_mut(id).map(|o| &mut o.control)
+        {
+            data.selection_controller = i32::from(index);
+            self.selection_controllers.remove(&id);
+        }
+    }
+
     /// Native dropdown item selection forces the title/icon to be reapplied on
     /// reselect, without a transient -1 assignment to the selection controller.
     /// The input adapter is responsible for emitting the user change event.

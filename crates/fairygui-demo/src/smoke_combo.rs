@@ -10,6 +10,7 @@ struct State {
     combo: Option<Entity>,
     pane: Option<Entity>,
     rows: Vec<Entity>,
+    instance_owner: Option<Entity>,
 }
 #[derive(Resource, Default)]
 struct Events(Vec<(i32, String)>);
@@ -37,6 +38,7 @@ fn drive(
     mut state: ResMut<State>,
     demo: Res<Demo>,
     controller: Res<demos::DemoController>,
+    mut packages: ResMut<Assets<fairygui_bevy::FuiAsset>>,
     gui: GuiQuery,
     events: Res<Events>,
     existing: Query<()>,
@@ -260,8 +262,76 @@ fn drive(
         27 if elapsed > 6 => {
             assert!(!existing.contains(state.pane.unwrap()));
             assert!(!existing.contains(state.combo.unwrap()));
+            let asset = packages.add(fairygui_bevy::FuiAsset {
+                package: fairygui_bevy::core::FuiPackage::parse(
+                    "ComboInstance",
+                    include_bytes!("../../fairygui-core/tests/fixtures/ComboInstance.fui"),
+                )
+                .unwrap(),
+                res_key: "ui/ComboInstance".into(),
+            });
+            state.instance_owner = Some(
+                commands
+                    .spawn(FairyGuiRoot::new(asset, "Main").with_position(Vec2::new(100., 100.)))
+                    .id(),
+            );
+            state.cursor = None;
+            next = true;
+        }
+        28 if elapsed > 10 && gui.view(state.instance_owner.unwrap()).is_some() => {
+            let owner = state.instance_owner.unwrap();
+            for (name, text, index, color) in [
+                ("direct", "Second", 1, Color::srgb_u8(51, 153, 204)),
+                ("nested", "First", 0, Color::srgb_u8(102, 204, 153)),
+                ("preserved", "Base", -1, Color::srgb_u8(18, 52, 86)),
+                ("bound", "Second", 1, Color::srgb_u8(204, 153, 51)),
+            ] {
+                let combo = gui.child_by_name(owner, name).unwrap();
+                let mut title = gui.child_by_name(combo, "title").unwrap();
+                if name == "nested" {
+                    title = gui.child_by_name(title, "title").unwrap();
+                }
+                assert_eq!(gui.text(title), Some(text), "{name}");
+                assert_eq!(gui.color(title), Some(color), "{name}");
+                assert_eq!(
+                    gui.combo_box(combo).unwrap().selected_index(),
+                    index,
+                    "{name}"
+                );
+                assert!(nodes.get(title).unwrap().0.size().min_element() > 0.);
+            }
+            state.combo = gui.child_by_name(owner, "nested");
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-combo-instance.png"));
+            next = true;
+        }
+        29 if elapsed > 6 => {
+            let mut combo = gui_edit.get_mut(state.combo.unwrap()).unwrap();
+            combo.set_color(Color::srgb_u8(204, 102, 51));
+            combo.set_combo_selection(1);
+            next = true;
+        }
+        30 if elapsed > 8 => {
+            let label = gui.child_by_name(state.combo.unwrap(), "title").unwrap();
+            let title = gui.child_by_name(label, "title").unwrap();
+            assert_eq!(gui.text(title), Some("Second"));
+            assert_eq!(gui.color(title), Some(Color::srgb_u8(204, 102, 51)));
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-combo-instance-runtime.png",
+                ));
+            next = true;
+        }
+        31 if elapsed > 6 => {
+            commands.entity(state.instance_owner.unwrap()).despawn();
+            next = true;
+        }
+        32 if elapsed > 6 => {
+            assert!(!existing.contains(state.combo.unwrap()));
             info!(
-                "demo smoke PASSED: ECS combo items/values/count/direction, current observer snapshots, real select/reselect, programmatic value/missing value, retained dropdown/rows, replacement on reopen and owner disposal"
+                "demo smoke PASSED: ECS combo configuration, real select/reselect, retained dropdown/rows, exported direct/nested title colors, initial parent selection, retained runtime edits and disposal"
             );
             exit.write(AppExit::Success);
             next = true;
