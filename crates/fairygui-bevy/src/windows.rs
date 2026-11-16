@@ -11,6 +11,7 @@ mod tests;
 /// disposes the model and every view. Hiding retains them for reuse. Native
 /// close-button input updates visible=false on this component.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
+#[component(on_remove = invalidate_window_owner)]
 pub struct FairyGuiWindow {
     pub asset: Handle<FuiAsset>,
     pub item_name: String,
@@ -118,11 +119,23 @@ impl GuiWindowState {
 }
 #[derive(Debug)]
 pub(super) struct Binding {
+    source_removed: bool,
     source: FairyGuiWindow,
     object: Option<GObjectId>,
     pub(super) failed: bool,
     wait_pane: Option<GObjectId>,
     wait_error: Option<String>,
+}
+
+fn invalidate_window_owner(
+    mut world: bevy::ecs::world::DeferredWorld,
+    context: bevy::ecs::lifecycle::HookContext,
+) {
+    if let Some(mut runtime) = world.get_non_send_mut::<GuiRuntime>()
+        && let Some(binding) = runtime.ecs_windows.get_mut(&context.entity)
+    {
+        binding.source_removed = true;
+    }
 }
 
 impl GuiRuntime {
@@ -140,7 +153,7 @@ impl GuiRuntime {
     pub(crate) fn ecs_window_source_matches(&self, owner: Entity, source: &FairyGuiWindow) -> bool {
         self.ecs_windows
             .get(&owner)
-            .is_some_and(|binding| binding.source.same_template(source))
+            .is_some_and(|binding| !binding.source_removed && binding.source.same_template(source))
     }
     pub(crate) fn is_ecs_window_object(&self, object: GObjectId) -> bool {
         self.ecs_windows
@@ -261,6 +274,7 @@ pub(crate) fn sync_ecs_windows(
             runtime.clear_ecs_wait(entity);
         }
         let mut binding = runtime.ecs_windows.remove(&entity).unwrap_or(Binding {
+            source_removed: false,
             source: (*source).clone(),
             object: None,
             failed: false,

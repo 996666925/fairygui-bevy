@@ -567,7 +567,7 @@ fn ecs_drag_touch_owner_survives_another_finger_release_and_cancellation_cleans_
 
 #[test]
 fn direct_drag_rejects_changed_or_removed_owner_templates_before_lifecycle_sync() {
-    for change in 0..3 {
+    for change in 0..4 {
         let (mut app, _, owner, source, _) = fixture();
         app.world_mut().entity_mut(source).remove::<GuiDragSource>();
         mouse(&mut app, true);
@@ -581,8 +581,15 @@ fn direct_drag_rejects_changed_or_removed_owner_templates_before_lifecycle_sync(
             1 => {
                 app.world_mut().entity_mut(owner).remove::<FairyGuiRoot>();
             }
-            _ => {
+            2 => {
                 app.world_mut().despawn(owner);
+            }
+            _ => {
+                let source = app.world().get::<FairyGuiRoot>(owner).unwrap().clone();
+                app.world_mut()
+                    .entity_mut(owner)
+                    .remove::<FairyGuiRoot>()
+                    .insert(source);
             }
         }
         assert!(!start(&mut app, owner, None), "change={change}");

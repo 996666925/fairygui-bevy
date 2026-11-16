@@ -340,7 +340,7 @@ fn exported_chat_height_relation_uses_design_size_after_runtime_row_height_overr
 #[test]
 fn direct_edit_services_reject_replaced_removed_or_despawned_owner_aliases_before_sync() {
     for window in [false, true] {
-        for change in 0..4 {
+        for change in 0..5 {
             let (mut app, asset) = app();
             let owner = if window {
                 app.world_mut()
@@ -395,7 +395,7 @@ fn direct_edit_services_reject_replaced_removed_or_despawned_owner_aliases_befor
                 2 => {
                     app.world_mut().despawn(owner);
                 }
-                _ => {
+                3 => {
                     let pending = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
                     if window {
                         app.world_mut()
@@ -407,6 +407,21 @@ fn direct_edit_services_reject_replaced_removed_or_despawned_owner_aliases_befor
                             .get_mut::<FairyGuiRoot>(owner)
                             .unwrap()
                             .asset = pending;
+                    }
+                }
+                _ => {
+                    if window {
+                        let source = app.world().get::<FairyGuiWindow>(owner).unwrap().clone();
+                        app.world_mut()
+                            .entity_mut(owner)
+                            .remove::<FairyGuiWindow>()
+                            .insert(source);
+                    } else {
+                        let source = app.world().get::<FairyGuiRoot>(owner).unwrap().clone();
+                        app.world_mut()
+                            .entity_mut(owner)
+                            .remove::<FairyGuiRoot>()
+                            .insert(source);
                     }
                 }
             }
@@ -436,7 +451,7 @@ fn direct_edit_services_reject_replaced_removed_or_despawned_owner_aliases_befor
             app.update();
             assert!(!app.world().non_send::<GuiRuntime>().store().contains(old));
             assert!(app.world_mut().gui_mut(view).is_none());
-            if change == 0 {
+            if change == 0 || change == 4 {
                 assert!(app.world_mut().gui_mut(owner).is_some());
             } else {
                 assert!(app.world_mut().gui_mut(owner).is_none());

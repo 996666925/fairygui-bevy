@@ -225,3 +225,50 @@ fn entity_linked_popups_toggle_on_input_and_keep_their_views() {
         }
     }
 }
+
+#[test]
+fn entity_button_popup_cannot_reuse_a_removed_owner_after_identical_reinsertion() {
+    for window in [false, true] {
+        let (mut app, asset, button) = fixture();
+        let target = if window {
+            app.world_mut()
+                .spawn(FairyGuiWindow::new(asset, "WindowA"))
+                .id()
+        } else {
+            app.world_mut()
+                .spawn(FairyGuiRoot::new(asset, "Component12"))
+                .id()
+        };
+        app.world_mut()
+            .entity_mut(button)
+            .insert(GuiButtonPopup(Some(target)));
+        app.update();
+        let old_target = id(&app, target);
+        assert_eq!(linked(&app, button), Some(old_target));
+        // Ordinary replacement preserves the live component and native identity.
+        if window {
+            let source = app.world().get::<FairyGuiWindow>(target).unwrap().clone();
+            app.world_mut().entity_mut(target).insert(source.clone());
+            assert!(app.world_mut().gui_mut(target).is_some());
+            app.world_mut()
+                .entity_mut(target)
+                .remove::<FairyGuiWindow>()
+                .insert(source);
+        } else {
+            let source = app.world().get::<FairyGuiRoot>(target).unwrap().clone();
+            app.world_mut().entity_mut(target).insert(source.clone());
+            assert!(app.world_mut().gui_mut(target).is_some());
+            app.world_mut()
+                .entity_mut(target)
+                .remove::<FairyGuiRoot>()
+                .insert(source);
+        }
+        crate::properties::sync(app.world_mut());
+        assert_eq!(linked(&app, button), None);
+        assert!(app.world_mut().gui_mut(target).is_none());
+        app.update();
+        assert_ne!(id(&app, target), old_target);
+        assert_eq!(linked(&app, button), Some(id(&app, target)));
+        assert!(app.world_mut().gui_mut(target).is_some());
+    }
+}

@@ -607,7 +607,7 @@ fn initial_text_acknowledgements_follow_rebinding_without_replaying_old_writes()
 fn owner_property_writes_wait_for_the_current_template_without_editing_the_old_view() {
     use crate::properties::sync_property;
     for window in [false, true] {
-        for change in 0..3 {
+        for change in 0..4 {
             let (mut app, root, asset) = fixture("Button1", true);
             let owner = if window {
                 app.world_mut().despawn(root);
@@ -644,8 +644,15 @@ fn owner_property_writes_wait_for_the_current_template_without_editing_the_old_v
                             .unwrap()
                             .asset = pending.clone()
                     }
-                    _ => {
+                    2 => {
                         app.world_mut().entity_mut(owner).remove::<FairyGuiWindow>();
+                    }
+                    _ => {
+                        let source = app.world().get::<FairyGuiWindow>(owner).unwrap().clone();
+                        app.world_mut()
+                            .entity_mut(owner)
+                            .remove::<FairyGuiWindow>()
+                            .insert(source);
                     }
                 }
             } else {
@@ -662,8 +669,15 @@ fn owner_property_writes_wait_for_the_current_template_without_editing_the_old_v
                             .unwrap()
                             .asset = pending.clone()
                     }
-                    _ => {
+                    2 => {
                         app.world_mut().entity_mut(owner).remove::<FairyGuiRoot>();
+                    }
+                    _ => {
+                        let source = app.world().get::<FairyGuiRoot>(owner).unwrap().clone();
+                        app.world_mut()
+                            .entity_mut(owner)
+                            .remove::<FairyGuiRoot>()
+                            .insert(source);
                     }
                 }
             }

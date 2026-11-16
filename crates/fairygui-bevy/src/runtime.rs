@@ -78,6 +78,7 @@ pub struct GuiConfig {
 /// named component from an already requested `.fui` asset when it is ready.
 /// Removing the component removes the generated UI tree and its Bevy views.
 #[derive(Component, Debug, Clone, PartialEq)]
+#[component(on_remove = invalidate_root_owner)]
 pub struct FairyGuiRoot {
     pub asset: Handle<FuiAsset>,
     pub item_name: String,
@@ -147,6 +148,7 @@ pub struct GuiRootInstance {
 
 #[derive(Debug)]
 struct EcsRootBinding {
+    source_removed: bool,
     asset: Handle<FuiAsset>,
     item_name: String,
     handle: Option<usize>,
@@ -156,6 +158,20 @@ struct EcsRootBinding {
     size: Option<Vec2>,
     follow_window_size: bool,
     parent: Option<Entity>,
+}
+
+fn invalidate_root_owner(
+    mut world: bevy::ecs::world::DeferredWorld,
+    context: bevy::ecs::lifecycle::HookContext,
+) {
+    // Invalidate the alias immediately, retaining the old model for explicit
+    // view handles until scheduled disposal. A same-template reinsertion is a
+    // new owner instance and must never revive this binding.
+    if let Some(mut runtime) = world.get_non_send_mut::<GuiRuntime>()
+        && let Some(binding) = runtime.ecs_roots.get_mut(&context.entity)
+    {
+        binding.source_removed = true;
+    }
 }
 
 #[derive(Component, Debug)]
@@ -771,7 +787,9 @@ impl GuiRuntime {
 
     pub(crate) fn ecs_root_source_matches(&self, owner: Entity, source: &FairyGuiRoot) -> bool {
         self.ecs_roots.get(&owner).is_some_and(|binding| {
-            binding.asset == source.asset && binding.item_name == source.item_name
+            !binding.source_removed
+                && binding.asset == source.asset
+                && binding.item_name == source.item_name
         })
     }
 
@@ -2139,6 +2157,7 @@ pub fn sync_ecs_roots(
         runtime.ecs_roots.insert(
             owner,
             EcsRootBinding {
+                source_removed: false,
                 asset: source.asset.clone(),
                 item_name: source.item_name.clone(),
                 handle: None,
