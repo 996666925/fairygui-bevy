@@ -260,6 +260,103 @@ fn loader_field_edits_merge_with_native_changes_and_keep_settings_across_url_rep
 }
 
 #[test]
+fn constrained_auto_loader_keeps_its_group_centered_and_aligns_retained_component_content() {
+    use crate::core::{Size, object::GroupLayoutSettings, package::ObjectType};
+    let (mut app, owner, _) = fixture("Basics", "Demo_Loader", true);
+    let loader = child(&mut app, owner, "n2");
+    app.world_mut()
+        .get_mut::<GuiIcon>(loader)
+        .unwrap()
+        .set("ui://Basics/Component12");
+    app.update();
+    let loader_id = object(&app, loader);
+    let (group, content, source) = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let content = runtime.loader_component(loader_id).unwrap();
+        let source = runtime.store().object(content).unwrap().size();
+        let store = runtime.store_mut();
+        let parent = store.object(loader_id).unwrap().parent().unwrap();
+        let size = store.object(parent).unwrap().size();
+        let member_size = store.object(loader_id).unwrap().size();
+        store.set_xy(
+            loader_id,
+            (size.width - member_size.width) * 0.5,
+            (size.height - member_size.height) * 0.5,
+        );
+        let group = store.create(ObjectType::Group);
+        store.set_parent(group, Some(parent));
+        store.set_group(loader_id, Some(group));
+        store.set_group_layout_settings(group, GroupLayoutSettings::default());
+        store.flush_group_layouts();
+        store.add_relation(group, parent, RelationType::CenterCenter, false);
+        store.add_relation(group, parent, RelationType::MiddleMiddle, false);
+        (group, content, source)
+    };
+    app.update();
+    let view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(content)
+        .unwrap();
+    for align in 0..3 {
+        app.world_mut()
+            .get_mut::<GuiLoaderSettings>(loader)
+            .unwrap()
+            .auto_size = true;
+        app.world_mut()
+            .get_mut::<GuiLoaderSettings>(loader)
+            .unwrap()
+            .fill = 0;
+        app.world_mut()
+            .get_mut::<GuiLoaderSettings>(loader)
+            .unwrap()
+            .align = align;
+        app.world_mut()
+            .get_mut::<GuiLoaderSettings>(loader)
+            .unwrap()
+            .vertical_align = align;
+        app.world_mut()
+            .get_mut::<GuiSizeConstraints>(loader)
+            .unwrap()
+            .min = Vec2::new(source.width + 201., source.height + 151.);
+        for _ in 0..3 {
+            app.update();
+            let runtime = app.world().non_send::<GuiRuntime>();
+            assert_eq!(runtime.loader_component(loader_id), Some(content));
+            assert_eq!(runtime.entity_of(content), Some(view));
+            let store = runtime.store();
+            let loader = store.object(loader_id).unwrap();
+            let parent = store.object(loader.parent().unwrap()).unwrap().size();
+            let group = store.object(group).unwrap();
+            let expected = Size::new(source.width + 201., source.height + 151.);
+            assert_eq!(group.size(), expected);
+            assert_eq!(
+                group.position(),
+                crate::core::Point::new(
+                    (parent.width - expected.width) * 0.5,
+                    (parent.height - expected.height) * 0.5
+                )
+            );
+            assert_eq!(loader.position(), group.position());
+            let offset = match align {
+                0 => Vec2::ZERO,
+                1 => Vec2::new(100., 75.),
+                _ => Vec2::new(201., 151.),
+            };
+            assert_eq!(
+                app.world().get::<GuiTransform>(view).unwrap().position,
+                offset
+            );
+            let node = app.world().get::<Node>(view).unwrap();
+            assert_eq!(
+                (node.left, node.top),
+                (Val::Px(offset.x), Val::Px(offset.y))
+            );
+        }
+    }
+}
+
+#[test]
 fn progress_and_mask_component_edits_merge_and_retain_f64_amounts_and_layout() {
     let (mut app, owner, _) = fixture("Cooldown", "Main", true);
     let progress = child(&mut app, owner, "b0");

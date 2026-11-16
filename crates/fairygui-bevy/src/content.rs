@@ -131,13 +131,7 @@ pub(crate) fn sync_content_layout(
                 .map_or(Vec2::ZERO, |image| image.size().as_vec2());
         }
         let source_size = Size::new(source.x, source.y);
-        let viewport = gobject.size();
         let auto_size = matches!(gobject.control(), ControlData::Loader(data) if data.auto_size);
-        let canvas = if let ControlData::Loader(loader) = gobject.control() {
-            loader.content_rect(source_size, viewport)
-        } else {
-            GuiRect::new(0.0, 0.0, viewport.width, viewport.height)
-        };
         if auto_size {
             runtime.store_mut().set_size(
                 object.0,
@@ -145,6 +139,15 @@ pub(crate) fn sync_content_layout(
                 if source.y > 0.0 { source.y } else { 30.0 },
             );
         }
+        // Auto-size may be clamped and may notify relations. Resolve the live
+        // viewport after that write, before aligning or scaling its content.
+        let gobject = runtime.store().object(object.0).unwrap();
+        let viewport = gobject.size();
+        let canvas = if let ControlData::Loader(loader) = gobject.control() {
+            loader.content_rect(source_size, viewport)
+        } else {
+            GuiRect::new(0.0, 0.0, viewport.width, viewport.height)
+        };
         let rect = trimmed_rect(canvas, source, if grid.is_some() { None } else { trim });
         let next = (
             Val::Px(rect.x),
@@ -355,6 +358,59 @@ mod tests {
                 .unwrap()
                 .size(),
             Size::new(150.0, 75.0)
+        );
+    }
+
+    #[test]
+    fn constrained_auto_loader_uses_the_current_viewport_before_trim_on_every_update() {
+        use fairygui_core::object::SizeConstraints;
+        let (mut app, object, _, visual) = setup(ObjectType::Loader);
+        {
+            let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+            let store = runtime.store_mut();
+            store.set_size_constraints(
+                object,
+                SizeConstraints {
+                    min: Size::new(301., 201.),
+                    max: Size::ZERO,
+                },
+            );
+            store.set_loader_auto_size(object, true);
+            store.set_loader_layout(object, 0, 1, 1);
+        }
+        for _ in 0..3 {
+            app.update();
+            assert_eq!(
+                node_rect(app.world().get::<Node>(visual).unwrap()),
+                (Val::Px(110.), Val::Px(80.), Val::Px(40.), Val::Px(20.))
+            );
+        }
+        app.world_mut()
+            .get_mut::<ContentVisual>(visual)
+            .unwrap()
+            .source_size = Vec2::new(150., 75.);
+        app.update();
+        assert_eq!(
+            node_rect(app.world().get::<Node>(visual).unwrap()),
+            (Val::Px(85.), Val::Px(68.), Val::Px(40.), Val::Px(20.))
+        );
+        app.world_mut()
+            .non_send_mut::<GuiRuntime>()
+            .store_mut()
+            .set_size_constraints(object, SizeConstraints::default());
+        app.update();
+        assert_eq!(
+            node_rect(app.world().get::<Node>(visual).unwrap()),
+            (Val::Px(10.), Val::Px(5.), Val::Px(40.), Val::Px(20.))
+        );
+        assert_eq!(
+            app.world()
+                .non_send::<GuiRuntime>()
+                .store()
+                .object(object)
+                .unwrap()
+                .size(),
+            Size::new(150., 75.)
         );
     }
 }

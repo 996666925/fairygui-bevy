@@ -261,6 +261,7 @@ impl Default for LoaderData {
 
 impl LoaderData {
     /// Layout the untrimmed content canvas using FairyGUI's six fill modes.
+    /// The viewport is the actual size after auto-size and size constraints.
     /// Images and movies are sized directly; use_resize only affects components.
     pub fn content_rect(
         &self,
@@ -271,12 +272,13 @@ impl LoaderData {
         if source.is_zero() {
             return Rect::ZERO;
         }
-        let (mut width, mut height) = (source.width, source.height);
-        if self.auto_size {
-            return Rect::new(0.0, 0.0, width, height);
-        }
+        // Native layout uses JS Number through scaling and floor alignment.
+        // Rounding the scale to f32 first can move a centered edge by one pixel.
+        let (mut width, mut height) = (f64::from(source.width), f64::from(source.height));
+        let (viewport_width, viewport_height) =
+            (f64::from(viewport.width), f64::from(viewport.height));
         if self.fill != 0 {
-            let (mut sx, mut sy) = (viewport.width / width, viewport.height / height);
+            let (mut sx, mut sy) = (viewport_width / width, viewport_height / height);
             match self.fill {
                 1 => {
                     sx = sx.min(sy);
@@ -298,16 +300,16 @@ impl LoaderData {
             height *= sy;
         }
         let x = match self.align {
-            1 => ((viewport.width - width) / 2.0).floor(),
-            2 => viewport.width - width,
+            1 => ((viewport_width - width) / 2.0).floor(),
+            2 => viewport_width - width,
             _ => 0.0,
         };
         let y = match self.vertical_align {
-            1 => ((viewport.height - height) / 2.0).floor(),
-            2 => viewport.height - height,
+            1 => ((viewport_height - height) / 2.0).floor(),
+            2 => viewport_height - height,
             _ => 0.0,
         };
-        Rect::new(x, y, width, height)
+        Rect::new(x as f32, y as f32, width as f32, height as f32)
     }
 }
 
@@ -315,6 +317,87 @@ impl LoaderData {
 mod loader_layout_tests {
     use super::*;
     use crate::geom::{Rect, Size};
+
+    #[test]
+    fn auto_sized_loader_alignment_and_fill_match_native_size_constraints() {
+        use crate::object::{ObjectStore, SizeConstraints};
+        let mut states = 0;
+        for line in
+            include_str!("../../tests/fixtures/loader-auto-constraints-reference.txt").lines()
+        {
+            if line.starts_with('#') {
+                continue;
+            }
+            let (config, expected) = line.split_once(" | ").unwrap();
+            let v: Vec<f32> = config
+                .split_whitespace()
+                .map(|v| v.parse().unwrap())
+                .collect();
+            let expected: Vec<f32> = expected
+                .split_whitespace()
+                .map(|v| v.parse().unwrap())
+                .collect();
+            let mut store = ObjectStore::new();
+            let loader = store.create(ObjectType::Loader);
+            store.set_size(loader, 250., 150.);
+            store.set_size_constraints(
+                loader,
+                SizeConstraints {
+                    min: Size::new(v[0], v[1]),
+                    max: Size::new(v[2], v[3]),
+                },
+            );
+            store.set_loader_auto_size(loader, true);
+            store.set_loader_layout(loader, v[4] as i32, v[6] as i32, v[7] as i32);
+            store.set_loader_shrink_only(loader, v[5] != 0.);
+            store.set_loader_use_resize(loader, v[8] != 0.);
+            let source = Size::new(100., 50.);
+            if v[9] == 1. {
+                let component = store.create(ObjectType::Component);
+                store.set_size(component, 100., 50.);
+                store.set_parent(component, Some(loader));
+                store.layout_loader_component(loader, component, source);
+                let o = store.object(component).unwrap();
+                let actual = [
+                    store.object(loader).unwrap().width(),
+                    store.object(loader).unwrap().height(),
+                    o.x(),
+                    o.y(),
+                    o.width(),
+                    o.height(),
+                    o.scale_x(),
+                    o.scale_y(),
+                ];
+                for (actual, expected) in actual.into_iter().zip(&expected) {
+                    assert!(
+                        (actual - expected).abs() < 0.001,
+                        "{config}: {actual} != {expected}"
+                    );
+                }
+            } else {
+                store.set_size(loader, 100., 50.);
+                let object = store.object(loader).unwrap();
+                let ControlData::Loader(data) = object.control() else {
+                    unreachable!()
+                };
+                let actual = data.content_rect(source, object.size());
+                assert_eq!(
+                    [
+                        object.width(),
+                        object.height(),
+                        actual.x,
+                        actual.y,
+                        actual.width,
+                        actual.height
+                    ],
+                    expected[..6],
+                    "{config}"
+                );
+            }
+            states += 1;
+        }
+        assert_eq!(states, 1728);
+    }
 
     #[test]
     fn fill_modes_keep_original_size_fit_match_dimensions_stretch_and_cover() {
@@ -367,7 +450,7 @@ mod loader_layout_tests {
     }
 
     #[test]
-    fn shrink_only_caps_enlargement_and_auto_size_uses_source_dimensions() {
+    fn shrink_only_caps_enlargement_and_auto_size_uses_the_actual_viewport() {
         let mut data = LoaderData {
             fill: 4,
             shrink_only: true,
@@ -382,7 +465,11 @@ mod loader_layout_tests {
         data.auto_size = true;
         assert_eq!(
             data.content_rect(Size::new(100.0, 50.0), Size::new(300.0, 200.0)),
-            Rect::new(0.0, 0.0, 100.0, 50.0)
+            Rect::new(200.0, 150.0, 100.0, 50.0)
+        );
+        assert_eq!(
+            data.content_rect(Size::new(100., 50.), Size::new(100., 50.)),
+            Rect::new(0., 0., 100., 50.)
         );
         assert_eq!(
             data.content_rect(Size::ZERO, Size::new(300.0, 200.0)),

@@ -1,6 +1,13 @@
 //! Rendered GGroup bounds and center relations after retained ECS edits.
 use super::*;
 
+type LoaderVisuals<'w, 's> = Query<
+    'w,
+    's,
+    (&'static ChildOf, &'static Node, &'static UiGlobalTransform),
+    (With<ImageNode>, Without<GObjectRef>),
+>;
+
 #[derive(Resource, Default)]
 struct State {
     frame: u32,
@@ -10,6 +17,8 @@ struct State {
     buttons: Vec<Entity>,
     member_sizes: Vec<(Vec2, Vec2)>,
     detached_positions: Vec<Vec2>,
+    loader_panels: Vec<Entity>,
+    loader_geometry: Vec<(Vec2, Vec2, Vec2)>,
 }
 
 pub(super) fn install(app: &mut App) {
@@ -23,6 +32,7 @@ fn drive(
     gui: GuiQuery,
     assets: Res<AssetServer>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
+    visuals: LoaderVisuals,
     mut objects: GuiMut,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
@@ -396,8 +406,121 @@ fn drive(
             next = true;
         }
         21 if elapsed >= 20 => {
+            for &owner in state.panels.iter().chain(&state.buttons) {
+                objects.get_mut(owner).unwrap().set_visible(false);
+            }
+            for x in [40., 450., 860.] {
+                state.loader_panels.push(
+                    commands
+                        .spawn(
+                            FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Demo_Loader")
+                                .with_position(Vec2::new(x, 180.))
+                                .with_size(Vec2::new(360., 260.)),
+                        )
+                        .id(),
+                );
+            }
+            next = true;
+        }
+        22 if elapsed >= 12
+            && state
+                .loader_panels
+                .iter()
+                .all(|&owner| gui.view(owner).is_some()) =>
+        {
+            for (index, &owner) in state.loader_panels.iter().enumerate() {
+                let loader = gui.child_by_name(owner, "n2").unwrap();
+                for &child in gui.get(owner).unwrap().children() {
+                    if child != loader {
+                        objects.get_mut(child).unwrap().set_visible(false);
+                    }
+                }
+                objects
+                    .get_mut(loader)
+                    .unwrap()
+                    .set_loader_settings(GuiLoaderSettings {
+                        auto_size: true,
+                        align: index as i32,
+                        vertical_align: index as i32,
+                        ..default()
+                    });
+            }
+            next = true;
+        }
+        23 if elapsed >= 12 => {
+            let panels = state.loader_panels.clone();
+            for owner in panels {
+                let loader = gui.child_by_name(owner, "n2").unwrap();
+                let size = gui.transform(loader).unwrap().size();
+                let (_, node, _) = visuals
+                    .iter()
+                    .find(|(parent, _, _)| parent.parent() == loader)
+                    .unwrap();
+                let px = |value| match value {
+                    Val::Px(value) => value,
+                    _ => panic!("expected pixels"),
+                };
+                state.loader_geometry.push((
+                    size,
+                    Vec2::new(px(node.left), px(node.top)),
+                    Vec2::new(px(node.width), px(node.height)),
+                ));
+                commands.entity(loader).insert(GuiSizeConstraints {
+                    min: size + Vec2::new(161., 101.),
+                    ..default()
+                });
+                commands.queue(move |world: &mut World| {
+                    let loader = world.get::<GObjectRef>(loader).unwrap().0;
+                    let mut runtime = world.non_send_mut::<GuiRuntime>();
+                    let store = runtime.store_mut();
+                    let parent = store.object(loader).unwrap().parent().unwrap();
+                    let parent_size = store.object(parent).unwrap().size();
+                    store.set_xy(
+                        loader,
+                        (parent_size.width - size.x) * 0.5,
+                        (parent_size.height - size.y) * 0.5,
+                    );
+                    let group = store.create(fairygui_core::package::ObjectType::Group);
+                    store.set_parent(group, Some(parent));
+                    store.set_group(loader, Some(group));
+                    store.flush_group_layouts();
+                    store.add_relation(group, parent, RelationType::CenterCenter, false);
+                    store.add_relation(group, parent, RelationType::MiddleMiddle, false);
+                });
+            }
+            next = true;
+        }
+        24 if elapsed >= 12 => {
+            check_loader_alignment(&state, &gui, &nodes, &visuals);
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-group-loader-alignment.png",
+                ));
+            next = true;
+        }
+        25 if elapsed >= 12 => {
+            for (index, &owner) in state.loader_panels.iter().enumerate() {
+                let loader = gui.child_by_name(owner, "n2").unwrap();
+                commands.entity(loader).insert(GuiSizeConstraints {
+                    min: state.loader_geometry[index].0 + Vec2::new(201., 151.),
+                    ..default()
+                });
+            }
+            next = true;
+        }
+        26 if elapsed >= 12 => {
+            check_loader_alignment(&state, &gui, &nodes, &visuals);
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-group-loader-resized.png",
+                ));
+            next = true;
+        }
+        27 if elapsed >= 12 => {
             info!(
-                "demo smoke PASSED: rendered group alignment, ECS fixed layouts, proportional/main-grid resizing, hidden members, pivoted size relations, simultaneous size/position axis edits, entity group membership and retained geometry"
+                "demo smoke PASSED: rendered group alignment, fixed layouts, resizing, hidden members, pivots, simultaneous axis edits, group membership and constrained auto-loader left/center/right alignment"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -407,6 +530,50 @@ fn drive(
     if next {
         state.step += 1;
         state.since = state.frame;
+    }
+}
+
+fn check_loader_alignment(
+    state: &State,
+    gui: &GuiQuery,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    visuals: &LoaderVisuals,
+) {
+    for (index, &owner) in state.loader_panels.iter().enumerate() {
+        let loader = gui.child_by_name(owner, "n2").unwrap();
+        let group = gui.group(loader).unwrap();
+        let size = gui.transform(loader).unwrap().size();
+        let position = (gui.transform(owner).unwrap().size() - size) * 0.5;
+        assert_eq!(gui.transform(group).unwrap().position(), position);
+        assert_eq!(gui.transform(loader).unwrap().position(), position);
+        let (source, trim, part_size) = state.loader_geometry[index];
+        let extra = size - source;
+        let align = match index {
+            0 => Vec2::ZERO,
+            1 => (extra * 0.5).floor(),
+            _ => extra,
+        };
+        let (_, node, transform) = visuals
+            .iter()
+            .find(|(parent, _, _)| parent.parent() == loader)
+            .unwrap();
+        assert_eq!(
+            (node.left, node.top, node.width, node.height),
+            (
+                Val::Px(trim.x + align.x),
+                Val::Px(trim.y + align.y),
+                Val::Px(part_size.x),
+                Val::Px(part_size.y)
+            )
+        );
+        let (loader_node, loader_transform) = nodes.get(loader).unwrap();
+        let expected = loader_transform.transform_point2(
+            (trim + align + part_size * 0.5 - size * 0.5) / loader_node.inverse_scale_factor(),
+        );
+        assert!(
+            transform.transform_point2(Vec2::ZERO).distance(expected) <= 1.,
+            "loader {index}: projected content must match its aligned model"
+        );
     }
 }
 
