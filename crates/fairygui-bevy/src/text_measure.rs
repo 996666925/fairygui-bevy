@@ -3,6 +3,9 @@ use super::*;
 use bevy::text::{FontCx, LayoutCx, TextBounds, TextElement, TextPipeline};
 use std::collections::HashSet;
 
+#[path = "raster_fit.rs"]
+pub(crate) mod fit;
+
 #[cfg(test)]
 #[path = "text_measure_tests.rs"]
 mod tests;
@@ -428,7 +431,13 @@ pub(crate) fn sync_padding(
 ) {
     let measure = runtime.text_measurer.borrow();
     for (object, mut node) in &mut nodes {
-        if measure.contains(object.0) && node.padding == UiRect::ZERO {
+        let shrink = runtime
+            .store()
+            .object(object.0)
+            .filter(|object| !matches!(object.control(), ControlData::TextInput(_)))
+            .and_then(|object| object.control().as_text_field())
+            .is_some_and(|data| data.auto_size == 3);
+        if (shrink || measure.contains(object.0)) && node.padding == UiRect::ZERO {
             node.padding = UiRect::all(Val::Px(2.));
         }
     }

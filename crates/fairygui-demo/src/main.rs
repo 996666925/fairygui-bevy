@@ -223,6 +223,8 @@ fn main() -> AppExit {
         smoke::install_text_variables(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-html-options") {
         smoke::install_html_options(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-raster-shrink") {
+        smoke::install_raster_shrink(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-group-alignment") {
         smoke::install_group_alignment(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-opaque") {

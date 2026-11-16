@@ -863,6 +863,11 @@ commands.entity(title).insert(GuiHtmlOptions {
 空白处理遵循原版 HTML 解析器的分段修剪规则。纯文本不受影响，关闭富文本后保留设置。
 `--smoke-html-options` 验证独立配置、HTML/UBB 样式、运行时恢复默认及实体复用。
 
+普通字体的 `auto_size = 3` 会在绘制前按实际段落测量缩小字号，支持单行宽度适配及
+多行高度搜索；富文本的独立字号和行距一起缩小，内联图片保持自己的尺寸。
+源文本、`GuiTextFormat.font_size` 和控件外框保持原值；改大外框或缩短文字后自动恢复。
+字体迟到、DPI 和样式变化会重新计算。`--smoke-raster-shrink` 验证真实窗口中的适配与恢复。
+
 文字样式直接修改 `GuiTextFormat`，按钮、标签和下拉框会转发到其标题文字：
 
 ```rust,ignore

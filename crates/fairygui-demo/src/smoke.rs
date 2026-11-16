@@ -47,6 +47,11 @@ mod html_options;
 pub(super) fn install_html_options(app: &mut App) {
     html_options::install(app);
 }
+#[path = "smoke_raster_shrink.rs"]
+mod raster_shrink;
+pub(super) fn install_raster_shrink(app: &mut App) {
+    raster_shrink::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {

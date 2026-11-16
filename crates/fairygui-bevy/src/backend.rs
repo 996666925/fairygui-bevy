@@ -282,7 +282,16 @@ pub fn align_text(
             1.0
         };
         let text_size = layout.size / scale;
-        let gutter = if runtime.text_measurer.borrow().contains(reference.0) {
+        let gutter = if data.auto_size == 3 {
+            if matches!(
+                object.control(),
+                fairygui_core::widget::ControlData::TextInput(_)
+            ) {
+                0.
+            } else {
+                2.
+            }
+        } else if runtime.text_measurer.borrow().contains(reference.0) {
             2.
         } else {
             0.

@@ -245,6 +245,7 @@ pub(crate) fn sync_rich_text(
             },
             backend::text_layout_for_object(gobject, data),
             backend::text_line_height_for(data, None),
+            crate::runtime::text_measure::fit::FontMetrics::new(data, None),
             backend::text_letter_spacing_for(data),
         ));
         let images = spawn_rich_content(
@@ -590,6 +591,7 @@ pub(super) fn spawn_rich_content(
                             ..backend::text_font_for_span(data, font, *size, *bold, *italic)
                         },
                         backend::text_line_height_for(data, *size),
+                        crate::runtime::text_measure::fit::FontMetrics::new(data, *size),
                         backend::text_letter_spacing_for(data),
                     ));
                     spans.push(span.id());

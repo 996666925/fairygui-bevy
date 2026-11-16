@@ -3443,6 +3443,7 @@ pub(crate) fn sync_dirty(
         {
             if text.is_some() {
                 commands.entity(entity).insert((
+                    text_measure::fit::FontMetrics::new(data, None),
                     backend::text_layout_for_object(gobject, data),
                     backend::text_letter_spacing_for(data),
                 ));

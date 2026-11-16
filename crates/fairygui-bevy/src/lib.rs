@@ -451,7 +451,12 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 runtime::sync_bitmap_rich_text,
                 graph::sync_graphs,
-                (runtime::sync_rich_text, runtime::text_measure::sync_padding).chain(),
+                (
+                    runtime::sync_rich_text,
+                    runtime::text_measure::sync_padding,
+                    runtime::text_measure::fit::sync,
+                )
+                    .chain(),
                 runtime::sync_appearance,
                 image_fill::sync_image_fills,
                 (

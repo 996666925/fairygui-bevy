@@ -279,6 +279,7 @@ pub(super) fn spawn_text(
         },
         backend::text_layout_for_object(object, data),
         backend::text_line_height_for(data, None),
+        crate::runtime::text_measure::fit::FontMetrics::new(data, None),
         backend::text_letter_spacing_for(data),
     ));
     if selected.rich {
@@ -441,6 +442,8 @@ pub(crate) fn sync_text_fonts(
                 BitmapTextMetrics,
                 RichTextBlock,
                 BitmapRichText,
+                crate::runtime::text_measure::fit::FontMetrics,
+                crate::runtime::text_measure::fit::RasterFit,
             )>();
         node.padding = UiRect::ZERO;
         let images = spawn_text(
