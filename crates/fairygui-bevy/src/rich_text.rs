@@ -351,7 +351,18 @@ impl RichTextBlock {
             }
         }
         for (entity, kind, bounds) in &layout.inline_boxes {
-            if *kind != InlineBoxKind::InFlow || !bounds.contains(local) {
+            if *kind != InlineBoxKind::InFlow || local.x < bounds.min.x || local.x > bounds.max.x {
+                continue;
+            }
+            // Native HtmlLink covers the row, including the space above and
+            // below a centered image; the image's own quad is smaller.
+            let Some((_, top, height, _)) =
+                inline_image_rows(block).find(|(id, _, _, _)| *id == entity.to_bits())
+            else {
+                continue;
+            };
+            let area = Rect::new(bounds.min.x, top, bounds.max.x, top + height);
+            if !area.contains(local) {
                 continue;
             }
             if let Some((_, group, href)) = self.links.iter().find(|(span, _, _)| span == entity) {
@@ -364,6 +375,55 @@ impl RichTextBlock {
             }
         }
         None
+    }
+}
+
+/// Row geometry uses the layout's unrounded advance, independently of font
+/// baselines and glyph overhang. UI scaling happens after native pixel rounding.
+fn inline_image_rows(block: &ComputedTextBlock) -> impl Iterator<Item = (u64, f32, f32, f32)> + '_ {
+    let mut y = 0_f64;
+    block.buffer().lines().flat_map(move |line| {
+        let top = y as f32;
+        let height = line.metrics().line_height;
+        y += f64::from(height);
+        line.items().filter_map(move |item| match item {
+            parley::PositionedLayoutItem::InlineBox(value)
+                if value.kind == parley::InlineBoxKind::InFlow =>
+            {
+                Some((value.id, top, height, value.height))
+            }
+            _ => None,
+        })
+    })
+}
+
+/// Laya Text defaults to alignItems=middle. Keep each image centered in its
+/// measured row instead of aligning its bottom with the text baseline.
+pub(crate) fn center_inline_images(
+    mut text: Query<(&ComputedTextBlock, &mut bevy::text::TextLayoutInfo), With<RichTextBlock>>,
+) {
+    for (block, mut layout) in &mut text {
+        if layout.inline_boxes.is_empty() {
+            continue;
+        }
+        let scale = layout.scale_factor.max(f32::EPSILON);
+        for (id, top, height, image_height) in inline_image_rows(block) {
+            let Some((_, _, bounds)) = layout
+                .inline_boxes
+                .iter_mut()
+                .find(|(entity, kind, _)| entity.to_bits() == id && *kind == InlineBoxKind::InFlow)
+            else {
+                continue;
+            };
+            // GUI font/leading/image metrics are integer logical pixels. Undo
+            // physical scaling before rounding the offset; e.g. 3px and 1px
+            // at 70% otherwise become 0.99999994px and incorrectly floor to 0.
+            let row_pixels = (height / scale).round();
+            let image_pixels = (image_height / scale).round();
+            let y = top + ((row_pixels - image_pixels).max(0.) * 0.5).floor() * scale;
+            bounds.min.y = y;
+            bounds.max.y = y + image_height;
+        }
     }
 }
 

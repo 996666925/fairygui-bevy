@@ -57,6 +57,11 @@ mod raster_ellipsis;
 pub(super) fn install_raster_ellipsis(app: &mut App) {
     raster_ellipsis::install(app);
 }
+#[path = "smoke_inline_alignment.rs"]
+mod inline_alignment;
+pub(super) fn install_inline_alignment(app: &mut App) {
+    inline_alignment::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {

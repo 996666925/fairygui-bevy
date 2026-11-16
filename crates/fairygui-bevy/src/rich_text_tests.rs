@@ -875,20 +875,10 @@ fn linked_image_box_uses_the_same_capture_and_transformed_content_coordinates() 
         );
     app.update();
     let image = images(&app, text)[0];
-    let inline_box = app.world().get::<InlineImage>(image).unwrap().inline_box;
-    let block = computed_block(&[inline_box]);
-    app.world_mut().entity_mut(entity).insert((
-        block,
-        bevy::text::TextLayoutInfo {
-            scale_factor: 2.0,
-            inline_boxes: vec![(
-                inline_box,
-                InlineBoxKind::InFlow,
-                Rect::new(0.0, 0.0, 30.0, 20.0),
-            )],
-            ..default()
-        },
-    ));
+    assert_eq!(
+        inline_boxes::shape(&mut app, text, 100., 2., Vec2::new(20., 30.)),
+        entity
+    );
     for scale in [Vec2::ONE, Vec2::new(-1.2, 0.7)] {
         let transform = UiGlobalTransform::from(bevy::math::Affine2::from_scale_angle_translation(
             scale,
@@ -896,7 +886,13 @@ fn linked_image_box_uses_the_same_capture_and_transformed_content_coordinates() 
             Vec2::new(120.0, 90.0),
         ));
         let computed = app.world().get::<ComputedNode>(entity).unwrap();
-        let local = Vec2::new(15.0, 10.0) + computed.content_box().min;
+        let bounds = app
+            .world()
+            .get::<bevy::text::TextLayoutInfo>(entity)
+            .unwrap()
+            .inline_boxes[0]
+            .2;
+        let local = bounds.center() + computed.content_box().min;
         let physical_cursor = transform.transform_point2(local);
         let normalized = computed
             .normalize_point(transform, physical_cursor)

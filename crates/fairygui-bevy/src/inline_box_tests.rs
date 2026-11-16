@@ -6,7 +6,13 @@ use bevy::text::*;
 /// including rasterized glyphs when present. The tracked demo font makes this
 /// independent of installed OS fonts. Only the UI frame is supplied by the test;
 /// window smoke also runs the complete Bevy UI layout and clipping schedules.
-fn shape(app: &mut App, text: GObjectId, width: f32, scale: f32, padding: Vec2) -> Entity {
+pub(super) fn shape(
+    app: &mut App,
+    text: GObjectId,
+    width: f32,
+    scale: f32,
+    padding: Vec2,
+) -> Entity {
     let root = app
         .world()
         .non_send::<GuiRuntime>()
@@ -82,6 +88,9 @@ fn shape(app: &mut App, text: GObjectId, width: f32, scale: f32, padding: Vec2) 
             ..default()
         },
     ));
+    app.world_mut()
+        .run_system_once(center_inline_images)
+        .unwrap();
     root
 }
 
@@ -97,6 +106,120 @@ fn source(app: &App, url: &str) -> InlineImageSource {
         Default::default(),
     )
     .unwrap()
+}
+
+#[test]
+fn differently_sized_images_center_in_each_row_with_native_logical_pixel_rounding() {
+    let (mut app, _, text) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(text, "<img src='missing.png' width='18' height='10'/><img src='missing.png' width='18' height='33'/><br/><img src='missing.png' width='18' height='9'/><img src='missing.png' width='18' height='31'/>");
+    app.update();
+    for scale in [1., 1.25, 1.75, 2.] {
+        let entity = shape(&mut app, text, 200., scale, Vec2::ZERO);
+        let layout = app.world().get::<TextLayoutInfo>(entity).unwrap();
+        let boxes: Vec<_> = layout
+            .inline_boxes
+            .iter()
+            .map(|(_, _, rect)| *rect)
+            .collect();
+        assert_eq!(boxes.len(), 4);
+        // Unmodified Laya Text.doLayout produces y=11 for both [10,33]
+        // and [9,31]. Round in logical pixels before applying UI scale.
+        let row2 = app
+            .world()
+            .get::<ComputedTextBlock>(entity)
+            .unwrap()
+            .buffer()
+            .lines()
+            .next()
+            .unwrap()
+            .metrics()
+            .line_height;
+        for (actual, expected) in
+            boxes
+                .iter()
+                .map(|r| r.min.y)
+                .zip([11. * scale, 0., row2 + 11. * scale, row2])
+        {
+            assert!(
+                (actual - expected).abs() < 0.001,
+                "scale={scale}: {actual} != {expected}"
+            );
+        }
+        app.world_mut()
+            .run_system_once(center_inline_images)
+            .unwrap();
+        let layout = app.world().get::<TextLayoutInfo>(entity).unwrap();
+        assert_eq!(
+            layout
+                .inline_boxes
+                .iter()
+                .map(|(_, _, rect)| *rect)
+                .collect::<Vec<_>>(),
+            boxes
+        );
+    }
+}
+
+#[test]
+fn tiny_images_keep_native_pixel_rounding_and_do_not_drift_at_noninteger_scales() {
+    let (mut app, _, text) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(text, "<img src='missing.png' width='18' height='1'/><img src='missing.png' width='18' height='3'/>");
+    app.update();
+    for scale in [0.7, 0.9, 1.1, 1.2, 1.3, 1.6, 1.7, 2.3] {
+        let entity = shape(&mut app, text, 200., scale, Vec2::ZERO);
+        for _ in 0..20 {
+            let layout = app.world().get::<TextLayoutInfo>(entity).unwrap();
+            let first = layout.inline_boxes[0].2;
+            assert!(
+                (first.min.y - scale).abs() < 0.0001,
+                "scale={scale}: {first:?}"
+            );
+            assert!((first.height() - scale).abs() < 0.0001);
+            app.world_mut()
+                .run_system_once(center_inline_images)
+                .unwrap();
+        }
+    }
+}
+
+#[test]
+fn image_links_cover_the_row_above_and_below_the_centered_quad() {
+    let (mut app, _, text) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(text, "<a href='event:small'><img src='missing.png' width='18' height='10'/></a><img src='missing.png' width='18' height='80'/>");
+    app.update();
+    for scale in [1., 1.25, 2.] {
+        let entity = shape(&mut app, text, 200., scale, Vec2::splat(4.) * scale);
+        let layout = app.world().get::<TextLayoutInfo>(entity).unwrap();
+        let node = app.world().get::<ComputedNode>(entity).unwrap();
+        let block = app.world().get::<ComputedTextBlock>(entity).unwrap();
+        let rich = app.world().get::<RichTextBlock>(entity).unwrap();
+        let runtime = app.world().non_send::<GuiRuntime>();
+        // Native HtmlLink owns the entire 80px row, not just the 10px image.
+        for y in [1., 39., 79.] {
+            let point = (Vec2::new(10., y) * scale + node.content_inset().min_inset) / node.size();
+            assert_eq!(
+                rich.link_at(runtime, text, point, node, block, layout)
+                    .map(|hit| hit.href),
+                Some("event:small".into())
+            );
+        }
+        for point in [Vec2::new(10., 81.), Vec2::new(25., 39.)] {
+            let point = (point * scale + node.content_inset().min_inset) / node.size();
+            assert!(
+                rich.link_at(runtime, text, point, node, block, layout)
+                    .is_none()
+            );
+        }
+    }
 }
 
 #[test]

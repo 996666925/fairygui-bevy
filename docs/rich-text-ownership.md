@@ -64,8 +64,15 @@ run layout and captures transformed and rebuilt image states.
 
 This is bounded lifecycle and rendering-state verification, not native pixel
 parity. Image sizes and advances no longer depend on a placeholder glyph/font.
-Paragraph baselines and line metrics still come from Parley; Laya's default
-`alignItems=middle`, per-line rounding and extra underline pixel can differ.
+Inline images follow Laya's default `alignItems=middle`: each original canvas
+is centered inside its measured row, with the offset floored in logical pixels
+before DPI/UiScale is applied. This runs after ellipsis projection and before
+quad placement, so wrapping, resizing, clipping and cached projections use the
+same image rectangles. Atlas trim offsets stay relative to that canvas.
+
+Paragraph baselines and row heights still come from Parley. Laya's font-height
+measurement, vertical placement of differently sized text runs, interline spacing
+and extra underline pixel can still differ.
 The layout tests exercise the actual Bevy TextReader/Parley pipeline with the
 tracked demo font, in addition to real-window checks.
 
@@ -89,7 +96,8 @@ its text-owned parts. Unresolved, unchanged sources do not rebuild every frame.
 
 UBB URL scopes preserve an opening-tag identity through nested styles and images.
 Separate adjacent tags with identical hrefs remain distinct. Link hit testing uses
-each actual Bevy text-run or inline-box rectangle in physical content coordinates (including padding)
+each actual Bevy text-run rectangle or linked image's full row height in physical
+content coordinates (including padding)
 and the owner's normalized cursor, so wrapped lines do not create a giant union
 rectangle covering empty gaps. Bevy's inverse UI transform supplies this cursor
 for rotated/scaled/mirrored nodes. The normal pointer target policy still applies:

@@ -573,11 +573,13 @@ impl Plugin for FairyGuiPlugin {
         app.add_systems(
             PostUpdate,
             (
+                runtime::center_inline_images,
                 runtime::position_inline_images,
                 runtime::finalize_inline_images,
             )
                 .chain()
                 .after(bevy::ui::widget::text_system)
+                .after(runtime::text_measure::ellipsis::sync)
                 .before(bevy::ui::update::update_clipping_system),
         );
         app.add_systems(

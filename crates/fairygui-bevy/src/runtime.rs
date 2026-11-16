@@ -262,8 +262,8 @@ mod rich_text;
 pub(crate) use rich_text::InlineMovieClipPlayer;
 pub(crate) use rich_text::LinkHit;
 pub(crate) use rich_text::{
-    InlineImage, RichTextBlock, advance_inline_movie_clips, finalize_inline_images,
-    sync_inline_image_hierarchy, sync_rich_text,
+    InlineImage, RichTextBlock, advance_inline_movie_clips, center_inline_images,
+    finalize_inline_images, sync_inline_image_hierarchy, sync_rich_text,
 };
 pub use rich_text::{InlineImageOwner, InlineImageParts};
 
