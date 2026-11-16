@@ -255,6 +255,8 @@ impl Plugin for FairyGuiPlugin {
         if !app.world().contains_resource::<Assets<Font>>() {
             app.init_asset::<Font>();
         }
+        app.init_resource::<bevy::text::FontAtlasSet>()
+            .init_resource::<bevy::text::ScaleCx>();
         graph::install(app);
         image_fill::install(app);
         text_stroke::install(app);
@@ -535,6 +537,22 @@ impl Plugin for FairyGuiPlugin {
                 .after(runtime::play_queued_sounds),
         );
 
+        app.add_systems(
+            PostUpdate,
+            runtime::text_measure::ellipsis::restore
+                .before(bevy::ui::UiSystems::Layout)
+                .before(bevy::ui::widget::text_system)
+                .before(bevy::ui::widget::update_editable_text_layout),
+        );
+        app.add_systems(
+            PostUpdate,
+            runtime::text_measure::ellipsis::sync
+                .after(bevy::ui::widget::text_system)
+                .after(bevy::ui::widget::update_editable_text_layout)
+                .after(runtime::publish_password_layout)
+                .after(backend::align_text)
+                .before(runtime::position_inline_images),
+        );
         app.add_systems(
             PostUpdate,
             backend::align_text

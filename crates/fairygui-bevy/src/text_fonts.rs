@@ -444,6 +444,7 @@ pub(crate) fn sync_text_fonts(
                 BitmapRichText,
                 crate::runtime::text_measure::fit::FontMetrics,
                 crate::runtime::text_measure::fit::RasterFit,
+                crate::runtime::text_measure::ellipsis::EllipsisState,
             )>();
         node.padding = UiRect::ZERO;
         let images = spawn_text(

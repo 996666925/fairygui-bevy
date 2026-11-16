@@ -78,7 +78,8 @@ pub(crate) fn install(app: &mut App) {
         build_strokes
             .after(bevy::ui::widget::text_system)
             .after(bevy::ui::widget::update_editable_text_layout)
-            .after(runtime::publish_password_layout),
+            .after(runtime::publish_password_layout)
+            .after(runtime::text_measure::ellipsis::sync),
     );
     if let Some(render) = app.get_sub_app_mut(RenderApp) {
         render.init_resource::<ForegroundSnapshot>().add_systems(

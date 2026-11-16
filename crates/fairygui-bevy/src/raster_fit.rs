@@ -27,7 +27,7 @@ impl FontMetrics {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Run {
+pub(super) enum Run {
     Text {
         entity: Entity,
         text: String,
@@ -42,14 +42,14 @@ enum Run {
     },
 }
 
-#[derive(Debug)]
-struct Key {
-    size: Vec2,
-    gutter: f32,
-    font_size: i32,
-    layout: TextLayout,
-    revision: u64,
-    runs: Vec<Run>,
+#[derive(Debug, Clone)]
+pub(super) struct Key {
+    pub(super) size: Vec2,
+    pub(super) gutter: f32,
+    pub(super) font_size: i32,
+    pub(super) layout: TextLayout,
+    pub(super) revision: u64,
+    pub(super) runs: Vec<Run>,
 }
 impl PartialEq for Key {
     fn eq(&self, other: &Self) -> bool {
@@ -169,7 +169,7 @@ pub(crate) fn sync(
 }
 
 impl TextMeasurer {
-    fn shape_raster(&mut self, key: &Key, scale: f64) -> Option<(Vec2, usize)> {
+    pub(super) fn shape_block(&mut self, key: &Key, scale: f64) -> Option<ComputedTextBlock> {
         let fonts: Vec<_> = key
             .runs
             .iter()
@@ -230,7 +230,13 @@ impl TextMeasurer {
                 bevy::text::RemSize::default(),
             )
             .ok()?;
+        Some(computed)
+    }
+
+    fn shape_raster(&mut self, key: &Key, scale: f64) -> Option<(Vec2, usize)> {
+        let computed = self.shape_block(key, scale)?;
         let layout = computed.buffer();
+        let dpi = self.scale_factor.max(f32::EPSILON);
         Some((
             Vec2::new(layout.full_width(), layout.height()) / dpi,
             layout.lines().count(),

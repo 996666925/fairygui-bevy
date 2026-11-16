@@ -52,6 +52,11 @@ mod raster_shrink;
 pub(super) fn install_raster_shrink(app: &mut App) {
     raster_shrink::install(app);
 }
+#[path = "smoke_raster_ellipsis.rs"]
+mod raster_ellipsis;
+pub(super) fn install_raster_ellipsis(app: &mut App) {
+    raster_ellipsis::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {

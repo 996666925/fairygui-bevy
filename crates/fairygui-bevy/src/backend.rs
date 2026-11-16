@@ -273,16 +273,7 @@ pub fn align_text(
         let Some(data) = object.control().as_text_field() else {
             continue;
         };
-        if layout.size.y <= 0.0 {
-            continue;
-        }
-        let scale = if layout.scale_factor.is_finite() && layout.scale_factor > f32::EPSILON {
-            layout.scale_factor
-        } else {
-            1.0
-        };
-        let text_size = layout.size / scale;
-        let gutter = if data.auto_size == 3 {
+        let gutter = if matches!(data.auto_size, 3 | 4) {
             if matches!(
                 object.control(),
                 fairygui_core::widget::ControlData::TextInput(_)
@@ -296,53 +287,82 @@ pub fn align_text(
         } else {
             0.
         };
-        let available =
-            (Vec2::new(object.width(), object.height()) - text_size - Vec2::splat(gutter * 2.))
-                .max(Vec2::ZERO);
-        let factor = |alignment| match alignment {
-            1 => 0.5,
-            2 => 1.0,
-            _ => 0.0,
-        };
-        let padding = UiRect {
-            // Wrapped text is already justified by Parley inside its width.
-            // Feeding that measured remainder back as padding changes the next
-            // frame's wrapping constraint and can trip Parley's line breaker.
-            left: Val::Px(
-                gutter
-                    + if text_layout.linebreak == LineBreak::NoWrap {
-                        available.x * factor(data.align)
-                    } else {
-                        0.0
-                    },
-            ),
-            top: Val::Px(gutter + available.y * factor(data.vertical_align)),
-            right: Val::Px(gutter),
-            bottom: Val::Px(gutter),
-        };
-        if node.padding != padding {
-            node.padding = padding;
-        }
-        // Text is measured after Bevy UI layout. Apply the resolved inset in
-        // that same frame so extraction, link hits and inline images share the
-        // new origin immediately; changing Node alone waits for another layout.
-        let Val::Px(left) = padding.left else {
-            continue;
-        };
-        let Val::Px(top) = padding.top else { continue };
-        let scale = if computed.inverse_scale_factor.is_finite()
-            && computed.inverse_scale_factor > f32::EPSILON
-        {
-            computed.inverse_scale_factor.recip()
-        } else {
-            scale
-        };
-        let min = Vec2::new(left, top) * scale;
-        let max = Vec2::splat(gutter * scale);
-        if computed.padding.min_inset != min || computed.padding.max_inset != max {
-            computed.padding.min_inset = min;
-            computed.padding.max_inset = max;
-        }
+        align_text_block(
+            object,
+            data,
+            layout,
+            text_layout,
+            &mut node,
+            &mut computed,
+            gutter,
+        );
+    }
+}
+
+pub(crate) fn align_text_block(
+    object: &GObject,
+    data: &fairygui_core::widget::TextFieldData,
+    layout: &bevy::text::TextLayoutInfo,
+    text_layout: &TextLayout,
+    node: &mut Node,
+    computed: &mut ComputedNode,
+    gutter: f32,
+) {
+    if layout.size.y <= 0.0 {
+        return;
+    }
+    let scale = if layout.scale_factor.is_finite() && layout.scale_factor > f32::EPSILON {
+        layout.scale_factor
+    } else {
+        1.
+    };
+    let text_size = layout.size / scale;
+    let available =
+        (Vec2::new(object.width(), object.height()) - text_size - Vec2::splat(gutter * 2.))
+            .max(Vec2::ZERO);
+    let factor = |alignment| match alignment {
+        1 => 0.5,
+        2 => 1.0,
+        _ => 0.0,
+    };
+    let padding = UiRect {
+        // Wrapped text is already justified by Parley inside its width.
+        // Feeding that measured remainder back as padding changes the next
+        // frame's wrapping constraint and can trip Parley's line breaker.
+        left: Val::Px(
+            gutter
+                + if text_layout.linebreak == LineBreak::NoWrap {
+                    available.x * factor(data.align)
+                } else {
+                    0.0
+                },
+        ),
+        top: Val::Px(gutter + available.y * factor(data.vertical_align)),
+        right: Val::Px(gutter),
+        bottom: Val::Px(gutter),
+    };
+    if node.padding != padding {
+        node.padding = padding;
+    }
+    // Text is measured after Bevy UI layout. Apply the resolved inset in
+    // that same frame so extraction, link hits and inline images share the
+    // new origin immediately; changing Node alone waits for another layout.
+    let Val::Px(left) = padding.left else {
+        return;
+    };
+    let Val::Px(top) = padding.top else { return };
+    let scale = if computed.inverse_scale_factor.is_finite()
+        && computed.inverse_scale_factor > f32::EPSILON
+    {
+        computed.inverse_scale_factor.recip()
+    } else {
+        scale
+    };
+    let min = Vec2::new(left, top) * scale;
+    let max = Vec2::splat(gutter * scale);
+    if computed.padding.min_inset != min || computed.padding.max_inset != max {
+        computed.padding.min_inset = min;
+        computed.padding.max_inset = max;
     }
 }
 

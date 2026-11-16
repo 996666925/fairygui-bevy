@@ -3,6 +3,8 @@ use super::*;
 use bevy::text::{FontCx, LayoutCx, TextBounds, TextElement, TextPipeline};
 use std::collections::HashSet;
 
+#[path = "raster_ellipsis.rs"]
+pub(crate) mod ellipsis;
 #[path = "raster_fit.rs"]
 pub(crate) mod fit;
 
@@ -436,7 +438,7 @@ pub(crate) fn sync_padding(
             .object(object.0)
             .filter(|object| !matches!(object.control(), ControlData::TextInput(_)))
             .and_then(|object| object.control().as_text_field())
-            .is_some_and(|data| data.auto_size == 3);
+            .is_some_and(|data| matches!(data.auto_size, 3 | 4));
         if (shrink || measure.contains(object.0)) && node.padding == UiRect::ZERO {
             node.padding = UiRect::all(Val::Px(2.));
         }
