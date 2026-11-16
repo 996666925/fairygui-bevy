@@ -475,14 +475,6 @@ impl GraphType {
             _ => Self::Empty,
         }
     }
-
-    /// 是否能用节点自身的形状表达。
-    ///
-    /// 矩形与椭圆可以：前者就是节点本身，后者靠把四角圆角拉满得到。
-    /// 多边形需要真正的矢量绘制，不在其中。
-    pub const fn is_basic_shape(self) -> bool {
-        matches!(self, Self::Rect | Self::Ellipse)
-    }
 }
 
 impl GraphData {
@@ -538,18 +530,6 @@ mod graph_tests {
             GraphType::Empty,
             "认不出的编号按空处理，而不是当成某种图形"
         );
-    }
-
-    #[test]
-    fn only_basic_shapes_are_expressible_by_a_node() {
-        assert!(GraphType::Rect.is_basic_shape());
-        assert!(GraphType::Ellipse.is_basic_shape());
-        assert!(
-            !GraphType::Polygon.is_basic_shape(),
-            "多边形需要真正的矢量绘制"
-        );
-        assert!(!GraphType::RegularPolygon.is_basic_shape());
-        assert!(!GraphType::Empty.is_basic_shape());
     }
 
     #[test]

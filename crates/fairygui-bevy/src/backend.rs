@@ -78,59 +78,6 @@ pub fn transform_for(object: &GObject) -> UiTransform {
 /// 旧版近似值，为源兼容保留。运行时使用 Laya 灰度矩阵。
 pub const GRAYED_TINT: bevy::prelude::Color = bevy::prelude::Color::srgb(0.62, 0.62, 0.66);
 
-/// 图形的渲染外观。
-///
-/// 节点样式中的填充走背景色，描边走边框。运行时仅用它绘制圆角矩形；
-/// 普通矩形、圆和多边形使用矢量材质，保持布局尺寸与子节点原点。
-#[derive(Debug, Clone, Copy)]
-pub struct GraphStyle {
-    /// 填充色。不填充时是全透明的。
-    pub fill: bevy::prelude::Color,
-    /// 描边色。
-    pub stroke: bevy::prelude::Color,
-    /// 描边宽度（像素）。不描边时为零。
-    pub stroke_width: f32,
-    /// 四角圆角。
-    pub radius: BorderRadius,
-}
-
-/// 由图形数据算出渲染外观。
-pub fn graph_style(data: &fairygui_core::widget::GraphData) -> GraphStyle {
-    use fairygui_core::widget::GraphType;
-
-    let fill = if data.has_fill() {
-        to_bevy_color(data.drawn_fill_color())
-    } else {
-        bevy::prelude::Color::NONE
-    };
-
-    let (stroke, stroke_width) = if data.has_stroke() {
-        (to_bevy_color(data.line_color), data.line_size as f32)
-    } else {
-        (bevy::prelude::Color::NONE, 0.0)
-    };
-
-    let radius = if data.graph_kind() == GraphType::Ellipse {
-        BorderRadius::MAX
-    } else {
-        // 圆角顺序与编辑器写入一致：左上、右上、左下、右下。
-        let [top_left, top_right, bottom_left, bottom_right] = data.corner_radii();
-        BorderRadius {
-            top_left: Val::Px(top_left).into(),
-            top_right: Val::Px(top_right).into(),
-            bottom_left: Val::Px(bottom_left).into(),
-            bottom_right: Val::Px(bottom_right).into(),
-        }
-    };
-
-    GraphStyle {
-        fill,
-        stroke,
-        stroke_width,
-        radius,
-    }
-}
-
 /// 把溢出方式转换为裁剪设置。
 ///
 /// 可滚动的容器交给 `bevy_ui` 的滚动机制处理，这样裁剪、滚动位置与滚轮

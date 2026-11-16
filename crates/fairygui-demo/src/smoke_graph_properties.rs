@@ -397,7 +397,7 @@ fn drive(
                 next = true;
             }
             13 if elapsed >= 12 => {
-                assert!(!entities.contains(state.drawing.unwrap()));
+                assert_eq!(drawing(state.front.unwrap(), &faces), state.drawing);
                 state.drawing = Some(drawing(state.front.unwrap(), &faces).unwrap());
                 check_graph_layout(
                     state.front.unwrap(),
@@ -770,10 +770,125 @@ fn drive(
                 next = true;
             }
             47 if elapsed >= 8 => {
-                commands.entity(state.owner.unwrap()).despawn();
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(state.front.unwrap()).unwrap();
+                graph.kind = GraphType::Rect;
+                graph.corner_radius = Some([0.; 4]);
+                graph.line_size = 10;
                 next = true;
             }
             48 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                state.drawing = Some(surface);
+                let node = faces.get(surface).unwrap().3;
+                assert_eq!(
+                    (node.left, node.top, node.width, node.height),
+                    (Val::Px(-6.), Val::Px(-6.), Val::Px(72.), Val::Px(82.))
+                );
+                assert_eq!(node.border, UiRect::ZERO);
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(
+                        "target/fairygui-demo-native-rounded-zero-radii.png",
+                    ));
+                next = true;
+            }
+            49 => {
+                let (front, back) = (state.front.unwrap(), state.back.unwrap());
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(30., 35.),
+                    back,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            50 => {
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(state.front.unwrap()).unwrap();
+                graph.corner_radius = Some([100., 60., 80., 40.]);
+                graph.line_size = 3;
+                next = true;
+            }
+            51 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert_eq!(
+                    ui.p0().graph(front).unwrap().corner_radius,
+                    Some([100., 60., 80., 40.])
+                );
+                assert_eq!(drawing(front, &faces), state.drawing);
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    None,
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(
+                        "target/fairygui-demo-native-rounded-oversized.png",
+                    ));
+                next = true;
+            }
+            52 if elapsed >= 8 => {
+                ui.p2().get_mut(state.front.unwrap()).unwrap().size.x = 0.;
+                next = true;
+            }
+            53 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert!(drawing(front, &faces).is_none());
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    None,
+                    Vec2::new(0., 70.),
+                    &nodes,
+                );
+                ui.p2().get_mut(front).unwrap().size.x = 60.;
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(front).unwrap();
+                graph.corner_radius = Some([8., 12., 16., 20.]);
+                graph.line_color = Color::NONE;
+                next = true;
+            }
+            54 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                let node = faces.get(surface).unwrap().3;
+                assert_eq!(
+                    (node.left, node.top, node.width, node.height),
+                    (Val::Px(-1.), Val::Px(-1.), Val::Px(62.), Val::Px(72.))
+                );
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(
+                        "target/fairygui-demo-native-rounded-transparent-line.png",
+                    ));
+                next = true;
+            }
+            55 if elapsed >= 8 => {
+                commands.entity(state.owner.unwrap()).despawn();
+                next = true;
+            }
+            56 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -781,9 +896,9 @@ fn drive(
                 ] {
                     assert!(!entities.contains(entity));
                 }
-                assert_eq!(clicks.0.len(), 11);
+                assert_eq!(clicks.0.len(), 12);
                 println!(
-                    "demo smoke PASSED: graph shapes and contour hits, native rectangle primitives and circle paths, transparent-line inset, invisible and degenerate shape picking, signed circle radius, fill alpha, stroke-free logical layout, zero-size recovery, transformed layout and disposal"
+                    "demo smoke PASSED: native rectangle primitives, circle and rounded paths, centered DrawPath strokes, zero/oversized radii, transparent-line policies, invisible and degenerate shape picking, Earcut fills, stroke-free logical layout, zero-size recovery, transformed layout and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;

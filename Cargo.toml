@@ -36,6 +36,7 @@ fairygui-build = { path = "crates/fairygui-build", version = "0.1.0" }
 # Bevy 0.20 的 Parley 文本后端需要显式启用中日韩等复杂文字的分词数据。
 bevy = { version = "0.20.1", features = ["complex_script_segmentation", "system_font_discovery", "wav", "mp3"] }
 flate2 = { version = "1" }
+earcutr = { version = "0.5.0" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
 regress = { version = "0.12", features = ["utf16"] }

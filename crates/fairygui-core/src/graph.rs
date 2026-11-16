@@ -6,6 +6,8 @@ use crate::{
 
 mod circle;
 pub use circle::{CircleDrawing, circle_drawing};
+mod rounded_rectangle;
+pub use rounded_rectangle::{path_fill, rounded_rectangle_points};
 
 /// GGraph's Ellipse command is a width-based circle centered in its declared
 /// rectangle. Its drawing and hit bounds may extend above/below that rectangle.
@@ -369,7 +371,7 @@ pub fn polygon_stroke(input: &[PolygonPoint], width: f32) -> StrokeMesh {
         );
     }
     let count = points.len();
-    middle(
+    let end = middle(
         points[count - 2],
         points[count - 1],
         points[1],
@@ -388,8 +390,8 @@ pub fn polygon_stroke(input: &[PolygonPoint], width: f32) -> StrokeMesh {
     }
     vertices[0] = vertices[count - 2];
     vertices[1] = vertices[count - 1];
-    // Native's last join may introduce one or two additional vertices.
-    let end = count - 2;
+    // BasePoly closes with the index returned by the final join. A bevel can
+    // append vertices after this pair, so vertex_count - 2 is not equivalent.
     indices.extend([end, end + 1, 1, end + 1, 1, 0]);
     if indices.iter().any(|i| *i >= vertices.len()) {
         return StrokeMesh::default();

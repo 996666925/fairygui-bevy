@@ -503,3 +503,93 @@ fn circle_tessellation_tracks_ancestor_transforms_window_dpi_and_ui_scale_in_pla
             .is_none_or(|c| c.0.to_srgba().alpha == 0.)
     );
 }
+
+#[test]
+fn rounded_rectangles_center_their_strokes_and_reuse_materials_across_shape_changes() {
+    let (mut app, id, root) = fixture();
+    app.update();
+    let render = app.world().get::<GraphRender>(root).unwrap();
+    let surface = render.surface.unwrap();
+    let handle = render.material.as_ref().unwrap().clone();
+    let buffer = app
+        .world()
+        .resource::<Assets<PolygonMaterial>>()
+        .get(&handle)
+        .unwrap()
+        .geometry
+        .clone();
+    let child = app.world_mut().spawn((Node::default(), ChildOf(root))).id();
+    let mut data = GraphData {
+        graph_type: 1,
+        line_size: 10,
+        line_color: GuiColor::new(0., 1., 0., 0.5),
+        fill_color: GuiColor::new(1., 0., 0., 0.5),
+        corner_radius: Some([0.; 4]),
+        ..default()
+    };
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_graph(id, data.clone());
+    app.update();
+    let render = app.world().get::<GraphRender>(root).unwrap();
+    assert_eq!(render.surface, Some(surface));
+    assert_eq!(render.material.as_ref(), Some(&handle));
+    let material = app
+        .world()
+        .resource::<Assets<PolygonMaterial>>()
+        .get(&handle)
+        .unwrap();
+    assert_eq!(material.geometry, buffer);
+    assert_eq!(material.uniform.canvas, Vec4::new(-6., -6., 112., 92.));
+    assert_eq!(material.uniform.counts.x, 5);
+    assert_eq!(material.uniform.counts.z, 2);
+    assert!(material.uniform.counts.y > 0 && material.uniform.counts.w > 0);
+    assert_eq!(
+        (material.uniform.fill.w, material.uniform.stroke.w),
+        (0.5, 0.25)
+    );
+    assert_eq!(
+        app.world().get::<Node>(surface).unwrap().border,
+        UiRect::ZERO
+    );
+    assert!(
+        app.world()
+            .get::<BackgroundColor>(surface)
+            .is_none_or(|c| c.0.to_srgba().alpha == 0.)
+    );
+    data.line_color = GuiColor::TRANSPARENT;
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_graph(id, data);
+    app.update();
+    let material = app
+        .world()
+        .resource::<Assets<PolygonMaterial>>()
+        .get(&handle)
+        .unwrap();
+    assert_eq!(material.uniform.canvas, Vec4::new(-1., -1., 102., 82.));
+    assert_eq!(material.uniform.counts.y, 0);
+    assert!(material.uniform.counts.w > 0);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_size(id, 0., 80.);
+    app.update();
+    assert!(app.world().get_entity(surface).is_err());
+    assert!(app.world().get_entity(child).is_ok());
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_size(id, 100., 80.);
+    app.update();
+    assert!(
+        app.world()
+            .get::<GraphRender>(root)
+            .unwrap()
+            .surface
+            .is_some()
+    );
+    assert!(app.world().get_entity(child).is_ok());
+}

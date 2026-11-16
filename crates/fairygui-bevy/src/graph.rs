@@ -13,7 +13,10 @@ use bevy::{
 };
 use fairygui_core::{
     GObjectId, Size,
-    graph::{circle_drawing, polygon_draw_offset, polygon_points, polygon_stroke},
+    graph::{
+        circle_drawing, path_fill, polygon_draw_offset, polygon_points, polygon_stroke,
+        rounded_rectangle_points,
+    },
     widget::{ControlData, GraphData, GraphType},
 };
 
@@ -78,15 +81,20 @@ fn geometry(data: &GraphData, size: Size, scale: f64) -> Option<(Vec<Vec4>, Vec4
     if data.graph_kind() == GraphType::Rect && data.corner_radius.is_none() {
         return rectangle_geometry(data, size);
     }
+    let rounded_rectangle = data.graph_kind() == GraphType::Rect && data.corner_radius.is_some();
     let circle = circle_drawing(data, size, scale);
     if circle.is_some_and(|circle| circle.radius == 0.) {
         return None;
     }
-    let points = circle.map_or_else(|| polygon_points(data, size), |circle| circle.points());
+    let points = if rounded_rectangle {
+        rounded_rectangle_points(data, size)
+    } else {
+        circle.map_or_else(|| polygon_points(data, size), |circle| circle.points())
+    };
     if points.len() < 2 {
         return None;
     }
-    let offset = if circle.is_some() {
+    let offset = if circle.is_some() || rounded_rectangle {
         0.
     } else {
         polygon_draw_offset(data)
@@ -103,6 +111,14 @@ fn geometry(data: &GraphData, size: Size, scale: f64) -> Option<(Vec<Vec4>, Vec4
             Vec4::new(p.x + offset, p.y + offset, 0.0, 0.0)
         }));
     }
+    let stroke_triangles = (vertices.len() - count) / 3;
+    if rounded_rectangle && data.has_fill() {
+        vertices.extend(path_fill(&points).into_iter().map(|index| {
+            let p = points[index];
+            Vec4::new(p.x as f32, p.y as f32, 0., 0.)
+        }));
+    }
+    let fill_triangles = (vertices.len() - count) / 3 - stroke_triangles;
     let mut min = Vec2::splat(f32::INFINITY);
     let mut max = Vec2::splat(f32::NEG_INFINITY);
     for p in &vertices {
@@ -116,7 +132,12 @@ fn geometry(data: &GraphData, size: Size, scale: f64) -> Option<(Vec<Vec4>, Vec4
     if !extent.is_finite() || extent.min_element() <= 0.0 {
         return None;
     }
-    let counts = UVec4::new(count as u32, ((vertices.len() - count) / 3) as u32, 0, 0);
+    let counts = UVec4::new(
+        count as u32,
+        stroke_triangles as u32,
+        if rounded_rectangle { 2 } else { 0 },
+        fill_triangles as u32,
+    );
     Some((
         vertices,
         Vec4::new(min.x, min.y, extent.x, extent.y),
@@ -179,7 +200,6 @@ pub(crate) fn sync_graphs(
     materials: Option<ResMut<Assets<PolygonMaterial>>>,
     buffers: Option<ResMut<Assets<ShaderBuffer>>>,
     roots: Query<(Entity, &GObjectRef, Option<&GraphRender>), Without<GraphSurface>>,
-    mut basic_surfaces: Query<(&mut BackgroundColor, &mut BorderColor), With<GraphSurface>>,
     windows: Query<(Entity, &Window, Has<bevy::window::PrimaryWindow>)>,
     settings: Option<Res<crate::GuiInputSettings>>,
     ui_scale: Option<Res<bevy::ui::UiScale>>,
@@ -207,8 +227,6 @@ pub(crate) fn sync_graphs(
             continue;
         };
         let size = object_data.size();
-        let rounded_rectangle =
-            data.graph_kind() == GraphType::Rect && data.corner_radius.is_some();
         let circle_scale = if data.graph_kind() == GraphType::Ellipse {
             gui.store()
                 .coordinate_transform(object.0)
@@ -233,97 +251,6 @@ pub(crate) fn sync_graphs(
                 material.uniform.fill = fill;
                 material.uniform.stroke = stroke;
             }
-            if rounded_rectangle
-                && let Some(surface) = previous.and_then(|old| old.surface)
-                && let Ok((mut background, mut border)) = basic_surfaces.get_mut(surface)
-            {
-                let fill = Color::linear_rgba(fill.x, fill.y, fill.z, fill.w);
-                let stroke =
-                    BorderColor::all(Color::linear_rgba(stroke.x, stroke.y, stroke.z, stroke.w));
-                if background.0 != fill {
-                    background.0 = fill;
-                }
-                if *border != stroke {
-                    *border = stroke;
-                }
-            }
-            continue;
-        }
-        if rounded_rectangle {
-            commands
-                .entity(entity)
-                .remove::<(BackgroundColor, BorderColor)>();
-            commands
-                .entity(entity)
-                .entry::<Node>()
-                .and_modify(|mut node| {
-                    node.border = UiRect::ZERO;
-                    node.border_radius = BorderRadius::ZERO;
-                });
-            let bounds = (size.width > 0. && size.height > 0.).then_some(
-                fairygui_core::geom::Rect::new(0., 0., size.width, size.height),
-            );
-            let old_basic = previous
-                .filter(|old| old.material.is_none())
-                .and_then(|old| old.surface);
-            if let Some(old) = previous
-                .filter(|old| old.material.is_some())
-                .and_then(|old| old.surface)
-            {
-                commands.entity(old).despawn();
-            }
-            let surface = bounds.map(|bounds| {
-                let style = backend::graph_style(data);
-                // Taffy cannot make a border box narrower than its two borders.
-                // Keep that paint overflow centered on the declared rectangle;
-                // it must never enlarge or shift the logical view itself.
-                let width = bounds.width.max(style.stroke_width * 2.);
-                let height = bounds.height.max(style.stroke_width * 2.);
-                let canvas = Vec4::new(
-                    bounds.x + (bounds.width - width) * 0.5,
-                    bounds.y + (bounds.height - height) * 0.5,
-                    width,
-                    height,
-                );
-                let mut node = surface_node(canvas);
-                node.border = UiRect::all(Val::Px(style.stroke_width));
-                node.border_radius = style.radius;
-                let surface = old_basic.unwrap_or_else(|| {
-                    commands
-                        .spawn((
-                            GObjectRef(object.0),
-                            ChildOf(entity),
-                            ZIndex(-1),
-                            Name::new("FairyGUI shape surface"),
-                            bevy::picking::hover::Hovered::default(),
-                            bevy::picking::Pickable {
-                                should_block_lower: false,
-                                is_hoverable: true,
-                            },
-                            bevy::ui::RelativeCursorPosition::default(),
-                        ))
-                        .id()
-                });
-                commands.entity(surface).insert((
-                    node,
-                    GraphSurface { canvas },
-                    BackgroundColor(Color::linear_rgba(fill.x, fill.y, fill.z, fill.w)),
-                    BorderColor::all(Color::linear_rgba(stroke.x, stroke.y, stroke.z, stroke.w)),
-                ));
-                surface
-            });
-            if bounds.is_none()
-                && let Some(old) = old_basic
-            {
-                commands.entity(old).despawn();
-            }
-            commands.entity(entity).insert(GraphRender {
-                data: data.clone(),
-                size,
-                surface,
-                material: None,
-                circle_segments,
-            });
             continue;
         }
         if !matches!(

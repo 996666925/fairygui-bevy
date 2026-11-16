@@ -32,14 +32,24 @@ fn sample_color(p: vec2<f32>) -> vec4<f32> {
     }
     var inside = false;
     let count = material.counts.x;
-    var previous = vertices[count-1u].xy;
-    for (var i = 0u; i < count; i += 1u) {
-        let current = vertices[i].xy;
-        if ((current.y > p.y) != (previous.y > p.y)) {
-            let x = (previous.x-current.x)*(p.y-current.y)/(previous.y-current.y)+current.x;
-            if p.x < x { inside = !inside; }
+    if material.counts.z == 2u {
+        for (var i = 0u; i < material.counts.w; i += 1u) {
+            let start = count+(material.counts.y+i)*3u;
+            if triangle_contains(p,vertices[start].xy,vertices[start+1u].xy,vertices[start+2u].xy) {
+                inside = true;
+                break;
+            }
         }
-        previous = current;
+    } else {
+        var previous = vertices[count-1u].xy;
+        for (var i = 0u; i < count; i += 1u) {
+            let current = vertices[i].xy;
+            if ((current.y > p.y) != (previous.y > p.y)) {
+                let x = (previous.x-current.x)*(p.y-current.y)/(previous.y-current.y)+current.x;
+                if p.x < x { inside = !inside; }
+            }
+            previous = current;
+        }
     }
     var fill = vec4<f32>(0.0);
     if inside { fill = vec4<f32>(material.fill.rgb*material.fill.a,material.fill.a); }
