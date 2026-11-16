@@ -1,11 +1,9 @@
 //! 分帧构建。
 //!
-//! 一次性建起多个界面时，逐帧摊开可以避免启动瞬间的卡顿。粒度是**条目**：
-//! 每次推进构建若干条，而不是把单个条目的内部拆开——后者的收益有限，
-//! 却要把递归构建改造成显式状态机，得不偿失。
-//!
-//! 每帧的预算按「条目数」计。单个条目特别大时仍会占用较多时间，
-//! 因此预算应当配合实际的界面规模来调。
+//! Package children are built in postorder and supplied to the existing resource
+//! constructor. The budget counts individual objects, including inline leaves.
+//! Incomplete roots remain off stage; cancellation reclaims their prepared pool.
+//! Collecting the plan and finalizing each component still visit its child records.
 
 use std::collections::VecDeque;
 
@@ -14,15 +12,18 @@ use tracing::warn;
 use crate::error::{Error, Result};
 use crate::object::{GObjectId, ObjectStore};
 use crate::package::{FuiPackage, LoadContext, PackageRegistry};
-use crate::widget::{create_from_package, create_from_package_with_registry};
+use crate::widget::BuildPlan;
 
 /// 分帧构建器。
 #[derive(Debug)]
 pub struct AsyncBuilder {
     /// 尚未构建的条目。
     queue: VecDeque<usize>,
-    /// 每帧最多构建多少个条目。
+    /// 每帧最多构建多少个对象。
     budget: usize,
+    current: Option<BuildPlan>,
+    processed: usize,
+    total: usize,
     /// 已构建成功的根对象。
     roots: Vec<GObjectId>,
     /// 构建失败的条目数。
@@ -32,11 +33,14 @@ pub struct AsyncBuilder {
 impl AsyncBuilder {
     /// 创建构建任务。
     ///
-    /// `item_indices` 是要构建的条目，`budget` 是每帧最多构建的条目数。
+    /// `item_indices` 是要构建的条目，`budget` 是每次推进最多构建的对象数。
     pub fn new(item_indices: impl IntoIterator<Item = usize>, budget: usize) -> Self {
         Self {
             queue: item_indices.into_iter().collect(),
             budget: budget.max(1),
+            current: None,
+            processed: 0,
+            total: 0,
             roots: Vec::new(),
             failures: 0,
         }
@@ -44,7 +48,7 @@ impl AsyncBuilder {
 
     /// 待构建的条目数量。
     pub fn remaining(&self) -> usize {
-        self.queue.len()
+        self.queue.len() + usize::from(self.current.is_some())
     }
 
     /// 已构建完成的根对象。
@@ -59,7 +63,32 @@ impl AsyncBuilder {
 
     /// 是否已经全部处理完。
     pub fn is_finished(&self) -> bool {
-        self.queue.is_empty()
+        self.queue.is_empty() && self.current.is_none()
+    }
+
+    /// Number of objects constructed so far, including completed roots.
+    pub fn processed_objects(&self) -> usize {
+        self.processed
+    }
+
+    /// Object count of the plans collected so far. Later queued roots are
+    /// collected lazily; for a single-root builder this is the final total.
+    pub fn planned_objects(&self) -> usize {
+        self.total
+    }
+
+    /// Change the next advancement's object budget without restarting work.
+    pub fn set_budget(&mut self, budget: usize) {
+        self.budget = budget.max(1);
+    }
+
+    /// Dispose the unfinished root's prepared objects and discard queued roots.
+    /// Successfully completed roots remain owned by the caller.
+    pub fn cancel(&mut self, store: &mut ObjectStore) {
+        if let Some(mut current) = self.current.take() {
+            current.cancel(store);
+        }
+        self.queue.clear();
     }
 
     /// 推进一帧。返回是否已经全部完成。
@@ -75,7 +104,7 @@ impl AsyncBuilder {
         self.advance_using(store, package, ctx, None)
     }
 
-    /// Advance with dependency resolution, using the same per-entry budget.
+    /// Advance with dependency resolution, using the same per-object budget.
     pub fn advance_with_registry(
         &mut self,
         store: &mut ObjectStore,
@@ -93,34 +122,41 @@ impl AsyncBuilder {
         ctx: &LoadContext,
         registry: Option<&PackageRegistry>,
     ) -> bool {
-        let mut processed = 0;
-
-        while processed < self.budget {
-            let Some(item_index) = self.queue.pop_front() else {
-                return true;
-            };
-            processed += 1;
-
-            let result = match registry {
-                Some(registry) => {
-                    create_from_package_with_registry(store, package, item_index, ctx, registry)
+        for _ in 0..self.budget {
+            if self.current.is_none() {
+                let Some(item_index) = self.queue.pop_front() else {
+                    break;
+                };
+                match BuildPlan::new(package, item_index, ctx, registry) {
+                    Ok(plan) => {
+                        self.total += plan.total();
+                        self.current = Some(plan);
+                    }
+                    Err(error) => {
+                        self.failures += 1;
+                        warn!(item_index, %error, "Failed to plan asynchronous FairyGUI root");
+                        continue;
+                    }
                 }
-                None => create_from_package(store, package, item_index, ctx),
-            };
-            match result {
-                Ok(root) => self.roots.push(root),
-                Err(err) => {
+            }
+            let plan = self.current.as_mut().unwrap();
+            let before = plan.remaining();
+            match plan.advance(store, registry) {
+                Ok(Some(root)) => {
+                    self.processed += before - plan.remaining();
+                    self.roots.push(root);
+                    self.current = None;
+                }
+                Ok(None) => self.processed += before - plan.remaining(),
+                Err(error) => {
                     self.failures += 1;
-                    warn!(
-                        item_index,
-                        error = %err,
-                        "分帧构建时该条目失败，已跳过"
-                    );
+                    warn!(%error, "Failed to construct asynchronous FairyGUI root");
+                    plan.cancel(store);
+                    self.current = None;
                 }
             }
         }
-
-        self.queue.is_empty()
+        self.is_finished()
     }
 
     /// 一次性构建完，直到队列为空。
@@ -180,25 +216,30 @@ mod tests {
         assert_eq!(builder.remaining(), 2);
 
         assert!(!builder.advance(&mut store, &package, &ctx), "还有剩余");
-        assert_eq!(builder.roots().len(), 1);
-        assert_eq!(builder.remaining(), 1);
-
-        assert!(builder.advance(&mut store, &package, &ctx), "应当全部完成");
+        assert!(builder.roots().is_empty());
+        assert_eq!(store.len(), 1);
+        assert_eq!(builder.remaining(), 2);
+        while !builder.is_finished() {
+            let before = store.len();
+            builder.advance(&mut store, &package, &ctx);
+            assert_eq!(store.len(), before + 1);
+        }
         assert_eq!(builder.roots().len(), 2);
-        assert!(builder.is_finished());
+        assert_eq!(builder.processed_objects(), store.len());
     }
 
     #[test]
     fn budget_of_zero_is_treated_as_one() {
-        let builder = AsyncBuilder::new([0, 1], 0);
-        assert_eq!(builder.remaining(), 2);
+        let package = package();
+        let builder = AsyncBuilder::new([main_index(&package)], 0);
+        assert_eq!(builder.remaining(), 1);
 
         // 预算为 0 会让推进永远不动，这里应当被纠正为至少 1。
-        let package = package();
         let mut store = ObjectStore::new();
         let mut builder = builder;
         builder.advance(&mut store, &package, &LoadContext::none());
-        assert_eq!(builder.remaining(), 1);
+        assert_eq!(store.len(), 1);
+        assert_eq!(builder.processed_objects(), 1);
     }
 
     #[test]

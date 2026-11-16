@@ -96,6 +96,10 @@ pub struct FairyGuiRoot {
     /// Logical FairyGUI parent: a root/window owner or a control view entity.
     /// An unavailable parent keeps this instance off stage until it resolves.
     pub parent: Option<Entity>,
+    /// Maximum core objects constructed per update. None constructs immediately.
+    /// The completed tree is materialized as a whole; this is not a GPU/upload
+    /// or wall-clock budget. Zero is treated as one.
+    pub build_budget: Option<usize>,
 }
 
 impl FairyGuiRoot {
@@ -108,6 +112,7 @@ impl FairyGuiRoot {
             size: None,
             follow_window_size: false,
             parent: None,
+            build_budget: None,
         }
     }
 
@@ -118,6 +123,12 @@ impl FairyGuiRoot {
 
     pub fn with_size(mut self, size: Vec2) -> Self {
         self.size = Some(size);
+        self
+    }
+
+    /// Spread resource construction over updates, retaining the same ECS owner.
+    pub fn with_build_budget(mut self, objects_per_update: usize) -> Self {
+        self.build_budget = Some(objects_per_update.max(1));
         self
     }
 
@@ -146,6 +157,15 @@ pub struct GuiRootInstance {
     pub object: GObjectId,
 }
 
+/// Construction progress on an owner using FairyGuiRoot::with_build_budget.
+/// No root instance or views are published until the entire model is ready.
+/// The completed snapshot remains on the owner until its source is replaced.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuiRootBuildProgress {
+    pub constructed: usize,
+    pub total: usize,
+}
+
 #[derive(Debug)]
 struct EcsRootBinding {
     source_removed: bool,
@@ -158,6 +178,7 @@ struct EcsRootBinding {
     size: Option<Vec2>,
     follow_window_size: bool,
     parent: Option<Entity>,
+    builder: Option<fairygui_core::async_build::AsyncBuilder>,
 }
 
 fn invalidate_root_owner(
@@ -761,6 +782,10 @@ impl GuiRuntime {
             }
         };
 
+        Some(self.adopt_root(handle, object))
+    }
+
+    fn adopt_root(&mut self, handle: Handle<FuiAsset>, object: GObjectId) -> usize {
         self.remember_asset_tree(object, &handle);
         self.roots.push(GuiRoot {
             handle,
@@ -768,7 +793,16 @@ impl GuiRuntime {
             spawned: false,
             attached: true,
         });
-        Some(self.roots.len() - 1)
+        self.roots.len() - 1
+    }
+
+    fn dispose_root_binding(&mut self, commands: &mut Commands, mut binding: EcsRootBinding) {
+        if let Some(builder) = &mut binding.builder {
+            builder.cancel(&mut self.store);
+        }
+        if let Some(handle) = binding.handle {
+            self.remove_root(commands, handle);
+        }
     }
 
     /// 顶层界面的根对象。
@@ -951,7 +985,7 @@ impl GuiRuntime {
     /// 分帧创建界面。
     ///
     /// 与 [`Self::create_root`] 的区别是不在调用当帧建完整棵树，而是每帧
-    /// 构建若干条目，避免启动瞬间卡顿。`budget` 是每帧最多构建的条目数。
+    /// 构建若干对象。`budget` 是每帧最多构建的对象数。
     ///
     /// 返回一个编号，用于查询这次构建的进度。
     pub fn create_roots_async(
@@ -2094,15 +2128,16 @@ pub fn sync_ecs_roots(
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     for owner in removed.read() {
-        if let Some(binding) = runtime.ecs_roots.remove(&owner)
-            && let Some(handle) = binding.handle
-        {
-            runtime.remove_root(&mut commands, handle);
+        if let Some(binding) = runtime.ecs_roots.remove(&owner) {
+            runtime.dispose_root_binding(&mut commands, binding);
         }
         if entities.get(owner).is_ok() {
-            commands
-                .entity(owner)
-                .remove::<(GuiRootInstance, GuiRootView, root_mount::GuiRootMountState)>();
+            commands.entity(owner).remove::<(
+                GuiRootInstance,
+                GuiRootView,
+                GuiRootBuildProgress,
+                root_mount::GuiRootMountState,
+            )>();
         }
     }
 
@@ -2146,14 +2181,12 @@ pub fn sync_ecs_roots(
             continue;
         }
 
-        if let Some(binding) = runtime.ecs_roots.remove(&owner)
-            && let Some(handle) = binding.handle
-        {
-            runtime.remove_root(&mut commands, handle);
+        if let Some(binding) = runtime.ecs_roots.remove(&owner) {
+            runtime.dispose_root_binding(&mut commands, binding);
         }
         commands
             .entity(owner)
-            .remove::<(GuiRootInstance, GuiRootView)>();
+            .remove::<(GuiRootInstance, GuiRootView, GuiRootBuildProgress)>();
         runtime.ecs_roots.insert(
             owner,
             EcsRootBinding {
@@ -2167,6 +2200,7 @@ pub fn sync_ecs_roots(
                 size: source.size,
                 follow_window_size: source.follow_window_size,
                 parent: None,
+                builder: None,
             },
         );
     }
@@ -2205,9 +2239,50 @@ pub fn sync_ecs_roots(
         let Some(asset) = assets.get(&source.asset) else {
             continue;
         };
-        let Some(handle) =
-            runtime.create_root(source.asset.clone(), &asset.package, &source.item_name)
-        else {
+        let created =
+            if source.build_budget.is_some() || runtime.ecs_roots[&owner].builder.is_some() {
+                let builder = runtime.ecs_roots.get_mut(&owner).unwrap().builder.take();
+                let builder = builder.map_or_else(
+                    || {
+                        runtime.register_package(source.asset.clone(), &asset.package);
+                        fairygui_core::async_build::AsyncBuilder::from_names(
+                            &asset.package,
+                            &[&source.item_name],
+                            source.build_budget.unwrap_or(usize::MAX),
+                        )
+                        .ok()
+                    },
+                    Some,
+                );
+                if let Some(mut builder) = builder {
+                    builder.set_budget(source.build_budget.unwrap_or(usize::MAX));
+                    let runtime = &mut *runtime;
+                    let done = builder.advance_with_registry(
+                        &mut runtime.store,
+                        &asset.package,
+                        &runtime.registry.load_context(&asset.package),
+                        &runtime.registry,
+                    );
+                    commands.entity(owner).insert(GuiRootBuildProgress {
+                        constructed: builder.processed_objects(),
+                        total: builder.planned_objects(),
+                    });
+                    if !done {
+                        runtime.ecs_roots.get_mut(&owner).unwrap().builder = Some(builder);
+                        continue;
+                    }
+                    builder
+                        .roots()
+                        .first()
+                        .copied()
+                        .map(|object| runtime.adopt_root(source.asset.clone(), object))
+                } else {
+                    None
+                }
+            } else {
+                runtime.create_root(source.asset.clone(), &asset.package, &source.item_name)
+            };
+        let Some(handle) = created else {
             tracing::warn!(
                 owner = ?owner,
                 item = %source.item_name,

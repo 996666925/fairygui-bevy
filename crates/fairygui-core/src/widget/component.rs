@@ -21,6 +21,10 @@ use crate::object::{GObjectId, ObjectStore};
 use crate::package::{FuiPackage, LoadContext, ObjectType, PackageItemType};
 use crate::widget::{ControlData, OverflowType, leaf};
 
+#[path = "construction.rs"]
+mod construction;
+pub(crate) use construction::BuildPlan;
+
 /// Paint ordering of a component's logical children. It never changes their
 /// indices, controller bindings, relations or list selection.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -151,6 +155,7 @@ pub fn create_from_package(
                 .get(ctx.branch_index as usize)
                 .cloned()
                 .unwrap_or_default(),
+            children: None,
         },
     )
 }
@@ -177,6 +182,7 @@ pub fn create_from_package_with_registry(
                 .get(ctx.branch_index as usize)
                 .cloned()
                 .unwrap_or_default(),
+            children: None,
         },
     )
 }
@@ -187,6 +193,8 @@ struct Construction<'a> {
     // Retain the original branch name even through an intermediate package
     // without that branch. Branch indices are never transferable across packages.
     branch: String,
+    /// Direct children prepared by the asynchronous postorder builder.
+    children: Option<Vec<GObjectId>>,
 }
 
 fn create_with_context(
@@ -239,6 +247,7 @@ fn build_component(
     object: GObjectId,
     construction: &mut Construction<'_>,
 ) -> Result<()> {
+    let prepared = construction.children.take();
     let item = package
         .item(item_index)
         .ok_or_else(|| Error::ItemNotFound(format!("#{item_index}")))?;
@@ -336,9 +345,18 @@ fn build_component(
     }
 
     let child_count = buffer.read_i16()?.max(0) as usize;
+    if prepared
+        .as_ref()
+        .is_some_and(|children| children.len() != child_count)
+    {
+        return Err(Error::invalid_data(
+            buffer.position(),
+            "prepared child count changed",
+        ));
+    }
     let mut children = Vec::with_capacity(child_count);
 
-    for _ in 0..child_count {
+    for child_index in 0..child_count {
         let data_len = buffer.read_i16()?.max(0) as usize;
         let child_pos = buffer.position();
 
@@ -363,7 +381,13 @@ fn build_component(
             let owner = source_package?;
             Some((owner, owner.item_index_by_id(id)?))
         });
-        let child = if let Some((owner, source_index)) = source {
+        let child = if let Some(prepared) = &prepared {
+            let child = prepared[child_index];
+            if !store.contains(child) {
+                return Err(Error::invalid_data(child_pos, "prepared child was removed"));
+            }
+            child
+        } else if let Some((owner, source_index)) = source {
             let owner_ctx = LoadContext {
                 branch_index: owner.branch_index_of(&construction.branch),
                 ..*ctx

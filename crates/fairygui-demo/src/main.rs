@@ -231,6 +231,8 @@ fn main() -> AppExit {
         smoke::install_inline_alignment(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-text-decorations") {
         smoke::install_text_decorations(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-async-root") {
+        smoke::install_async_root(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-text-wrapping") {
         smoke::install_text_wrapping(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-group-alignment") {

@@ -103,7 +103,7 @@ fn foreign_image_and_async_construction_preserve_package_boundaries() {
     let index = theme.item_index_by_name("PopupMenu").unwrap();
     let mut builder = AsyncBuilder::new([index, index], 1);
     assert!(!builder.advance_with_registry(&mut store, &theme, &LoadContext::none(), &registry));
-    assert!(builder.advance_with_registry(&mut store, &theme, &LoadContext::none(), &registry));
+    while !builder.advance_with_registry(&mut store, &theme, &LoadContext::none(), &registry) {}
     assert_eq!(builder.failures(), 0);
     for root in builder.roots() {
         let image = store.child_by_name(*root, "n0").unwrap();

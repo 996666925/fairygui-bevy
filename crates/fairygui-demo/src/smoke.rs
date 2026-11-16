@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_async_root.rs"]
+mod async_root;
+pub(super) fn install_async_root(app: &mut App) {
+    async_root::install(app);
+}
 #[path = "smoke_input_selection.rs"]
 mod input_selection;
 pub(super) fn install_input_selection(app: &mut App) {

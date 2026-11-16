@@ -1250,8 +1250,31 @@ are parsed. A newly serialized true flag therefore runs its handler immediately
 after setup_beforeAdd, before instance gears/selection and parent controller
 initialization. Construction suppresses new controller gear tweens; existing
 runtime controller setters handle subsequent changes. The behavior is shared by
-synchronous, registry-backed and per-entry asynchronous construction.
+synchronous, registry-backed and per-object asynchronous construction.
 See grayed-state.md for native traces, derived binary fixture and limits.
+
+## Incremental root construction
+
+AsyncBuilder collects a postorder resource plan, including plain inline objects.
+Each advancement allocates at most its configured object budget. Prepared child
+roots are supplied to the ordinary component parser, which applies instance
+properties, gears, relations, controllers and extensions in the same order as
+synchronous construction. Package ownership, branch names and scroll defaults
+are retained in the plan. Failed/cancelled plans reclaim every prepared object;
+already completed roots remain caller-owned.
+
+FairyGuiRoot.build_budget enables this path for an ECS owner. The binding retains
+its builder while GuiRootBuildProgress reports constructed/total objects and
+GuiRootMountState reports Building. Incomplete objects have no views or stage
+membership. Only the completed root is adopted into the ordinary materialization
+path, using the owner's current geometry, active flag and parent. Initialization
+and extension binding therefore see a complete tree. Budget edits keep progress;
+component removal, despawn and template replacement cancel the owned plan.
+
+The budget counts exported model objects, not elapsed time or GPU work. Planning,
+one component's instance-binding pass, generated Loader/list/bar preparation and view
+materialization still perform concentrated work. These limits are distinct from
+the native postorder allocation rule.
 
 ## Runtime gear capture
 

@@ -21,6 +21,7 @@ pub(crate) mod relation;
 mod tree;
 
 pub use combo::{ComboBoxData, ComboPopup, popup_position};
+pub(crate) use component::BuildPlan;
 pub use component::{
     ChildOverride, ChildrenRenderOrder, ComponentData, HitTestArea, create_from_package,
     create_from_package_with_registry,

@@ -353,7 +353,9 @@ fn normal_and_deferred_roots_render_embedded_foreign_components_using_source_han
     };
     {
         let mut gui = app.world_mut().remove_non_send::<GuiRuntime>().unwrap();
-        gui.advance_builds(app.world().resource::<Assets<FuiAsset>>());
+        while gui.has_pending_builds() {
+            gui.advance_builds(app.world().resource::<Assets<FuiAsset>>());
+        }
         let root = gui.roots.last().unwrap().object;
         let foreign = gui.store.child_by_name(root, "n0").unwrap();
         assert_eq!(

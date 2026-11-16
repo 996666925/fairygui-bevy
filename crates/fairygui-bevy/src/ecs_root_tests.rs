@@ -3,6 +3,9 @@ use crate::FairyGuiPlugin;
 use crate::ecs::{GuiDisplay, GuiObjectInfo, GuiQuery, GuiText, GuiTransform};
 use bevy::ecs::system::SystemState;
 
+#[path = "ecs_async_root_tests.rs"]
+mod async_roots;
+
 fn app() -> (App, Handle<FuiAsset>) {
     let mut app = App::new();
     app.add_plugins((

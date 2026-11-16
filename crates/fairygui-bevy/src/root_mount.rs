@@ -11,6 +11,7 @@ mod tests;
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuiRootMountState {
     WaitingForAsset,
+    Building,
     WaitingForParent,
     Mounted { parent: Option<Entity> },
     Detached,
@@ -124,6 +125,8 @@ pub(crate) fn sync_mounts(
                     current.copied(),
                     if binding.failed {
                         GuiRootMountState::CreationFailed
+                    } else if binding.builder.is_some() {
+                        GuiRootMountState::Building
                     } else {
                         GuiRootMountState::WaitingForAsset
                     },

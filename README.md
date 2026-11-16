@@ -204,6 +204,27 @@ commands.spawn(
 没有可用窗口时保留当前尺寸（创建时使用 `size` 或导出值）。修改
 `follow_window_size = false` 可停止跟随，并恢复配置的 `size`（为 `None` 则保留当前尺寸）。
 
+大界面可在同一个根拥有者上启用分帧构建：
+
+```rust,ignore
+commands.spawn(
+    FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Demo_Window")
+        .with_build_budget(32),
+);
+```
+
+`build_budget: Some(n)` 限制每次 Update 构建的导出对象数量，包含内联叶对象和
+嵌套组件；0 按 1 处理，默认 `None` 同步构建。`GuiRootBuildProgress` 在拥有者上
+提供 `constructed` / `total`，`GuiRootMountState::Building` 表示正在构建。
+完成后才添加 `GuiRootInstance`、生成视图并进入 `Initialize`，中间对象不进入舞台。
+完成的进度快照保留；移除、销毁或替换模板会回收正在构建的全部对象。
+构建中修改预算保留进度，改为 `None` 则在本次更新完成剩余构建；
+尺寸、位置、窗口跟随和挂载目标使用完成时的最新配置。
+
+这是对象数量预算。收集描述、完成单个容器的属性绑定、动态 Loader 内容、列表项/滚动条准备、
+视图生成及字体/纹理上传仍有各自的集中工作，不承诺固定的帧耗时。
+`--smoke-async-root` 在真实窗口检查构建中的隐藏、一次初始化、配置更新和视图保留。
+
 动态创建的组件可通过父实体直接挂进现有 FairyGUI 容器：
 
 ```rust,ignore
@@ -218,7 +239,7 @@ let child = commands.spawn(
 `parent` 接受 `FairyGuiRoot` / `FairyGuiWindow` 拥有者或带 `GObjectRef` 的容器视图。
 位置在父节点局部坐标中；父变换、透明度、裁剪、舞台状态与输入规则自然作用于子树，
 事件沿同一逻辑层级冒泡。父资产或父视图尚未就绪时等待，期间不会生成独立可见界面。
-`GuiRootMountState`（或 `gui.root_mount(owner)`）提供等待资产、等待父目标、已挂载、
+`GuiRootMountState`（或 `gui.root_mount(owner)`）提供等待资产、构建中、等待父目标、已挂载、
 主动撤下、无效父节点、循环挂载与创建失败状态；叶对象不能作父节点。
 
 修改 `FairyGuiRoot.parent` 可保留现有模型、视图及业务组件换父，设为 `None` 可提升为
@@ -1759,7 +1780,7 @@ cargo run -p fairygui-core --bin dump_fui -- crates/fairygui-core/tests/fixtures
 | 特性 | 现状 |
 | --- | --- |
 | 骨骼动画 | 不支持。3D 装载器会给出告警并降级为普通容器 |
-| 分帧构建粒度 | 按**条目**分帧。单个特别庞大的界面仍会在构建它的那一帧占用较多时间 |
+| 分帧构建粒度 | `FairyGuiRoot::with_build_budget(n)` 按导出对象数分帧，子组件先完成再交给父组件；包含内联叶对象、跨包引用和分支，支持进度查询、预算修改及取消回收。单个容器的绑定、列表项/滚动条准备和视图生成仍集中完成，数量预算不等同于固定帧耗时 |
 | 图片填充遮罩 | 横向、纵向与 90°/180°/360° 径向已接入 UI 材质，按原版起点、方向与进度裁剪纹理，保留布局尺寸；支持 Image、Loader 图片与序列帧内容。进度条使用填充模式时更新 `fillAmount`，不缩小图片。详见 [图片填充](docs/image-fill.md) |
 | 颜色滤镜 | 图片、文字、位图字形、内联图片、Loader 内容与图形使用统一离屏路径，在子树合成后应用亮度、对比度、饱和度与色相矩阵；支持嵌套滤镜、显式恒等滤镜隔离与组透明度，保留填充遮罩和九宫格几何。无渲染器时保留本地投影回退。详见 [颜色滤镜](docs/color-filters.md) 与 [离屏合成](docs/compositing.md) |
 | 混合模式 | 接入 Normal、Add、Multiply、Screen、Erase、Mask，支持父级继承、显式 Normal 覆盖与 reset；滤镜边界将混合和累积透明度转移到合成结果。Screen 遵循所查 Laya 版本的加法因子；其余枚举和边界限制见 [离屏合成](docs/compositing.md) |
