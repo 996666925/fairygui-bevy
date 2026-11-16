@@ -114,6 +114,12 @@ fn visible_size(app: &mut App, title: Entity) -> Vec2 {
             ..default()
         }),
     );
+    let bevy::text::LineHeight::Px(line_height) =
+        *app.world().get::<bevy::text::LineHeight>(title).unwrap()
+    else {
+        panic!("pixel line height");
+    };
+    let leading = (line_height - pixels(app, title)) as i32;
     let size = app.world().get::<GuiTransform>(title).unwrap().size();
     measure
         .shape_raster(
@@ -121,6 +127,8 @@ fn visible_size(app: &mut App, title: Entity) -> Vec2 {
                 size,
                 gutter: 2.,
                 font_size: 36,
+                leading,
+                native_vertical: true,
                 layout: *app.world().get::<TextLayout>(title).unwrap(),
                 revision: 0,
                 runs,

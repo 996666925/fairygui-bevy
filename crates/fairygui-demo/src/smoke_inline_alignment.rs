@@ -3,7 +3,7 @@ use super::*;
 
 const PAIR: &str = "<img src='images/inline-swatch.png' width='18' height='10'/><img src='images/inline-swatch.png' width='18' height='33'/>";
 const LINK: &str = "<a href='event:small'><img src='images/inline-swatch.png' width='18' height='10'/></a><img src='images/inline-swatch.png' width='18' height='80'/>";
-const MIXED: &str = "<font size='48'>Aa 中文</font><img src='images/inline-swatch.png' width='40' height='14'/> text";
+const MIXED: &str = "<font size='48' stroke='2' strokecolor='#0088FF'>Aa 中文</font><img src='images/inline-swatch.png' width='40' height='14'/> text";
 
 #[derive(Resource, Default)]
 struct State {
@@ -101,13 +101,24 @@ fn drive(
                 let (first, second) = (layout.inline_boxes[0].2, layout.inline_boxes[1].2);
                 let expected = if index == 0 && state.frame == 80 {
                     assert_eq!(block.buffer().lines().count(), 2);
-                    [0., 10. * scale]
+                    [0., 14. * scale]
                 } else {
                     assert_eq!(block.buffer().lines().count(), 1);
                     [if index == 0 { 11. } else { 35. } * scale, 0.]
                 };
                 assert!((first.min.y - expected[0]).abs() < 0.01);
                 assert!((second.min.y - expected[1]).abs() < 0.01);
+            } else {
+                let baseline = |glyph: &bevy::text::PositionedGlyph| {
+                    (glyph.position.y
+                        - glyph.atlas_info.offset.y
+                        - glyph.atlas_info.rect.size().y * 0.5)
+                        / layout.scale_factor
+                };
+                assert!((layout.size.y / layout.scale_factor - 57.).abs() < 0.01);
+                assert!((baseline(&layout.glyphs[0]) - 44.234375).abs() < 0.01);
+                assert!((baseline(layout.glyphs.last().unwrap()) - 36.125).abs() < 0.01);
+                assert!((layout.inline_boxes[0].2.min.y / layout.scale_factor - 21.).abs() < 0.01);
             }
             let (text_node, text_global) = nodes.get(title).unwrap();
             for (image, (_, _, bounds)) in

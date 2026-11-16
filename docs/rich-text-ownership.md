@@ -70,9 +70,24 @@ before DPI/UiScale is applied. This runs after ellipsis projection and before
 quad placement, so wrapping, resizing, clipping and cached projections use the
 same image rectangles. Atlas trim offsets stay relative to that canvas.
 
-Paragraph baselines and row heights still come from Parley. Laya's font-height
-measurement, vertical placement of differently sized text runs, interline spacing
-and extra underline pixel can still differ.
+Non-editable raster paragraphs retain Parley's horizontal shaping and wrapping,
+then apply native vertical command layout. The actual selected font, weight and
+variation coordinates supply a 32px `g` / `有` pixel probe. Run heights scale that
+probe with ceiling; each row uses its highest command plus one underline pixel,
+and adds scaled leading only between rows. Mixed font sizes and images center in
+that row. Text baselines use the font's typographic middle alignment and probe
+offset. Auto-size, Shrink, Ellipsis, fill, stroke, decorations and image link areas
+share these row metrics. Source text stays unchanged.
+
+`ComputedTextBlock` retains Parley's shaping geometry; the final `TextLayoutInfo`
+contains the projected positions. The original rendering data is restored after
+input and before UI measurement. Unchanged paragraph geometry reuses its cached vertical projection even when
+Bevy refreshes equivalent shaping data; paint-change notifications stay intact. Text inputs retain editor
+geometry so caret/selection behavior remains consistent.
+
+Glyph coverage depends on Bevy/Swash and can differ from browser Canvas even with
+the same font file. Horizontal wrapping remains Parley's, and raster strike
+extensions are still Bevy's. These rules do not claim browser framebuffer parity.
 The layout tests exercise the actual Bevy TextReader/Parley pipeline with the
 tracked demo font, in addition to real-window checks.
 

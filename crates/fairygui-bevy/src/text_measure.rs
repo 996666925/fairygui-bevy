@@ -8,6 +8,13 @@ pub(crate) mod ellipsis;
 #[path = "raster_fit.rs"]
 pub(crate) mod fit;
 
+#[path = "raster_font_metrics.rs"]
+mod font_metrics;
+#[path = "raster_rows.rs"]
+mod rows;
+#[path = "raster_vertical.rs"]
+pub(crate) mod vertical;
+
 #[cfg(test)]
 #[path = "text_measure_tests.rs"]
 mod tests;
@@ -28,6 +35,7 @@ pub(crate) struct TextMeasurer {
     translations: fairygui_core::translation::TranslationTable,
     revision: u64,
     cache: HashMap<GObjectId, Cached>,
+    font_geometry: font_metrics::FontGeometryCache,
 }
 
 #[derive(PartialEq)]
@@ -144,7 +152,7 @@ impl TextMeasurer {
         use bevy::text::FontSource;
         Some(match source {
             FontSource::Handle(handle) => {
-                FontSource::Handle(self.font_handles.get(&handle.id())?.clone())
+                FontSource::Handle(self.font_handles.get(&handle.id()).cloned()?)
             }
             FontSource::List(sources) => FontSource::List(
                 sources
@@ -225,6 +233,9 @@ impl TextMeasurer {
             self.default_font.as_ref(),
             |handle| self.font_handles.contains_key(&handle.id()),
         );
+        // Metric recipes keep application handles; only pipeline spans use the
+        // measurer's separate asset allocator, whose indices may overlap.
+        let original_raster = raster.clone();
         let raster = self.font_source(raster)?;
         let fonts: Vec<_> = parsed
             .spans
@@ -246,20 +257,25 @@ impl TextMeasurer {
                 })
             })
             .collect();
-        let spans = parsed.spans.iter().enumerate().filter_map(|(index, span)| {
-            let element = if span.image.is_some() {
-                TextElement::Box(boxes[index].as_ref()?)
-            } else {
-                TextElement::Text {
-                    text: &span.text,
-                    font: &fonts[index],
-                    color: Color::WHITE,
-                    line_height: backend::text_line_height_for(data, span.size),
-                    letter_spacing: backend::text_letter_spacing_for(data),
-                }
-            };
-            Some((Entity::from_raw_u32(index as u32).unwrap(), 0, element))
-        });
+        let spans: Vec<_> = parsed
+            .spans
+            .iter()
+            .enumerate()
+            .filter_map(|(index, span)| {
+                let element = if span.image.is_some() {
+                    TextElement::Box(boxes[index].as_ref()?)
+                } else {
+                    TextElement::Text {
+                        text: &span.text,
+                        font: &fonts[index],
+                        color: Color::WHITE,
+                        line_height: backend::text_line_height_for(data, span.size),
+                        letter_spacing: backend::text_letter_spacing_for(data),
+                    }
+                };
+                Some((Entity::from_raw_u32(index as u32).unwrap(), 0, element))
+            })
+            .collect();
         let max = object.max_size().width;
         let width = if data.single_line {
             None
@@ -270,13 +286,48 @@ impl TextMeasurer {
         };
         let layout = backend::text_layout_for_object(object, data);
         let mut computed = ComputedTextBlock::default();
+        let native_key = fit::Key {
+            size: Vec2::new(object.width(), object.height()),
+            gutter: 2.,
+            font_size: data.font_size,
+            leading: data.leading,
+            native_vertical: !matches!(object.control(), ControlData::TextInput(_)),
+            layout,
+            revision: self.revision,
+            runs: spans
+                .iter()
+                .map(|(entity, _, element)| match element {
+                    TextElement::Text {
+                        text,
+                        font,
+                        line_height,
+                        letter_spacing,
+                        ..
+                    } => fit::Run::Text {
+                        entity: *entity,
+                        text: (*text).into(),
+                        font: TextFont {
+                            font: original_raster.clone(),
+                            ..(*font).clone()
+                        },
+                        height: *line_height,
+                        spacing: *letter_spacing,
+                        metrics: None,
+                    },
+                    TextElement::Box(value) => fit::Run::Box {
+                        entity: *entity,
+                        value: **value,
+                    },
+                })
+                .collect(),
+        };
         // Parley quantizes glyph advances at the render target's scale. Shaping
         // at 1x and scaling the result can make a short line wrap at fractional
         // DPI, even with the same font. Match rendering, then round outwards.
         self.pipeline
             .update_buffer(
                 &self.fonts,
-                spans,
+                spans.into_iter(),
                 layout.linebreak,
                 layout.justify,
                 TextBounds {
@@ -292,13 +343,21 @@ impl TextMeasurer {
             )
             .ok()?;
         let buffer = computed.buffer();
+        let dpi = self.scale_factor.max(f32::EPSILON);
+        let native = native_key
+            .native_vertical
+            .then(|| self.raster_rows(&native_key, &computed, 1.))
+            .flatten();
         let measured = if text.is_empty() {
             Vec2::new(0., 0.)
         } else {
-            (Vec2::new(buffer.full_width(), buffer.height()).ceil()
-                / self.scale_factor.max(f32::EPSILON))
-            .ceil()
-                + Vec2::splat(4.)
+            Vec2::new(
+                (buffer.full_width().ceil() / dpi).ceil(),
+                native.map_or_else(
+                    || (buffer.height().ceil() / dpi).ceil(),
+                    |rows| rows.logical_height.ceil(),
+                ),
+            ) + Vec2::splat(4.)
         };
         Some(Vec2::new(
             if data.auto_size == 1 {
@@ -337,6 +396,7 @@ pub(crate) fn sync_assets(
         measure.revision = measure.revision.wrapping_add(1);
     }
     if let Some(fonts) = fonts.filter(|fonts| fonts.is_changed()) {
+        measure.font_geometry.clear();
         measure.fonts = Assets::default();
         measure.font_handles.clear();
         measure.font_cx = FontCx::default();

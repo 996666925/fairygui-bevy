@@ -79,7 +79,8 @@ pub(crate) fn install(app: &mut App) {
             .after(bevy::ui::widget::text_system)
             .after(bevy::ui::widget::update_editable_text_layout)
             .after(runtime::publish_password_layout)
-            .after(runtime::text_measure::ellipsis::sync),
+            .after(runtime::text_measure::ellipsis::sync)
+            .after(runtime::text_measure::vertical::sync),
     );
     if let Some(render) = app.get_sub_app_mut(RenderApp) {
         render.init_resource::<ForegroundSnapshot>().add_systems(
@@ -196,6 +197,7 @@ fn layout_strokes(
     cache: &mut StrokeCache,
     images: &mut Assets<Image>,
     used: &mut HashSet<StrokeKey>,
+    vertical: Option<&runtime::text_measure::vertical::NativeTextLayout>,
 ) -> Vec<StrokeGlyph> {
     let mut out = Vec::new();
     for (line_index, line) in layout.lines().enumerate() {
@@ -240,7 +242,11 @@ fn layout_strokes(
                 let Some(atlas) = cache.glyph(&key, font.data.as_ref(), glyph_id, images) else {
                     continue;
                 };
-                let baseline = Vec2::new(glyph.x, glyph.y);
+                let baseline = Vec2::new(
+                    glyph.x,
+                    glyph.y
+                        + vertical.map_or(0., |v| v.shift(line_index as u32, brush.section_index)),
+                );
                 out.push(StrokeGlyph {
                     texture: atlas.texture,
                     rect: atlas.rect,
@@ -277,6 +283,7 @@ fn build_strokes(
             Option<&mut TextStrokeGeometry>,
             Option<&runtime::appearance::TextTintSource>,
             Option<&bevy::text::TextCursorStyle>,
+            Option<&runtime::text_measure::vertical::NativeTextLayout>,
         ),
         With<Text>,
     >,
@@ -301,6 +308,7 @@ fn build_strokes(
         previous,
         tint_source,
         cursor_style,
+        vertical,
     ) in &mut roots
     {
         let Some(owner) = owner.map(|o| o.0).or_else(|| prompt.map(|o| o.0)) else {
@@ -333,6 +341,7 @@ fn build_strokes(
             &mut cache,
             &mut images,
             &mut used,
+            vertical,
         );
         let surfaces = composite::project(
             &glyphs,

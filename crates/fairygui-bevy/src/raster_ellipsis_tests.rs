@@ -448,7 +448,7 @@ fn soft_breaks_between_image_rows_do_not_introduce_font_height_or_move_retained_
     app.world_mut()
         .gui_mut(title)
         .unwrap()
-        .set_size(Vec2::new(50., 35.));
+        .set_size(Vec2::new(50., 44.));
     for scale in [1., 1.25, 2.] {
         app.insert_resource(bevy::ui::UiScale(scale));
         app.update();
@@ -491,7 +491,7 @@ fn soft_breaks_preserve_text_row_heights_and_baselines_before_the_marker_row() {
     app.world_mut()
         .gui_mut(title)
         .unwrap()
-        .set_size(Vec2::new(140., 95.));
+        .set_size(Vec2::new(140., 105.));
     for scale in [1., 1.25, 2.] {
         app.insert_resource(bevy::ui::UiScale(scale));
         app.update();

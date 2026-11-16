@@ -539,6 +539,13 @@ impl Plugin for FairyGuiPlugin {
 
         app.add_systems(
             PostUpdate,
+            runtime::text_measure::vertical::restore
+                .before(runtime::text_measure::ellipsis::restore)
+                .before(bevy::ui::UiSystems::Layout)
+                .before(bevy::ui::widget::text_system),
+        );
+        app.add_systems(
+            PostUpdate,
             runtime::text_measure::ellipsis::restore
                 .before(bevy::ui::UiSystems::Layout)
                 .before(bevy::ui::widget::text_system)
@@ -550,8 +557,16 @@ impl Plugin for FairyGuiPlugin {
                 .after(bevy::ui::widget::text_system)
                 .after(bevy::ui::widget::update_editable_text_layout)
                 .after(runtime::publish_password_layout)
-                .after(backend::align_text)
+                .before(runtime::text_measure::vertical::sync)
                 .before(runtime::position_inline_images),
+        );
+        app.add_systems(
+            PostUpdate,
+            runtime::text_measure::vertical::sync
+                .after(bevy::ui::widget::text_system)
+                .after(runtime::publish_password_layout)
+                .before(backend::align_text)
+                .before(runtime::center_inline_images),
         );
         app.add_systems(
             PostUpdate,

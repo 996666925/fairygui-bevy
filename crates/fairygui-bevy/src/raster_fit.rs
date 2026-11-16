@@ -19,7 +19,7 @@ impl FontMetrics {
             leading: data.leading,
         }
     }
-    fn scaled(self, scale: f64) -> (FontSize, LineHeight) {
+    pub(super) fn scaled(self, scale: f64) -> (FontSize, LineHeight) {
         let size = (f64::from(self.size) * scale).floor().max(1.) as f32;
         let leading = (f64::from(self.leading) * scale).floor() as f32;
         (FontSize::Px(size), LineHeight::Px((size + leading).max(1.)))
@@ -47,6 +47,8 @@ pub(super) struct Key {
     pub(super) size: Vec2,
     pub(super) gutter: f32,
     pub(super) font_size: i32,
+    pub(super) leading: i32,
+    pub(super) native_vertical: bool,
     pub(super) layout: TextLayout,
     pub(super) revision: u64,
     pub(super) runs: Vec<Run>,
@@ -56,6 +58,8 @@ impl PartialEq for Key {
         self.size == other.size
             && self.gutter == other.gutter
             && self.font_size == other.font_size
+            && self.leading == other.leading
+            && self.native_vertical == other.native_vertical
             && self.layout.linebreak == other.layout.linebreak
             && self.layout.justify == other.layout.justify
             && self.revision == other.revision
@@ -67,6 +71,11 @@ impl PartialEq for Key {
 pub(crate) struct RasterFit {
     key: Key,
     scale: f64,
+}
+impl RasterFit {
+    pub(super) fn scale(&self) -> f64 {
+        self.scale
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -128,6 +137,8 @@ pub(crate) fn sync(
                 2.
             },
             font_size: data.font_size,
+            leading: data.leading,
+            native_vertical: !matches!(object.control(), ControlData::TextInput(_)),
             layout: backend::text_layout_for_object(object, data),
             revision: service.revision,
             runs,
@@ -236,9 +247,17 @@ impl TextMeasurer {
     fn shape_raster(&mut self, key: &Key, scale: f64) -> Option<(Vec2, usize)> {
         let computed = self.shape_block(key, scale)?;
         let layout = computed.buffer();
+        let native = if key.native_vertical {
+            self.raster_rows(key, &computed, scale)
+        } else {
+            None
+        };
         let dpi = self.scale_factor.max(f32::EPSILON);
         Some((
-            Vec2::new(layout.full_width(), layout.height()) / dpi,
+            Vec2::new(
+                layout.full_width() / dpi,
+                native.map_or(layout.height() / dpi, |rows| rows.logical_height),
+            ),
             layout.lines().count(),
         ))
     }

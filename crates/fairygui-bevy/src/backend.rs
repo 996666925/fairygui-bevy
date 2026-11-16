@@ -209,7 +209,8 @@ pub fn text_font_for_span(
     }
 }
 
-/// FairyGUI's leading is extra space added to the font size.
+/// Fallback shaping strut. Final static row heights use the font pixel probe
+/// and add leading between rows in the runtime's vertical projection.
 pub fn text_line_height_for(
     data: &fairygui_core::widget::TextFieldData,
     size: Option<i32>,

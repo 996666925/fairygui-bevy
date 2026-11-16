@@ -283,6 +283,7 @@ pub(crate) struct RichTextBlock {
     spans: Vec<Entity>,
     image_sources: Vec<(String, Option<InlineImageIdentity>)>,
     links: Vec<(Entity, usize, String)>,
+    image_rows: Vec<(Entity, Rect)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -310,6 +311,9 @@ impl LinkHit {
 }
 
 impl RichTextBlock {
+    pub(super) fn set_image_rows(&mut self, rows: Vec<(Entity, Rect)>) {
+        self.image_rows = rows;
+    }
     pub(super) fn despawn_spans(&self, commands: &mut Commands) {
         for &span in &self.spans {
             commands.entity(span).despawn();
@@ -356,12 +360,16 @@ impl RichTextBlock {
             }
             // Native HtmlLink covers the row, including the space above and
             // below a centered image; the image's own quad is smaller.
-            let Some((_, top, height, _)) =
+            let area = if let Some((_, area)) = self.image_rows.iter().find(|(id, _)| id == entity)
+            {
+                *area
+            } else if let Some((_, top, height, _)) =
                 inline_image_rows(block).find(|(id, _, _, _)| *id == entity.to_bits())
-            else {
+            {
+                Rect::new(bounds.min.x, top, bounds.max.x, top + height)
+            } else {
                 continue;
             };
-            let area = Rect::new(bounds.min.x, top, bounds.max.x, top + height);
             if !area.contains(local) {
                 continue;
             }
@@ -400,10 +408,14 @@ fn inline_image_rows(block: &ComputedTextBlock) -> impl Iterator<Item = (u64, f3
 /// Laya Text defaults to alignItems=middle. Keep each image centered in its
 /// measured row instead of aligning its bottom with the text baseline.
 pub(crate) fn center_inline_images(
-    mut text: Query<(&ComputedTextBlock, &mut bevy::text::TextLayoutInfo), With<RichTextBlock>>,
+    mut text: Query<(
+        &ComputedTextBlock,
+        &mut bevy::text::TextLayoutInfo,
+        &RichTextBlock,
+    )>,
 ) {
-    for (block, mut layout) in &mut text {
-        if layout.inline_boxes.is_empty() {
+    for (block, mut layout, rich) in &mut text {
+        if layout.inline_boxes.is_empty() || !rich.image_rows.is_empty() {
             continue;
         }
         let scale = layout.scale_factor.max(f32::EPSILON);
@@ -737,6 +749,7 @@ pub(super) fn spawn_rich_content(
         }
     });
     entity.insert(RichTextBlock {
+        image_rows: Vec::new(),
         source: text.into(),
         data: data.clone(),
         font: font.cloned(),

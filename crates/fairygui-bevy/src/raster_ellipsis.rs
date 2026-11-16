@@ -14,6 +14,7 @@ mod tests;
 #[derive(Component, Debug)]
 pub(crate) struct EllipsisState {
     key: Key,
+    render_key: Key,
     hint: FontHinting,
     source: ComputedTextBlock,
     source_info: TextLayoutInfo,
@@ -22,6 +23,9 @@ pub(crate) struct EllipsisState {
     markers: Vec<(Entity, Entity)>,
 }
 impl EllipsisState {
+    pub(super) fn render_key(&self) -> &Key {
+        &self.render_key
+    }
     pub(crate) fn is_projected(&self) -> bool {
         self.truncated
     }
@@ -79,11 +83,16 @@ struct Plan {
     marker_styles: Vec<(Entity, Entity)>,
 }
 
-fn plan(key: &Key, shaped: &ComputedTextBlock, dpi: f32) -> Option<Plan> {
+fn plan(
+    key: &Key,
+    shaped: &ComputedTextBlock,
+    dpi: f32,
+    native: Option<&super::rows::Rows>,
+) -> Option<Plan> {
     let layout = shaped.buffer();
     let available = (key.size - Vec2::splat(key.gutter * 2.)).max(Vec2::ZERO);
     let width = layout.full_width() / dpi;
-    let height = layout.height() / dpi;
+    let height = native.map_or(layout.height() / dpi, |rows| rows.logical_height);
     let multiline = key.layout.linebreak != LineBreak::NoWrap;
     let lines: Vec<_> = layout.lines().collect();
     if lines.is_empty()
@@ -98,7 +107,12 @@ fn plan(key: &Key, shaped: &ComputedTextBlock, dpi: f32) -> Option<Plan> {
     } else {
         lines
             .iter()
-            .position(|line| line.metrics().block_max_coord / dpi > available.y)
+            .enumerate()
+            .position(|(index, line)| {
+                native.map_or(line.metrics().block_max_coord / dpi, |rows| {
+                    rows.lines[index].logical_top + rows.lines[index].logical_height
+                }) > available.y
+            })
             .map_or(lines.len(), |index| index.max(1))
     };
     let deleted = count < lines.len();
@@ -380,6 +394,8 @@ pub(crate) fn sync(
                 2.
             },
             font_size: data.font_size,
+            leading: data.leading,
+            native_vertical: !matches!(object.control(), ControlData::TextInput(_)),
             layout: backend::text_layout_for_object(object, data),
             revision: service.revision,
             runs: reader
@@ -412,6 +428,7 @@ pub(crate) fn sync(
             .filter(|previous| previous.key == key && previous.hint == hint)
         {
             EllipsisState {
+                render_key: previous.render_key.clone(),
                 key,
                 hint,
                 source: block.clone(),
@@ -431,8 +448,19 @@ pub(crate) fn sync(
                 continue;
             };
             let mut markers = Vec::new();
-            let planned = plan(&key, &shaped, service.scale_factor.max(f32::EPSILON));
+            let native = if matches!(object.control(), ControlData::TextInput(_)) {
+                None
+            } else {
+                service.raster_rows(&measurement, &shaped, 1.)
+            };
+            let planned = plan(
+                &key,
+                &shaped,
+                service.scale_factor.max(f32::EPSILON),
+                native.as_ref(),
+            );
             let truncated = planned.is_some();
+            let render_key;
             let projected = {
                 let mut projected = key.clone();
                 if let Some(plan) = planned {
@@ -478,9 +506,11 @@ pub(crate) fn sync(
                 projected_info
                     .run_geometry
                     .retain(|run| run.bounds.width() > 0.);
+                render_key = projected;
                 Some((computed, projected_info, visible_text))
             };
             EllipsisState {
+                render_key,
                 key,
                 hint,
                 source: block.clone(),
