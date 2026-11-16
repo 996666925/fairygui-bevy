@@ -7,6 +7,10 @@
 //!
 //! 两者的首字节含义不同：前者是控件自己的某个枚举，后者是「对象类型」校验值。
 
+#[cfg(test)]
+#[path = "label_input_tests.rs"]
+mod label_input_tests;
+
 use crate::binary::{ByteBuffer, StringTable};
 use crate::color::Color;
 use crate::error::Result;
@@ -312,7 +316,8 @@ pub(crate) fn setup_button(
 
 /// 读取标签的实例数据。
 pub(crate) fn setup_label(
-    data: &mut LabelData,
+    store: &mut crate::object::ObjectStore,
+    object: crate::object::GObjectId,
     buffer: &mut ByteBuffer<'_>,
     table: &StringTable,
     begin_pos: usize,
@@ -328,27 +333,51 @@ pub(crate) fn setup_label(
     }
 
     if let Some(title) = buffer.read_s(table)? {
-        data.title = title;
+        store.set_object_text(object, &title);
     }
-    data.icon = buffer.read_s(table)?;
+    if let Some(icon) = buffer.read_s(table)? {
+        store.apply_icon_to(object, &icon);
+    }
 
     if buffer.read_bool()? {
-        data.title_color = Some(read_color(buffer)?);
+        store.set_control_color(object, read_color(buffer)?, None);
     }
 
     let font_size = buffer.read_i32()?;
     if font_size != 0 {
-        data.title_font_size = font_size;
+        store.set_object_font_size(object, font_size);
     }
 
     // 标签内部如果是输入框，还会带一段输入框属性；否则是一段固定长度的保留区。
     if buffer.read_bool()? {
-        if expected_type == ObjectType::InputText {
-            let _prompt = buffer.read_s(table)?;
-            let _restrict = buffer.read_s(table)?;
-            let _max_length = buffer.read_i32()?;
-            let _keyboard_type = buffer.read_i32()?;
-            let _password = buffer.read_bool()?;
+        if let Some(input) = store.input_field_of(object) {
+            let prompt = buffer.read_s(table)?;
+            let restrict = buffer.read_s(table)?;
+            let max_length = buffer.read_i32()?;
+            let keyboard_type = buffer.read_i32()?;
+            let password = buffer.read_bool()?;
+            let super::ControlData::TextInput(data) = &mut store.object_mut(input).unwrap().control
+            else {
+                unreachable!()
+            };
+            // Null/zero/false mean "keep the source input's value", not reset.
+            if let Some(prompt) = prompt {
+                data.prompt_text = Some(prompt);
+            }
+            if let Some(restrict) = restrict {
+                data.restrict = Some(restrict);
+            }
+            if max_length != 0 {
+                data.max_length = max_length;
+            }
+            if matches!(keyboard_type, 3 | 4) {
+                data.keyboard_type = keyboard_type;
+                data.password = false;
+            }
+            if password {
+                data.password = true;
+            }
+            store.mark(input, crate::object::dirty::TEXT);
         } else {
             buffer.skip(13);
         }

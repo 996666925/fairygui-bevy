@@ -551,6 +551,13 @@ let selected = input.selected_text(editor);
 `--smoke-input-selection` 验证普通、密码和多行输入的直接选区、UTF-16、全选、重聚焦及光标滚动，
 `--smoke-nested-scroll` 验证直接取消滚动手势时保留程序滚动动画。
 
+Label 实例的标题、图标、颜色、字号及输入属性会在 FUI 构建期转发到实际标题字段，
+支持标题为嵌套 Label／Button 的情况。导出的提示文字、restrict、最大长度和密码
+设置会进入 `GuiTextInputSettings`；null／零值／false 保留模板配置，空字符串显式清空。
+显式数字／URL 键盘类型会先取消模板密码类型，随后为 true 的密码标记可再次开启遮罩。
+这些实例覆盖只在构建时应用，之后通过 ECS 修改的设置不会被旧实例数据重新覆盖。
+键盘类型编号保留在核心输入数据中；当前 Bevy 桌面输入后端尚未提供移动软键盘类型切换。
+
 `GuiTextInput` 的目标 observer 在 Publish 阶段触发，不冒泡；`value` 为已提交的
 原始文本，密码框也不会用遮罩字符替代。需要集中记录时仍可通过消息读取。
 

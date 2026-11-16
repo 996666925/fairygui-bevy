@@ -457,9 +457,6 @@ fn build_component(
                 ControlData::Button(data) => {
                     super::extend::setup_button(data, &mut buffer, table, child_pos, kind)?;
                 }
-                ControlData::Label(data) => {
-                    super::extend::setup_label(data, &mut buffer, table, child_pos, kind)?;
-                }
                 ControlData::ProgressBar(data) => {
                     super::extend::setup_progress(data, &mut buffer, table, child_pos, kind)?;
                 }
@@ -490,6 +487,23 @@ fn build_component(
                 }
                 _ => {}
             }
+        }
+
+        // GLabel.setup_afterAdd forwards instance properties to its already
+        // constructed title, recursively resolving nested labels/buttons.
+        if matches!(
+            store.object(child).unwrap().control(),
+            ControlData::Label(_)
+        ) {
+            let kind = store.object(child).unwrap().kind();
+            super::extend::setup_label(
+                store,
+                child,
+                &mut buffer,
+                package.string_table(),
+                child_pos,
+                kind,
+            )?;
         }
 
         // GComponent.setup_afterAdd's first block-4 value binds a pane to a

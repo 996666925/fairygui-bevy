@@ -124,3 +124,89 @@ fn basics_contains_progress_and_slider_widgets() {
         "示例包中应当包含进度条、滑动条或标签（进度条 {progress}，滑动条 {sliders}，标签 {labels}）"
     );
 }
+
+#[test]
+fn label_input_instance_overrides_reach_nested_titles_and_do_not_modify_templates() {
+    let (package, mut store, root) = build(
+        "LabelInput",
+        include_bytes!("fixtures/LabelInput.fui"),
+        "Main",
+    );
+    for (name, prompt, restrict, max, password, font, color, value) in [
+        (
+            "direct",
+            "Enter four digits",
+            "0-9",
+            4,
+            false,
+            24,
+            [51, 102, 153],
+            "",
+        ),
+        (
+            "nested",
+            "Password digits",
+            "0-9",
+            6,
+            true,
+            22,
+            [153, 51, 102],
+            "",
+        ),
+        (
+            "preserved",
+            "BaseHint",
+            "A-Z",
+            8,
+            false,
+            16,
+            [18, 52, 86],
+            "BASE",
+        ),
+        ("cleared", "", "", -1, false, 20, [0, 0, 0], ""),
+    ] {
+        let label = store.child_by_name(root, name).unwrap();
+        let input = store.input_field_of(label).unwrap();
+        let ControlData::TextInput(data) = store.object(input).unwrap().control() else {
+            panic!()
+        };
+        assert_eq!(data.prompt_text.as_deref(), Some(prompt), "{name}");
+        assert_eq!(data.restrict.as_deref(), Some(restrict), "{name}");
+        assert_eq!(
+            (data.max_length, data.password, data.text_field.font_size),
+            (max, password, font),
+            "{name}"
+        );
+        assert_eq!(
+            data.text_field.color,
+            fairygui_core::color::Color::from_rgba8(color[0], color[1], color[2], 255)
+        );
+        assert_eq!(store.object_text(label), Some(value), "{name}");
+        store.set_input_prompt(label, Some("Runtime hint"));
+        store.set_input_password(label, !password);
+        store.apply_titles();
+        let ControlData::TextInput(data) = store.object(input).unwrap().control() else {
+            panic!()
+        };
+        assert_eq!(data.prompt_text.as_deref(), Some("Runtime hint"));
+        assert_eq!(data.password, !password);
+    }
+    let template = create_from_package(
+        &mut store,
+        &package,
+        package.item_index_by_name("DirectInput").unwrap(),
+        &LoadContext::none(),
+    )
+    .unwrap();
+    let input = store.input_field_of(template).unwrap();
+    let ControlData::TextInput(data) = store.object(input).unwrap().control() else {
+        panic!()
+    };
+    assert_eq!(data.prompt_text.as_deref(), Some("BaseHint"));
+    assert_eq!(data.restrict.as_deref(), Some("A-Z"));
+    assert_eq!(
+        (data.max_length, data.password, data.text_field.font_size),
+        (8, false, 16)
+    );
+    assert_eq!(store.object_text(template), Some("BASE"));
+}

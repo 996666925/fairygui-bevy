@@ -39,6 +39,46 @@ fn fixture(restrict: Option<&str>, max: i32, single: bool) -> (App, GObjectId, E
 }
 
 #[test]
+fn programmatic_shortening_refreshes_the_caret_before_same_frame_insert_and_ime() {
+    let (mut app, owner, entity) = fixture(None, 0, true);
+    edit(
+        &mut app,
+        entity,
+        [
+            TextEdit::Insert("中文😀long text".into()),
+            TextEdit::TextEnd(false),
+        ],
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "");
+    edit(&mut app, entity, [TextEdit::Insert("123".into())]);
+    assert_eq!(value(&app, entity), "123");
+    // The previous ASCII caret index 3 is also an invalid index beyond this
+    // shorter one-byte string. IME commits must use the refreshed selection.
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text(owner, "x");
+    edit(
+        &mut app,
+        entity,
+        [TextEdit::ImeCommit {
+            value: "好".into()
+        }],
+    );
+    assert_eq!(value(&app, entity), "x好");
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object_text(owner),
+        Some("x好")
+    );
+}
+
+#[test]
 fn editable_inputs_keep_one_layout_owner_when_static_text_is_reinserted() {
     let (mut app, _, entity) = fixture(None, 0, true);
     assert!(

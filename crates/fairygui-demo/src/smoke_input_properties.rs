@@ -22,6 +22,7 @@ struct State {
     cursor: Option<Vec2>,
     direct_checked: bool,
     enter_count: usize,
+    label: Option<Entity>,
 }
 
 pub(super) fn install(app: &mut App) {
@@ -98,7 +99,7 @@ fn ime(commands: &mut Commands, event: Ime) {
 fn drive(
     mut state: ResMut<State>,
     demo: Res<Demo>,
-    assets: Res<AssetServer>,
+    assets: (Res<AssetServer>, ResMut<Assets<FuiAsset>>),
     mut ui: ParamSet<(
         GuiQuery,
         Query<(&mut GuiTextInputSettings, &mut GuiText, &mut GuiTextFormat)>,
@@ -118,6 +119,7 @@ fn drive(
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
 ) {
+    let (assets, mut packages) = assets;
     state.frame += 1;
     assert!(
         state.frame < 1200,
@@ -372,8 +374,142 @@ fn drive(
             assert!(!entities.contains(state.prompt.unwrap()));
             assert_eq!(focus.focused_entity(), None);
             assert!(!window.ime_enabled);
+            let package = packages.add(FuiAsset {
+                package: fairygui_bevy::core::FuiPackage::parse(
+                    "LabelInput",
+                    include_bytes!("../../fairygui-core/tests/fixtures/LabelInput.fui"),
+                )
+                .unwrap(),
+                res_key: "LabelInput".into(),
+            });
+            state.owner = Some(
+                commands
+                    .spawn(FairyGuiRoot::new(package, "Main").with_position(Vec2::new(70., 80.)))
+                    .id(),
+            );
+            next = true;
+        }
+        18 if elapsed >= 12 && ui.p0().view(state.owner.unwrap()).is_some() => {
+            let gui = ui.p0();
+            for (name, password, max, font, prompt) in [
+                ("direct", false, 4, 24, "Enter four digits"),
+                ("nested", true, 6, 22, "Password digits"),
+                ("preserved", false, 8, 16, "BaseHint"),
+                ("cleared", false, -1, 20, ""),
+            ] {
+                let label = gui.child_by_name(state.owner.unwrap(), name).unwrap();
+                let title = gui.child_by_name(label, "title").unwrap();
+                let input = if name == "nested" {
+                    gui.child_by_name(title, "title").unwrap()
+                } else {
+                    title
+                };
+                let settings = gui.input_settings(label).unwrap();
+                assert_eq!((settings.password, settings.max_length), (password, max));
+                assert_eq!(settings.prompt_text.as_deref(), Some(prompt));
+                assert_eq!(gui.text_format(input).unwrap().font_size, font);
+                if name == "nested" {
+                    state.label = Some(label);
+                    state.input = Some(input);
+                }
+            }
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-label-input-settings.png",
+                ));
+            next = true;
+        }
+        19 if elapsed >= 8 => {
+            let (node, transform) = nodes.get(state.input.unwrap()).unwrap();
+            state.cursor = Some(
+                transform.transform_point2(node.content_box().min + Vec2::splat(10.))
+                    / window.scale_factor(),
+            );
+            next = true;
+        }
+        20 if elapsed >= 3 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        21 if elapsed >= 3 => {
+            mouse.release(MouseButton::Left);
+            next = true;
+        }
+        22 if elapsed >= 6 => {
+            assert_eq!(focus.focused_entity(), state.input);
+            key(
+                &mut commands,
+                window_entity,
+                Key::Character("a12345678".into()),
+                KeyCode::KeyA,
+                Some("a12345678"),
+            );
+            next = true;
+        }
+        23 if elapsed >= 8 => {
+            let (editor, _, text) = editors.get(state.input.unwrap()).unwrap();
+            assert_eq!(editor.value().to_string(), "12345");
+            assert_eq!(text.0, "●●●●●");
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-label-input-password.png",
+                ));
+            next = true;
+        }
+        24 if elapsed >= 8 => {
+            let mut edits = ui.p1();
+            let (mut settings, mut text, _) = edits.get_mut(state.label.unwrap()).unwrap();
+            settings.password = false;
+            settings.max_length = 3;
+            settings.prompt_text = Some("Runtime nested label".into());
+            text.set("");
+            next = true;
+        }
+        25 if elapsed >= 8 => {
+            let input = state.input.unwrap();
+            let settings = ui.p0().input_settings(input).unwrap().clone();
+            assert!(!settings.password);
+            assert_eq!(settings.max_length, 3);
+            assert_eq!(editors.get(input).unwrap().0.value().to_string(), "");
+            let object = references.get(input).unwrap().0;
+            let (hint, _, text, _) = prompts
+                .iter()
+                .find(|(_, owner, ..)| owner.0 == object)
+                .unwrap();
+            assert_eq!(text.0, "Runtime nested label");
+            state.prompt = Some(hint);
+            key(
+                &mut commands,
+                window_entity,
+                Key::Character("123a45".into()),
+                KeyCode::Digit1,
+                Some("123a45"),
+            );
+            next = true;
+        }
+        26 if elapsed >= 8 => {
+            let (editor, _, text) = editors.get(state.input.unwrap()).unwrap();
+            assert_eq!(editor.value().to_string(), "123");
+            assert_eq!(text.0, "123");
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-label-input-runtime.png"));
+            next = true;
+        }
+        27 if elapsed >= 8 => {
+            commands.entity(state.owner.unwrap()).despawn();
+            next = true;
+        }
+        28 if elapsed >= 8 => {
+            assert!(!entities.contains(state.input.unwrap()));
+            assert!(!entities.contains(state.label.unwrap()));
+            assert!(!entities.contains(state.prompt.unwrap()));
+            assert_eq!(focus.focused_entity(), None);
+            assert!(!window.ime_enabled);
             println!(
-                "demo smoke PASSED: ECS input settings, prompt colors, pointer and direct focus, direct Enter prevention, KeyboardInput/IME, UTF-16 restriction/length, password real value, same-frame read-only, programmatic assignment and disposal"
+                "demo smoke PASSED: ECS input properties, keyboard and IME, serialized direct and nested label settings, exported prompt/font/color/restriction/password, retained runtime overrides and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

@@ -40,6 +40,97 @@ fn fixture() -> (App, Entity, Entity) {
         .unwrap();
     (app, owner, input)
 }
+
+#[test]
+fn serialized_label_inputs_project_settings_and_keep_runtime_edits_after_construction() {
+    let (mut app, old_owner, _) = fixture();
+    app.world_mut().despawn(old_owner);
+    app.update();
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: crate::core::FuiPackage::parse(
+                "LabelInput",
+                include_bytes!("../../fairygui-core/tests/fixtures/LabelInput.fui"),
+            )
+            .unwrap(),
+            res_key: "LabelInput".into(),
+        });
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    for (name, password, max, font) in [
+        ("direct", false, 4, 24),
+        ("nested", true, 6, 22),
+        ("preserved", false, 8, 16),
+        ("cleared", false, -1, 20),
+    ] {
+        let mut state = SystemState::<GuiQuery>::new(app.world_mut());
+        let gui = state.get(app.world()).unwrap();
+        let label = gui.child_by_name(owner, name).unwrap();
+        let title = gui.child_by_name(label, "title").unwrap();
+        let input = if name == "nested" {
+            gui.child_by_name(title, "title").unwrap()
+        } else {
+            title
+        };
+        assert_eq!(
+            gui.input_settings(label).unwrap(),
+            gui.input_settings(input).unwrap()
+        );
+        assert_eq!(
+            (
+                gui.input_settings(input).unwrap().password,
+                gui.input_settings(input).unwrap().max_length
+            ),
+            (password, max)
+        );
+        assert_eq!(gui.text_format(input).unwrap().font_size, font);
+        if name == "preserved" {
+            assert_eq!(value(&app, input), "BASE");
+            continue;
+        }
+        edit(&mut app, input, [TextEdit::Insert("a12345678".into())]);
+        assert_eq!(
+            value(&app, input),
+            match name {
+                "direct" => "123",
+                "nested" => "12345",
+                _ => "a12345678",
+            }
+        );
+        assert_eq!(
+            app.world()
+                .get::<crate::runtime::InputPasswordView>(input)
+                .is_some(),
+            password
+        );
+        {
+            let mut settings = app
+                .world_mut()
+                .get_mut::<GuiTextInputSettings>(label)
+                .unwrap();
+            settings.password = false;
+            settings.max_length = 3;
+            settings.prompt_text = Some("Runtime label".into());
+        }
+        app.world_mut().get_mut::<GuiText>(label).unwrap().set("");
+        app.update();
+        assert_eq!(value(&app, input), "");
+        let settings = app.world().get::<GuiTextInputSettings>(input).unwrap();
+        assert_eq!((settings.password, settings.max_length), (false, 3));
+        assert_eq!(settings.prompt_text.as_deref(), Some("Runtime label"));
+        edit(&mut app, input, [TextEdit::Insert("12345".into())]);
+        assert_eq!(value(&app, input), "123");
+        assert!(
+            app.world()
+                .get::<crate::runtime::InputPasswordView>(input)
+                .is_none()
+        );
+    }
+    app.world_mut().despawn(owner);
+    app.update();
+}
 fn value(app: &App, input: Entity) -> String {
     app.world()
         .get::<EditableText>(input)

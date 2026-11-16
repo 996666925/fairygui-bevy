@@ -269,6 +269,12 @@ pub(crate) fn apply_input_edits(context: InputEdits) {
         if policy.paste.is_none() {
             policy.paste = editable.pending_paste.take();
         }
+        if !policy.queued.is_empty() || policy.paste.is_some() {
+            // Programmatic text writes can leave Parley's selection referring
+            // to the previous buffer until layout refresh. Refresh before any
+            // insertion/deletion or selection query uses those byte indices.
+            editable.editor.refresh_layout(&mut fonts, &mut layouts.0);
+        }
         loop {
             let edit = if let Some(mut read) = policy.paste.take() {
                 match read.poll_result() {
