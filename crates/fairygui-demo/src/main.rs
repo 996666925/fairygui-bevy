@@ -229,6 +229,8 @@ fn main() -> AppExit {
         smoke::install_raster_ellipsis(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-inline-alignment") {
         smoke::install_inline_alignment(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-text-decorations") {
+        smoke::install_text_decorations(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-group-alignment") {
         smoke::install_group_alignment(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-opaque") {

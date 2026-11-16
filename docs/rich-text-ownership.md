@@ -86,8 +86,17 @@ Bevy refreshes equivalent shaping data; paint-change notifications stay intact. 
 geometry so caret/selection behavior remains consistent.
 
 Glyph coverage depends on Bevy/Swash and can differ from browser Canvas even with
-the same font file. Horizontal wrapping remains Parley's, and raster strike
-extensions are still Bevy's. These rules do not claim browser framebuffer parity.
+the same font file. Horizontal wrapping remains Parley's. These rules do not
+claim browser framebuffer parity.
+
+Static raster underlines and strikes use native centered-line bounds. Bevy's
+RunGeometry stores the top edge, so the adapter subtracts half the native
+thickness before extraction. Strikes extend four logical pixels beyond both
+ends in the render world; run bounds, backgrounds, links, line measurements and
+source spans keep their original width. This preserves effective color, alpha,
+clip and transformed coordinates. Text inputs retain Bevy's editable decoration
+geometry. The `--smoke-text-decorations` window check records interior/exterior
+samples for the generated screenshots and exercises style removal/restoration.
 The layout tests exercise the actual Bevy TextReader/Parley pipeline with the
 tracked demo font, in addition to real-window checks.
 

@@ -187,12 +187,13 @@ pub(crate) fn sync(
                 .map_or(key.font_size as f32, |(_, _, size)| *size);
             run.bounds.min.y = row.top;
             run.bounds.max.y = row.top + row.height;
-            let thickness = (size / 16.).max(1.);
-            run.underline_y = (row.logical_top + row.logical_height - thickness) * dpi;
-            run.underline_thickness = thickness * dpi;
-            run.strikethrough_y =
-                (row.logical_top + row.logical_height * 0.5 - thickness).trunc() * dpi;
-            run.strikethrough_thickness = thickness * dpi;
+            crate::text_decorations::project_geometry(
+                run,
+                row.logical_top,
+                row.logical_height,
+                size,
+                dpi,
+            );
         }
         for row in &layout.rows.lines {
             for (entity, canvas, _) in &row.images {

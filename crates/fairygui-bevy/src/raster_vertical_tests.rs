@@ -166,6 +166,47 @@ fn first_frame_auto_size_matches_rendered_rows_at_fractional_dpi_without_trailin
 }
 
 #[test]
+fn underline_and_strike_centers_follow_native_row_coordinates_without_expanding_runs() {
+    for scale in [0.7, 1., 1.3, 2.] {
+        let (app, _, title) = fixture(
+            "<a href='event:line'><strike><font size='48'>A</font><font size='12'>g</font></strike></a>",
+            scale,
+            3,
+        );
+        let block = app.world().get::<ComputedTextBlock>(title).unwrap();
+        let info = app.world().get::<TextLayoutInfo>(title).unwrap();
+        assert_eq!(info.run_geometry.len(), 2);
+        for run in &info.run_geometry {
+            let span = block.entities()[run.section_index as usize].entity;
+            assert!(app.world().get::<bevy::text::Underline>(span).is_some());
+            assert!(app.world().get::<bevy::text::Strikethrough>(span).is_some());
+            let FontSize::Px(size) = app.world().get::<TextFont>(span).unwrap().font_size else {
+                panic!("pixel font");
+            };
+            let thickness = (size / 16.).max(1.);
+            assert!((run.underline_position().y / scale - (57. - thickness)).abs() < 0.001);
+            assert!(
+                (run.strikethrough_position().y / scale - (28.5 - thickness).trunc()).abs() < 0.001
+            );
+            assert!((run.bounds.height() / scale - 57.).abs() < 0.001);
+            let actual_width: f32 = block
+                .buffer()
+                .lines()
+                .flat_map(|line| line.items())
+                .filter_map(|item| {
+                    let parley::PositionedLayoutItem::GlyphRun(glyphs) = item else {
+                        return None;
+                    };
+                    (glyphs.style().brush.section_index == run.section_index)
+                        .then_some(glyphs.advance())
+                })
+                .sum();
+            assert!((run.bounds.width() - actual_width).abs() < 0.001);
+        }
+    }
+}
+
+#[test]
 fn mixed_font_sizes_and_images_use_command_centers_and_native_baselines() {
     for scale in [1., 1.3, 2.] {
         let (app, _, title) = fixture(

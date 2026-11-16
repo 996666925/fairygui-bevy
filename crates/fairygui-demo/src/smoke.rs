@@ -62,6 +62,11 @@ mod inline_alignment;
 pub(super) fn install_inline_alignment(app: &mut App) {
     inline_alignment::install(app);
 }
+#[path = "smoke_text_decorations.rs"]
+mod text_decorations;
+pub(super) fn install_text_decorations(app: &mut App) {
+    text_decorations::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {

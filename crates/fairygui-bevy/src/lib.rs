@@ -123,6 +123,7 @@ mod text_variables;
 pub use text_variables::GuiTextVars;
 mod html_options;
 pub use html_options::GuiHtmlOptions;
+mod text_decorations;
 mod text_stroke;
 pub mod tree;
 mod tree_settings;
@@ -260,6 +261,7 @@ impl Plugin for FairyGuiPlugin {
         graph::install(app);
         image_fill::install(app);
         text_stroke::install(app);
+        text_decorations::install(app);
         app.configure_sets(
             Update,
             (
