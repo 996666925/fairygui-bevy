@@ -13,7 +13,7 @@ use bevy::{
 };
 use fairygui_core::{
     GObjectId, Size,
-    graph::{polygon_draw_offset, polygon_points, polygon_stroke},
+    graph::{circle_drawing, polygon_draw_offset, polygon_points, polygon_stroke},
     widget::{ControlData, GraphData, GraphType},
 };
 
@@ -61,6 +61,7 @@ pub(crate) struct GraphRender {
     size: Size,
     surface: Option<Entity>,
     material: Option<Handle<PolygonMaterial>>,
+    circle_segments: Option<usize>,
 }
 
 fn colors(gui: &GuiRuntime, id: GObjectId, data: &GraphData) -> (Vec4, Vec4) {
@@ -73,15 +74,23 @@ fn colors(gui: &GuiRuntime, id: GObjectId, data: &GraphData) -> (Vec4, Vec4) {
     (color(data.drawn_fill_color()), color(data.line_color))
 }
 
-fn geometry(data: &GraphData, size: Size) -> Option<(Vec<Vec4>, Vec4, UVec4)> {
+fn geometry(data: &GraphData, size: Size, scale: f64) -> Option<(Vec<Vec4>, Vec4, UVec4)> {
     if data.graph_kind() == GraphType::Rect && data.corner_radius.is_none() {
         return rectangle_geometry(data, size);
     }
-    let points = polygon_points(data, size);
+    let circle = circle_drawing(data, size, scale);
+    if circle.is_some_and(|circle| circle.radius == 0.) {
+        return None;
+    }
+    let points = circle.map_or_else(|| polygon_points(data, size), |circle| circle.points());
     if points.len() < 2 {
         return None;
     }
-    let offset = polygon_draw_offset(data);
+    let offset = if circle.is_some() {
+        0.
+    } else {
+        polygon_draw_offset(data)
+    };
     let mut vertices: Vec<_> = points
         .iter()
         .map(|p| Vec4::new(p.x as f32 + offset, p.y as f32 + offset, 0.0, 0.0))
@@ -163,7 +172,7 @@ fn surface_node(canvas: Vec4) -> Node {
     }
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub(crate) fn sync_graphs(
     mut commands: Commands,
     gui: NonSend<GuiRuntime>,
@@ -171,10 +180,25 @@ pub(crate) fn sync_graphs(
     buffers: Option<ResMut<Assets<ShaderBuffer>>>,
     roots: Query<(Entity, &GObjectRef, Option<&GraphRender>), Without<GraphSurface>>,
     mut basic_surfaces: Query<(&mut BackgroundColor, &mut BorderColor), With<GraphSurface>>,
+    windows: Query<(Entity, &Window, Has<bevy::window::PrimaryWindow>)>,
+    settings: Option<Res<crate::GuiInputSettings>>,
+    ui_scale: Option<Res<bevy::ui::UiScale>>,
 ) {
     let (Some(mut materials), Some(mut buffers)) = (materials, buffers) else {
         return;
     };
+    let physical_scale = f64::from(
+        windows
+            .iter()
+            .find(|(entity, _, primary)| {
+                settings
+                    .as_ref()
+                    .and_then(|s| s.window)
+                    .map_or(*primary, |target| target == *entity)
+            })
+            .map_or(1., |(_, window, _)| window.scale_factor())
+            * ui_scale.map_or(1., |scale| scale.0),
+    );
     for (entity, object, previous) in &roots {
         let Some(object_data) = gui.store().object(object.0) else {
             continue;
@@ -183,9 +207,24 @@ pub(crate) fn sync_graphs(
             continue;
         };
         let size = object_data.size();
-        let plain_rectangle = data.graph_kind() == GraphType::Rect && data.corner_radius.is_none();
+        let rounded_rectangle =
+            data.graph_kind() == GraphType::Rect && data.corner_radius.is_some();
+        let circle_scale = if data.graph_kind() == GraphType::Ellipse {
+            gui.store()
+                .coordinate_transform(object.0)
+                .map_or(physical_scale, |transform| {
+                    let (x, y) = transform.axis_scales();
+                    physical_scale * x.max(y)
+                })
+        } else {
+            1.
+        };
+        let circle_segments =
+            circle_drawing(data, size, circle_scale).map(|circle| circle.segments);
         let (fill, stroke) = colors(&gui, object.0, data);
-        if previous.is_some_and(|old| old.data == *data && old.size == size) {
+        if previous.is_some_and(|old| {
+            old.data == *data && old.size == size && old.circle_segments == circle_segments
+        }) {
             if let Some(mut material) = previous
                 .and_then(|old| old.material.as_ref())
                 .and_then(|handle| materials.get_mut(handle))
@@ -194,8 +233,7 @@ pub(crate) fn sync_graphs(
                 material.uniform.fill = fill;
                 material.uniform.stroke = stroke;
             }
-            if data.graph_kind().is_basic_shape()
-                && !plain_rectangle
+            if rounded_rectangle
                 && let Some(surface) = previous.and_then(|old| old.surface)
                 && let Ok((mut background, mut border)) = basic_surfaces.get_mut(surface)
             {
@@ -211,7 +249,7 @@ pub(crate) fn sync_graphs(
             }
             continue;
         }
-        if data.graph_kind().is_basic_shape() && !plain_rectangle {
+        if rounded_rectangle {
             commands
                 .entity(entity)
                 .remove::<(BackgroundColor, BorderColor)>();
@@ -222,16 +260,9 @@ pub(crate) fn sync_graphs(
                     node.border = UiRect::ZERO;
                     node.border_radius = BorderRadius::ZERO;
                 });
-            let bounds = if data.graph_kind() == GraphType::Ellipse {
-                fairygui_core::graph::circle_bounds(size)
-            } else {
-                (size.width > 0. && size.height > 0.).then_some(fairygui_core::geom::Rect::new(
-                    0.,
-                    0.,
-                    size.width,
-                    size.height,
-                ))
-            };
+            let bounds = (size.width > 0. && size.height > 0.).then_some(
+                fairygui_core::geom::Rect::new(0., 0., size.width, size.height),
+            );
             let old_basic = previous
                 .filter(|old| old.material.is_none())
                 .and_then(|old| old.surface);
@@ -291,15 +322,14 @@ pub(crate) fn sync_graphs(
                 size,
                 surface,
                 material: None,
+                circle_segments,
             });
             continue;
         }
-        if !plain_rectangle
-            && !matches!(
-                data.graph_kind(),
-                GraphType::Polygon | GraphType::RegularPolygon
-            )
-        {
+        if !matches!(
+            data.graph_kind(),
+            GraphType::Rect | GraphType::Ellipse | GraphType::Polygon | GraphType::RegularPolygon
+        ) {
             if let Some(surface) = previous.and_then(|old| old.surface) {
                 commands.entity(surface).despawn();
             }
@@ -317,6 +347,7 @@ pub(crate) fn sync_graphs(
                 size,
                 surface: None,
                 material: None,
+                circle_segments,
             });
             continue;
         }
@@ -330,7 +361,7 @@ pub(crate) fn sync_graphs(
                 node.border = UiRect::ZERO;
                 node.border_radius = BorderRadius::ZERO;
             });
-        let Some((vertices, canvas, counts)) = geometry(data, size) else {
+        let Some((vertices, canvas, counts)) = geometry(data, size, circle_scale) else {
             if let Some(surface) = previous.and_then(|old| old.surface) {
                 commands.entity(surface).despawn();
             }
@@ -339,6 +370,7 @@ pub(crate) fn sync_graphs(
                 size,
                 surface: None,
                 material: None,
+                circle_segments,
             });
             continue;
         };
@@ -393,6 +425,7 @@ pub(crate) fn sync_graphs(
             size,
             surface: Some(surface),
             material: Some(handle),
+            circle_segments,
         });
     }
 }

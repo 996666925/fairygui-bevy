@@ -80,8 +80,8 @@ pub const GRAYED_TINT: bevy::prelude::Color = bevy::prelude::Color::srgb(0.62, 0
 
 /// 图形的渲染外观。
 ///
-/// 矩形和圆使用独立绘制节点，保持控件自身的布局尺寸与子节点原点。
-/// 填充走绘制节点的背景色，描边走边框；圆使用正方形节点与全圆角。
+/// 节点样式中的填充走背景色，描边走边框。运行时仅用它绘制圆角矩形；
+/// 普通矩形、圆和多边形使用矢量材质，保持布局尺寸与子节点原点。
 #[derive(Debug, Clone, Copy)]
 pub struct GraphStyle {
     /// 填充色。不填充时是全透明的。

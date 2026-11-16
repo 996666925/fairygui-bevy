@@ -1,8 +1,11 @@
-//! Native GGraph polygon coordinates and LayaAir 3.3 closed-line geometry.
+//! Native GGraph drawing commands and LayaAir 3.3 path/stroke geometry.
 use crate::{
     Point, Rect, Size,
     widget::{GraphData, GraphType},
 };
+
+mod circle;
+pub use circle::{CircleDrawing, circle_drawing};
 
 /// GGraph's Ellipse command is a width-based circle centered in its declared
 /// rectangle. Its drawing and hit bounds may extend above/below that rectangle.

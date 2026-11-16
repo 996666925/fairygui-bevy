@@ -196,17 +196,22 @@ fn native_circle_surface_keeps_its_width_based_bounds_tint_and_entity_across_res
         .surface
         .unwrap();
     let node = app.world().get::<Node>(surface).unwrap();
-    assert_eq!(
-        (node.left, node.top, node.width, node.height),
-        (Val::Px(0.), Val::Px(-10.), Val::Px(100.), Val::Px(100.))
-    );
-    assert_eq!(node.border, UiRect::all(Val::Px(4.)));
+    let canvas = app.world().get::<GraphSurface>(surface).unwrap().canvas;
+    assert!(canvas.abs_diff_eq(Vec4::new(-1., -11., 102., 102.), 0.3));
+    assert_eq!(node.border, UiRect::ZERO);
     assert!(
         app.world()
             .get::<BackgroundColor>(root)
             .is_none_or(|bg| bg.0 == Color::NONE)
     );
-    assert_eq!(app.world().resource::<Assets<PolygonMaterial>>().len(), 0);
+    let handle = app
+        .world()
+        .get::<GraphRender>(root)
+        .unwrap()
+        .material
+        .as_ref()
+        .unwrap()
+        .clone();
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .store_mut()
@@ -214,11 +219,12 @@ fn native_circle_surface_keeps_its_width_based_bounds_tint_and_entity_across_res
     app.update();
     assert_eq!(
         app.world()
-            .get::<BackgroundColor>(surface)
+            .resource::<Assets<PolygonMaterial>>()
+            .get(&handle)
             .unwrap()
-            .0
-            .to_linear()
-            .alpha,
+            .uniform
+            .fill
+            .w,
         0.5
     );
     app.world_mut()
@@ -230,9 +236,12 @@ fn native_circle_surface_keeps_its_width_based_bounds_tint_and_entity_across_res
         app.world().get::<GraphRender>(root).unwrap().surface,
         Some(surface)
     );
-    assert_eq!(
-        app.world().get::<GraphSurface>(surface).unwrap().canvas,
-        Vec4::new(0., 30., 40., 40.)
+    assert!(
+        app.world()
+            .get::<GraphSurface>(surface)
+            .unwrap()
+            .canvas
+            .abs_diff_eq(Vec4::new(-1., 29., 42., 42.), 0.3)
     );
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
@@ -268,7 +277,7 @@ fn switching_circle_polygon_rectangle_and_empty_reclaims_only_owned_drawing_surf
             .unwrap()
             .material
             .is_some()
-            && matches!(kind, 1 | 3);
+            && matches!(kind, 1..=3);
         let mut data = match app
             .world()
             .non_send::<GuiRuntime>()
@@ -316,7 +325,7 @@ fn rectangle_geometry_preserves_native_inset_signed_quads_and_visible_bounds() {
         fill_color: GuiColor::WHITE,
         ..default()
     };
-    let (quads, canvas, counts) = geometry(&data, Size::new(2., 3.)).unwrap();
+    let (quads, canvas, counts) = geometry(&data, Size::new(2., 3.), 1.).unwrap();
     assert_eq!(counts, UVec4::new(5, 0, 1, 0));
     assert_eq!(
         quads,
@@ -330,11 +339,11 @@ fn rectangle_geometry_preserves_native_inset_signed_quads_and_visible_bounds() {
     );
     assert_eq!(canvas, Vec4::new(-9., -8., 20., 19.));
     data.line_color.a = 0.;
-    let (quads, canvas, _) = geometry(&data, Size::new(100., 80.)).unwrap();
+    let (quads, canvas, _) = geometry(&data, Size::new(100., 80.), 1.).unwrap();
     assert_eq!(quads[0], Vec4::new(5., 5., 90., 70.));
     assert_eq!(canvas, Vec4::new(4., 4., 92., 72.));
     data.fill_color.a = 0.;
-    assert!(geometry(&data, Size::new(100., 80.)).is_none());
+    assert!(geometry(&data, Size::new(100., 80.), 1.).is_none());
 }
 
 #[test]
@@ -382,4 +391,115 @@ fn rectangle_material_keeps_primitive_opacity_separate_without_a_background_quad
         UiRect::ZERO
     );
     assert_eq!(app.world().get::<Node>(root).unwrap().border, UiRect::ZERO);
+}
+
+#[test]
+fn circle_material_insets_transparent_lines_and_keeps_signed_radii_without_affecting_hits() {
+    let mut data = GraphData {
+        graph_type: 2,
+        line_size: 10,
+        line_color: GuiColor::TRANSPARENT,
+        fill_color: GuiColor::WHITE,
+        ..default()
+    };
+    let (points, canvas, counts) = geometry(&data, Size::new(100., 80.), 1.).unwrap();
+    assert_eq!(points[0], Vec4::new(95., 40., 0., 0.));
+    assert_eq!(counts.y, 0);
+    assert!(
+        canvas.z < 93. && canvas.w < 93.,
+        "transparent stroke still insets the fill"
+    );
+    data.line_size = 120;
+    data.line_color = GuiColor::WHITE;
+    let (points, canvas, counts) = geometry(&data, Size::new(100., 80.), 1.).unwrap();
+    assert_eq!(points[0], Vec4::new(40., 40., 0., 0.));
+    assert!(counts.y > 0 && canvas.z > 140. && canvas.w > 140.);
+    data.line_size = 100;
+    assert!(geometry(&data, Size::new(100., 80.), 1.).is_none());
+    assert!(fairygui_core::graph::graph_contains(
+        &data,
+        Size::new(100., 80.),
+        fairygui_core::Point::new(50., 40.)
+    ));
+}
+
+#[test]
+fn circle_tessellation_tracks_ancestor_transforms_window_dpi_and_ui_scale_in_place() {
+    let (mut app, id, root) = fixture();
+    let parent = {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        let parent = gui.store_mut().create(ObjectType::Component);
+        gui.store_mut().set_parent(id, Some(parent));
+        gui.store_mut().set_scale(parent, 3., 1.);
+        gui.store_mut().set_scale(id, 2., 1.);
+        gui.store_mut().set_rotation(id, 90.);
+        gui.store_mut().set_graph(
+            id,
+            GraphData {
+                graph_type: 2,
+                line_size: 4,
+                line_color: GuiColor::new(0., 1., 0., 0.5),
+                fill_color: GuiColor::new(1., 0., 0., 0.5),
+                ..default()
+            },
+        );
+        parent
+    };
+    let mut window = Window::default();
+    window.resolution.set_scale_factor_override(Some(2.));
+    app.world_mut().spawn((window, bevy::window::PrimaryWindow));
+    app.insert_resource(bevy::ui::UiScale(1.5));
+    app.update();
+    let render = app.world().get::<GraphRender>(root).unwrap();
+    assert_eq!(render.circle_segments, Some(542));
+    let surface = render.surface.unwrap();
+    let handle = render.material.as_ref().unwrap().clone();
+    let material = app
+        .world()
+        .resource::<Assets<PolygonMaterial>>()
+        .get(&handle)
+        .unwrap();
+    assert_eq!(
+        (material.uniform.fill.w, material.uniform.stroke.w),
+        (0.5, 0.25)
+    );
+    let buffer = material.geometry.clone();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_rotation(id, 0.);
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GraphRender>(root)
+            .unwrap()
+            .circle_segments,
+        Some(1085)
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_rotation(parent, 37.);
+    app.update();
+    let render = app.world().get::<GraphRender>(root).unwrap();
+    assert_eq!(render.circle_segments, Some(1085));
+    assert_eq!(render.surface, Some(surface));
+    assert_eq!(render.material.as_ref(), Some(&handle));
+    assert_eq!(
+        app.world()
+            .resource::<Assets<PolygonMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .geometry,
+        buffer
+    );
+    assert_eq!(
+        app.world().get::<Node>(surface).unwrap().border,
+        UiRect::ZERO
+    );
+    assert!(
+        app.world()
+            .get::<BackgroundColor>(surface)
+            .is_none_or(|c| c.0.to_srgba().alpha == 0.)
+    );
 }

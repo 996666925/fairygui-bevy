@@ -243,6 +243,12 @@ pub struct CoordinateTransform {
     ty: f64,
 }
 impl CoordinateTransform {
+    /// Lengths of the global matrix columns, including nested rotations and
+    /// nonuniform scales. Translation and pivot position do not affect them.
+    pub fn axis_scales(self) -> (f64, f64) {
+        (self.a.hypot(self.b), self.c.hypot(self.d))
+    }
+
     pub fn transform_point(self, point: Point) -> Option<Point> {
         let point = self.point(point);
         (point.x.is_finite() && point.y.is_finite()).then_some(point)

@@ -245,10 +245,16 @@ fn drive(
                 );
                 let surface = drawing(front, &faces).unwrap();
                 let node = faces.get(surface).unwrap().3;
-                assert_eq!(
-                    (node.top, node.width, node.height),
-                    (Val::Px(-60.), Val::Px(200.), Val::Px(200.))
-                );
+                let px = |value| {
+                    if let Val::Px(value) = value {
+                        value
+                    } else {
+                        panic!("pixel graph surface")
+                    }
+                };
+                assert!((px(node.top) + 61.).abs() < 0.5);
+                assert!((px(node.width) - 202.).abs() < 0.5);
+                assert!((px(node.height) - 202.).abs() < 0.5);
                 assert!(
                     ui.p0().graph(surface).is_none(),
                     "decorative surface must not become a logical GUI view"
@@ -308,7 +314,7 @@ fn drive(
                 next = true;
             }
             6 if elapsed >= 12 => {
-                assert!(!entities.contains(state.drawing.unwrap()));
+                assert_eq!(drawing(state.front.unwrap(), &faces), state.drawing);
                 state.drawing = Some(drawing(state.front.unwrap(), &faces).unwrap());
                 commands
                     .spawn(Screenshot::primary_window())
@@ -490,24 +496,21 @@ fn drive(
             22 if elapsed >= 8 => {
                 let front = state.front.unwrap();
                 assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.5);
-                let surface = drawing(front, &faces).unwrap();
-                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.5);
+                assert!(drawing(front, &faces).is_some());
                 ui.p3().get_mut(front).unwrap().alpha = 0.2;
                 next = true;
             }
             23 if elapsed >= 8 => {
                 let front = state.front.unwrap();
                 assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.2);
-                let surface = drawing(front, &faces).unwrap();
-                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.2);
+                assert!(drawing(front, &faces).is_some());
                 ui.p2().get_mut(front).unwrap().size.x += 20.;
                 next = true;
             }
             24 if elapsed >= 8 => {
                 let front = state.front.unwrap();
                 assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.5);
-                let surface = drawing(front, &faces).unwrap();
-                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.5);
+                assert!(drawing(front, &faces).is_some());
                 ui.p1().get_mut(front).unwrap().fill_color = Color::srgb(0.6, 0.2, 0.8);
                 next = true;
             }
@@ -670,10 +673,107 @@ fn drive(
                 next = true;
             }
             39 if elapsed >= 8 => {
-                commands.entity(state.owner.unwrap()).despawn();
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(state.front.unwrap()).unwrap();
+                graph.kind = GraphType::Ellipse;
+                graph.line_color = Color::NONE;
+                graph.fill_color = Color::srgb(0.6, 0.2, 0.8);
                 next = true;
             }
             40 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                let node = faces.get(surface).unwrap().3;
+                assert_eq!(node.border, UiRect::ZERO);
+                let Val::Px(width) = node.width else {
+                    panic!("pixel circle surface")
+                };
+                assert!(
+                    (width - 52.).abs() < 0.5,
+                    "transparent line must inset the circle path"
+                );
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk("target/fairygui-demo-native-circle-inset.png"));
+                next = true;
+            }
+            41 => {
+                let front = state.front.unwrap();
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(1., 35.),
+                    front,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            42 => {
+                ui.p1().get_mut(state.front.unwrap()).unwrap().line_size = 60;
+                next = true;
+            }
+            43 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert!(drawing(front, &faces).is_none());
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    None,
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                next = true;
+            }
+            44 => {
+                let front = state.front.unwrap();
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(30., 35.),
+                    front,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            45 => {
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(state.front.unwrap()).unwrap();
+                graph.line_size = 80;
+                graph.line_color = Color::WHITE;
+                graph.fill_color = Color::srgba(0.6, 0.2, 0.8, 0.5);
+                next = true;
+            }
+            46 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(
+                        "target/fairygui-demo-native-circle-thick-stroke.png",
+                    ));
+                next = true;
+            }
+            47 if elapsed >= 8 => {
+                commands.entity(state.owner.unwrap()).despawn();
+                next = true;
+            }
+            48 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -681,9 +781,9 @@ fn drive(
                 ] {
                     assert!(!entities.contains(entity));
                 }
-                assert_eq!(clicks.0.len(), 9);
+                assert_eq!(clicks.0.len(), 11);
                 println!(
-                    "demo smoke PASSED: graph shapes and contour hits, native rectangle primitives and transparent-line inset, invisible rectangle picking, fill alpha, stroke-free logical layout, zero-size recovery, transformed layout and disposal"
+                    "demo smoke PASSED: graph shapes and contour hits, native rectangle primitives and circle paths, transparent-line inset, invisible and degenerate shape picking, signed circle radius, fill alpha, stroke-free logical layout, zero-size recovery, transformed layout and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;
