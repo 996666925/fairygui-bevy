@@ -14,6 +14,7 @@ enum Step {
     Plain {
         kind: ObjectType,
         package: String,
+        rows: Vec<String>,
     },
 }
 
@@ -112,9 +113,22 @@ impl BuildPlan {
                 if let Some((owner, index)) = resource {
                     self.collect(owner, index, &context, registry, active)?;
                 } else {
+                    let rows = if matches!(kind, ObjectType::List | ObjectType::Tree) {
+                        self.collect_list_items(
+                            &package,
+                            &mut buffer,
+                            start,
+                            &context,
+                            registry,
+                            active,
+                        )?
+                    } else {
+                        Vec::new()
+                    };
                     self.steps.push_back(Step::Plain {
                         kind,
                         package: package.id().into(),
+                        rows,
                     });
                 }
                 buffer.set_position(start + length);
@@ -128,6 +142,58 @@ impl BuildPlan {
             children,
         });
         Ok(())
+    }
+
+    fn collect_list_items(
+        &mut self,
+        package: &std::sync::Arc<FuiPackage>,
+        buffer: &mut crate::binary::ByteBuffer<'_>,
+        begin: usize,
+        context: &LoadContext,
+        registry: Option<&PackageRegistry>,
+        active: &mut Vec<(String, usize)>,
+    ) -> Result<Vec<String>> {
+        if !buffer.seek(begin, 8)? {
+            return Ok(Vec::new());
+        }
+        let default = buffer.read_s(package.string_table())?;
+        let count = buffer.read_i16()?.max(0) as usize;
+        let mut urls = Vec::new();
+        for _ in 0..count {
+            let next = i32::from(buffer.read_i16()?);
+            let end = buffer.resolve_relative(next)?;
+            let url = buffer
+                .read_s(package.string_table())?
+                .or_else(|| default.clone());
+            if let Some(url) = url {
+                let resource = if url.starts_with("ui://") {
+                    package
+                        .resolve_local_url(&url)
+                        .map(|index| (package.clone(), index))
+                        .or_else(|| {
+                            registry?
+                                .resolve_url(&url)
+                                .map(|(owner, index)| (owner.clone(), index))
+                        })
+                } else if !url.is_empty() && !url.contains("://") {
+                    package
+                        .item_index_by_name(&url)
+                        .map(|index| (package.clone(), index))
+                } else {
+                    None
+                };
+                if let Some((owner, index)) = resource {
+                    urls.push(format!(
+                        "ui://{}{}",
+                        owner.id(),
+                        owner.item(index).unwrap().id
+                    ));
+                    self.collect(owner, index, context, registry, active)?;
+                }
+            }
+            buffer.set_position(end);
+        }
+        Ok(urls)
     }
 
     pub(crate) fn remaining(&self) -> usize {
@@ -146,46 +212,63 @@ impl BuildPlan {
         let Some(step) = self.steps.pop_front() else {
             return Ok(None);
         };
-        let object = match step {
-            Step::Plain { kind, package } => {
-                let object = store.create(kind);
-                store.object_mut(object).unwrap().source_package_id = Some(package);
-                object
-            }
-            Step::Resource {
-                package,
-                index,
-                context,
-                children,
-            } => {
-                let start = self
-                    .pool
-                    .len()
-                    .checked_sub(children)
-                    .ok_or_else(|| Error::invalid_data(0, "incomplete prepared child pool"))?;
-                let children = self.pool.split_off(start);
-                create_with_context(
-                    store,
-                    &package,
+        let object =
+            match step {
+                Step::Plain {
+                    kind,
+                    package,
+                    rows,
+                } => {
+                    let start =
+                        self.pool.len().checked_sub(rows.len()).ok_or_else(|| {
+                            Error::invalid_data(0, "incomplete prepared list pool")
+                        })?;
+                    let items = self.pool.split_off(start);
+                    let object = store.create(kind);
+                    // Prepared rows never enter the display hierarchy.
+                    store.cache_prepared_list_items(object, rows.into_iter().zip(items).collect());
+                    store.object_mut(object).unwrap().source_package_id = Some(package);
+                    object
+                }
+                Step::Resource {
+                    package,
                     index,
-                    &context,
-                    &mut Construction {
-                        registry,
-                        active: Vec::new(),
-                        branch: self.branch.clone(),
-                        children: Some(children),
-                    },
-                )?
-            }
-        };
+                    context,
+                    children,
+                } => {
+                    let start =
+                        self.pool.len().checked_sub(children).ok_or_else(|| {
+                            Error::invalid_data(0, "incomplete prepared child pool")
+                        })?;
+                    let children = self.pool.split_off(start);
+                    create_with_context(
+                        store,
+                        &package,
+                        index,
+                        &context,
+                        &mut Construction {
+                            registry,
+                            active: Vec::new(),
+                            branch: self.branch.clone(),
+                            children: Some(children),
+                        },
+                    )?
+                }
+            };
         self.owned.push(object);
+        store.mark_constructing(object);
         self.pool.push(object);
         if self.steps.is_empty() {
             if self.pool.len() != 1 {
                 return Err(Error::invalid_data(0, "unconsumed prepared objects"));
             }
+            if self.owned.iter().any(|&object| !store.contains(object)) {
+                return Err(Error::invalid_data(0, "prepared object was removed"));
+            }
+            let root = self.pool.pop().unwrap();
+            store.finish_construction(root);
             self.owned.clear();
-            return Ok(self.pool.pop());
+            return Ok(Some(root));
         }
         Ok(None)
     }

@@ -115,7 +115,10 @@ pub(crate) fn sync_loader_components(
         .collect();
     let mut visited = std::collections::HashSet::new();
     while let Some(loader) = pending.pop_front() {
-        if !visited.insert(loader) || gui.loader_components.contains_key(&loader) {
+        if !visited.insert(loader)
+            || gui.loader_components.contains_key(&loader)
+            || gui.store.is_constructing(loader)
+        {
             continue;
         }
         let Some(url) = gui

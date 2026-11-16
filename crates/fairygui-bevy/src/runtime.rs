@@ -652,59 +652,82 @@ impl GuiRuntime {
     /// template.  FairyGUI stores list data separately from the visual child
     /// objects; the renderer needs both before it can apply titles and layout.
     fn materialize_list_items(&mut self, package: &FuiPackage, root: GObjectId) {
-        let mut lists = vec![root];
-        self.store
-            .for_each_descendant(root, &mut |id| lists.push(id));
-
-        for list in lists {
-            if self.store.is_virtual_list(list) {
-                continue;
+        let mut pending = std::collections::VecDeque::from([root]);
+        while let Some(object) = pending.pop_front() {
+            self.materialize_list_rows(package, object);
+            if let Some(object) = self.store.object(object) {
+                pending.extend(object.children().iter().copied());
             }
-            let (default_item, item_urls, existing) = {
-                let Some(object) = self.store.object(list) else {
-                    continue;
-                };
-                let data = match object.control() {
-                    ControlData::List(data) => data,
-                    ControlData::Tree(data) => &data.list,
-                    _ => continue,
-                };
-                (
-                    data.default_item.clone(),
-                    data.items
-                        .iter()
-                        .map(|item| item.url.clone().or_else(|| data.default_item.clone()))
-                        .collect::<Vec<_>>(),
-                    self.store.list_item_count(list),
-                )
+        }
+    }
+
+    fn materialize_list_rows(&mut self, package: &FuiPackage, list: GObjectId) {
+        if self.store.is_virtual_list(list) {
+            return;
+        }
+        let (default_item, item_urls, existing) = {
+            let Some(object) = self.store.object(list) else {
+                return;
             };
+            let data = match object.control() {
+                ControlData::List(data) => data,
+                ControlData::Tree(data) => &data.list,
+                _ => return,
+            };
+            (
+                data.default_item.clone(),
+                data.items
+                    .iter()
+                    .map(|item| item.url.clone().or_else(|| data.default_item.clone()))
+                    .collect::<Vec<_>>(),
+                self.store.list_item_count(list),
+            )
+        };
 
-            if item_urls.len() <= existing {
+        if item_urls.len() <= existing {
+            return;
+        }
+
+        for url in item_urls.into_iter().skip(existing) {
+            let Some(url) = url.or_else(|| default_item.clone()) else {
+                continue;
+            };
+            let owner = self
+                .store
+                .object(list)
+                .and_then(|object| object.source_package_id())
+                .filter(|id| *id != package.id())
+                .and_then(|id| self.registry.get_by_id(id))
+                .cloned()
+                .unwrap_or_else(|| std::sync::Arc::new(package.clone()));
+            let Some(template) = self.resolve_template(&owner, &url) else {
+                tracing::warn!(list = ?list, %url, "list item template cannot be resolved");
+                continue;
+            };
+            let index = template.package.resolve_branch(
+                template.index,
+                &self.registry.load_context(&template.package),
+            );
+            let identity = format!(
+                "ui://{}{}",
+                template.package.id(),
+                template.package.item(index).unwrap().id
+            );
+            if self.loader_would_recurse(list, &identity) {
+                tracing::warn!(?list, %url, "recursive list item reference rejected");
                 continue;
             }
-
-            for url in item_urls.into_iter().skip(existing) {
-                let Some(url) = url.or_else(|| default_item.clone()) else {
-                    continue;
-                };
-                let owner = self
-                    .store
-                    .object(list)
-                    .and_then(|object| object.source_package_id())
-                    .filter(|id| *id != package.id())
-                    .and_then(|id| self.registry.get_by_id(id))
-                    .cloned()
-                    .unwrap_or_else(|| std::sync::Arc::new(package.clone()));
-                let Some(template) = self.resolve_template(&owner, &url) else {
-                    tracing::warn!(list = ?list, %url, "list item template cannot be resolved");
-                    continue;
-                };
-                let Some(item) = self.create_template(&template) else {
-                    tracing::warn!(list = ?list, %url, "list item template cannot be created");
-                    continue;
-                };
-                self.store.set_parent(item, Some(list));
-            }
+            let item = if let Some(item) = self.store.take_prepared_list_item(list, &template.url) {
+                self.remember_asset_tree(item, &template.handle);
+                Some(item)
+            } else {
+                self.create_template(&template)
+            };
+            let Some(item) = item else {
+                tracing::warn!(list = ?list, %url, "list item template cannot be created");
+                continue;
+            };
+            self.store.set_parent(item, Some(list));
         }
     }
 

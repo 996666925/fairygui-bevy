@@ -272,6 +272,9 @@ pub(crate) fn sync_loader_status(
         .store
         .iter()
         .filter_map(|(id, object)| {
+            if gui.store.is_constructing(id) {
+                return None;
+            }
             if let ControlData::Loader(data) = object.control() {
                 Some((
                     id,

@@ -358,3 +358,13 @@ WebRenderStruct2D in a scalar Node host, recording source SHA256 hashes,
 samples. Identity filters use native subStruct objects; basic Matrix/Vector/Rectangle
 holders replace unused graphics infrastructure. No browser or native GPU is used.
 See docs/compositing.md for the Bevy renderer and window verification.
+
+`AsyncLists.fui` derives from the native Basics export with package ID
+`asynlst1` and name `AsyncLists`. `Dropdown2.list` receives the first two native
+item records from `Demo_List.n0`; `Demo_Grid.list1` uses `Dropdown2` as its four
+row templates, producing real nested lists. `Demo_List.n9` instead references
+`Demo_List` itself to exercise recursive-template rejection. Package/component
+index tables and lengths are rebuilt; other resource records, controllers,
+relations, images and atlas references remain unchanged. Tests parse with the
+`Basics` resource prefix so existing atlas filenames remain valid. This is a
+derived behavioral fixture, not a new editor export or native framebuffer trace.

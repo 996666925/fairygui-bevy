@@ -1255,7 +1255,12 @@ See grayed-state.md for native traces, derived binary fixture and limits.
 
 ## Incremental root construction
 
-AsyncBuilder collects a postorder resource plan, including plain inline objects.
+AsyncBuilder collects a postorder resource plan, including plain inline objects
+and exported list/tree item templates. Each plain list receives an independent
+FIFO pool keyed by canonical package/item URLs. These prepared roots stay outside
+the logical/display hierarchy until materialization takes them. ObjectStore's
+disposal traversal includes these owned pools, including nested pools; ordinary
+descendant/stage traversal excludes them.
 Each advancement allocates at most its configured object budget. Prepared child
 roots are supplied to the ordinary component parser, which applies instance
 properties, gears, relations, controllers and extensions in the same order as
@@ -1271,8 +1276,17 @@ path, using the owner's current geometry, active flag and parent. Initialization
 and extension binding therefore see a complete tree. Budget edits keep progress;
 component removal, despawn and template replacement cancel the owned plan.
 
-The budget counts exported model objects, not elapsed time or GPU work. Planning,
-one component's instance-binding pass, generated Loader/list/bar preparation and view
+ObjectStore marks unfinished models and unused prepared rows as constructing.
+Loader component/status services defer those objects, preventing content/error
+sign allocation outside the active budget. Publishing a root clears this flag
+for its logical tree; taking a prepared row publishes that row's logical tree,
+while its own unused row pool remains unpublished. The list materializer visits
+newly attached children too, completing nested lists before the first view.
+Synchronous materialization rejects recursive item resources by model ancestry;
+the asynchronous planner rejects cycles before allocating any objects.
+
+The budget counts model objects, not elapsed time or GPU work. Planning,
+one component's instance-binding pass, generated Loader/bar preparation, row layout and view
 materialization still perform concentrated work. These limits are distinct from
 the native postorder allocation rule.
 

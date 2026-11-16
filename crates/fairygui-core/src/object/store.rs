@@ -63,6 +63,8 @@ pub use groups::{GroupLayoutSettings, GroupLayoutType};
 mod buttons;
 #[path = "combo.rs"]
 mod combo;
+#[path = "construction.rs"]
+mod construction;
 #[path = "list_items.rs"]
 mod list_items;
 #[path = "list_layout.rs"]
@@ -260,6 +262,9 @@ pub struct ObjectStore {
     completed_progress_tweens: Vec<(GObjectId, f64)>,
     slider_bars: std::collections::HashMap<GObjectId, slider::SliderBars>,
     virtual_states: std::collections::HashMap<GObjectId, virtual_list::VirtualState>,
+    constructing: HashSet<GObjectId>,
+    prepared_list_items:
+        std::collections::HashMap<GObjectId, std::collections::VecDeque<(String, GObjectId)>>,
 }
 
 impl ObjectStore {
@@ -328,6 +333,11 @@ impl ObjectStore {
         self.dispose_transitions_in(id);
 
         let removed_set: HashSet<GObjectId> = removed.iter().copied().collect();
+        self.constructing.retain(|id| !removed_set.contains(id));
+        self.prepared_list_items.retain(|owner, items| {
+            items.retain(|(_, item)| !removed_set.contains(item));
+            !removed_set.contains(owner) && !items.is_empty()
+        });
         self.relation_dependents.retain(|target, owners| {
             owners.retain(|owner| !removed_set.contains(owner));
             !removed_set.contains(target) && !owners.is_empty()
@@ -432,6 +442,11 @@ impl ObjectStore {
         }
         if let Some(state) = self.virtual_states.get(&id) {
             for &(_, child) in &state.pool {
+                self.collect_subtree(child, out);
+            }
+        }
+        if let Some(items) = self.prepared_list_items.get(&id) {
+            for &(_, child) in items {
                 self.collect_subtree(child, out);
             }
         }

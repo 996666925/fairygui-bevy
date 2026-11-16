@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_async_lists.rs"]
+mod async_lists;
+pub(super) fn install_async_lists(app: &mut App) {
+    async_lists::install(app);
+}
 #[path = "smoke_async_root.rs"]
 mod async_root;
 pub(super) fn install_async_root(app: &mut App) {

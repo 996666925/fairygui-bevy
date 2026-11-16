@@ -101,26 +101,173 @@ fn one_object_budget_matches_synchronous_exported_trees_and_never_exposes_partia
                 create_from_package(&mut sync, &package, index, &LoadContext::none()).unwrap();
             let mut store = ObjectStore::new();
             let mut builder = AsyncBuilder::new([index], 1);
-            for count in 1..=sync.len() {
+            for count in 1..10_000 {
                 let finished = builder.advance(&mut store, &package, &LoadContext::none());
                 assert_eq!(store.len(), count, "{name}/{}", item.name);
-                assert_eq!(finished, count == sync.len());
                 if !finished {
                     assert!(builder.roots().is_empty());
                 }
                 assert!(store.iter().all(|(id, _)| !store.is_on_stage(id)));
+                if finished {
+                    break;
+                }
             }
+            assert!(builder.is_finished());
             assert_eq!(builder.failures(), 0, "{name}/{}", item.name);
-            assert_eq!(builder.processed_objects(), sync.len());
-            assert_eq!(builder.planned_objects(), sync.len());
+            assert_eq!(builder.processed_objects(), store.len());
+            assert_eq!(builder.planned_objects(), store.len());
+            assert!(store.len() >= sync.len());
             assert_eq!(
                 snapshot(&store, builder.roots()[0]),
                 snapshot(&sync, root),
                 "{name}/{}",
                 item.name
             );
+            store.remove(builder.roots()[0]);
+            assert!(
+                store.is_empty(),
+                "prepared rows must share their list's lifetime"
+            );
         }
     }
+}
+
+#[test]
+fn prepared_rows_stay_off_stage_and_are_consumed_in_native_fifo_order_without_allocating() {
+    let package = FuiPackage::parse("Basics", include_bytes!("fixtures/Basics.fui")).unwrap();
+    let mut store = ObjectStore::new();
+    let mut builder = AsyncBuilder::from_names(&package, &["Demo_List"], 1).unwrap();
+    let root = builder.finish(&mut store, &package, &LoadContext::none())[0];
+    let lists: Vec<_> = store
+        .iter()
+        .filter_map(|(id, object)| {
+            let fairygui_core::widget::ControlData::List(data) = object.control() else {
+                return None;
+            };
+            let default = data.default_item.clone()?;
+            (data.items.len() > 2
+                && data
+                    .items
+                    .iter()
+                    .all(|item| item.url.as_ref() == Some(&default)))
+            .then_some((id, default, data.items.len()))
+        })
+        .collect();
+    let index = package.resolve_local_url(&lists[0].1).unwrap();
+    let item_id = &package.item(index).unwrap().id;
+    let canonical = format!("ui://{}{}", package.id(), item_id);
+    let expected: Vec<_> = store
+        .iter()
+        .filter_map(|(id, object)| {
+            (store.is_constructing(id)
+                && object.parent().is_none()
+                && object.package_item_id() == Some(item_id))
+            .then_some(id)
+        })
+        .collect();
+    assert_eq!(
+        expected.len(),
+        lists.iter().map(|(_, _, count)| count).sum::<usize>()
+    );
+    let mut expected = expected.into_iter();
+    let total = store.len();
+    store.attach_to_stage(root);
+    for (list, url, count) in lists {
+        assert_eq!(package.resolve_local_url(&url), Some(index));
+        for _ in 0..count {
+            let expected = expected.next().unwrap();
+            assert!(!store.is_on_stage(expected));
+            assert!(store.is_constructing(expected));
+            let row = store.take_prepared_list_item(list, &canonical).unwrap();
+            assert_eq!(row, expected);
+            assert!(!store.is_constructing(row));
+            assert!(!store.is_on_stage(row));
+            store.set_parent(row, Some(list));
+            assert!(store.is_on_stage(row));
+            assert_eq!(store.len(), total);
+        }
+        assert!(store.take_prepared_list_item(list, &canonical).is_none());
+    }
+    assert!(expected.next().is_none());
+    store.remove(root);
+    assert!(store.is_empty());
+}
+
+#[test]
+fn cancellation_after_a_list_pool_is_created_disposes_every_cached_row() {
+    let package = FuiPackage::parse("Basics", include_bytes!("fixtures/Basics.fui")).unwrap();
+    let mut store = ObjectStore::new();
+    let survivor = store.create(ObjectType::Graph);
+    let mut builder = AsyncBuilder::from_names(&package, &["Demo_List"], 1).unwrap();
+    while !store
+        .iter()
+        .any(|(_, object)| object.kind() == ObjectType::List)
+    {
+        assert!(!builder.advance(&mut store, &package, &LoadContext::none()));
+    }
+    assert!(store.len() > 10);
+    builder.cancel(&mut store);
+    assert_eq!(store.len(), 1);
+    assert!(store.contains(survivor));
+}
+
+#[test]
+fn nested_prepared_pools_share_ownership_and_remain_unpublished_until_their_own_row_is_taken() {
+    let package = FuiPackage::parse("Basics", include_bytes!("fixtures/AsyncLists.fui")).unwrap();
+    let mut store = ObjectStore::new();
+    let mut builder = AsyncBuilder::from_names(&package, &["Demo_Grid"], 1).unwrap();
+    let root = builder.finish(&mut store, &package, &LoadContext::none())[0];
+    let list = store.child_by_name(root, "list1").unwrap();
+    let canonical = |name| {
+        format!(
+            "ui://{}{}",
+            package.id(),
+            package
+                .item(package.item_index_by_name(name).unwrap())
+                .unwrap()
+                .id
+        )
+    };
+    let row = store
+        .take_prepared_list_item(list, &canonical("Dropdown2"))
+        .unwrap();
+    store.set_parent(row, Some(list));
+    let inner = store.child_by_name(row, "list").unwrap();
+    assert!(!store.is_constructing(inner));
+    let url = match store.object(inner).unwrap().control() {
+        fairygui_core::widget::ControlData::List(data) => {
+            assert_eq!(data.items.len(), 2);
+            data.default_item.clone().unwrap()
+        }
+        _ => panic!("nested list"),
+    };
+    let total = store.len();
+    let nested = store.take_prepared_list_item(inner, &url).unwrap();
+    assert!(!store.is_constructing(nested));
+    store.set_parent(nested, Some(inner));
+    assert_eq!(store.len(), total);
+    assert!(
+        store.iter().any(|(id, _)| store.is_constructing(id)),
+        "untaken rows stay unpublished"
+    );
+    store.remove(root);
+    assert!(
+        store.is_empty(),
+        "unused nested pools are reclaimed recursively"
+    );
+}
+
+#[test]
+fn recursive_list_item_templates_fail_during_planning_without_allocating() {
+    let package = FuiPackage::parse("Basics", include_bytes!("fixtures/AsyncLists.fui")).unwrap();
+    let mut store = ObjectStore::new();
+    let survivor = store.create(ObjectType::Graph);
+    let mut builder = AsyncBuilder::from_names(&package, &["Demo_List"], 1).unwrap();
+    assert!(builder.advance(&mut store, &package, &LoadContext::none()));
+    assert_eq!(builder.failures(), 1);
+    assert!(builder.roots().is_empty());
+    assert_eq!(store.len(), 1);
+    assert!(store.contains(survivor));
 }
 
 #[test]

@@ -1,5 +1,21 @@
 use super::*;
 use crate::GuiRootMountState;
+use bevy::ecs::system::RunSystemOnce;
+
+fn package_app(bytes: &[u8], resource: &str) -> (App, Handle<FuiAsset>) {
+    let (mut app, handle) = app();
+    app.world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .insert(
+            handle.id(),
+            FuiAsset {
+                package: FuiPackage::parse(resource, bytes).unwrap(),
+                res_key: format!("ui/{resource}"),
+            },
+        )
+        .unwrap();
+    (app, handle)
+}
 
 fn object_ids(app: &App) -> Vec<GObjectId> {
     app.world()
@@ -268,4 +284,163 @@ fn a_completed_child_waits_for_its_incrementally_built_parent_without_becoming_a
         app.world().get::<ChildOf>(child_view).unwrap().parent(),
         app.world().get::<GuiRootView>(parent).unwrap().0
     );
+}
+
+#[test]
+fn list_and_tree_rows_are_built_under_the_root_budget_and_ready_during_initialize() {
+    #[derive(Resource, Default)]
+    struct Seen(usize);
+    fn initialize(
+        roots: Query<&GuiRootView, Added<GuiRootView>>,
+        references: Query<&GObjectRef>,
+        mut seen: ResMut<Seen>,
+        runtime: NonSend<GuiRuntime>,
+    ) {
+        for view in &roots {
+            let root = references.get(view.0).unwrap().0;
+            let mut objects = vec![root];
+            runtime
+                .store()
+                .for_each_descendant(root, &mut |id| objects.push(id));
+            for id in objects {
+                let Some(data) = runtime.store().object(id).and_then(|o| match o.control() {
+                    ControlData::List(data) => Some(data.as_ref()),
+                    ControlData::Tree(data) => Some(&data.list),
+                    _ => None,
+                }) else {
+                    continue;
+                };
+                if !data.items.is_empty() {
+                    assert_eq!(runtime.store().list_item_count(id), data.items.len());
+                    for row in runtime.store().list_items(id).unwrap() {
+                        assert!(runtime.entity_of(row).is_some());
+                        assert!(!runtime.store().is_constructing(row));
+                    }
+                    seen.0 += 1;
+                }
+            }
+        }
+    }
+    for (bytes, package_name, item) in [
+        (
+            include_bytes!("../../fairygui-core/tests/fixtures/Basics.fui").as_slice(),
+            "Basics",
+            "Demo_List",
+        ),
+        (
+            include_bytes!("../../fairygui-core/tests/fixtures/AsyncLists.fui").as_slice(),
+            "Basics",
+            "Demo_Grid",
+        ),
+        (
+            include_bytes!("../../fairygui-demo/assets/ui/TreeView.fui").as_slice(),
+            "TreeView",
+            "Main",
+        ),
+    ] {
+        let (mut app, asset) = package_app(bytes, package_name);
+        app.init_resource::<Seen>()
+            .add_systems(Update, initialize.in_set(crate::GuiSystems::Initialize));
+        let owner = app
+            .world_mut()
+            .spawn(FairyGuiRoot::new(asset, item).with_build_budget(1))
+            .id();
+        let mut completed = false;
+        let mut before = Vec::new();
+        for _ in 0..2500 {
+            app.update();
+            let progress = app.world().get::<GuiRootBuildProgress>(owner).unwrap();
+            assert!(progress.total > 10);
+            let runtime = app.world().non_send::<GuiRuntime>();
+            if progress.constructed < progress.total {
+                assert_eq!(
+                    runtime.store().len(),
+                    progress.constructed,
+                    "{package_name}/{item}"
+                );
+                assert!(app.world().get::<GuiRootInstance>(owner).is_none());
+                assert!(
+                    runtime
+                        .store()
+                        .iter()
+                        .all(|(id, _)| runtime.entity_of(id).is_none())
+                );
+                before = object_ids(&app);
+            } else {
+                assert!(
+                    before.iter().all(|&id| runtime.store().contains(id)),
+                    "prepared objects must be reused"
+                );
+                assert!(app.world().resource::<Seen>().0 > 0);
+                assert!(
+                    runtime
+                        .store()
+                        .iter()
+                        .all(|(id, _)| !runtime.store().is_constructing(id))
+                );
+                completed = true;
+                break;
+            }
+        }
+        assert!(completed);
+        app.world_mut().entity_mut(owner).despawn();
+        app.update();
+        assert!(object_ids(&app).is_empty());
+    }
+}
+
+#[test]
+fn unpublished_loader_content_and_error_signs_cannot_allocate_outside_the_build_budget() {
+    let (mut app, asset) = package_app(
+        include_bytes!("../../fairygui-core/tests/fixtures/Basics.fui"),
+        "Basics",
+    );
+    let owner = app
+        .world_mut()
+        .spawn(FairyGuiRoot::new(asset, "Demo_List").with_build_budget(1))
+        .id();
+    let loader = (0..1000)
+        .find_map(|_| {
+            app.update();
+            let runtime = app.world().non_send::<GuiRuntime>();
+            runtime.store().iter().find_map(|(id, object)| {
+                (runtime.store().is_constructing(id)
+                    && object.kind() == fairygui_core::package::ObjectType::Loader)
+                    .then_some(id)
+            })
+        })
+        .unwrap();
+    let before = object_ids(&app);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .apply_icon_to(loader, "ui://Basics/Component12");
+    app.world_mut()
+        .run_system_once(sync_loader_components)
+        .unwrap();
+    assert_eq!(object_ids(&app), before);
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .loader_component(loader)
+            .is_none()
+    );
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        runtime
+            .store_mut()
+            .apply_icon_to(loader, "ui://Basics/missing");
+        runtime.set_loader_error_sign(Some("ui://Basics/Component12"));
+    }
+    app.world_mut().run_system_once(sync_loader_status).unwrap();
+    assert_eq!(object_ids(&app), before);
+    assert!(
+        !app.world()
+            .non_send::<GuiRuntime>()
+            .loader_status
+            .contains_key(&loader)
+    );
+    app.world_mut().entity_mut(owner).despawn();
+    app.update();
+    assert!(object_ids(&app).is_empty());
 }
