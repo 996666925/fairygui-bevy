@@ -37,6 +37,11 @@ mod group_alignment;
 pub(super) fn install_group_alignment(app: &mut App) {
     group_alignment::install(app);
 }
+#[path = "smoke_text_variables.rs"]
+mod text_variables;
+pub(super) fn install_text_variables(app: &mut App) {
+    text_variables::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {

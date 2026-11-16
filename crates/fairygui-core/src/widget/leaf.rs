@@ -763,8 +763,8 @@ pub struct TextFieldData {
     pub stroke_color: Option<Color>,
     /// 描边宽度。
     pub stroke: f32,
-    /// 是否包含模板变量。
-    pub template_vars: bool,
+    /// None disables substitution; an empty map enables exported defaults.
+    pub template_vars: Option<crate::text::TextVariables>,
     /// 文本内容，在描述块 6 中读取。
     pub text: String,
 }
@@ -1101,7 +1101,7 @@ fn read_text_field(
     }
 
     if buffer.read_bool()? {
-        data.template_vars = true;
+        data.template_vars = Some(Default::default());
     }
 
     Ok(data)

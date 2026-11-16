@@ -582,6 +582,7 @@ pub struct GuiQuery<'w, 's> {
     spaces: Query<'w, 's, &'static GuiSpace>,
     texts: Query<'w, 's, &'static GuiText>,
     text_formats: Query<'w, 's, &'static crate::GuiTextFormat>,
+    text_variables: Query<'w, 's, &'static crate::GuiTextVars>,
     input_settings: Query<'w, 's, &'static crate::GuiTextInputSettings>,
     data: Query<'w, 's, &'static crate::GuiData>,
     button_settings: Query<'w, 's, &'static crate::GuiButtonSettings>,
@@ -707,6 +708,9 @@ impl GuiQuery<'_, '_> {
 
     pub fn text_format(&self, entity: Entity) -> Option<&crate::GuiTextFormat> {
         self.text_formats.get(self.view(entity)?).ok()
+    }
+    pub fn text_variables(&self, entity: Entity) -> Option<&crate::GuiTextVars> {
+        self.text_variables.get(self.view(entity)?).ok()
     }
 
     pub fn input_settings(&self, entity: Entity) -> Option<&crate::GuiTextInputSettings> {

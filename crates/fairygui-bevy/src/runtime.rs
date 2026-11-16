@@ -3261,8 +3261,13 @@ pub(crate) fn sync_input_text(
         }
     })?;
     let (current, multiline, password, ubb) = current;
-    let translated =
-        fairygui_core::text::input::normalize_input_lines(&runtime.translate(&current), multiline);
+    let translated = fairygui_core::text::input::normalize_input_lines(
+        &text_fonts::template_text(
+            runtime.store().object(object).unwrap(),
+            &runtime.translate(&current),
+        ),
+        multiline,
+    );
     let value = editor.value().to_string();
     // Explicit model/translation edits win over a concurrent editor change.
     // Font/layout updates alone must not reset selection or IME composition.
@@ -3419,7 +3424,9 @@ pub(crate) fn sync_dirty(
             && let Some(text) = text.as_mut()
         {
             let content = match gobject.control() {
-                ControlData::Text(data) => runtime.translate(&data.text),
+                ControlData::Text(data) => {
+                    text_fonts::display_text(gobject, &runtime.translate(&data.text))
+                }
                 ControlData::TextInput(data) => {
                     text_fonts::display_text(gobject, &runtime.translate(&data.text_field.text))
                 }

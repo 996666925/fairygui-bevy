@@ -120,6 +120,8 @@ fn binding(
     fonts: Option<&Assets<Font>>,
 ) -> TextFontBinding {
     let data = object.control().as_text_field().unwrap();
+    let text = template_text(object, text);
+    let text = text.as_str();
     let bitmap = data
         .font
         .as_deref()
@@ -156,13 +158,25 @@ fn binding(
 
 /// Core values stay unmasked; only renderer sources receive this projection.
 pub(super) fn display_text(object: &fairygui_core::GObject, text: &str) -> String {
+    let text = template_text(object, text);
     if let ControlData::TextInput(input) = object.control()
         && input.password
     {
-        fairygui_core::text::input::password_text(text, input.text_field.ubb_enabled)
+        fairygui_core::text::input::password_text(&text, input.text_field.ubb_enabled)
     } else {
-        text.to_owned()
+        text
     }
+}
+
+pub(super) fn template_text(object: &fairygui_core::GObject, text: &str) -> String {
+    object
+        .control()
+        .as_text_field()
+        .and_then(|data| data.template_vars.as_ref())
+        .map_or_else(
+            || text.to_owned(),
+            |variables| fairygui_core::text::expand_template(text, variables),
+        )
 }
 
 // Preserve the existing styled-input path. Plain UBB-enabled inputs still use
@@ -214,7 +228,7 @@ pub(super) fn spawn_text(
     let text = input_text.as_deref().unwrap_or(text);
     let selected = binding(object, asset, assets, font, text, asset_server, None);
     let display = display_text(object, text);
-    let source = text;
+    let source = template_text(object, text);
     let text = display.as_str();
     if let Some((source, bitmap)) = data
         .font
@@ -295,7 +309,7 @@ pub(super) fn spawn_text(
             root.insert(Underline);
         }
         if let ControlData::TextInput(input) = object.control() {
-            let mut editable = bevy::text::EditableText::new(source);
+            let mut editable = bevy::text::EditableText::new(&source);
             editable.allow_newlines = !data.single_line;
             root.insert((
                 editable,

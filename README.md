@@ -822,6 +822,30 @@ fn move_button(mut transforms: Query<&mut GuiTransform>, target: Entity) {
 用 `FairyGuiRoot` 的构造方法设置，其余初始属性可随拥有者一起挂载，资产就绪后应用。
 移除属性组件会恢复原生投影；移除拥有者会一起清理对应状态。
 
+文本模板变量通过 `GuiTextVars` 直接编辑，按钮、标签和下拉框转发到实际标题字段：
+
+```rust,ignore
+commands.entity(title).insert(GuiTextVars::new([
+    ("name", "Alice"),
+    ("score", "100"),
+]));
+// GuiText 可保存 "Hello {name=Guest}, score: {score}"。
+fn update_score(mut texts: Query<&mut GuiTextVars>) {
+    for mut vars in &mut texts {
+        vars.set("score", "200");
+    }
+}
+```
+
+支持 `{name}`、`{name=默认值}`、`\{` 转义和 Unicode；缺失变量替换为空，已设置的空值
+不会回退到默认值，变量值只展开一次。FUI 的模板开关创建空变量表，`clear()` 保持
+模板展开并清空变量，`disable()` 恢复原样文字。`GuiText` 和文本齿轮保留源模板，
+变量在翻译之后、UBB／HTML 和密码遮罩之前展开，并参与普通／位图字体自动尺寸测量。
+`GuiQuery::text_variables` 查询当前配置，`GuiObjectMut::set_text_variables` 可立即修改；
+同帧修改不同变量会保留未编辑键的原生更新。拥有者组件可等待资产并随模板替换应用。
+输入框保留源模板，编辑器显示展开结果；用户编辑后以实际输入替换源文本，提示文字不展开。
+`--smoke-text-vars` 验证导出默认值、运行期变量、富文本、输入框、嵌套标题及尺寸更新。
+
 文字样式直接修改 `GuiTextFormat`，按钮、标签和下拉框会转发到其标题文字：
 
 ```rust,ignore

@@ -286,6 +286,29 @@ impl ObjectStore {
         changed
     }
 
+    /// Replace the actual title field's variables. None disables expansion;
+    /// an empty map still resolves defaults and removes missing variables.
+    pub fn set_object_text_variables(
+        &mut self,
+        id: GObjectId,
+        variables: Option<crate::text::TextVariables>,
+    ) -> bool {
+        let Some(target) = self.text_field_of(id) else {
+            return false;
+        };
+        let field = match &mut self.objects[target].control {
+            ControlData::Text(data) => data,
+            ControlData::TextInput(data) => &mut data.text_field,
+            _ => return false,
+        };
+        if field.template_vars == variables {
+            return false;
+        }
+        field.template_vars = variables;
+        self.touch(target, dirty::TEXT);
+        true
+    }
+
     pub(crate) fn initialize_resource_title(&mut self, id: GObjectId) {
         if !matches!(
             self.object(id).map(|o| o.control()),

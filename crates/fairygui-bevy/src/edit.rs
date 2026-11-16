@@ -387,6 +387,11 @@ impl GuiObjectMut<'_> {
             format.apply(&native, &native, self.runtime, self.object);
         }
     }
+    pub fn set_text_variables(&mut self, variables: crate::GuiTextVars) {
+        self.runtime
+            .store_mut()
+            .set_object_text_variables(self.object, variables.0);
+    }
     pub fn set_children_render_order(&mut self, order: crate::ChildrenRenderOrder) {
         self.runtime
             .store_mut()

@@ -326,8 +326,9 @@ impl RichTextBlock {
         block: &ComputedTextBlock,
         layout: &bevy::text::TextLayoutInfo,
     ) -> Option<LinkHit> {
-        let data = runtime.store().object(object)?.control().as_text_field()?;
-        if self.source != runtime.translate(&data.text)
+        let current = runtime.store().object(object)?;
+        let data = current.control().as_text_field()?;
+        if self.source != text_fonts::display_text(current, &runtime.translate(&data.text))
             || self.data != *data
             || self.font.as_ref() != runtime.font.as_ref()
         {
