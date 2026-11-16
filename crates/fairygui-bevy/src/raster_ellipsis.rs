@@ -224,6 +224,19 @@ fn plan(key: &Key, shaped: &ComputedTextBlock, dpi: f32) -> Option<Plan> {
     let mut markers = Vec::new();
     let mut newline_style = 0;
     for (index, line) in commands.iter().enumerate() {
+        // Only an authored hard break contributes its original font metrics.
+        // A soft wrap has no glyph; preserve the measured height of its row.
+        let end = lines[index].text_range().end;
+        let hard_break = key.runs.iter().enumerate().find_map(|(run, value)| {
+            let Run::Text { text, .. } = value else {
+                return None;
+            };
+            let range = &ranges[run];
+            (end > range.start
+                && end <= range.end
+                && text.as_bytes().get(end - range.start - 1) == Some(&b'\n'))
+            .then_some(run)
+        });
         for command in line {
             match (&key.runs[command.run], &command.text) {
                 (Run::Box { entity: target, .. }, Some(value)) => {
@@ -247,12 +260,38 @@ fn plan(key: &Key, shaped: &ComputedTextBlock, dpi: f32) -> Option<Plan> {
                 (_, None) => output.push(key.runs[command.run].clone()),
             }
         }
-        if index + 1 < commands.len() {
-            let mut run = key.runs[newline_style].clone();
-            if let Run::Text { text, .. } = &mut run {
-                *text = "\n".into();
+        let more_lines = index + 1 < commands.len();
+        if more_lines || line.is_empty() {
+            let mut run = key.runs[hard_break.unwrap_or(newline_style)].clone();
+            if let Run::Text {
+                text,
+                font,
+                height,
+                spacing,
+                metrics,
+                ..
+            } = &mut run
+            {
+                *text = if more_lines { "\n" } else { "\u{200b}" }.into();
+                if hard_break.is_none() && !line.is_empty() {
+                    font.font_size = FontSize::Px(1.);
+                    *height = LineHeight::Px(lines[index].metrics().line_height / dpi);
+                    *spacing = LetterSpacing::Px(0.);
+                    *metrics = None;
+                }
             }
-            output.push(run);
+            output.push(run.clone());
+            if more_lines && hard_break.is_none() {
+                // Parley 0.11 takes a shaped run's line height from the next
+                // style at a font boundary. End the break run with a separate
+                // zero-width carrier, so the next line's font cannot enlarge
+                // the preceding row. Its metrics round to zero in UI layout.
+                if let Run::Text { text, font, .. } = &mut run {
+                    *text = "\u{200b}".into();
+                    font.font_size = FontSize::Px(0.001);
+                }
+                output.push(run);
+            }
         }
     }
     Some(Plan {
@@ -435,6 +474,10 @@ pub(crate) fn sync(
                     info.clear();
                     continue;
                 }
+                // Newline/empty-line carriers have no interactive area.
+                projected_info
+                    .run_geometry
+                    .retain(|run| run.bounds.width() > 0.);
                 Some((computed, projected_info, visible_text))
             };
             EllipsisState {

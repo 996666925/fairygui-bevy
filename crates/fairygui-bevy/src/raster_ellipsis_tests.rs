@@ -430,3 +430,119 @@ fn image_only_markers_inherit_the_field_underline_and_retain_the_image_link() {
     assert!(app.world().get::<Underline>(state.markers[0].0).is_some());
     assert_eq!(link_at_run(&app, title, 0).as_deref(), Some("only"));
 }
+
+fn original_layout(app: &App, title: Entity) -> ComputedTextBlock {
+    let key = app.world().get::<EllipsisState>(title).unwrap().key.clone();
+    app.world()
+        .non_send::<GuiRuntime>()
+        .text_measurer
+        .borrow_mut()
+        .shape_block(&key, 1.)
+        .unwrap()
+}
+
+#[test]
+fn soft_breaks_between_image_rows_do_not_introduce_font_height_or_move_retained_images() {
+    let source = "<img src='missing.png' width='18' height='10'/>".repeat(8);
+    let (mut app, _, title, _) = fixture(&source, true, true, true);
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(50., 35.));
+    for scale in [1., 1.25, 2.] {
+        app.insert_resource(bevy::ui::UiScale(scale));
+        app.update();
+        let original = original_layout(&app, title);
+        let state = app.world().get::<EllipsisState>(title).unwrap();
+        let projected = state.projected.as_ref().unwrap();
+        let retained_lines = projected.0.buffer().lines().count();
+        assert!(retained_lines > 1);
+        let mut checked = 0;
+        // The final retained row may grow to fit the ellipsis font.
+        for line in original.buffer().lines().take(retained_lines - 1) {
+            for item in line.items() {
+                let PositionedLayoutItem::InlineBox(source) = item else {
+                    continue;
+                };
+                let (_, _, visible) = projected
+                    .1
+                    .inline_boxes
+                    .iter()
+                    .find(|(entity, _, _)| entity.to_bits() == source.id)
+                    .unwrap();
+                assert!(
+                    visible.min.abs_diff_eq(Vec2::new(source.x, source.y), 0.01),
+                    "scale={scale}, source=({}, {}), visible={visible:?}",
+                    source.x,
+                    source.y
+                );
+                checked += 1;
+            }
+        }
+        assert!(checked >= 4);
+        assert_eq!(app.world().get::<GuiText>(title).unwrap().value(), source);
+    }
+}
+
+#[test]
+fn soft_breaks_preserve_text_row_heights_and_baselines_before_the_marker_row() {
+    let source = "Ordinary multiline text with a long suffix that must overflow. ".repeat(8);
+    let (mut app, _, title, _) = fixture(&source, false, true, true);
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(140., 95.));
+    for scale in [1., 1.25, 2.] {
+        app.insert_resource(bevy::ui::UiScale(scale));
+        app.update();
+        let original = original_layout(&app, title);
+        let projected = app.world().get::<ComputedTextBlock>(title).unwrap();
+        let retained_lines = projected.buffer().lines().count();
+        assert!(retained_lines >= 3);
+        for (source, visible) in original
+            .buffer()
+            .lines()
+            .zip(projected.buffer().lines())
+            .take(retained_lines - 1)
+        {
+            let source = source.metrics();
+            let visible = visible.metrics();
+            assert!((visible.line_height - source.line_height).abs() < 0.01);
+            assert!((visible.baseline - source.baseline).abs() < 0.01);
+        }
+    }
+}
+
+#[test]
+fn explicit_empty_lines_keep_their_original_height_when_following_content_is_ellipsized() {
+    let source = "<img src='missing.png' width='18' height='10'/><br/><br/>Trailing text that extends beyond the field";
+    let (mut app, _, title, _) = fixture(source, true, true, true);
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(100., 64.));
+    app.update();
+    let original = original_layout(&app, title);
+    let state = app.world().get::<EllipsisState>(title).unwrap();
+    let projected = state.projected.as_ref().unwrap();
+    let lines = projected.0.buffer().lines().count();
+    assert_eq!(lines, 2);
+    for (source, visible) in original.buffer().lines().zip(projected.0.buffer().lines()) {
+        assert_eq!(visible.metrics(), source.metrics());
+    }
+    let expected: f32 = original
+        .buffer()
+        .lines()
+        .take(lines)
+        .map(|line| line.metrics().line_height)
+        .sum();
+    assert!((projected.0.buffer().height() - expected).abs() < 0.01);
+    assert!(
+        projected
+            .1
+            .run_geometry
+            .iter()
+            .all(|run| run.bounds.width() > 0.)
+    );
+    assert_eq!(app.world().get::<Text>(title).unwrap().0, "");
+}
