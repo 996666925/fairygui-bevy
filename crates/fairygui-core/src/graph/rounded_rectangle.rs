@@ -112,20 +112,10 @@ impl Path {
     }
 }
 
-/// Native non-convex DrawPath fill, triangulated in double precision. The
-/// renderer skips paths with at most three points before calling Earcut.
-pub fn path_fill(points: &[PolygonPoint]) -> Vec<usize> {
-    if points.len() < 4 || points.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
-        return Vec::new();
-    }
-    let coordinates: Vec<f64> = points.iter().flat_map(|p| [p.x, p.y]).collect();
-    earcutr::earcut(&coordinates, &[], 2).unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{graph_contains, polygon_stroke};
+    use crate::graph::{graph_contains, path_fill, polygon_stroke};
 
     #[test]
     fn rounded_paths_and_centered_strokes_match_original_draw_path_commands() {
@@ -194,7 +184,7 @@ mod tests {
                 ),
                 "fill" => {
                     let actual = if filled {
-                        path_fill(&points)
+                        path_fill(&points, false)
                     } else {
                         Vec::new()
                     };

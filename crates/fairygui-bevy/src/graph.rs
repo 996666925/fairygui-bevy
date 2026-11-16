@@ -13,10 +13,7 @@ use bevy::{
 };
 use fairygui_core::{
     GObjectId, Size,
-    graph::{
-        circle_drawing, path_fill, polygon_draw_offset, polygon_points, polygon_stroke,
-        rounded_rectangle_points,
-    },
+    graph::{circle_drawing, path_fill, polygon_drawing, polygon_stroke, rounded_rectangle_points},
     widget::{ControlData, GraphData, GraphType},
 };
 
@@ -86,34 +83,32 @@ fn geometry(data: &GraphData, size: Size, scale: f64) -> Option<(Vec<Vec4>, Vec4
     if circle.is_some_and(|circle| circle.radius == 0.) {
         return None;
     }
-    let points = if rounded_rectangle {
-        rounded_rectangle_points(data, size)
+    let (points, convex) = if rounded_rectangle {
+        (rounded_rectangle_points(data, size), false)
+    } else if let Some(circle) = circle {
+        (circle.points(), true)
     } else {
-        circle.map_or_else(|| polygon_points(data, size), |circle| circle.points())
+        let drawing = polygon_drawing(data, size)?;
+        (drawing.points, drawing.convex)
     };
     if points.len() < 2 {
         return None;
     }
-    let offset = if circle.is_some() || rounded_rectangle {
-        0.
-    } else {
-        polygon_draw_offset(data)
-    };
     let mut vertices: Vec<_> = points
         .iter()
-        .map(|p| Vec4::new(p.x as f32 + offset, p.y as f32 + offset, 0.0, 0.0))
+        .map(|p| Vec4::new(p.x as f32, p.y as f32, 0.0, 0.0))
         .collect();
     let count = vertices.len();
     if data.has_stroke() {
         let mesh = polygon_stroke(&points, data.line_size as f32);
         vertices.extend(mesh.indices.iter().map(|&i| {
             let p = mesh.vertices[i];
-            Vec4::new(p.x + offset, p.y + offset, 0.0, 0.0)
+            Vec4::new(p.x, p.y, 0.0, 0.0)
         }));
     }
     let stroke_triangles = (vertices.len() - count) / 3;
-    if rounded_rectangle && data.has_fill() {
-        vertices.extend(path_fill(&points).into_iter().map(|index| {
+    if data.has_fill() {
+        vertices.extend(path_fill(&points, convex).into_iter().map(|index| {
             let p = points[index];
             Vec4::new(p.x as f32, p.y as f32, 0., 0.)
         }));
@@ -135,7 +130,7 @@ fn geometry(data: &GraphData, size: Size, scale: f64) -> Option<(Vec<Vec4>, Vec4
     let counts = UVec4::new(
         count as u32,
         stroke_triangles as u32,
-        if rounded_rectangle { 2 } else { 0 },
+        2,
         fill_triangles as u32,
     );
     Some((

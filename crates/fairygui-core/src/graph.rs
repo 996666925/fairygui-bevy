@@ -7,7 +7,9 @@ use crate::{
 mod circle;
 pub use circle::{CircleDrawing, circle_drawing};
 mod rounded_rectangle;
-pub use rounded_rectangle::{path_fill, rounded_rectangle_points};
+pub use rounded_rectangle::rounded_rectangle_points;
+mod fill;
+pub use fill::{PolygonDrawing, path_fill, polygon_drawing};
 
 /// GGraph's Ellipse command is a width-based circle centered in its declared
 /// rectangle. Its drawing and hit bounds may extend above/below that rectangle.

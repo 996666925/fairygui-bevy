@@ -1,5 +1,6 @@
 //! ECS graph edits, expanded native circles and real contour pass-through clicks.
 use super::*;
+use bevy::render::view::screenshot::ScreenshotCaptured;
 
 #[derive(Resource, Default)]
 struct State {
@@ -13,6 +14,7 @@ struct State {
     child: Option<Entity>,
     cursor: Option<Vec2>,
     click: Option<Click>,
+    pixel_checks: u8,
 }
 struct Click {
     stage: u8,
@@ -94,6 +96,45 @@ fn check_graph_layout(
             "graph paint must stay centered on its logical view"
         );
     }
+}
+
+fn capture_grays(
+    commands: &mut Commands,
+    source: Entity,
+    samples: &[(Vec2, f32)],
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    path: &'static str,
+) {
+    let (node, transform) = nodes.get(source).unwrap();
+    let samples: Vec<_> = samples
+        .iter()
+        .map(|&(local, gray)| {
+            let physical = transform
+                .transform_point2(node.border_box().min + local / node.inverse_scale_factor());
+            (physical.floor().as_uvec2(), gray)
+        })
+        .collect();
+    commands
+        .spawn(Screenshot::primary_window())
+        .observe(save_to_disk(path))
+        .observe(
+            move |event: On<ScreenshotCaptured>, mut state: ResMut<State>| {
+                for &(point, expected) in &samples {
+                    let pixel = event
+                        .image
+                        .get_color_at(point.x, point.y)
+                        .unwrap()
+                        .to_linear();
+                    for channel in [pixel.red, pixel.green, pixel.blue] {
+                        assert!(
+                            (channel - expected).abs() < 0.025,
+                            "{path}: pixel {point:?}: {pixel:?}, expected linear gray {expected}"
+                        );
+                    }
+                }
+                state.pixel_checks += 1;
+            },
+        );
 }
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn drive(
@@ -885,10 +926,176 @@ fn drive(
                 next = true;
             }
             55 if elapsed >= 8 => {
+                let (front, back) = (state.front.unwrap(), state.back.unwrap());
+                ui.p1().get_mut(back).unwrap().fill_color = Color::BLACK;
+                ui.p3().get_mut(back).unwrap().alpha = 1.;
+                *ui.p1().get_mut(front).unwrap() = GuiGraph {
+                    kind: GraphType::Polygon,
+                    line_size: 0,
+                    fill_color: Color::srgba(1., 1., 1., 0.5),
+                    polygon_points: vec![
+                        Vec2::ZERO,
+                        Vec2::splat(100.),
+                        Vec2::new(0., 100.),
+                        Vec2::new(100., 0.),
+                    ],
+                    ..default()
+                };
+                let mut transforms = ui.p2();
+                for (entity, position, size) in [
+                    (back, Vec2::new(80., 40.), Vec2::splat(180.)),
+                    (front, Vec2::new(100., 60.), Vec2::splat(100.)),
+                ] {
+                    let mut transform = transforms.get_mut(entity).unwrap();
+                    transform.position = position;
+                    transform.size = size;
+                    transform.scale = Vec2::ONE;
+                    transform.skew = Vec2::ZERO;
+                    transform.pivot = Vec2::ZERO;
+                    transform.pivot_as_anchor = false;
+                    transform.rotation = 0.;
+                }
+                next = true;
+            }
+            56 if elapsed >= 12 => {
+                let front = state.front.unwrap();
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    drawing(front, &faces),
+                    Vec2::splat(100.),
+                    &nodes,
+                );
+                capture_grays(
+                    &mut commands,
+                    front,
+                    &[(Vec2::new(90., 50.), 0.5), (Vec2::new(25., 90.), 0.)],
+                    &nodes,
+                    "target/fairygui-demo-native-polygon-fill.png",
+                );
+                next = true;
+            }
+            57 => {
+                let (front, back) = (state.front.unwrap(), state.back.unwrap());
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(90., 50.),
+                    back,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            58 => {
+                let front = state.front.unwrap();
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(25., 90.),
+                    front,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            59 if state.pixel_checks >= 1 => {
+                ui.p1()
+                    .get_mut(state.front.unwrap())
+                    .unwrap()
+                    .polygon_points = vec![
+                    Vec2::ZERO,
+                    Vec2::new(100., 0.),
+                    Vec2::splat(100.),
+                    Vec2::new(0., 100.),
+                ];
+                next = true;
+            }
+            60 if elapsed >= 8 => {
+                capture_grays(
+                    &mut commands,
+                    state.front.unwrap(),
+                    &[
+                        Vec2::splat(25.),
+                        Vec2::splat(50.),
+                        Vec2::new(30., 70.),
+                        Vec2::new(70., 30.),
+                        Vec2::splat(75.),
+                    ]
+                    .map(|p| (p, 0.5)),
+                    &nodes,
+                    "target/fairygui-demo-native-polygon-shared-edges.png",
+                );
+                next = true;
+            }
+            61 if state.pixel_checks >= 2 => {
+                ui.p1()
+                    .get_mut(state.front.unwrap())
+                    .unwrap()
+                    .polygon_points = vec![
+                    Vec2::ZERO,
+                    Vec2::new(100., 0.),
+                    Vec2::splat(100.),
+                    Vec2::new(0., 100.),
+                    Vec2::ZERO,
+                    Vec2::new(100., 0.),
+                    Vec2::splat(100.),
+                    Vec2::new(0., 100.),
+                ];
+                next = true;
+            }
+            62 if elapsed >= 8 => {
+                capture_grays(
+                    &mut commands,
+                    state.front.unwrap(),
+                    &[
+                        Vec2::splat(25.),
+                        Vec2::splat(50.),
+                        Vec2::new(30., 70.),
+                        Vec2::new(70., 30.),
+                        Vec2::splat(75.),
+                    ]
+                    .map(|p| (p, 0.75)),
+                    &nodes,
+                    "target/fairygui-demo-native-polygon-overdraw.png",
+                );
+                next = true;
+            }
+            63 if state.pixel_checks >= 3 => {
+                let front = state.front.unwrap();
+                {
+                    let mut graphs = ui.p1();
+                    let mut graph = graphs.get_mut(front).unwrap();
+                    graph.kind = GraphType::RegularPolygon;
+                    graph.sides = 7;
+                    graph.start_angle = 17.;
+                    graph.distances = vec![1., -1., f32::NAN, 0., 1.3, -0.5];
+                }
+                ui.p2().get_mut(front).unwrap().size = Vec2::new(120., 90.);
+                next = true;
+            }
+            64 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert!(ui.p0().graph(front).unwrap().distances[2].is_nan());
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    None,
+                    Vec2::new(120., 90.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(
+                        "target/fairygui-demo-native-regular-polygon-fill.png",
+                    ));
+                next = true;
+            }
+            65 if elapsed >= 8 => {
                 commands.entity(state.owner.unwrap()).despawn();
                 next = true;
             }
-            56 if elapsed >= 8 => {
+            66 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -896,9 +1103,10 @@ fn drive(
                 ] {
                     assert!(!entities.contains(entity));
                 }
-                assert_eq!(clicks.0.len(), 12);
+                assert_eq!(clicks.0.len(), 14);
+                assert_eq!(state.pixel_checks, 3);
                 println!(
-                    "demo smoke PASSED: native rectangle primitives, circle and rounded paths, centered DrawPath strokes, zero/oversized radii, transparent-line policies, invisible and degenerate shape picking, Earcut fills, stroke-free logical layout, zero-size recovery, transformed layout and disposal"
+                    "demo smoke PASSED: native primitive paths and triangle fills, self-intersection paint versus hit policy, GPU pixel checks for shared edges and overlapping alpha, signed regular polygons, stroke-free layout, zero-size recovery, retained geometry and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;

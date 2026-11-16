@@ -43,7 +43,7 @@ fn polygon_material_preserves_surface_buffer_and_updates_geometry_color_and_ance
         .get(&handle)
         .unwrap();
     let buffer = material.geometry.clone();
-    assert_eq!(material.uniform.counts.x, 3);
+    assert_eq!(material.uniform.counts.x, 4);
     assert!(material.uniform.counts.y > 0);
     assert!(material.uniform.canvas.x < 0.0);
     assert_eq!(app.world().get::<ChildOf>(surface).unwrap().parent(), root);
@@ -99,7 +99,7 @@ fn polygon_material_preserves_surface_buffer_and_updates_geometry_color_and_ance
         .resource::<Assets<PolygonMaterial>>()
         .get(&handle)
         .unwrap();
-    assert_eq!(material.uniform.counts.x, 7);
+    assert_eq!(material.uniform.counts.x, 8);
     assert_eq!(material.geometry, buffer);
     assert_eq!(material.uniform.fill.w, 0.5);
 }
@@ -592,4 +592,32 @@ fn rounded_rectangles_center_their_strokes_and_reuse_materials_across_shape_chan
             .is_some()
     );
     assert!(app.world().get_entity(child).is_ok());
+}
+
+#[test]
+fn self_intersecting_polygon_fill_uses_native_triangles_independently_of_hit_area() {
+    let data = GraphData {
+        graph_type: 3,
+        line_size: 0,
+        fill_color: GuiColor::WHITE,
+        polygon_points: Some(vec![0., 0., 100., 100., 0., 100., 100., 0.]),
+        ..default()
+    };
+    let (vertices, _, counts) = geometry(&data, Size::new(100., 100.), 1.).unwrap();
+    assert_eq!(counts, UVec4::new(5, 0, 2, 1));
+    // Original Earcut emits triangle (100,100), (0,0), (100,0).
+    let triangle = &vertices[counts.x as usize..];
+    assert!(triangle.contains(&Vec4::new(100., 100., 0., 0.)));
+    assert!(triangle.contains(&Vec4::ZERO));
+    assert!(triangle.contains(&Vec4::new(100., 0., 0., 0.)));
+    assert!(!fairygui_core::graph::graph_contains(
+        &data,
+        Size::new(100., 100.),
+        fairygui_core::Point::new(90., 50.)
+    ));
+    assert!(fairygui_core::graph::graph_contains(
+        &data,
+        Size::new(100., 100.),
+        fairygui_core::Point::new(25., 90.)
+    ));
 }
