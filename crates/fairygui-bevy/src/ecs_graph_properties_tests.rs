@@ -419,7 +419,7 @@ fn semi_transparent_graph_fill_owns_alpha_and_redraws_reset_subsequent_opacity_e
                 .alpha,
             0.5
         );
-        if matches!(kind, GraphType::Rect | GraphType::Ellipse) {
+        if kind == GraphType::Ellipse {
             let drawn = surface(&mut app, graph).unwrap();
             assert_eq!(
                 app.world()

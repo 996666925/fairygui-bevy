@@ -11,6 +11,48 @@ pub fn circle_bounds(size: Size) -> Option<Rect> {
         .then(|| Rect::new(0., (size.height - size.width) * 0.5, size.width, size.width))
 }
 
+/// Ordered native DrawRect primitives. Dimensions retain their signs when a
+/// stroke is wider than the object; normalize each quad when rasterizing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RectangleDrawing {
+    pub fill: Option<Rect>,
+    /// Top, bottom, left, right. Overlapping quads are blended separately.
+    pub stroke: Option<[Rect; 4]>,
+}
+
+/// GGraph's plain rectangle command, including the inset caused by a fully
+/// transparent line color. Rounded rectangles use DrawPath instead.
+pub fn rectangle_drawing(data: &GraphData, size: Size) -> Option<RectangleDrawing> {
+    if data.graph_kind() != GraphType::Rect
+        || data.corner_radius.is_some()
+        || !size.width.is_finite()
+        || !size.height.is_finite()
+        || size.width <= 0.
+        || size.height <= 0.
+    {
+        return None;
+    }
+    let line = data.line_size.max(0) as f32;
+    Some(RectangleDrawing {
+        fill: data.has_fill().then_some(Rect::new(
+            line * 0.5,
+            line * 0.5,
+            size.width - line,
+            size.height - line,
+        )),
+        stroke: (line > 0.).then_some([
+            Rect::new(0., 0., size.width, line),
+            Rect::new(0., size.height - line, size.width, line),
+            Rect::new(0., line, line, size.height - 2. * line),
+            Rect::new(size.width - line, line, line, size.height - 2. * line),
+        ]),
+    })
+}
+
+#[cfg(test)]
+#[path = "graph_rectangle_tests.rs"]
+mod rectangle_tests;
+
 /// Laya HitArea's graphics commands, independent of paint opacity. DrawPath
 /// (used for rounded rectangles, even zero radii) has no native hit branch.
 pub fn graph_contains(data: &GraphData, size: Size, point: Point) -> bool {

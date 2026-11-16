@@ -1,4 +1,4 @@
-//! Polygon surfaces use Bevy's normal UI material pipeline and clipping/order.
+//! Graph drawing surfaces use Bevy's normal UI clipping and ordering.
 use crate::{GObjectRef, GuiRuntime, backend};
 use bevy::{
     asset::embedded_asset,
@@ -74,6 +74,9 @@ fn colors(gui: &GuiRuntime, id: GObjectId, data: &GraphData) -> (Vec4, Vec4) {
 }
 
 fn geometry(data: &GraphData, size: Size) -> Option<(Vec<Vec4>, Vec4, UVec4)> {
+    if data.graph_kind() == GraphType::Rect && data.corner_radius.is_none() {
+        return rectangle_geometry(data, size);
+    }
     let points = polygon_points(data, size);
     if points.len() < 2 {
         return None;
@@ -112,6 +115,43 @@ fn geometry(data: &GraphData, size: Size) -> Option<(Vec<Vec4>, Vec4, UVec4)> {
     ))
 }
 
+fn rectangle_geometry(data: &GraphData, size: Size) -> Option<(Vec<Vec4>, Vec4, UVec4)> {
+    let drawing = fairygui_core::graph::rectangle_drawing(data, size)?;
+    let quad = |r: fairygui_core::Rect| Vec4::new(r.x, r.y, r.width, r.height);
+    // Slot zero is always the fill. Keep native stroke order and signed sizes.
+    let mut vertices = vec![quad(drawing.fill.unwrap_or(fairygui_core::Rect::ZERO))];
+    if let Some(stroke) = drawing.stroke {
+        vertices.extend(stroke.into_iter().map(quad));
+    }
+    let mut min = Vec2::splat(f32::INFINITY);
+    let mut max = Vec2::splat(f32::NEG_INFINITY);
+    for (index, q) in vertices.iter().enumerate() {
+        if (index == 0 && !data.has_fill())
+            || (index > 0 && !data.has_stroke())
+            || q.z == 0.
+            || q.w == 0.
+        {
+            continue;
+        }
+        let p = Vec2::new(q.x, q.y);
+        let end = p + Vec2::new(q.z, q.w);
+        min = min.min(p.min(end));
+        max = max.max(p.max(end));
+    }
+    min -= Vec2::ONE;
+    max += Vec2::ONE;
+    let extent = max - min;
+    if !extent.is_finite() || extent.min_element() <= 0. {
+        return None;
+    }
+    let counts = UVec4::new(vertices.len() as u32, 0, 1, 0);
+    Some((
+        vertices,
+        Vec4::new(min.x, min.y, extent.x, extent.y),
+        counts,
+    ))
+}
+
 fn surface_node(canvas: Vec4) -> Node {
     Node {
         position_type: PositionType::Absolute,
@@ -143,6 +183,7 @@ pub(crate) fn sync_graphs(
             continue;
         };
         let size = object_data.size();
+        let plain_rectangle = data.graph_kind() == GraphType::Rect && data.corner_radius.is_none();
         let (fill, stroke) = colors(&gui, object.0, data);
         if previous.is_some_and(|old| old.data == *data && old.size == size) {
             if let Some(mut material) = previous
@@ -154,6 +195,7 @@ pub(crate) fn sync_graphs(
                 material.uniform.stroke = stroke;
             }
             if data.graph_kind().is_basic_shape()
+                && !plain_rectangle
                 && let Some(surface) = previous.and_then(|old| old.surface)
                 && let Ok((mut background, mut border)) = basic_surfaces.get_mut(surface)
             {
@@ -169,7 +211,7 @@ pub(crate) fn sync_graphs(
             }
             continue;
         }
-        if data.graph_kind().is_basic_shape() {
+        if data.graph_kind().is_basic_shape() && !plain_rectangle {
             commands
                 .entity(entity)
                 .remove::<(BackgroundColor, BorderColor)>();
@@ -252,10 +294,12 @@ pub(crate) fn sync_graphs(
             });
             continue;
         }
-        if !matches!(
-            data.graph_kind(),
-            GraphType::Polygon | GraphType::RegularPolygon
-        ) {
+        if !plain_rectangle
+            && !matches!(
+                data.graph_kind(),
+                GraphType::Polygon | GraphType::RegularPolygon
+            )
+        {
             if let Some(surface) = previous.and_then(|old| old.surface) {
                 commands.entity(surface).despawn();
             }
@@ -332,7 +376,7 @@ pub(crate) fn sync_graphs(
                     GraphSurface { canvas },
                     GObjectRef(object.0),
                     ChildOf(entity),
-                    Name::new("FairyGUI polygon surface"),
+                    Name::new("FairyGUI primitive surface"),
                     ZIndex(-1),
                     bevy::picking::hover::Hovered::default(),
                     bevy::picking::Pickable {

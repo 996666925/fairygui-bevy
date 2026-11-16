@@ -105,7 +105,7 @@ fn polygon_material_preserves_surface_buffer_and_updates_geometry_color_and_ance
 }
 
 #[test]
-fn changing_polygon_to_basic_or_empty_releases_surface_and_invalid_geometry_is_bounded() {
+fn polygon_and_rectangle_materials_reuse_their_surface_and_release_invalid_geometry() {
     let (mut app, id, root) = fixture();
     app.update();
     let surface = app
@@ -126,23 +126,28 @@ fn changing_polygon_to_basic_or_empty_releases_surface_and_invalid_geometry_is_b
             },
         );
     app.update();
-    assert!(app.world().get_entity(surface).is_err());
     let rectangle = app
         .world()
         .get::<GraphRender>(root)
         .unwrap()
         .surface
         .unwrap();
-    assert_ne!(rectangle, surface);
+    assert_eq!(rectangle, surface);
     assert!(app.world().get::<BackgroundColor>(root).is_none());
-    assert_eq!(
-        app.world()
-            .get::<BackgroundColor>(rectangle)
-            .unwrap()
-            .0
-            .to_linear(),
-        Color::WHITE.to_linear()
-    );
+    let handle = app
+        .world()
+        .get::<GraphRender>(root)
+        .unwrap()
+        .material
+        .as_ref()
+        .unwrap();
+    let material = app
+        .world()
+        .resource::<Assets<PolygonMaterial>>()
+        .get(handle)
+        .unwrap();
+    assert_eq!(material.uniform.fill, Vec4::ONE);
+    assert_eq!(material.uniform.counts, UVec4::new(1, 0, 1, 0));
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .store_mut()
@@ -257,6 +262,13 @@ fn switching_circle_polygon_rectangle_and_empty_reclaims_only_owned_drawing_surf
         .unwrap();
     for kind in [2, 3, 1, 0] {
         let old = app.world().get::<GraphRender>(root).unwrap().surface;
+        let reuse = app
+            .world()
+            .get::<GraphRender>(root)
+            .unwrap()
+            .material
+            .is_some()
+            && matches!(kind, 1 | 3);
         let mut data = match app
             .world()
             .non_send::<GuiRuntime>()
@@ -276,7 +288,14 @@ fn switching_circle_polygon_rectangle_and_empty_reclaims_only_owned_drawing_surf
         app.update();
         assert!(app.world().get_entity(child).is_ok());
         if let Some(old) = old {
-            assert!(app.world().get_entity(old).is_err());
+            if reuse {
+                assert_eq!(
+                    app.world().get::<GraphRender>(root).unwrap().surface,
+                    Some(old)
+                );
+            } else {
+                assert!(app.world().get_entity(old).is_err());
+            }
         }
         if kind == 0 {
             assert_eq!(
@@ -286,4 +305,81 @@ fn switching_circle_polygon_rectangle_and_empty_reclaims_only_owned_drawing_surf
         }
     }
     assert!(app.world().get_entity(polygon).is_err());
+}
+
+#[test]
+fn rectangle_geometry_preserves_native_inset_signed_quads_and_visible_bounds() {
+    let mut data = GraphData {
+        graph_type: 1,
+        line_size: 10,
+        line_color: GuiColor::WHITE,
+        fill_color: GuiColor::WHITE,
+        ..default()
+    };
+    let (quads, canvas, counts) = geometry(&data, Size::new(2., 3.)).unwrap();
+    assert_eq!(counts, UVec4::new(5, 0, 1, 0));
+    assert_eq!(
+        quads,
+        [
+            Vec4::new(5., 5., -8., -7.),
+            Vec4::new(0., 0., 2., 10.),
+            Vec4::new(0., -7., 2., 10.),
+            Vec4::new(0., 10., 10., -17.),
+            Vec4::new(-8., 10., 10., -17.),
+        ]
+    );
+    assert_eq!(canvas, Vec4::new(-9., -8., 20., 19.));
+    data.line_color.a = 0.;
+    let (quads, canvas, _) = geometry(&data, Size::new(100., 80.)).unwrap();
+    assert_eq!(quads[0], Vec4::new(5., 5., 90., 70.));
+    assert_eq!(canvas, Vec4::new(4., 4., 92., 72.));
+    data.fill_color.a = 0.;
+    assert!(geometry(&data, Size::new(100., 80.)).is_none());
+}
+
+#[test]
+fn rectangle_material_keeps_primitive_opacity_separate_without_a_background_quad() {
+    let (mut app, id, root) = fixture();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_graph(
+            id,
+            GraphData {
+                graph_type: 1,
+                line_size: 10,
+                fill_color: GuiColor::new(1., 0., 0., 0.5),
+                line_color: GuiColor::new(0., 1., 0., 0.5),
+                ..default()
+            },
+        );
+    app.update();
+    let render = app.world().get::<GraphRender>(root).unwrap();
+    let surface = render.surface.unwrap();
+    let handle = render.material.as_ref().unwrap().clone();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_alpha(id, 0.3);
+    for _ in 0..2 {
+        app.update();
+    }
+    let material = app
+        .world()
+        .resource::<Assets<PolygonMaterial>>()
+        .get(&handle)
+        .unwrap();
+    assert_eq!(material.uniform.counts, UVec4::new(5, 0, 1, 0));
+    assert_eq!(material.uniform.fill.w, 0.3);
+    assert_eq!(material.uniform.stroke.w, 0.15);
+    assert!(
+        app.world()
+            .get::<BackgroundColor>(surface)
+            .is_none_or(|color| color.0.to_srgba().alpha == 0.)
+    );
+    assert_eq!(
+        app.world().get::<Node>(surface).unwrap().border,
+        UiRect::ZERO
+    );
+    assert_eq!(app.world().get::<Node>(root).unwrap().border, UiRect::ZERO);
 }

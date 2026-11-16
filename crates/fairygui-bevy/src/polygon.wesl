@@ -17,6 +17,19 @@ fn triangle_contains(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>, c: vec2<f32>) -> 
     return (x >= 0.0 && y >= 0.0 && z >= 0.0) || (x <= 0.0 && y <= 0.0 && z <= 0.0);
 }
 fn sample_color(p: vec2<f32>) -> vec4<f32> {
+    if material.counts.z == 1u {
+        var result = vec4<f32>(0.0);
+        for (var i = 0u; i < material.counts.x; i += 1u) {
+            let quad = vertices[i];
+            let lo = min(quad.xy,quad.xy+quad.zw);
+            let hi = max(quad.xy,quad.xy+quad.zw);
+            if all(p >= lo) && all(p < hi) {
+                let color = select(material.stroke,material.fill,i == 0u);
+                result = vec4<f32>(color.rgb*color.a,color.a)+result*(1.0-color.a);
+            }
+        }
+        return result;
+    }
     var inside = false;
     let count = material.counts.x;
     var previous = vertices[count-1u].xy;

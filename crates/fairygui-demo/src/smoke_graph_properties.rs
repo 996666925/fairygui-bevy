@@ -524,7 +524,6 @@ fn drive(
                 let front = state.front.unwrap();
                 assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.25);
                 let surface = drawing(front, &faces).unwrap();
-                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.25);
                 check_graph_layout(
                     front,
                     state.child.unwrap(),
@@ -600,10 +599,81 @@ fn drive(
                 next = true;
             }
             33 if elapsed >= 8 => {
-                commands.entity(state.owner.unwrap()).despawn();
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(state.front.unwrap()).unwrap();
+                graph.line_color = Color::NONE;
+                graph.fill_color = Color::srgb(0.6, 0.2, 0.8);
                 next = true;
             }
             34 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                let node = faces.get(surface).unwrap().3;
+                assert_eq!(
+                    (node.left, node.top, node.width, node.height),
+                    (Val::Px(4.), Val::Px(4.), Val::Px(52.), Val::Px(62.))
+                );
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                ui.p1().get_mut(front).unwrap().fill_color = Color::NONE;
+                next = true;
+            }
+            35 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert!(drawing(front, &faces).is_none());
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    None,
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                next = true;
+            }
+            36 => {
+                let front = state.front.unwrap();
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(30., 35.),
+                    front,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            37 => {
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(state.front.unwrap()).unwrap();
+                graph.fill_color = Color::srgba(0.6, 0.2, 0.8, 0.25);
+                graph.line_color = Color::WHITE;
+                next = true;
+            }
+            38 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let surface = drawing(front, &faces).unwrap();
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    Some(surface),
+                    Vec2::new(60., 70.),
+                    &nodes,
+                );
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk("target/fairygui-demo-native-rectangle.png"));
+                next = true;
+            }
+            39 if elapsed >= 8 => {
+                commands.entity(state.owner.unwrap()).despawn();
+                next = true;
+            }
+            40 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -611,9 +681,9 @@ fn drive(
                 ] {
                     assert!(!entities.contains(entity));
                 }
-                assert_eq!(clicks.0.len(), 8);
+                assert_eq!(clicks.0.len(), 9);
                 println!(
-                    "demo smoke PASSED: graph shapes and contour hits, native fill alpha and redraw resets, stroke-free logical layout and child origin, centered thick strokes, zero-size recovery, transformed layout and disposal"
+                    "demo smoke PASSED: graph shapes and contour hits, native rectangle primitives and transparent-line inset, invisible rectangle picking, fill alpha, stroke-free logical layout, zero-size recovery, transformed layout and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;
