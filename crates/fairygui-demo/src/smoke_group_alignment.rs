@@ -19,10 +19,16 @@ struct State {
     detached_positions: Vec<Vec2>,
     loader_panels: Vec<Entity>,
     loader_geometry: Vec<(Vec2, Vec2, Vec2)>,
+    relation_checks: usize,
 }
 
 pub(super) fn install(app: &mut App) {
-    app.init_resource::<State>().add_systems(PreUpdate, drive);
+    app.init_resource::<State>()
+        .add_systems(PreUpdate, drive)
+        .add_systems(
+            Update,
+            check_related_loader_contents.in_set(GuiSystems::PostLayout),
+        );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -519,8 +525,55 @@ fn drive(
             next = true;
         }
         27 if elapsed >= 12 => {
+            let owner = state.loader_panels[0];
+            let target = gui.child_by_name(owner, "n5").unwrap();
+            let loader = gui.child_by_name(owner, "n2").unwrap();
+            commands.entity(loader).insert((
+                GuiSizeConstraints::default(),
+                GuiLoaderSettings {
+                    fill: 4,
+                    ..default()
+                },
+            ));
+            objects
+                .get_mut(target)
+                .unwrap()
+                .set_loader_settings(GuiLoaderSettings {
+                    auto_size: true,
+                    ..default()
+                });
+            commands.queue(move |world: &mut World| {
+                let first = world.get::<GObjectRef>(loader).unwrap().0;
+                let target = world.get::<GObjectRef>(target).unwrap().0;
+                world.non_send_mut::<GuiRuntime>().store_mut().add_relation(
+                    first,
+                    target,
+                    RelationType::Size,
+                    false,
+                );
+            });
+            next = true;
+        }
+        28 if elapsed >= 12 => {
+            let target = gui.child_by_name(state.loader_panels[0], "n5").unwrap();
+            objects
+                .get_mut(target)
+                .unwrap()
+                .set_icon("ui://9leh0eyfwa8u2u");
+            next = true;
+        }
+        29 if elapsed >= 12 => {
+            assert!(state.relation_checks >= 20);
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-group-loader-relations.png",
+                ));
+            next = true;
+        }
+        30 if elapsed >= 12 => {
             info!(
-                "demo smoke PASSED: rendered group alignment, fixed layouts, resizing, hidden members, pivots, simultaneous axis edits, group membership and constrained auto-loader left/center/right alignment"
+                "demo smoke PASSED: group layouts, pivots, membership, constrained auto-loader alignment and same-frame related loader content across URL changes"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -531,6 +584,32 @@ fn drive(
         state.step += 1;
         state.since = state.frame;
     }
+}
+
+fn check_related_loader_contents(mut state: ResMut<State>, gui: GuiQuery, visuals: LoaderVisuals) {
+    if state.step < 28 || state.step > 30 {
+        return;
+    }
+    let owner = state.loader_panels[0];
+    let loader = gui.child_by_name(owner, "n2").unwrap();
+    let size = gui.transform(loader).unwrap().size();
+    let (source, trim, part) = state.loader_geometry[0];
+    let scale = size / source;
+    let (_, node, _) = visuals
+        .iter()
+        .find(|(parent, _, _)| parent.parent() == loader)
+        .unwrap();
+    assert_eq!(
+        (node.left, node.top, node.width, node.height),
+        (
+            Val::Px(trim.x * scale.x),
+            Val::Px(trim.y * scale.y),
+            Val::Px(part.x * scale.x),
+            Val::Px(part.y * scale.y)
+        ),
+        "related loader content must match current geometry on every projected frame"
+    );
+    state.relation_checks += 1;
 }
 
 fn check_loader_alignment(

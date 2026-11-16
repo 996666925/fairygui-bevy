@@ -80,12 +80,23 @@ fn trimmed_rect(
     )
 }
 
+pub(crate) struct PreparedContent {
+    entity: Entity,
+    object: GObjectId,
+    source: Vec2,
+    trim: Option<(Vec2, Vec2)>,
+    blank: bool,
+}
+
+#[allow(clippy::type_complexity)]
 pub(crate) fn sync_content_layout(
     mut runtime: NonSendMut<GuiRuntime>,
     images: Option<Res<Assets<Image>>>,
     roots: Query<&GObjectRef>,
     players: Query<&MovieClipPlayer>,
+    mut prepared: Local<Vec<PreparedContent>>,
     mut visuals: Query<(
+        Entity,
         &ContentVisual,
         Option<&crate::image_fill::ImageGrid>,
         &mut ImageNode,
@@ -94,7 +105,11 @@ pub(crate) fn sync_content_layout(
     )>,
 ) {
     use fairygui_core::geom::{Rect as GuiRect, Size};
-    for (visual, grid, mut image, mut node, mut visibility) in &mut visuals {
+    prepared.clear();
+    // A later auto-sized loader can resize an earlier visual through sibling
+    // relations or group bounds. Finish those writes before projecting any
+    // content, so query/archetype order cannot introduce a one-frame delay.
+    for (entity, visual, grid, mut image, _, _) in &mut visuals {
         let Ok(object) = roots.get(visual.root) else {
             continue;
         };
@@ -130,7 +145,6 @@ pub(crate) fn sync_content_layout(
                 .and_then(|images| images.get(&image.image))
                 .map_or(Vec2::ZERO, |image| image.size().as_vec2());
         }
-        let source_size = Size::new(source.x, source.y);
         let auto_size = matches!(gobject.control(), ControlData::Loader(data) if data.auto_size);
         if auto_size {
             runtime.store_mut().set_size(
@@ -139,16 +153,33 @@ pub(crate) fn sync_content_layout(
                 if source.y > 0.0 { source.y } else { 30.0 },
             );
         }
-        // Auto-size may be clamped and may notify relations. Resolve the live
-        // viewport after that write, before aligning or scaling its content.
-        let gobject = runtime.store().object(object.0).unwrap();
+        prepared.push(PreparedContent {
+            entity,
+            object: object.0,
+            source,
+            trim: if grid.is_some() { None } else { trim },
+            blank,
+        });
+    }
+    let store = runtime.store_mut();
+    store.flush_group_layouts();
+    store.flush_list_layouts();
+    store.flush_group_layouts();
+    for prepared in prepared.iter() {
+        let Ok((_, _, _, _, mut node, mut visibility)) = visuals.get_mut(prepared.entity) else {
+            continue;
+        };
+        let Some(gobject) = runtime.store().object(prepared.object) else {
+            continue;
+        };
         let viewport = gobject.size();
+        let source_size = Size::new(prepared.source.x, prepared.source.y);
         let canvas = if let ControlData::Loader(loader) = gobject.control() {
             loader.content_rect(source_size, viewport)
         } else {
             GuiRect::new(0.0, 0.0, viewport.width, viewport.height)
         };
-        let rect = trimmed_rect(canvas, source, if grid.is_some() { None } else { trim });
+        let rect = trimmed_rect(canvas, prepared.source, prepared.trim);
         let next = (
             Val::Px(rect.x),
             Val::Px(rect.y),
@@ -158,11 +189,11 @@ pub(crate) fn sync_content_layout(
         if (node.left, node.top, node.width, node.height) != next {
             (node.left, node.top, node.width, node.height) = next;
         }
-        let visible = !blank
+        let visible = !prepared.blank
             && rect.width > 0.0
             && rect.height > 0.0
             && !matches!(
-                runtime.loader_load_state(object.0),
+                runtime.loader_load_state(prepared.object),
                 Some(GuiLoaderState::Failed(_))
             );
         let next = if visible {
@@ -412,5 +443,74 @@ mod tests {
                 .size(),
             Size::new(150., 75.)
         );
+    }
+
+    #[test]
+    fn loader_content_relations_are_current_before_any_visual_is_projected() {
+        use fairygui_core::object::RelationType;
+        for grouped in [false, true] {
+            let (mut app, first, _, first_visual) = setup(ObjectType::Loader);
+            let (parent, second) = {
+                let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+                let store = runtime.store_mut();
+                let parent = store.create(ObjectType::Component);
+                store.set_parent(first, Some(parent));
+                store.set_loader_layout(first, 4, 0, 0);
+                let second = store.create(ObjectType::Loader);
+                store.set_parent(second, Some(parent));
+                store.set_size(second, 20., 20.);
+                store.set_loader_auto_size(second, true);
+                let target = if grouped {
+                    let group = store.create(ObjectType::Group);
+                    store.set_parent(group, Some(parent));
+                    store.set_group(second, Some(group));
+                    store.flush_group_layouts();
+                    group
+                } else {
+                    second
+                };
+                store.add_relation(first, target, RelationType::Size, false);
+                (parent, second)
+            };
+            let root = app.world_mut().spawn(GObjectRef(second)).id();
+            let second_visual = app
+                .world_mut()
+                .spawn((
+                    ContentVisual {
+                        root,
+                        source_size: Vec2::new(150., 75.),
+                        trim: None,
+                    },
+                    Node::default(),
+                    ImageNode::default(),
+                    Visibility::Hidden,
+                ))
+                .id();
+            app.world_mut()
+                .get_mut::<ContentVisual>(first_visual)
+                .unwrap()
+                .trim = None;
+            app.update();
+            assert_eq!(
+                node_rect(app.world().get::<Node>(first_visual).unwrap()),
+                (Val::Px(0.), Val::Px(0.), Val::Px(330.), Val::Px(155.)),
+                "an earlier visual must observe a later loader's size notification in the same frame"
+            );
+            app.world_mut()
+                .get_mut::<ContentVisual>(second_visual)
+                .unwrap()
+                .source_size = Vec2::new(180., 90.);
+            app.update();
+            assert_eq!(
+                node_rect(app.world().get::<Node>(first_visual).unwrap()),
+                (Val::Px(0.), Val::Px(0.), Val::Px(360.), Val::Px(170.))
+            );
+            assert!(
+                app.world()
+                    .non_send::<GuiRuntime>()
+                    .store()
+                    .contains(parent)
+            );
+        }
     }
 }
