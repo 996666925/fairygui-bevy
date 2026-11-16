@@ -45,6 +45,77 @@ fn config(count: usize) -> GuiVirtualList {
 }
 
 #[test]
+fn ecs_arrow_navigation_reveals_offscreen_selection_without_click_events() {
+    use crate::{GuiButtonSelected, GuiListSelection, GuiMut, ListNavigationDirection};
+    let (mut app, owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.world_mut()
+        .entity_mut(view)
+        .insert((config(1000), GuiListSelection(vec![900])));
+    app.update();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .drain_events()
+        .for_each(drop);
+    app.add_systems(
+        Update,
+        (move |mut gui: GuiMut, mut done: Local<bool>| {
+            if !*done {
+                assert!(
+                    gui.get_mut(view)
+                        .unwrap()
+                        .navigate_list(ListNavigationDirection::Down)
+                );
+                *done = true;
+            }
+        })
+        .in_set(GuiSystems::Respond),
+    );
+    app.update();
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [901]);
+    {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        let row = runtime.store().virtual_item_object(list, 901).unwrap();
+        let entity = runtime.entity_of(row).unwrap();
+        assert!(app.world().get::<GuiButtonSelected>(entity).unwrap().0);
+        assert!(runtime.store().is_child_in_view(list, row).unwrap());
+        assert!(
+            runtime
+                .store()
+                .virtual_list_info(list)
+                .unwrap()
+                .active_count
+                < 30
+        );
+    }
+    assert!(
+        app.world_mut()
+            .non_send_mut::<GuiRuntime>()
+            .drain_events()
+            .all(|event| !matches!(
+                event.kind,
+                crate::core::object::EventKind::Click
+                    | crate::core::object::EventKind::ClickItem
+                    | crate::core::object::EventKind::StateChanged
+            ))
+    );
+    assert!(
+        app.world_mut()
+            .gui_mut(view)
+            .unwrap()
+            .navigate_list(ListNavigationDirection::Up)
+    );
+    app.update();
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [900]);
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(app.world_mut().gui_mut(view).is_none());
+}
+
+#[test]
 fn writable_selection_waits_for_content_and_tracks_native_and_row_edits() {
     use crate::{GuiButtonSelected, GuiListSelection};
     let (mut app, _, list, view) = fixture(

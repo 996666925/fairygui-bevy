@@ -167,7 +167,7 @@ pub use tree::{
 pub use fairygui_core as core;
 pub use fairygui_core::widget::{
     ButtonMode, ChildrenRenderOrder, FillMethod, FlipType, GraphType, ListLayoutType,
-    ListSelectionMode,
+    ListNavigationDirection, ListSelectionMode,
 };
 pub use fairygui_core::{
     color_matrix::ColorFilterParams,
@@ -231,7 +231,7 @@ pub mod prelude {
         GuiTreeNode, GuiTreeNodeState, GuiTreeSettings, GuiTreeState, GuiTweenComplete,
         GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowState,
         GuiWorldExt, ListInteractionSettings, ListLayoutSettings, ListLayoutType,
-        ListSelectionMode, PopupMenuTemplates, RelationType, TreeSettings,
+        ListNavigationDirection, ListSelectionMode, PopupMenuTemplates, RelationType, TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
     pub use crate::{

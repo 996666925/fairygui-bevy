@@ -43,6 +43,16 @@ impl ListLayoutType {
     }
 }
 
+/// Direction passed to the list's explicit arrow-navigation operation.
+/// Applications choose which keyboard or gamepad input invokes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListNavigationDirection {
+    Up,
+    Right,
+    Down,
+    Left,
+}
+
 /// 选择模式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ListSelectionMode {

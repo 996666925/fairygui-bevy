@@ -1,12 +1,115 @@
 //! GList selection: live buttons override retained offscreen virtual records.
 use super::{GObjectId, ObjectStore};
-use crate::widget::{ControlData, ListData, ListSelectionMode};
+use crate::widget::{
+    ControlData, ListData, ListLayoutType, ListNavigationDirection, ListSelectionMode,
+};
 
 #[cfg(test)]
 #[path = "list_selection_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "list_navigation_tests.rs"]
+mod navigation_tests;
+
 impl ObjectStore {
+    /// Explicit GList.handleArrowKey navigation. Starts at the first selected
+    /// index, replaces the selection and reveals the destination without
+    /// synthesizing click/state events. No selection or a boundary is a no-op.
+    ///
+    /// Cross-axis flow/pagination navigation follows native child-coordinate
+    /// scans, including their first/last-band boundary behavior. Native indexes
+    /// materialized children with the selected index; an unavailable virtual
+    /// child is safely ignored here instead of dereferencing a missing object.
+    /// Returns whether the selected indices changed.
+    pub fn navigate_list_selection(
+        &mut self,
+        list: GObjectId,
+        direction: ListNavigationDirection,
+    ) -> bool {
+        use ListLayoutType::*;
+        use ListNavigationDirection::*;
+        let Some(layout) = self.list_data(list).map(|data| data.layout) else {
+            return false;
+        };
+        let Some(index) = self
+            .list_selection(list)
+            .and_then(|i| usize::try_from(i).ok())
+        else {
+            return false;
+        };
+        let sequential = match direction {
+            Up | Down => matches!(layout, SingleColumn | FlowVertical),
+            Left | Right => matches!(layout, SingleRow | FlowHorizontal | Pagination),
+        };
+        let target = if sequential {
+            match direction {
+                Up | Left => index.checked_sub(1),
+                Down | Right => index
+                    .checked_add(1)
+                    .filter(|i| *i < self.list_num_items(list)),
+            }
+        } else if matches!(
+            (layout, direction),
+            (FlowHorizontal | Pagination, Up | Down) | (FlowVertical, Left | Right)
+        ) {
+            let rows = self.list_items(list).unwrap();
+            let coordinate = |i: usize| {
+                let row = self.object(*rows.get(i)?)?;
+                Some(if layout == FlowVertical {
+                    row.x()
+                } else {
+                    row.y()
+                })
+            };
+            let Some(current) = coordinate(index) else {
+                return false;
+            };
+            let backwards = matches!(direction, Up | Left);
+            let scan = std::iter::successors(Some(index), |i| {
+                if backwards {
+                    i.checked_sub(1)
+                } else {
+                    i.checked_add(1)
+                }
+            })
+            .skip(1)
+            .take_while(|i| *i < rows.len());
+            let mut offset = 0;
+            let mut adjacent = None;
+            let mut target = None;
+            for i in scan {
+                let value = coordinate(i).unwrap();
+                if let Some(band) = adjacent {
+                    if value != band {
+                        target = if backwards {
+                            i.checked_add(offset + 1)
+                        } else {
+                            i.checked_sub(offset + 1)
+                        };
+                        break;
+                    }
+                } else if value != current {
+                    adjacent = Some(value);
+                } else {
+                    offset += 1;
+                }
+            }
+            target
+        } else {
+            None
+        };
+        let Some(target) = target else {
+            return false;
+        };
+        let before = self.list_selections(list);
+        let outer = self.list_selection_batches.insert(list);
+        self.clear_list_selection(list);
+        self.add_list_selection_with_scroll(list, target, true);
+        self.finish_list_selection(list, outer);
+        self.list_selections(list) != before
+    }
+
     pub(super) fn list_data(&self, list: GObjectId) -> Option<&ListData> {
         match self.object(list)?.control() {
             ControlData::List(data) => Some(data),
@@ -248,8 +351,9 @@ impl ObjectStore {
         self.list_selections(list) != before
     }
 
-    /// Returns whether a live button changed; controller feedback is deliberately
-    /// absent for an offscreen-only change, matching native addSelection.
+    /// Returns whether a live button needed its setter. Common buttons reject
+    /// the state change, but native addSelection still updates the controller.
+    /// Offscreen-only changes do not feed back to the controller.
     fn set_list_record_selected(&mut self, list: GObjectId, index: usize, selected: bool) -> bool {
         let item = if let Some(state) = self.virtual_states.get_mut(&list) {
             if index >= state.geometry.count {
@@ -261,7 +365,13 @@ impl ObjectStore {
         } else {
             self.list_item_at(list, index)
         };
-        item.is_some_and(|item| self.set_button_selected(item, selected))
+        item.is_some_and(|item| {
+            let needs_setter = self
+                .button_selected(item)
+                .is_some_and(|old| old != selected);
+            self.set_button_selected(item, selected);
+            needs_setter
+        })
     }
 
     /// Clear even in None mode. The Shift anchor is retained.

@@ -496,3 +496,39 @@ fn renderer_count_and_resize_changes_are_refreshed_before_return() {
         assert_eq!(store.scroll_pane(list).unwrap().content_size(), Size::ZERO);
     }
 }
+
+#[test]
+fn virtual_sequential_navigation_reveals_logical_offscreen_rows_and_guards_missing_children() {
+    use crate::widget::ListNavigationDirection;
+    let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, false, false);
+    let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));
+    let mut provider = |_| None;
+    let mut render = |_: &mut ObjectStore, _: usize, _: GObjectId| {};
+    store.enable_virtual_list(list, "a", &mut create).unwrap();
+    store.set_virtual_item_count(list, 1000).unwrap();
+    store
+        .refresh_virtual_list(list, &mut create, &mut provider, &mut render)
+        .unwrap();
+    store.set_list_selection(list, 500);
+    assert!(store.navigate_list_selection(list, ListNavigationDirection::Down));
+    assert_eq!(store.list_selections(list), Some(vec![501]));
+    assert!(store.scroll_pane(list).unwrap().pos().y > 10_000.);
+    store
+        .refresh_virtual_list(list, &mut create, &mut provider, &mut render)
+        .unwrap();
+    let row = store.virtual_item_object(list, 501).unwrap();
+    assert_eq!(store.button_selected(row), Some(true));
+    let position = store.scroll_pane(list).unwrap().pos();
+    assert!(store.is_child_in_view(list, row).unwrap());
+    let mut settings = store.list_layout_settings(list).unwrap();
+    settings.layout = ListLayoutType::FlowHorizontal;
+    settings.column_count = 3;
+    store.set_list_layout_settings(list, settings);
+    assert!(!store.navigate_list_selection(list, ListNavigationDirection::Up));
+    assert_eq!(store.list_selections(list), Some(vec![501]));
+    assert_eq!(store.scroll_pane(list).unwrap().pos(), position);
+    let other = store.create(ObjectType::Component);
+    assert!(!store.navigate_list_selection(other, ListNavigationDirection::Down));
+    store.remove(other);
+    assert!(!store.navigate_list_selection(other, ListNavigationDirection::Down));
+}

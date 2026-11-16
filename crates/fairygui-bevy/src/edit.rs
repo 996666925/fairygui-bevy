@@ -1,5 +1,6 @@
 //! Direct object editing for behavior such as playback and scrolling.
 use super::*;
+use crate::ListNavigationDirection;
 use bevy::ecs::system::SystemParam;
 use fairygui_core::package::ObjectType;
 
@@ -719,6 +720,15 @@ impl GuiObjectMut<'_> {
         let runtime = &mut *self.runtime;
         let object = self.object;
         runtime.store_mut().set_list_selection(object, index);
+    }
+    /// Explicit native arrow navigation, starting at the first selected row.
+    /// Replaces selection and reveals the destination without emitting a click.
+    /// Bind keyboard/gamepad input in your own ECS system. Returns whether the
+    /// selected indices changed; unavailable rows and boundaries are ignored.
+    pub fn navigate_list(&mut self, direction: ListNavigationDirection) -> bool {
+        self.runtime
+            .store_mut()
+            .navigate_list_selection(self.object, direction)
     }
     pub fn set_tree_expanded(&mut self, index: usize, expanded: bool) {
         let runtime = &mut *self.runtime;

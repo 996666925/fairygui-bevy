@@ -33,7 +33,9 @@ pub use leaf::{
     FillMethod, FlipType, GraphData, GraphType, GroupData, ImageData, LoaderData, MovieClipData,
     TextFieldData, TextInputData,
 };
-pub use list::{ListData, ListItemData, ListLayoutType, ListSelectionMode};
+pub use list::{
+    ListData, ListItemData, ListLayoutType, ListNavigationDirection, ListSelectionMode,
+};
 pub use tree::{TreeData, TreeNodeData};
 
 /// 溢出处理方式。
