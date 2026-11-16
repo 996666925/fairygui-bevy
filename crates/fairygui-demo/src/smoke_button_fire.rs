@@ -4,7 +4,7 @@ use fairygui_core::widget::{ButtonState, ControlData};
 #[derive(Resource, Default)]
 pub(super) struct State {
     stage: u8,
-    request: Option<(GObjectId, bool)>,
+    request: Option<(Entity, bool)>,
     frames: u32,
     since: u32,
     baseline: Vec2,
@@ -24,9 +24,9 @@ pub(super) fn install(app: &mut App) {
         .add_systems(Update, execute.in_set(GuiSystems::Respond));
 }
 
-fn execute(mut state: ResMut<State>, mut runtime: NonSendMut<GuiRuntime>) {
+fn execute(mut state: ResMut<State>, mut gui: GuiMut) {
     if let Some((button, effect)) = state.request.take() {
-        assert!(runtime.fire_button_click(button, effect));
+        assert!(gui.get_mut(button).unwrap().fire_click(effect));
     }
 }
 
@@ -51,7 +51,7 @@ pub(super) fn drive(
                 .store_mut()
                 .set_button_linked_popup(button, Some(popup));
             state.popup = Some(popup);
-            state.request = Some((button, true));
+            state.request = Some((runtime.entity_of(button).unwrap(), true));
             state.since = state.frames;
             state.stage = 1;
         }
@@ -100,7 +100,7 @@ pub(super) fn drive(
                             .abs_diff_eq(state.baseline, 0.001)
                     );
                     assert_eq!(state.clicks, 0);
-                    state.request = Some((button, false));
+                    state.request = Some((runtime.entity_of(button).unwrap(), false));
                     state.stage = 3;
                     state.since = state.frames;
                 }

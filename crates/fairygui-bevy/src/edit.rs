@@ -241,6 +241,15 @@ impl std::fmt::Debug for GuiObjectMut<'_> {
     }
 }
 impl GuiObjectMut<'_> {
+    /// Execute native GButton.fireClick. Check/Radio selection changes enqueue
+    /// GuiStateChanged; no GuiClick or pointer press is synthesized and linked
+    /// popups stay untouched. Common buttons optionally show 100/200 ms down/up
+    /// feedback. Hidden/noninteractive buttons still execute native behavior.
+    /// Returns false for a non-button; uses current model settings immediately.
+    pub fn fire_click(&mut self, down_effect: bool) -> bool {
+        self.runtime.fire_button_click(self.object, down_effect)
+    }
+
     /// Unsubscribe this object from all exported and runtime relation targets.
     pub fn clear_relations(&mut self) -> bool {
         self.runtime.store_mut().clear_relations(self.object)

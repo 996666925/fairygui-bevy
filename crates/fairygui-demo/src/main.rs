@@ -227,6 +227,8 @@ fn main() -> AppExit {
         smoke::install_image_flip(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-graph-properties") {
         smoke::install_graph_properties(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-button-fire") {
+        smoke::install_button_fire(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-button-properties") {
         smoke::install_button_properties(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-text-selection") {

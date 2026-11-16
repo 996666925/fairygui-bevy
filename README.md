@@ -335,6 +335,13 @@ commands.entity(button).insert(GuiButtonPopup(Some(popup)));
 恢复拥有者配置。绑定在当前指针输入前应用；打开后保留原版定位、弹层栈和窗口
 切换规则，隐藏及再次打开复用同一视图。`--smoke-popup` 验证实际点击和实体绑定。
 
+程序触发按钮的内部点击行为使用 `gui.get_mut(button).unwrap().fire_click(true)`。
+它按当前模型配置切换 Check/Radio 选择，并在改变选择时发布 `GuiStateChanged`，
+不合成指针按下、不发送 `GuiClick`，也不打开绑定弹层。Common 按钮传入 `true`
+时显示原版 100/200 毫秒按下／恢复反馈，`false` 关闭反馈。隐藏或禁用交互不阻止
+程序调用；非按钮返回 `false`，未就绪或失效拥有者无法取得编辑器。ECS 设置应先同步，
+或通过同一 `GuiObjectMut` 直接修改设置后调用。`--smoke-button-fire` 验证实际反馈和视图复用。
+
 容器的绘制顺序通过 `GuiRenderOrder` 修改，与逻辑层级分开：
 
 ```rust,ignore

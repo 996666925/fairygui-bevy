@@ -256,6 +256,7 @@ pub(super) fn install_windows(app: &mut App) {
 struct Smoke {
     transition_only: bool,
     popup_only: bool,
+    button_fire_only: bool,
     frames: u32,
     step: u32,
     entry: usize,
@@ -357,6 +358,21 @@ pub(super) fn install_popup(app: &mut App) {
     smoke.basics_entry = demos::BASICS_PAGES
         .iter()
         .position(|page| *page == "Popup")
+        .unwrap();
+}
+
+pub(super) fn install_button_fire(app: &mut App) {
+    install(app);
+    // Sample both native 100/200 ms feedback callbacks even when a slow GPU
+    // frame spans the entire pressed interval on the validation host.
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+        std::time::Duration::from_secs_f64(1. / 60.),
+    ));
+    let mut smoke = app.world_mut().resource_mut::<Smoke>();
+    smoke.button_fire_only = true;
+    smoke.basics_entry = demos::BASICS_PAGES
+        .iter()
+        .position(|page| *page == "Button")
         .unwrap();
 }
 
@@ -1356,6 +1372,13 @@ fn drive(
                 assert_eq!(smoke.menu_stage, 17);
                 info!(
                     "demo smoke PASSED: real popup navigation, linked popup press/close/outside handling, direct menu observers, disabled and hidden rows, checked state and retained view reuse"
+                );
+                exit.write(AppExit::Success);
+                return;
+            }
+            if smoke.button_fire_only && page == "Button" && fire_smoke.complete() {
+                info!(
+                    "demo smoke PASSED: entity fireClick feedback, retained scale restoration, no synthetic Click or linked popup"
                 );
                 exit.write(AppExit::Success);
                 return;

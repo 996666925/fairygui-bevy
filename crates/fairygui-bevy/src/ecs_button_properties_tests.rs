@@ -280,13 +280,9 @@ fn current_frame_settings_control_internal_clicks_and_mode_reset_does_not_emit_s
     struct Request(Option<Entity>);
     #[derive(Resource, Default)]
     struct Changes(usize);
-    fn click(
-        mut request: ResMut<Request>,
-        references: Query<&GObjectRef>,
-        mut runtime: NonSendMut<GuiRuntime>,
-    ) {
+    fn click(mut request: ResMut<Request>, mut gui: GuiMut) {
         if let Some(entity) = request.0.take() {
-            runtime.fire_button_click(references.get(entity).unwrap().0, false);
+            assert!(gui.get_mut(entity).unwrap().fire_click(false));
         }
     }
     let (mut app, owner, _) = fixture(true);
@@ -341,6 +337,90 @@ fn current_frame_settings_control_internal_clicks_and_mode_reset_does_not_emit_s
     app.update();
     assert!(app.world().get::<GuiButtonSelected>(button).unwrap().0);
     assert_eq!(app.world().resource::<Changes>().0, 1);
+}
+
+#[test]
+fn direct_fire_click_updates_selection_once_without_click_or_popup_and_retains_feedback() {
+    use crate::core::widget::ButtonState;
+    #[derive(Resource, Default)]
+    struct Seen {
+        changed: Vec<bool>,
+        clicks: usize,
+    }
+    let (mut app, owner, asset) = fixture(true);
+    let button = view(&app, owner);
+    let mut source = FairyGuiRoot::new(asset, "Component12");
+    source.active = false;
+    let popup = app.world_mut().spawn(source).id();
+    app.world_mut()
+        .entity_mut(button)
+        .insert(GuiButtonPopup(Some(popup)))
+        .observe(
+            |event: On<GuiStateChanged>,
+             selected: Query<&GuiButtonSelected>,
+             mut seen: ResMut<Seen>| {
+                seen.changed.push(selected.get(event.entity).unwrap().0);
+            },
+        )
+        .observe(|_: On<GuiClick>, mut seen: ResMut<Seen>| {
+            seen.clicks += 1;
+        });
+    app.init_resource::<Seen>();
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+        std::time::Duration::ZERO,
+    ));
+    app.update();
+    app.world_mut()
+        .gui_mut(owner)
+        .unwrap()
+        .set_button_settings(GuiButtonSettings {
+            mode: ButtonMode::Check,
+            sound: None,
+            ..default()
+        });
+    assert!(app.world_mut().gui_mut(owner).unwrap().fire_click(true));
+    app.update();
+    assert_eq!(app.world().resource::<Seen>().changed, [true]);
+    assert_eq!(app.world().resource::<Seen>().clicks, 0);
+    assert!(app.world().resource::<GuiPopupState>().stack().is_empty());
+    assert!(app.world_mut().gui_mut(button).unwrap().fire_click(false));
+    app.update();
+    assert_eq!(app.world().resource::<Seen>().changed, [true, false]);
+    app.world_mut()
+        .gui_mut(owner)
+        .unwrap()
+        .set_button_settings(GuiButtonSettings {
+            mode: ButtonMode::Common,
+            down_effect: 2,
+            down_effect_value: 0.8,
+            ..default()
+        });
+    app.world_mut().gui_mut(owner).unwrap().set_visible(false);
+    app.world_mut().gui_mut(owner).unwrap().set_touchable(false);
+    assert!(app.world_mut().gui_mut(owner).unwrap().fire_click(true));
+    let object = app.world().get::<GObjectRef>(button).unwrap().0;
+    let state = |app: &App| {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        let object = runtime.store().object(object).unwrap();
+        let ControlData::Button(data) = object.control() else {
+            panic!()
+        };
+        assert!(!data.pressed);
+        (data.interaction_state, object.scale_x(), object.scale_y())
+    };
+    assert_eq!(state(&app).0, ButtonState::Over);
+    app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+        std::time::Duration::from_millis(100),
+    ));
+    app.update();
+    assert_eq!(state(&app), (ButtonState::Down, 0.8, 0.8));
+    app.update();
+    assert_eq!(state(&app), (ButtonState::Up, 1., 1.));
+    assert_eq!(app.world().resource::<Seen>().changed, [true, false]);
+    assert_eq!(app.world().resource::<Seen>().clicks, 0);
+    assert!(app.world().resource::<GuiPopupState>().stack().is_empty());
+    assert_eq!(view(&app, owner), button);
+    assert!(!app.world_mut().gui_mut(popup).unwrap().fire_click(true));
 }
 
 #[test]
