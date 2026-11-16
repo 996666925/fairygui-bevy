@@ -26,6 +26,14 @@ pub(super) fn install(app: &mut App) {
             .before(PickingSystems::ProcessInput),
     );
 }
+
+fn receive_on_owner(event: On<GuiDrop>, mut objects: GuiMut) {
+    objects
+        .get_mut(event.entity)
+        .unwrap()
+        .set_icon(event.data.clone().unwrap_or_default());
+}
+
 #[allow(clippy::too_many_arguments)]
 fn drive(
     mut state: ResMut<State>,
@@ -92,8 +100,49 @@ fn drive(
             if sources.get(source).is_err() {
                 return;
             }
-            state.source = Some(source);
-            state.receiver = Some(receiver);
+            state.icon = gui.icon(source).unwrap().to_owned();
+            assert!(!state.icon.is_empty());
+            assert_eq!(gui.icon(receiver), Some(""));
+            for original in [source, receiver] {
+                let mut display = *gui.display(original).unwrap();
+                display.visible = false;
+                commands.entity(original).insert(display);
+            }
+            let source_geometry = gui.transform(source).unwrap();
+            let receiver_geometry = gui.transform(receiver).unwrap();
+            let page = state.page.unwrap();
+            state.source = Some(
+                commands
+                    .spawn((
+                        FairyGuiRoot::new(assets.load("ui/Basics.fui"), "BagGridSub2")
+                            .with_parent(page)
+                            .with_position(source_geometry.position())
+                            .with_size(source_geometry.size()),
+                        ChildOf(page),
+                        GuiText::new("B"),
+                        GuiIcon::new(state.icon.clone()),
+                        GuiDraggable::default(),
+                        GuiDragSource {
+                            icon: Some(state.icon.clone()),
+                            data: Some(state.icon.clone()),
+                        },
+                    ))
+                    .id(),
+            );
+            state.receiver = Some(
+                commands
+                    .spawn((
+                        FairyGuiRoot::new(assets.load("ui/Basics.fui"), "BagGridSub2")
+                            .with_parent(page)
+                            .with_position(receiver_geometry.position())
+                            .with_size(receiver_geometry.size()),
+                        ChildOf(page),
+                        GuiText::new("C"),
+                        GuiDropTarget,
+                    ))
+                    .observe(receive_on_owner)
+                    .id(),
+            );
             state.free = gui.child_by_name(state.page.unwrap(), "a");
             let free = state.free.unwrap();
             let geometry = gui.transform(free).unwrap();
@@ -132,13 +181,13 @@ fn drive(
                     bounds: Some(GuiDragBounds::Control(bounds_owner)),
                 });
             state.bounds = Some(bounds_owner);
-            state.icon = gui.icon(source).unwrap().to_owned();
-            assert!(!state.icon.is_empty());
-            assert_eq!(gui.icon(receiver), Some(""));
             state.cursor = Some(center(source));
             next = true;
         }
-        2 if elapsed >= 4 => {
+        2 if elapsed >= 12
+            && gui.view(state.source.unwrap()).is_some()
+            && gui.view(state.receiver.unwrap()).is_some() =>
+        {
             mouse.press(MouseButton::Left);
             next = true;
         }
@@ -153,7 +202,8 @@ fn drive(
             next = true;
         }
         5 if elapsed >= 8 => {
-            assert_eq!(drag.source(), state.source);
+            assert_eq!(drag.source(), gui.view(state.source.unwrap()));
+            assert!(!motions.get(state.source.unwrap()).unwrap().is_dragging());
             let agent = drag.agent().unwrap();
             state.agent = Some(agent);
             let transform = gui.transform(agent).unwrap();
@@ -262,7 +312,7 @@ fn drive(
             assert!(!existing.contains(state.source.unwrap()));
             mouse.release(MouseButton::Left);
             println!(
-                "demo smoke PASSED: ECS free and owner-bounded control movement, native threshold origin, Loader proxy, entity drop icon response, pointer release, proxy cleanup and source disposal"
+                "demo smoke PASSED: ECS owner drag source and drop observer, view source identity, proxy precedence, free and bounded control movement, pointer release, proxy cleanup and source disposal"
             );
             exit.write(AppExit::Success);
             next = true;

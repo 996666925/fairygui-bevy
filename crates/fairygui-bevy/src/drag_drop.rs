@@ -9,7 +9,9 @@ use bevy::window::PrimaryWindow;
 #[path = "ecs_drag_tests.rs"]
 mod tests;
 
-/// Attach to a control view to start a drag after the configured pointer threshold.
+/// Attach to a control view or root/window owner to start after the pointer threshold.
+/// Owner configuration waits for assets and follows template replacement. A
+/// view's configuration takes precedence over its owner's configuration.
 /// The nearest configured ancestor of the pressed control wins. Removing this
 /// component disables future starts; GuiDrag::cancel ends an already active drag.
 #[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
@@ -19,8 +21,9 @@ pub struct GuiDragSource {
     pub data: Option<String>,
 }
 
-/// A control view that accepts drops. The nearest marked ancestor of the release
-/// hit receives one GuiDrop entity event. Attach an observer on this same entity.
+/// A control view or root/window owner that accepts drops. The nearest configured
+/// ancestor of the release hit receives one GuiDrop on the entity declaring this
+/// component. A view declaration takes precedence over its owner's declaration.
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct GuiDropTarget;
 
@@ -65,7 +68,7 @@ impl GuiDrag<'_, '_> {
         };
         windows::viewport(&mut self.runtime, &self.windows, &self.settings);
         self.runtime
-            .begin_ecs_drag(&mut self.input, object, &configuration, touch_id)
+            .begin_ecs_drag(&mut self.input, source, object, &configuration, touch_id)
     }
     /// Cancel immediately without emitting a drop. Native proxy data is removed
     /// immediately; proxy entities are despawned when Bevy applies deferred work.
@@ -132,16 +135,23 @@ impl GuiDragState {
 #[derive(Debug)]
 pub(super) struct Session {
     pub source: Entity,
+    origin: Entity,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct DropTargetBinding {
+    pub entity: Entity,
+    view: Entity,
 }
 
 impl GuiRuntime {
     pub(super) fn ecs_drop_target(&self, mut target: GObjectId) -> Option<(GObjectId, Entity)> {
         loop {
-            if let Some(&entity) = self.drop_targets.get(&target)
-                && self.entity_of(target) == Some(entity)
+            if let Some(binding) = self.drop_targets.get(&target)
+                && self.entity_of(target) == Some(binding.view)
                 && crate::input::eligible(self, target)
             {
-                return Some((target, entity));
+                return Some((target, binding.entity));
             }
             target = self.store.object(target)?.parent()?;
         }
@@ -150,6 +160,7 @@ impl GuiRuntime {
     fn begin_ecs_drag(
         &mut self,
         input: &mut InputRouter,
+        origin: Entity,
         source: GObjectId,
         configuration: &GuiDragSource,
         touch_id: Option<u64>,
@@ -205,7 +216,10 @@ impl GuiRuntime {
             fairygui_core::Point::new(position.x, position.y),
         );
         self.drag_touch_id = touch_id;
-        self.ecs_drag = Some(Session { source: entity });
+        self.ecs_drag = Some(Session {
+            source: entity,
+            origin,
+        });
         true
     }
 }
@@ -214,29 +228,38 @@ impl GuiRuntime {
 /// blocked source deliver a cached drop on that frame.
 pub(crate) fn prepare_drag_targets(
     mut commands: Commands,
-    targets: Query<(Entity, &GObjectRef), With<GuiDropTarget>>,
-    objects: Query<&GObjectRef>,
+    targets: Query<Entity, With<GuiDropTarget>>,
+    resolver: edit::GuiObjectResolver,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
-    runtime.drop_targets = targets
-        .iter()
-        .filter_map(|(entity, reference)| {
-            (runtime.entity_of(reference.0) == Some(entity)).then_some((reference.0, entity))
-        })
-        .collect();
+    runtime.drop_targets.clear();
+    for entity in &targets {
+        let Some((object, view)) = resolver.view(&runtime, entity) else {
+            continue;
+        };
+        let binding = runtime
+            .drop_targets
+            .entry(object)
+            .or_insert(DropTargetBinding { entity, view });
+        if entity == view {
+            *binding = DropTargetBinding { entity, view };
+        }
+    }
     if runtime.ecs_drag.as_ref().is_some_and(|session| {
-        objects.get(session.source).is_err()
-            || runtime.drag_drop.source().is_none_or(|source| {
-                runtime.entity_of(source) != Some(session.source)
-                    || !crate::input::eligible(&runtime, source)
-            })
+        runtime.drag_drop.source().is_none_or(|source| {
+            resolver.object(&runtime, session.origin) != Some(source)
+                || resolver.object(&runtime, session.source) != Some(source)
+                || runtime.entity_of(source) != Some(session.source)
+                || !crate::input::eligible(&runtime, source)
+        })
     }) {
         runtime.cancel_drag(&mut commands);
     }
 }
 
 pub(crate) fn begin_configured_drags(
-    sources: Query<&GuiDragSource>,
+    sources: Query<(Entity, &GuiDragSource)>,
+    resolver: edit::GuiObjectResolver,
     mut state: ResMut<InputRouter>,
     windows: Query<(Entity, &Window, Has<PrimaryWindow>)>,
     settings: Res<GuiInputSettings>,
@@ -245,17 +268,25 @@ pub(crate) fn begin_configured_drags(
     if runtime.is_dragging() {
         return;
     }
+    let mut effective = HashMap::new();
+    for (entity, configuration) in &sources {
+        let Some((object, view)) = resolver.view(&runtime, entity) else {
+            continue;
+        };
+        let entry = effective.entry(object).or_insert((entity, configuration));
+        if entity == view {
+            *entry = (entity, configuration);
+        }
+    }
     for (touch_id, target, _, moved, started) in state.drag_pointers() {
         if !moved || started {
             continue;
         }
         let mut source = Some(target);
         while let Some(object) = source {
-            if let Some(entity) = runtime.entity_of(object)
-                && let Ok(configuration) = sources.get(entity)
-            {
+            if let Some(&(entity, configuration)) = effective.get(&object) {
                 windows::viewport(&mut runtime, &windows, &settings);
-                runtime.begin_ecs_drag(&mut state, object, configuration, touch_id);
+                runtime.begin_ecs_drag(&mut state, entity, object, configuration, touch_id);
                 if runtime.is_dragging() {
                     return;
                 }

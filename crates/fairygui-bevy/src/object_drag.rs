@@ -53,16 +53,16 @@ pub(crate) struct Active {
 }
 
 pub(crate) fn prepare_object_drags(
-    sources: Query<(Entity, &GObjectRef), With<GuiDragSource>>,
+    sources: Query<Entity, With<GuiDragSource>>,
     configurations: Query<(Entity, &GuiDraggable, Has<GObjectRef>)>,
     resolver: edit::GuiObjectResolver,
     mut runtime: NonSendMut<GuiRuntime>,
 ) {
     runtime.object_drag_bindings.clear();
     runtime.drag_source_bindings.clear();
-    for (entity, reference) in &sources {
-        if runtime.entity_of(reference.0) == Some(entity) {
-            runtime.drag_source_bindings.insert(reference.0);
+    for entity in &sources {
+        if let Some((object, _)) = resolver.view(&runtime, entity) {
+            runtime.drag_source_bindings.insert(object);
         }
     }
     let mut effective = HashMap::new();

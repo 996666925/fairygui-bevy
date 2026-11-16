@@ -576,7 +576,12 @@ fn on_drop(event: On<GuiDrop>) {
 }
 ```
 
-源和目标组件添加在控件视图上；释放时最近的目标祖先接收一次 `GuiDrop`。
+源和目标组件可添加在控件视图、`FairyGuiRoot` 或 `FairyGuiWindow` 拥有者上，
+拥有者配置等待资源并跟随模板替换；同一对象的视图配置优先，移除后恢复拥有者配置。
+释放时最近的目标祖先接收一次 `GuiDrop`，事件发给声明 `GuiDropTarget` 的实体，
+可直接在拥有者上绑定 observer。`GuiDrop.source` 与 `GuiDragState.source()` 仍为实际源视图；
+`GuiDragState.target()` 对应声明目标组件的实体。
+拥有者上的 `GuiDragSource` 同样优先于 `GuiDraggable` 移动控件自身。
 可选图标使用原生 100×100、中心轴心、不接收输入的 Loader，结束或取消后回收。
 `GuiDragState` 资源提供源、临时图标、当前目标、数据和所属触摸 ID；
 业务系统或 observer 可使用 `GuiDrag` 参数直接调用 `start(source, configuration, touch_id)`

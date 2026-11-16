@@ -571,7 +571,7 @@ pub struct GuiRuntime {
     pub(crate) active_object_drags: HashMap<GObjectId, object_drag::Active>,
     pub(crate) drag_source_bindings: std::collections::HashSet<GObjectId>,
     ecs_drag: Option<ecs_drag_drop::Session>,
-    drop_targets: HashMap<GObjectId, Entity>,
+    drop_targets: HashMap<GObjectId, ecs_drag_drop::DropTargetBinding>,
     drop_events: Vec<ecs_drag_drop::GuiDrop>,
     pub(crate) drag_touch_id: Option<u64>,
     /// 已加载的包。跨包引用（`ui://别的包/条目`）靠它解析。
@@ -1789,10 +1789,10 @@ impl GuiRuntime {
             })
         {
             if let Some(session) = session
-                && let Some(&entity) = self.drop_targets.get(&target)
+                && let Some(binding) = self.drop_targets.get(&target)
             {
                 self.drop_events.push(ecs_drag_drop::GuiDrop {
-                    entity,
+                    entity: binding.entity,
                     source: session.source,
                     data: data.clone(),
                     position: Vec2::new(pointer.x, pointer.y),

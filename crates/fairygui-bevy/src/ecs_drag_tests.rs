@@ -149,6 +149,321 @@ fn move_mouse(app: &mut App, window: Entity, position: Vec2) {
     app.update();
 }
 
+fn record_drop(event: On<GuiDrop>, mut drops: ResMut<Drops>) {
+    drops.0.push(event.event().clone());
+}
+
+fn owned_control(app: &mut App, asset: Handle<FuiAsset>, window: bool) -> Entity {
+    let mut entity = app.world_mut().spawn_empty();
+    if window {
+        let mut source = crate::FairyGuiWindow::new(asset, "Button1");
+        source.center_on_create = false;
+        source.draggable = false;
+        entity.insert(source);
+    } else {
+        entity.insert(FairyGuiRoot::new(asset, "Button1"));
+    }
+    entity.id()
+}
+
+#[test]
+fn owner_drag_components_start_from_descendants_and_deliver_to_the_configured_receiver() {
+    for windows in [false, true] {
+        let (mut app, window, page, old_source, old_receiver) = fixture();
+        app.world_mut()
+            .entity_mut(old_source)
+            .remove::<GuiDragSource>();
+        app.world_mut()
+            .entity_mut(old_receiver)
+            .remove::<GuiDropTarget>();
+        let asset = app.world().get::<FairyGuiRoot>(page).unwrap().asset.clone();
+        let source = owned_control(&mut app, asset.clone(), windows);
+        let target = owned_control(&mut app, asset, windows);
+        app.world_mut().entity_mut(source).insert((
+            GuiDragSource {
+                icon: None,
+                data: Some("owner".into()),
+            },
+            crate::GuiDraggable::default(),
+        ));
+        app.world_mut()
+            .entity_mut(target)
+            .insert(GuiDropTarget)
+            .observe(record_drop);
+        app.update();
+        app.update();
+        let mut query = SystemState::<crate::GuiQuery>::new(app.world_mut());
+        let gui = query.get(app.world()).unwrap();
+        let source_view = gui.view(source).unwrap();
+        let target_view = gui.view(target).unwrap();
+        let pressed = gui.child_by_name(source, "title").unwrap();
+        let released = gui.child_by_name(target, "title").unwrap();
+        let initial_position = gui.transform(source).unwrap().position();
+        for round in 0..3 {
+            if round == 1 {
+                app.world_mut()
+                    .entity_mut(source_view)
+                    .insert(GuiDragSource {
+                        icon: None,
+                        data: Some("view".into()),
+                    });
+                app.world_mut()
+                    .entity_mut(target_view)
+                    .insert(GuiDropTarget)
+                    .observe(record_drop);
+            } else if round == 2 {
+                app.world_mut()
+                    .entity_mut(source_view)
+                    .remove::<GuiDragSource>();
+                app.world_mut()
+                    .entity_mut(target_view)
+                    .remove::<GuiDropTarget>();
+            }
+            hover(&mut app, pressed);
+            move_mouse(&mut app, window, Vec2::splat(10.));
+            mouse(&mut app, true);
+            move_mouse(&mut app, window, Vec2::splat(40.));
+            let state = app.world().resource::<GuiDragState>();
+            assert_eq!(
+                state.source(),
+                Some(source_view),
+                "windows={windows}, round={round}"
+            );
+            assert_eq!(
+                state.data(),
+                Some(if round == 1 { "view" } else { "owner" })
+            );
+            assert!(
+                !app.world()
+                    .get::<crate::GuiObjectDragState>(source)
+                    .unwrap()
+                    .is_dragging()
+            );
+            let gui = query.get(app.world()).unwrap();
+            assert_eq!(gui.transform(source).unwrap().position(), initial_position);
+            hover(&mut app, released);
+            move_mouse(&mut app, window, Vec2::splat(70.));
+            let receiver = if round == 1 { target_view } else { target };
+            assert_eq!(
+                app.world().resource::<GuiDragState>().target(),
+                Some(receiver)
+            );
+            mouse(&mut app, false);
+            let drops = &app.world().resource::<Drops>().0;
+            assert_eq!(drops.len(), round + 1);
+            assert_eq!(
+                (drops[round].entity, drops[round].source),
+                (receiver, source_view)
+            );
+        }
+    }
+}
+
+#[test]
+fn owner_drag_policies_wait_for_assets_and_rebind_after_template_replacement() {
+    use bevy::ecs::system::RunSystemOnce;
+    for windows in [false, true] {
+        let (mut app, _, page, source, target) = fixture();
+        app.world_mut().entity_mut(source).remove::<GuiDragSource>();
+        app.world_mut().entity_mut(target).remove::<GuiDropTarget>();
+        let asset = app.world().get::<FairyGuiRoot>(page).unwrap().asset.clone();
+        let pending = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
+        let owner = owned_control(&mut app, pending.clone(), windows);
+        app.world_mut()
+            .entity_mut(owner)
+            .insert((GuiDragSource::default(), GuiDropTarget));
+        app.update();
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert!(runtime.drag_source_bindings.is_empty());
+        assert!(runtime.drop_targets.is_empty());
+        let loaded = {
+            let assets = app.world().resource::<Assets<FuiAsset>>();
+            let source = assets.get(&asset).unwrap();
+            FuiAsset {
+                package: source.package.clone(),
+                res_key: source.res_key.clone(),
+            }
+        };
+        app.world_mut()
+            .resource_mut::<Assets<FuiAsset>>()
+            .insert(pending.id(), loaded)
+            .unwrap();
+        app.update();
+        let mut query = SystemState::<crate::GuiQuery>::new(app.world_mut());
+        let view = query.get(app.world()).unwrap().view(owner).unwrap();
+        let object = app.world().get::<GObjectRef>(view).unwrap().0;
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert!(runtime.drag_source_bindings.contains(&object));
+        assert_eq!(runtime.ecs_drop_target(object), Some((object, owner)));
+        // A copied reference must not override the owner's declaration.
+        app.world_mut()
+            .spawn((GObjectRef(object), GuiDragSource::default(), GuiDropTarget));
+        if windows {
+            app.world_mut()
+                .get_mut::<crate::FairyGuiWindow>(owner)
+                .unwrap()
+                .item_name = "Button2".into();
+        } else {
+            app.world_mut()
+                .get_mut::<FairyGuiRoot>(owner)
+                .unwrap()
+                .item_name = "Button2".into();
+        }
+        app.world_mut()
+            .run_system_once(prepare_drag_targets)
+            .unwrap();
+        app.world_mut()
+            .run_system_once(crate::runtime::object_drag::prepare_object_drags)
+            .unwrap();
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert!(!runtime.drag_source_bindings.contains(&object));
+        assert_eq!(runtime.ecs_drop_target(object), None);
+        app.update();
+        let new_view = query.get(app.world()).unwrap().view(owner).unwrap();
+        assert_ne!(view, new_view);
+        let new_object = app.world().get::<GObjectRef>(new_view).unwrap().0;
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert!(!runtime.drag_source_bindings.contains(&object));
+        assert!(runtime.drag_source_bindings.contains(&new_object));
+        assert_eq!(
+            runtime.ecs_drop_target(new_object),
+            Some((new_object, owner))
+        );
+    }
+}
+
+#[test]
+fn owner_drag_session_cancels_on_source_invalidation_before_lifecycle_sync() {
+    use bevy::ecs::system::RunSystemOnce;
+    for windows in [false, true] {
+        for change in 0..3 {
+            let (mut app, window, page, old_source, _) = fixture();
+            app.world_mut()
+                .entity_mut(old_source)
+                .remove::<GuiDragSource>();
+            let asset = app.world().get::<FairyGuiRoot>(page).unwrap().asset.clone();
+            let owner = owned_control(&mut app, asset, windows);
+            app.world_mut()
+                .entity_mut(owner)
+                .insert(GuiDragSource::default());
+            app.update();
+            let mut query = SystemState::<crate::GuiQuery>::new(app.world_mut());
+            let gui = query.get(app.world()).unwrap();
+            let view = gui.view(owner).unwrap();
+            let pressed = gui.child_by_name(owner, "title").unwrap();
+            hover(&mut app, pressed);
+            mouse(&mut app, true);
+            move_mouse(&mut app, window, Vec2::splat(40.));
+            assert_eq!(app.world().resource::<GuiDragState>().source(), Some(view));
+            // Removing configuration disables future starts; the active session
+            // continues while its declaring owner still identifies this view.
+            app.world_mut().entity_mut(owner).remove::<GuiDragSource>();
+            app.update();
+            assert!(app.world().resource::<GuiDragState>().is_dragging());
+            if change == 2 {
+                app.world_mut().despawn(owner);
+            } else if windows {
+                if change == 0 {
+                    app.world_mut()
+                        .get_mut::<crate::FairyGuiWindow>(owner)
+                        .unwrap()
+                        .item_name = "Button2".into();
+                } else {
+                    let source = app
+                        .world()
+                        .get::<crate::FairyGuiWindow>(owner)
+                        .unwrap()
+                        .clone();
+                    app.world_mut()
+                        .entity_mut(owner)
+                        .remove::<crate::FairyGuiWindow>()
+                        .insert(source);
+                }
+            } else if change == 0 {
+                app.world_mut()
+                    .get_mut::<FairyGuiRoot>(owner)
+                    .unwrap()
+                    .item_name = "Button2".into();
+            } else {
+                let source = app.world().get::<FairyGuiRoot>(owner).unwrap().clone();
+                app.world_mut()
+                    .entity_mut(owner)
+                    .remove::<FairyGuiRoot>()
+                    .insert(source);
+            }
+            app.world_mut()
+                .run_system_once(prepare_drag_targets)
+                .unwrap();
+            assert!(
+                !app.world().non_send::<GuiRuntime>().is_dragging(),
+                "windows={windows}, change={change}"
+            );
+            assert!(app.world().resource::<Drops>().0.is_empty());
+        }
+    }
+}
+
+#[test]
+fn owner_drag_components_use_the_captured_finger_and_owner_drop_observer() {
+    let (mut app, window, page, source, _) = fixture();
+    app.world_mut().entity_mut(source).remove::<GuiDragSource>();
+    app.world_mut().entity_mut(page).insert(GuiDragSource {
+        icon: None,
+        data: Some("touch-owner".into()),
+    });
+    let asset = app.world().get::<FairyGuiRoot>(page).unwrap().asset.clone();
+    let target = owned_control(&mut app, asset, false);
+    app.world_mut()
+        .entity_mut(target)
+        .insert(GuiDropTarget)
+        .observe(record_drop);
+    app.update();
+    let mut query = SystemState::<crate::GuiQuery>::new(app.world_mut());
+    let gui = query.get(app.world()).unwrap();
+    let source_view = gui.view(page).unwrap();
+    let released = gui.child_by_name(target, "title").unwrap();
+    app.init_resource::<bevy::picking::hover::HoverMap>();
+    app.world_mut()
+        .get_mut::<Window>(window)
+        .unwrap()
+        .set_cursor_position(None);
+    touch(
+        &mut app,
+        window,
+        7,
+        source,
+        TouchPhase::Started,
+        Vec2::splat(10.),
+    );
+    touch(
+        &mut app,
+        window,
+        7,
+        source,
+        TouchPhase::Moved,
+        Vec2::splat(40.),
+    );
+    assert_eq!(
+        app.world().resource::<GuiDragState>().source(),
+        Some(source_view)
+    );
+    touch(
+        &mut app,
+        window,
+        7,
+        released,
+        TouchPhase::Ended,
+        Vec2::splat(70.),
+    );
+    let drops = &app.world().resource::<Drops>().0;
+    assert_eq!(drops.len(), 1);
+    assert_eq!(
+        (drops[0].entity, drops[0].source, drops[0].touch_id),
+        (target, source_view, Some(7))
+    );
+    assert_eq!(drops[0].data.as_deref(), Some("touch-owner"));
+}
+
 #[test]
 fn ecs_drag_threshold_proxy_nearest_receiver_same_frame_icon_and_repeated_cleanup() {
     let (mut app, window, owner, source, receiver) = fixture();

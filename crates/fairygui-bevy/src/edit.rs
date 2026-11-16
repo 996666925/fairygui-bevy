@@ -34,6 +34,14 @@ pub(crate) struct GuiObjectResolver<'w, 's> {
     windows: Query<'w, 's, &'static windows::FairyGuiWindow>,
 }
 impl GuiObjectResolver<'_, '_> {
+    /// Resolve declarative configuration to its current, materialized view.
+    /// Copied GObjectRef components cannot declare policies for another view.
+    pub(crate) fn view(&self, runtime: &GuiRuntime, entity: Entity) -> Option<(GObjectId, Entity)> {
+        let object = self.object(runtime, entity)?;
+        let view = runtime.entity_of(object)?;
+        (self.references.get(entity).is_err() || entity == view).then_some((object, view))
+    }
+
     pub(crate) fn object(&self, runtime: &GuiRuntime, entity: Entity) -> Option<GObjectId> {
         resolve_object(
             runtime,
