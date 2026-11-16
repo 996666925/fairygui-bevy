@@ -454,9 +454,6 @@ fn build_component(
             // 由容器派生的控件还要在实例数据里读扩展部分。
             let kind = child_object.kind();
             match &mut child_object.control {
-                ControlData::Button(data) => {
-                    super::extend::setup_button(data, &mut buffer, table, child_pos, kind)?;
-                }
                 ControlData::ProgressBar(data) => {
                     super::extend::setup_progress(data, &mut buffer, table, child_pos, kind)?;
                 }
@@ -489,21 +486,27 @@ fn build_component(
             }
         }
 
-        // GLabel.setup_afterAdd forwards instance properties to its already
-        // constructed title, recursively resolving nested labels/buttons.
-        if matches!(
-            store.object(child).unwrap().control(),
-            ControlData::Label(_)
-        ) {
-            let kind = store.object(child).unwrap().kind();
-            super::extend::setup_label(
+        // Instance setters forward to already constructed title fields before
+        // parent controllers are applied. Null values retain resource defaults.
+        let kind = store.object(child).unwrap().kind();
+        match store.object(child).unwrap().control() {
+            ControlData::Button(_) => super::extend::setup_button(
                 store,
                 child,
                 &mut buffer,
                 package.string_table(),
                 child_pos,
                 kind,
-            )?;
+            )?,
+            ControlData::Label(_) => super::extend::setup_label(
+                store,
+                child,
+                &mut buffer,
+                package.string_table(),
+                child_pos,
+                kind,
+            )?,
+            _ => {}
         }
 
         // GComponent.setup_afterAdd's first block-4 value binds a pane to a

@@ -11,6 +11,10 @@
 #[path = "label_input_tests.rs"]
 mod label_input_tests;
 
+#[cfg(test)]
+#[path = "button_instance_tests.rs"]
+mod button_instance_tests;
+
 use crate::binary::{ByteBuffer, StringTable};
 use crate::color::Color;
 use crate::error::Result;
@@ -267,7 +271,8 @@ pub(crate) fn read_button_extension(
 
 /// 读取按钮的实例数据（父容器中该子对象的块 6）。
 pub(crate) fn setup_button(
-    data: &mut ButtonData,
+    store: &mut crate::object::ObjectStore,
+    object: crate::object::GObjectId,
     buffer: &mut ByteBuffer<'_>,
     table: &StringTable,
     begin_pos: usize,
@@ -284,33 +289,41 @@ pub(crate) fn setup_button(
     }
 
     if let Some(title) = buffer.read_s(table)? {
-        data.title = title;
+        store.set_object_text(object, &title);
     }
-    data.selected_title = buffer.read_s(table)?;
-    data.icon = buffer.read_s(table)?;
-    data.selected_icon = buffer.read_s(table)?;
+    if let Some(title) = buffer.read_s(table)? {
+        store.set_button_selected_title(object, Some(&title));
+    }
+    if let Some(icon) = buffer.read_s(table)? {
+        store.apply_icon_to(object, &icon);
+    }
+    if let Some(icon) = buffer.read_s(table)? {
+        store.set_button_selected_icon(object, Some(&icon));
+    }
 
     if buffer.read_bool()? {
-        data.title_color = Some(read_color(buffer)?);
+        store.set_control_color(object, read_color(buffer)?, None);
     }
 
     let font_size = buffer.read_i32()?;
     if font_size != 0 {
-        data.title_font_size = font_size;
+        store.set_object_font_size(object, font_size);
     }
 
-    data.related_controller = i32::from(buffer.read_i16()?);
+    let controller = buffer.read_i16()?;
+    store.set_button_instance_controller(object, controller);
 
-    data.related_page_id = buffer.read_s(table)?;
+    let page = buffer.read_s(table)?;
+    store.set_button_related_page_id(object, page.as_deref());
     if let Some(sound) = buffer.read_s(table)? {
-        data.sound = Some(sound);
+        store.set_button_sound(object, Some(&sound));
     }
 
     if buffer.read_bool()? {
-        data.sound_volume_scale = buffer.read_f32()?;
+        store.set_button_sound_volume(object, buffer.read_f32()?);
     }
 
-    data.selected = buffer.read_bool()?;
+    store.set_button_selected(object, buffer.read_bool()?);
     Ok(())
 }
 

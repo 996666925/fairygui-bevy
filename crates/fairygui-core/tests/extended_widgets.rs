@@ -7,6 +7,106 @@ use fairygui_core::widget::{ButtonMode, ControlData, create_from_package};
 const MAIN_MENU: &[u8] = include_bytes!("fixtures/MainMenu.fui");
 const BASICS: &[u8] = include_bytes!("fixtures/Basics.fui");
 
+#[test]
+fn button_instance_styles_reach_nested_titles_before_initial_controller_application() {
+    let (package, mut store, root) = build(
+        "ButtonInstance",
+        include_bytes!("fixtures/ButtonInstance.fui"),
+        "Main",
+    );
+    for (name, base, visible, selected, font, color) in [
+        ("common", "COMMON", "COMMON", false, 24, [51, 153, 204]),
+        ("check", "CHECK OFF", "CHECK ON", true, 26, [204, 102, 51]),
+        (
+            "nested",
+            "NESTED OFF",
+            "NESTED ON",
+            true,
+            28,
+            [102, 204, 153],
+        ),
+        ("preserved", "Base", "Base", false, 16, [18, 52, 86]),
+        (
+            "bound",
+            "BOUND BASE",
+            "BOUND BASE",
+            false,
+            22,
+            [204, 153, 51],
+        ),
+        ("radio", "RADIO OFF", "RADIO ON", true, 24, [153, 102, 204]),
+    ] {
+        let button = store.child_by_name(root, name).unwrap();
+        let mut title = store.child_by_name(button, "title").unwrap();
+        if name == "nested" {
+            title = store.child_by_name(title, "title").unwrap();
+        }
+        assert_eq!(store.object_text(button), Some(base), "{name}: base title");
+        assert_eq!(
+            store.object_text(title),
+            Some(visible),
+            "{name}: visible title"
+        );
+        assert_eq!(
+            store.button_selected(button),
+            Some(selected),
+            "{name}: selection"
+        );
+        let field = store.object_text_field(button).unwrap();
+        assert_eq!(field.font_size, font, "{name}: font");
+        assert_eq!(
+            field.color,
+            fairygui_core::color::Color::from_rgba8(color[0], color[1], color[2], 255),
+            "{name}: color"
+        );
+    }
+    let controller = store
+        .object(root)
+        .unwrap()
+        .control()
+        .component()
+        .unwrap()
+        .controller("pages")
+        .unwrap();
+    assert_eq!(
+        controller.selected_index, 0,
+        "instance selection must not switch the parent's initial page"
+    );
+    let bound = store.child_by_name(root, "bound").unwrap();
+    assert_eq!(store.button_related_controller(bound), Some("pages"));
+    assert_eq!(
+        store.child_index(bound),
+        Some(4),
+        "construction must not reorder radio buttons"
+    );
+    store.set_button_selected(bound, true);
+    assert_eq!(
+        store
+            .object(root)
+            .unwrap()
+            .control()
+            .component()
+            .unwrap()
+            .controller("pages")
+            .unwrap()
+            .selected_index,
+        1
+    );
+    assert_eq!(
+        store.object_text(store.child_by_name(bound, "title").unwrap()),
+        Some("BOUND SELECTED")
+    );
+    let template = create_from_package(
+        &mut store,
+        &package,
+        package.item_index_by_name("Nested").unwrap(),
+        &LoadContext::none(),
+    )
+    .unwrap();
+    assert_eq!(store.object_text(template), Some("Base"));
+    assert_eq!(store.object_text_field(template).unwrap().font_size, 16);
+}
+
 fn build(name: &str, data: &[u8], item_name: &str) -> (FuiPackage, ObjectStore, GObjectId) {
     let package = FuiPackage::parse(name, data).expect("parse package");
     let mut store = ObjectStore::new();

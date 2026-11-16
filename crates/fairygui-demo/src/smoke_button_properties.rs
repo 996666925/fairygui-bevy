@@ -79,6 +79,7 @@ fn drive(
     events: Res<Events>,
     demo: Res<Demo>,
     assets: Res<AssetServer>,
+    mut packages: ResMut<Assets<fairygui_bevy::FuiAsset>>,
     mut ui: ParamSet<(
         GuiQuery,
         Query<(&mut GuiButtonSettings, &mut GuiButtonSelected, &mut GuiText)>,
@@ -350,8 +351,81 @@ fn drive(
             ] {
                 assert!(!entities.contains(entity));
             }
+            let package = fairygui_bevy::core::FuiPackage::parse(
+                "ButtonInstance",
+                include_bytes!("../../fairygui-core/tests/fixtures/ButtonInstance.fui"),
+            )
+            .unwrap();
+            let asset = packages.add(fairygui_bevy::FuiAsset {
+                package,
+                res_key: "ui/ButtonInstance".into(),
+            });
+            state.owner = Some(
+                commands
+                    .spawn(FairyGuiRoot::new(asset, "Main").with_position(Vec2::new(100., 100.)))
+                    .id(),
+            );
+            state.cursor = None;
+            next = true;
+        }
+        25 if elapsed >= 12 && ui.p0().view(state.owner.unwrap()).is_some() => {
+            let gui = ui.p0();
+            let owner = state.owner.unwrap();
+            for (name, visible, font, color) in [
+                ("common", "COMMON", 24, Color::srgb_u8(51, 153, 204)),
+                ("check", "CHECK ON", 26, Color::srgb_u8(204, 102, 51)),
+                ("nested", "NESTED ON", 28, Color::srgb_u8(102, 204, 153)),
+                ("bound", "BOUND BASE", 22, Color::srgb_u8(204, 153, 51)),
+            ] {
+                let button = gui.child_by_name(owner, name).unwrap();
+                let mut title = gui.child_by_name(button, "title").unwrap();
+                if name == "nested" {
+                    title = gui.child_by_name(title, "title").unwrap();
+                }
+                assert_eq!(gui.text(title), Some(visible), "{name}: exported title");
+                assert_eq!(
+                    gui.text_format(title).unwrap().font_size,
+                    font,
+                    "{name}: exported font"
+                );
+                assert_eq!(gui.color(title), Some(color), "{name}: exported color");
+                assert!(nodes.get(title).unwrap().0.size().min_element() > 0.);
+            }
+            state.button = gui.child_by_name(owner, "nested");
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk("target/fairygui-demo-button-instance.png"));
+            next = true;
+        }
+        26 if elapsed >= 6 => {
+            let button = state.button.unwrap();
+            let mut values = ui.p1();
+            let (_, mut selected, mut title) = values.get_mut(button).unwrap();
+            selected.0 = false;
+            title.set("Runtime nested");
+            next = true;
+        }
+        27 if elapsed >= 8 => {
+            let gui = ui.p0();
+            let label = gui.child_by_name(state.button.unwrap(), "title").unwrap();
+            let title = gui.child_by_name(label, "title").unwrap();
+            assert_eq!(gui.text(title), Some("Runtime nested"));
+            assert_eq!(gui.text_format(title).unwrap().font_size, 28);
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-button-instance-runtime.png",
+                ));
+            next = true;
+        }
+        28 if elapsed >= 6 => {
+            commands.entity(state.owner.unwrap()).despawn();
+            next = true;
+        }
+        29 if elapsed >= 6 => {
+            assert!(!entities.contains(state.button.unwrap()));
             println!(
-                "demo smoke PASSED: ECS button mode/title/icon configuration, same-release click policy, state notifications, Common reset, Radio clicks, live held-scale changes, base scale restoration and disposal"
+                "demo smoke PASSED: ECS button properties, pointer clicks, mode and effect changes, exported direct/nested title styles, Common selection policy, initial parent controller preservation, retained runtime edits and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

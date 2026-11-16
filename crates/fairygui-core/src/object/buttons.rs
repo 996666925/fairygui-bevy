@@ -10,6 +10,18 @@ pub(super) struct ButtonFeedback {
 }
 
 impl ObjectStore {
+    /// Parent controllers are installed after all child instance records. Keep
+    /// their serialized index until then; a negative value preserves the binding.
+    pub(crate) fn set_button_instance_controller(&mut self, id: GObjectId, index: i16) {
+        if index >= 0
+            && let Some(ControlData::Button(data)) =
+                self.objects.get_mut(id).map(|o| &mut o.control)
+        {
+            data.related_controller = i32::from(index);
+            self.selection_controllers.remove(&id);
+        }
+    }
+
     /// Resolve a new related controller on the current parent. Native retains
     /// this reference when moved and clears relatedPageId when it changes.
     pub fn set_button_related_controller(&mut self, id: GObjectId, name: Option<&str>) -> bool {
@@ -278,11 +290,18 @@ impl ObjectStore {
         data.selected = selected;
         self.refresh_button_state(id);
         self.apply_title(id);
-        if notify {
-            self.select_button_page(id, !selected);
-        }
-        if selected {
-            self.adjust_button_depth(id);
+        // Native selected setters update presentation while the parent's
+        // display list is being built, without changing its controller or order.
+        let building = self.objects[id]
+            .parent
+            .is_some_and(|parent| self.objects[parent].under_construct);
+        if !building {
+            if notify {
+                self.select_button_page(id, !selected);
+            }
+            if selected {
+                self.adjust_button_depth(id);
+            }
         }
         if let Some(parent) = self.object(id).and_then(|o| o.parent()) {
             self.refresh_list_selection_snapshot(parent);

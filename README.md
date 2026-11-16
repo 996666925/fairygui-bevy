@@ -922,13 +922,20 @@ fn configure_button(mut buttons: Query<&mut GuiButtonSettings>, target: Entity) 
 切回 Common 会先按旧模式取消选择，因此 Check 按钮可能联动关联控制器的相反页；
 程序配置和选中赋值不投递 `StateChanged`。
 
+FUI 按钮实例的标题、选中标题、图标、颜色和字号会按原版顺序应用，颜色与字号
+支持转发到嵌套 Label／Button 的实际文本字段。null 字段保留模板值，空字符串显式
+清空；Common 按钮忽略导出的选中标记。构建时的选中显示不会提前切换父控制器或
+调整兄弟顺序；有关联控制器时，最终选中值由父控制器的初始页决定。之后的 ECS
+编辑继续生效。
+
 `sound` 为 `None` 或空字符串时关闭点击音效，`sound_volume_scale` 保留有限原始值，
 播放时沿用音频适配层的 0..=1 裁剪。`change_state_on_click = false` 保留点击事件和音效。
 `down_effect` 为 0 关闭、1 压暗非文本子控件、2 绕中心缩放；缩放强度必须为有限正数。
 按住期间更改效果会先撤销旧效果，再应用新效果，松开后恢复基础尺度；无效效果配置
 恢复上次有效值，其余字段仍可更新。配置在本帧输入之前按完整属性顺序同步。
 `GuiQuery::button_settings` 可查询根拥有者或按钮视图，直接编辑可用 `set_button_settings`。
-`--smoke-button-properties` 验证真实点击、选中显示、模式切换、按住时的动态缩放和回收。
+`--smoke-button-properties` 验证真实点击、选中显示、模式切换、按住时的动态缩放、
+导出实例的嵌套标题样式、初始控制器页面、运行期修改和回收。
 
 输入框的编辑属性通过 `GuiTextInputSettings` 修改：
 

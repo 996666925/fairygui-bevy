@@ -5,6 +5,117 @@ use bevy::{ecs::system::SystemState, prelude::*};
 const BASE_ICON: &str = "ui://9leh0eyfrpmb6";
 const SELECTED_ICON: &str = "ui://9leh0eyfrpmbh";
 
+#[test]
+fn exported_button_instance_styles_and_selection_are_projected_on_the_first_frame() {
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        bevy::asset::AssetPlugin::default(),
+        FairyGuiPlugin,
+    ))
+    .init_resource::<ButtonInput<MouseButton>>()
+    .add_message::<bevy::input::mouse::MouseWheel>();
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: crate::core::FuiPackage::parse(
+                "ButtonInstance",
+                include_bytes!("../../fairygui-core/tests/fixtures/ButtonInstance.fui"),
+            )
+            .unwrap(),
+            res_key: "ui/ButtonInstance".into(),
+        });
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    for (name, value, selected, size, color) in [
+        ("common", "COMMON", false, 24., Color::srgb_u8(51, 153, 204)),
+        ("check", "CHECK ON", true, 26., Color::srgb_u8(204, 102, 51)),
+        (
+            "nested",
+            "NESTED ON",
+            true,
+            28.,
+            Color::srgb_u8(102, 204, 153),
+        ),
+        (
+            "bound",
+            "BOUND BASE",
+            false,
+            22.,
+            Color::srgb_u8(204, 153, 51),
+        ),
+    ] {
+        let button = child(&mut app, owner, name);
+        let mut title = child(&mut app, button, "title");
+        if name == "nested" {
+            title = child(&mut app, title, "title");
+        }
+        assert_eq!(
+            app.world().get::<GuiText>(title).unwrap().value(),
+            value,
+            "{name}"
+        );
+        assert_eq!(
+            app.world().get::<GuiButtonSelected>(button).unwrap().0,
+            selected,
+            "{name}"
+        );
+        assert_eq!(
+            app.world().get::<GuiTextFormat>(title).unwrap().font_size as f32,
+            size,
+            "{name}"
+        );
+        assert_eq!(
+            app.world().get::<GuiColor>(title).unwrap().0,
+            color,
+            "{name}"
+        );
+        assert_eq!(
+            app.world().get::<TextFont>(title).unwrap().font_size,
+            bevy::text::FontSize::Px(size),
+            "{name}"
+        );
+    }
+    let nested = child(&mut app, owner, "nested");
+    let label = child(&mut app, nested, "title");
+    let title = child(&mut app, label, "title");
+    app.world_mut()
+        .get_mut::<GuiText>(nested)
+        .unwrap()
+        .set("Runtime nested");
+    app.world_mut()
+        .get_mut::<GuiTextFormat>(nested)
+        .unwrap()
+        .font_size = 32;
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiText>(title).unwrap().value(),
+        "NESTED ON"
+    );
+    app.world_mut()
+        .get_mut::<GuiButtonSelected>(nested)
+        .unwrap()
+        .0 = false;
+    for _ in 0..3 {
+        app.update();
+        assert_eq!(child(&mut app, nested, "title"), label);
+        assert_eq!(child(&mut app, label, "title"), title);
+        assert_eq!(
+            app.world().get::<GuiText>(title).unwrap().value(),
+            "Runtime nested"
+        );
+        assert_eq!(
+            app.world().get::<GuiTextFormat>(title).unwrap().font_size,
+            32
+        );
+        assert_eq!(
+            app.world().get::<TextFont>(title).unwrap().font_size,
+            bevy::text::FontSize::Px(32.)
+        );
+    }
+}
+
 fn fixture(loaded: bool) -> (App, Entity, Handle<FuiAsset>) {
     let mut app = App::new();
     app.add_plugins((
