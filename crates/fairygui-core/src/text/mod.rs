@@ -16,7 +16,7 @@ pub use markup::{
     MarkupStyle, decode_entities, parse_html, parse_markup, strip_ubb_tags, ubb_to_html,
 };
 
-pub use ubb::{UbbDocument, UbbSpan, parse_rich_text, parse_ubb};
+pub use ubb::{UbbCommand, UbbDocument, UbbSpan, parse_rich_text, parse_ubb};
 #[cfg(test)]
 mod password_tests;
 #[cfg(test)]

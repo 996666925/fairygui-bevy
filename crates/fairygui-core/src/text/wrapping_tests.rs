@@ -42,7 +42,7 @@ fn width(text: &[u16], size: f64) -> f64 {
 }
 
 #[test]
-fn raster_command_wrapping_matches_unmodified_native_layout_in_132_cases() {
+fn raster_command_wrapping_matches_unmodified_native_layout_in_204_cases() {
     let mut elements = Vec::new();
     let mut expected = Vec::<WrappedLine>::new();
     let mut options = WrapOptions {
@@ -70,10 +70,14 @@ fn raster_command_wrapping_matches_unmodified_native_layout_in_132_cases() {
                 elements.push(WrapElement {
                     font_size: size,
                     height: (size * 1.2).ceil(),
-                    kind: if p[1] == "T" {
-                        WrapKind::Text(String::from_utf16(&units(p[3])).unwrap())
-                    } else {
-                        WrapKind::Object(Size::new(p[3].parse().unwrap(), p[4].parse().unwrap()))
+                    kind: match p[1] {
+                        "T" => WrapKind::Text(String::from_utf16(&units(p[3])).unwrap()),
+                        "E" => WrapKind::LinkEnd,
+                        "L" => WrapKind::Object(Size::ZERO),
+                        _ => WrapKind::Object(Size::new(
+                            p[3].parse().unwrap(),
+                            p[4].parse().unwrap(),
+                        )),
                     },
                 });
             }
@@ -91,7 +95,7 @@ fn raster_command_wrapping_matches_unmodified_native_layout_in_132_cases() {
                 height: p[5].parse().unwrap(),
                 font_size: p[6].parse().unwrap(),
                 text: (p[7] != "object").then(|| units(p[7])),
-                link_end: false,
+                link_end: p[8] == "1",
             }),
             Some("end") => {
                 let actual = wrap_commands(&elements, options, |_, text, size| width(text, size));
@@ -113,7 +117,11 @@ fn raster_command_wrapping_matches_unmodified_native_layout_in_132_cases() {
                     }
                     assert_eq!(actual.cmds.len(), expected.cmds.len(), "case {name}");
                     for (a, b) in actual.cmds.iter().zip(&expected.cmds) {
-                        assert_eq!((a.element, &a.text), (b.element, &b.text), "case {name}");
+                        assert_eq!(
+                            (a.element, &a.text, a.link_end),
+                            (b.element, &b.text, b.link_end),
+                            "case {name}"
+                        );
                         for (a, b) in [
                             (a.x, b.x),
                             (a.y, b.y),
@@ -132,5 +140,5 @@ fn raster_command_wrapping_matches_unmodified_native_layout_in_132_cases() {
             _ => {}
         }
     }
-    assert_eq!(count, 132);
+    assert_eq!(count, 204);
 }

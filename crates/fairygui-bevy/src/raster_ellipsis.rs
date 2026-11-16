@@ -319,6 +319,7 @@ pub(crate) fn sync(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,
     mut reader: TextReader<Text>,
+    boundaries: Query<&rich_text::RichLinkBoundary>,
     mut roots: Query<
         (
             Entity,
@@ -420,6 +421,7 @@ pub(crate) fn sync(
                     TextElement::Box(value) => Run::Box {
                         entity,
                         value: *value,
+                        boundary: boundaries.get(entity).copied().ok(),
                     },
                 })
                 .collect(),

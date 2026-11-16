@@ -39,6 +39,7 @@ pub(super) enum Run {
     Box {
         entity: Entity,
         value: InlineBox,
+        boundary: Option<rich_text::RichLinkBoundary>,
     },
 }
 
@@ -88,6 +89,7 @@ pub(crate) fn sync(
     runtime: NonSend<GuiRuntime>,
     roots: Query<(Entity, &GObjectRef, Option<&RasterFit>), With<Text>>,
     metrics: Query<&FontMetrics>,
+    boundaries: Query<&rich_text::RichLinkBoundary>,
     mut text: ParamSet<(TextReader<Text>, Query<(&mut TextFont, &mut LineHeight)>)>,
 ) {
     let mut service = runtime.text_measurer.borrow_mut();
@@ -130,6 +132,7 @@ pub(crate) fn sync(
                 TextElement::Box(value) => Run::Box {
                     entity,
                     value: *value,
+                    boundary: boundaries.get(entity).copied().ok(),
                 },
             })
             .collect();
@@ -225,7 +228,7 @@ impl TextMeasurer {
                     letter_spacing: *spacing,
                 },
             ),
-            Run::Box { entity, value } => (*entity, 0, TextElement::Box(value)),
+            Run::Box { entity, value, .. } => (*entity, 0, TextElement::Box(value)),
         });
         let mut computed = ComputedTextBlock::default();
         let dpi = self.scale_factor.max(f32::EPSILON);

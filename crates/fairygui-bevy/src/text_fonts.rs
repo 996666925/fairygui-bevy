@@ -186,6 +186,7 @@ fn needs_rich_input(data: &fairygui_core::widget::TextFieldData, text: &str) -> 
     segments.len() > 1
         || segments.iter().any(|segment| match segment {
             crate::text::RichSegment::Image { .. } => true,
+            crate::text::RichSegment::LinkStart { .. } | crate::text::RichSegment::LinkEnd => true,
             crate::text::RichSegment::Text {
                 size,
                 bold,

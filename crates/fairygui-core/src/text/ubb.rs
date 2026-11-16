@@ -44,10 +44,19 @@ impl UbbSpan {
 }
 
 /// 解析结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UbbCommand {
+    Span(usize),
+    LinkStart { id: usize, href: String },
+    LinkEnd,
+}
+
+/// Parsed styles plus the original command order, including empty links.
 #[derive(Debug, Clone, Default)]
 pub struct UbbDocument {
     /// 按出现顺序排列的文本段。
     pub spans: Vec<UbbSpan>,
+    pub commands: Vec<UbbCommand>,
 }
 
 impl UbbDocument {
@@ -62,7 +71,7 @@ impl UbbDocument {
 
     /// 是否没有任何内容。
     pub fn is_empty(&self) -> bool {
-        self.spans.is_empty()
+        self.commands.is_empty()
     }
 }
 
@@ -76,19 +85,28 @@ pub fn parse_rich_text(input: &str, ubb: bool, options: &super::MarkupOptions) -
     use super::markup::{MarkupKind, markup_color, parse_markup};
     let document = parse_markup(input, ubb, options);
     let mut spans = Vec::new();
+    let mut commands = Vec::new();
     let mut link = None;
     for (i, element) in document.elements.into_iter().enumerate() {
         match element.kind {
             MarkupKind::Link => {
+                commands.push(UbbCommand::LinkStart {
+                    id: i,
+                    href: element.attributes.get("href").cloned().unwrap_or_default(),
+                });
                 link = Some((
                     i,
                     element.attributes.get("href").cloned().unwrap_or_default(),
                 ))
             }
-            MarkupKind::LinkEnd => link = None,
+            MarkupKind::LinkEnd => {
+                commands.push(UbbCommand::LinkEnd);
+                link = None;
+            }
             MarkupKind::Text | MarkupKind::Image => {
                 let image = element.kind == MarkupKind::Image;
                 let style = element.style;
+                commands.push(UbbCommand::Span(spans.len()));
                 spans.push(UbbSpan {
                     text: element.text,
                     color: (!image && (style.color_changed || style.color != options.style.color))
@@ -113,12 +131,52 @@ pub fn parse_rich_text(input: &str, ubb: bool, options: &super::MarkupOptions) -
             _ => {}
         }
     }
-    UbbDocument { spans }
+    UbbDocument { spans, commands }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_adjacent_and_unclosed_links_preserve_the_original_command_boundaries() {
+        let document = parse_rich_text(
+            "<a href='same'></a><a href='same'>X</a><a href='open'>Y",
+            false,
+            &super::super::MarkupOptions::default(),
+        );
+        assert_eq!(document.plain_text(), "XY");
+        assert_eq!(
+            document.commands,
+            vec![
+                UbbCommand::LinkStart {
+                    id: 0,
+                    href: "same".into()
+                },
+                UbbCommand::LinkEnd,
+                UbbCommand::LinkStart {
+                    id: 2,
+                    href: "same".into()
+                },
+                UbbCommand::Span(0),
+                UbbCommand::LinkEnd,
+                UbbCommand::LinkStart {
+                    id: 5,
+                    href: "open".into()
+                },
+                UbbCommand::Span(1),
+            ]
+        );
+        assert_eq!(document.spans[0].link_id, Some(2));
+        assert_eq!(document.spans[1].link_id, Some(5));
+        let empty = parse_rich_text(
+            "<a href='empty'></a>",
+            false,
+            &super::super::MarkupOptions::default(),
+        );
+        assert!(empty.spans.is_empty());
+        assert!(!empty.is_empty());
+    }
 
     #[test]
     fn plain_text_becomes_a_single_span() {

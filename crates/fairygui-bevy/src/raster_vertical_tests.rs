@@ -284,6 +284,116 @@ fn wrapped_links_hit_their_new_rows_and_leave_the_previous_line_gap_inactive() {
 }
 
 #[test]
+fn empty_link_commands_keep_native_zero_width_height_and_never_publish_paint_or_hit_areas() {
+    for scale in [0.7, 1., 1.3, 2.] {
+        let (mut app, owner, title) = fixture("<a href='event:empty'></a>", scale, 3);
+        let info = app.world().get::<TextLayoutInfo>(title).unwrap();
+        assert!(info.glyphs.is_empty());
+        assert!(info.run_geometry.is_empty());
+        assert!(info.inline_boxes.is_empty());
+        assert_eq!(info.size, Vec2::new(0., scale));
+        assert_eq!(
+            app.world().get::<GuiTransform>(title).unwrap().size(),
+            Vec2::new(0., 5.)
+        );
+        let rich = app.world().get::<RichTextBlock>(title).unwrap();
+        let boundaries: Vec<_> = app
+            .world()
+            .get::<NativeTextLayout>(title)
+            .unwrap()
+            .key
+            .runs
+            .iter()
+            .filter_map(|run| match run {
+                fit::Run::Box {
+                    entity,
+                    boundary: Some(_),
+                    ..
+                } => Some(*entity),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(boundaries.len(), 2);
+        assert!(
+            boundaries
+                .iter()
+                .all(|&id| app.world().get::<rich_text::RichLinkBoundary>(id).is_some())
+        );
+        let node = app.world().get::<ComputedNode>(title).unwrap();
+        assert!(
+            rich.link_at(
+                app.world().non_send::<GuiRuntime>(),
+                app.world().get::<GObjectRef>(title).unwrap().0,
+                Vec2::ZERO,
+                node,
+                app.world().get::<ComputedTextBlock>(title).unwrap(),
+                info
+            )
+            .is_none()
+        );
+        for _ in 0..3 {
+            app.update();
+            assert_eq!(
+                app.world().get::<GuiTransform>(title).unwrap().size(),
+                Vec2::new(0., 5.)
+            );
+        }
+        app.world_mut().get_mut::<GuiText>(owner).unwrap().set("A");
+        app.update();
+        assert!(
+            boundaries
+                .iter()
+                .all(|&id| app.world().get_entity(id).is_err())
+        );
+        assert_eq!(
+            app.world().get::<GuiTransform>(title).unwrap().size().y,
+            33.
+        );
+    }
+}
+
+#[test]
+fn link_ends_and_adjacent_equal_hrefs_survive_cross_style_word_carry_and_source_changes() {
+    let (mut app, owner, title) = fixture(
+        "中<a href='same'>hel</a><a href='same'>lo</a><a href='empty'></a>",
+        1.3,
+        3,
+    );
+    app.world_mut()
+        .get_mut::<GuiTextFormat>(owner)
+        .unwrap()
+        .auto_size = 2;
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(64., 300.));
+    app.update();
+    assert_eq!(wrapped_text(&app, title), ["中", "hello"]);
+    let layout = app.world().get::<NativeTextLayout>(title).unwrap();
+    assert_eq!(
+        layout
+            .key
+            .runs
+            .iter()
+            .filter(|run| matches!(
+                run,
+                fit::Run::Box {
+                    boundary: Some(_),
+                    ..
+                }
+            ))
+            .count(),
+        6
+    );
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(300., 300.));
+    app.update();
+    assert_eq!(wrapped_text(&app, title), ["中hello"]);
+}
+
+#[test]
 fn punctuation_and_centered_rows_use_native_breaks_and_logical_alignment() {
     for scale in [0.7, 1., 1.3, 2.] {
         let (mut app, owner, title) = fixture("中文，标点。", scale, 3);

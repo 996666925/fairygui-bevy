@@ -97,6 +97,10 @@ fn visible_size(app: &mut App, title: Entity) -> Vec2 {
             TextElement::Box(value) => Run::Box {
                 entity,
                 value: *value,
+                boundary: app
+                    .world()
+                    .get::<rich_text::RichLinkBoundary>(entity)
+                    .copied(),
             },
         })
         .collect();

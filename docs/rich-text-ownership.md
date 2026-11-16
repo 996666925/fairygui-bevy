@@ -97,9 +97,19 @@ two reserved horizontal margin pixels. Command advances round independently;
 center/right offsets use the native measured row width. Measured row bounds
 retain the original pre-move finalization behavior. Both bitmap rich text and
 raster text use `fairygui_core::text::wrapping::wrap_commands`, supplying their
-own font measurements. The ordinary-font reference fixture covers 132 layouts
+own font measurements. The ordinary-font reference fixture covers 204 layouts
 from unchanged Laya `Text.doLayout` with a deterministic Canvas host; the existing
 bitmap fixtures validate the shared helper's bitmap path.
+
+`UbbDocument.commands` preserves link starts and ends in parser order, separately
+from visible text/image spans. Ordinary paragraphs retain zero-size boundary
+entities; the native wrapper converts closing boundaries to linkEnd flags rather
+than paint commands. Bitmap paragraphs use the same original stream, including
+empty, adjacent equal-href and unclosed links. Auto-size measurement follows that
+stream too. An empty link retains the native one-pixel row with zero text width;
+boundaries produce no glyph, decoration or image rectangle. Nonpositive link
+rectangles never participate in hit testing.
+Rebuilding a paragraph reclaims the boundary entities with its other owned spans.
 
 Auto-size, font fitting, ellipsis and final rendering share native breaks.
 Shrink keeps image dimensions fixed. Ellipsis trims virtual fragments without

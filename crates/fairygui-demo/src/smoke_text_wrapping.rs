@@ -1,7 +1,7 @@
 //! Native command breaks across styles, punctuation and width changes.
 use super::*;
 
-const WORD: &str = "中<a href='event:word'><font color='#FF8800' stroke='1' strokecolor='#0044FF'>hel</font><font color='#00FF88'>lo</font></a>";
+const WORD: &str = "<a href='event:empty'></a>中<a href='event:word'><font color='#FF8800' stroke='1' strokecolor='#0044FF'>hel</font><font color='#00FF88'>lo</font></a><a href='event:empty'></a>";
 const PUNCTUATION: &str = "中文，标点。";
 const IMAGE: &str = "中<img src='images/inline-swatch.png' width='18' height='10'/>hello";
 #[derive(Resource, Default)]
@@ -88,6 +88,10 @@ fn drive(
                 (gui.transform(title).unwrap().size().y - info.size.y / scale - 4.).abs() < 0.01
             );
             if index == 0 {
+                assert!(
+                    info.inline_boxes.is_empty(),
+                    "link boundaries must not publish image geometry"
+                );
                 assert_eq!(
                     block.buffer().lines().count(),
                     if state.frame == 80 { 1 } else { 2 }

@@ -41,8 +41,10 @@ impl BitmapRichText {
         }
         let local = normalized * computed.size() * computed.inverse_scale_factor();
         self.links.iter().find_map(|(group, href, r)| {
-            r.contains(fairygui_core::geom::Point::new(local.x, local.y))
-                .then(|| LinkHit::bitmap(object, self.generation, *group, href.clone()))
+            (r.width > 0.
+                && r.height > 0.
+                && r.contains(fairygui_core::geom::Point::new(local.x, local.y)))
+            .then(|| LinkHit::bitmap(object, self.generation, *group, href.clone()))
         })
     }
 }
@@ -62,12 +64,12 @@ pub(super) fn spawn(
     text: &str,
 ) {
     let data = object.control().as_text_field().unwrap();
-    let spans = crate::text::parse_for(data, text).spans;
+    let document = crate::text::parse_for(data, text);
+    let mut spans = document.spans;
     let mut elements = Vec::new();
     let mut styles = Vec::new();
     let mut sources = Vec::new();
     let mut image_sources = Vec::new();
-    let mut active = None;
     let push = |elements: &mut Vec<BitmapElement>,
                 styles: &mut Vec<usize>,
                 sources: &mut Vec<Option<rich_text::InlineImageSource>>,
@@ -82,32 +84,36 @@ pub(super) fn spawn(
         styles.push(span);
         sources.push(image);
     };
-    for (i, span) in spans.iter().enumerate() {
-        if span.link_id != active {
-            if active.is_some() {
+    for command in document.commands {
+        let i = match command {
+            fairygui_core::text::UbbCommand::Span(index) => index,
+            boundary => {
+                let (kind, span) = match boundary {
+                    fairygui_core::text::UbbCommand::LinkStart { id, href } => (
+                        BitmapElementKind::LinkStart,
+                        UbbSpan {
+                            link_id: Some(id),
+                            url: Some(href),
+                            ..default()
+                        },
+                    ),
+                    _ => (BitmapElementKind::LinkEnd, UbbSpan::default()),
+                };
+                let i = spans.len();
+                spans.push(span);
                 push(
                     &mut elements,
                     &mut styles,
                     &mut sources,
-                    BitmapElementKind::LinkEnd,
+                    kind,
                     i,
-                    span,
+                    &spans[i],
                     None,
                 );
+                continue;
             }
-            active = span.link_id;
-            if active.is_some() {
-                push(
-                    &mut elements,
-                    &mut styles,
-                    &mut sources,
-                    BitmapElementKind::LinkStart,
-                    i,
-                    span,
-                    None,
-                );
-            }
-        }
+        };
+        let span = &spans[i];
         if let Some(url) = &span.image {
             image_sources.push((
                 url.clone(),
@@ -143,19 +149,6 @@ pub(super) fn spawn(
                 None,
             );
         }
-    }
-    if active.is_some()
-        && let Some(span) = spans.last()
-    {
-        push(
-            &mut elements,
-            &mut styles,
-            &mut sources,
-            BitmapElementKind::LinkEnd,
-            spans.len() - 1,
-            span,
-            None,
-        );
     }
     let layout = layout_bitmap_rich_text(font, data, &elements, object.size());
     let mut glyphs = Vec::new();

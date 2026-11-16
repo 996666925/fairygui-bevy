@@ -179,6 +179,10 @@ impl TextMeasurer {
                         self.font_geometry(font)?.height(size),
                     )
                 }
+                Run::Box {
+                    boundary: Some(rich_text::RichLinkBoundary::End),
+                    ..
+                } => (WrapKind::LinkEnd, 0., 0.),
                 Run::Box { value, .. } => {
                     let raw_width = if value.size.x > 0. {
                         (value.size.x - 2.).max(0.)

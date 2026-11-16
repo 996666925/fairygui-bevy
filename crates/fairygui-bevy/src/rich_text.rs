@@ -54,6 +54,12 @@ pub(crate) struct InlineImage {
 #[derive(Component, Debug)]
 pub(crate) struct InlineImagePending;
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RichLinkBoundary {
+    Start,
+    End,
+}
+
 #[derive(Component, Debug)]
 pub(crate) struct InlineMovieClipPlayer {
     owner: GObjectId,
@@ -626,9 +632,29 @@ pub(super) fn spawn_rich_content(
             let (url, link_id) = match segment {
                 crate::text::RichSegment::Text { url, link_id, .. }
                 | crate::text::RichSegment::Image { url, link_id, .. } => (url.as_deref(), link_id),
+                _ => (None, &None),
             };
             let group = link_id.unwrap_or(segment_index);
             match segment {
+                crate::text::RichSegment::LinkStart { .. } | crate::text::RichSegment::LinkEnd => {
+                    let boundary = if matches!(segment, crate::text::RichSegment::LinkStart { .. })
+                    {
+                        RichLinkBoundary::Start
+                    } else {
+                        RichLinkBoundary::End
+                    };
+                    let span = parent
+                        .spawn((
+                            InlineBox {
+                                kind: InlineBoxKind::InFlow,
+                                size: Vec2::ZERO,
+                            },
+                            boundary,
+                            bevy::picking::Pickable::IGNORE,
+                        ))
+                        .id();
+                    spans.push(span);
+                }
                 crate::text::RichSegment::Text {
                     text,
                     color,

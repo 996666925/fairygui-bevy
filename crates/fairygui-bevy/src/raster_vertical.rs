@@ -88,6 +88,7 @@ pub(crate) fn sync(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,
     mut reader: TextReader<Text>,
+    boundaries: Query<&rich_text::RichLinkBoundary>,
     mut atlas: ResMut<bevy::text::FontAtlasSet>,
     mut images: ResMut<Assets<Image>>,
     mut scale_cx: ResMut<bevy::text::ScaleCx>,
@@ -161,6 +162,7 @@ pub(crate) fn sync(
                         TextElement::Box(value) => fit::Run::Box {
                             entity,
                             value: *value,
+                            boundary: boundaries.get(entity).copied().ok(),
                         },
                     })
                     .collect(),
@@ -286,6 +288,11 @@ pub(crate) fn sync(
                 }
             }
         }
+        info.inline_boxes.retain(|(entity, _, _)| {
+            !layout.render_key.runs.iter().any(|run| {
+                matches!(run, fit::Run::Box { entity: id, boundary: Some(_), .. } if id == entity)
+            })
+        });
         info.size.y = layout.rows.height;
         if let Some(geometry) = &layout.render_key.commands {
             info.size.x = geometry.width * dpi;

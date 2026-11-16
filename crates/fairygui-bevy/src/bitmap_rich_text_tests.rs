@@ -51,6 +51,66 @@ fn fixture(name: &str, content: &str) -> (App, usize, GObjectId, GObjectId, Enti
 }
 
 #[test]
+fn empty_bitmap_links_keep_native_command_rows_without_creating_glyphs_images_or_decorations() {
+    let (mut app, _, _, owner, entity) = fixture("n8", "[url=event:empty][/url]");
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_text_auto_size(owner, 1);
+    app.update();
+    app.update();
+    let block = app.world().get::<BitmapRichText>(entity).unwrap();
+    assert_eq!(block.parts, [block.generation]);
+    assert!(app.world().get::<Node>(block.generation).is_none());
+    assert!(
+        app.world()
+            .get::<BitmapGlyphs>(entity)
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    let metrics = app.world().get::<BitmapTextMetrics>(entity).unwrap();
+    assert_eq!(metrics.object_size, fairygui_core::Size::new(0., 5.));
+    assert_eq!(block.links.len(), 1);
+    assert_eq!(block.links[0].2.width, -2.);
+    assert_eq!(block.links[0].2.height, 1.);
+    {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        gui.store_mut().set_object_text_auto_size(owner, 0);
+        gui.store_mut().set_size(owner, 4., 5.);
+    }
+    app.update();
+    let block = app.world().get::<BitmapRichText>(entity).unwrap();
+    assert_eq!(block.links[0].2.width, 0.);
+    assert!(
+        block
+            .link_at(
+                app.world().non_send::<GuiRuntime>(),
+                owner,
+                Vec2::ONE,
+                &ComputedNode {
+                    size: Vec2::splat(2.),
+                    inverse_scale_factor: 1.,
+                    ..default()
+                }
+            )
+            .is_none(),
+        "a zero-width link must not hit even at its exact edge"
+    );
+    {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        gui.store_mut().set_object_text_auto_size(owner, 1);
+        gui.store_mut()
+            .set_object_text(owner, "[url=event:one]U[/url][url=event:one]I[/url]");
+    }
+    app.update();
+    let block = app.world().get::<BitmapRichText>(entity).unwrap();
+    assert_eq!(block.links.len(), 2);
+    assert_ne!(block.links[0].0, block.links[1].0);
+    assert_eq!(app.world().get::<BitmapGlyphs>(entity).unwrap().0.len(), 2);
+}
+
+#[test]
 fn exported_bitmap_spans_scale_tint_images_and_underlines_and_keep_pool_and_rebuild_ownership() {
     for (name, text, tinted) in [
         (

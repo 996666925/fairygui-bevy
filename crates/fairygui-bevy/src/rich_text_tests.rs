@@ -65,7 +65,14 @@ fn spans(app: &App, text: GObjectId) -> Vec<Entity> {
         .get::<RichTextBlock>(entity)
         .unwrap()
         .spans
-        .clone()
+        .iter()
+        .copied()
+        .filter(|&entity| {
+            app.world()
+                .get::<rich_text::RichLinkBoundary>(entity)
+                .is_none()
+        })
+        .collect()
 }
 
 #[test]
@@ -595,15 +602,16 @@ fn linked_image_and_nested_styles_keep_their_link_identity_but_adjacent_tags_do_
     let segments = crate::text::layout_ubb(
         "[url=event:xx]A[b]B[/b][img]icon[/img][/url][url=event:xx]C[/url]",
     );
-    assert_eq!(segments.len(), 4);
+    assert_eq!(segments.len(), 8);
     let identities: Vec<_> = segments
         .iter()
-        .map(|segment| match segment {
+        .filter_map(|segment| match segment {
             crate::text::RichSegment::Text { url, link_id, .. }
             | crate::text::RichSegment::Image { url, link_id, .. } => {
                 assert_eq!(url.as_deref(), Some("event:xx"));
-                link_id.unwrap()
+                Some(link_id.unwrap())
             }
+            _ => None,
         })
         .collect();
     assert_eq!(identities[0], identities[1]);
@@ -890,7 +898,10 @@ fn linked_image_box_uses_the_same_capture_and_transformed_content_coordinates() 
             .world()
             .get::<bevy::text::TextLayoutInfo>(entity)
             .unwrap()
-            .inline_boxes[0]
+            .inline_boxes
+            .iter()
+            .find(|(id, _, _)| *id == app.world().get::<InlineImage>(image).unwrap().inline_box)
+            .unwrap()
             .2;
         let local = bounds.center() + computed.content_box().min;
         let physical_cursor = transform.transform_point2(local);

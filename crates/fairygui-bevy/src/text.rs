@@ -163,6 +163,12 @@ pub fn layout_text(font: &BitmapFontData, text: &str, max_width: f32) -> Vec<Pla
 /// 富文本的一段。
 #[derive(Debug, Clone, PartialEq)]
 pub enum RichSegment {
+    /// Native zero-size link object and its closing command, including empty links.
+    LinkStart {
+        id: usize,
+        href: String,
+    },
+    LinkEnd,
     /// 文本段。
     Text {
         text: String,
@@ -231,28 +237,38 @@ pub(crate) fn layout_for(
 }
 fn segments(document: fairygui_core::text::UbbDocument) -> Vec<RichSegment> {
     document
-        .spans
+        .commands
         .into_iter()
-        .map(|span| match span.image {
-            Some(source) => RichSegment::Image {
-                source,
-                dimensions: span.image_dimensions,
-                url: span.url,
-                link_id: span.link_id,
-            },
-            None => RichSegment::Text {
-                text: span.text,
-                color: span.color,
-                size: span.size,
-                bold: span.bold,
-                italic: span.italic,
-                underline: span.underline,
-                strikethrough: span.strikethrough,
-                stroke: span.stroke,
-                stroke_color: span.stroke_color,
-                url: span.url,
-                link_id: span.link_id,
-            },
+        .map(|command| {
+            let index = match command {
+                fairygui_core::text::UbbCommand::LinkStart { id, href } => {
+                    return RichSegment::LinkStart { id, href };
+                }
+                fairygui_core::text::UbbCommand::LinkEnd => return RichSegment::LinkEnd,
+                fairygui_core::text::UbbCommand::Span(index) => index,
+            };
+            let span = document.spans[index].clone();
+            match span.image {
+                Some(source) => RichSegment::Image {
+                    source,
+                    dimensions: span.image_dimensions,
+                    url: span.url,
+                    link_id: span.link_id,
+                },
+                None => RichSegment::Text {
+                    text: span.text,
+                    color: span.color,
+                    size: span.size,
+                    bold: span.bold,
+                    italic: span.italic,
+                    underline: span.underline,
+                    strikethrough: span.strikethrough,
+                    stroke: span.stroke,
+                    stroke_color: span.stroke_color,
+                    url: span.url,
+                    link_id: span.link_id,
+                },
+            }
         })
         .collect()
 }

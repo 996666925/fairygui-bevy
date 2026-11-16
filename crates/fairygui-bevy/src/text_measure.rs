@@ -185,6 +185,7 @@ impl TextMeasurer {
             crate::text::parse_for(data, text)
         } else {
             fairygui_core::text::UbbDocument {
+                commands: vec![fairygui_core::text::UbbCommand::Span(0)],
                 spans: vec![fairygui_core::text::UbbSpan {
                     text: text.into(),
                     ..default()
@@ -210,9 +211,25 @@ impl TextMeasurer {
                 ));
             }
             let elements: Vec<_> = parsed
-                .spans
+                .commands
                 .iter()
-                .filter_map(|span| {
+                .filter_map(|command| {
+                    let span = match command {
+                        fairygui_core::text::UbbCommand::Span(index) => &parsed.spans[*index],
+                        boundary => {
+                            return Some(fairygui_core::bitmap_text::BitmapElement {
+                                kind: if matches!(
+                                    boundary,
+                                    fairygui_core::text::UbbCommand::LinkStart { .. }
+                                ) {
+                                    fairygui_core::bitmap_text::BitmapElementKind::LinkStart
+                                } else {
+                                    fairygui_core::bitmap_text::BitmapElementKind::LinkEnd
+                                },
+                                font_size: data.font_size,
+                            });
+                        }
+                    };
                     let kind = if let Some(source) = &span.image {
                         let size = self.image_size(asset?, source, span.image_dimensions)?;
                         fairygui_core::bitmap_text::BitmapElementKind::Image(
@@ -319,29 +336,57 @@ impl TextMeasurer {
                 spacing: backend::text_letter_spacing_for(data),
                 metrics: None,
             })
-            .chain(spans.iter().map(|(entity, _, element)| match element {
-                TextElement::Text {
-                    text,
-                    font,
-                    line_height,
-                    letter_spacing,
-                    ..
-                } => fit::Run::Text {
-                    entity: *entity,
-                    text: (*text).into(),
-                    font: TextFont {
-                        font: original_raster.clone(),
-                        ..(*font).clone()
-                    },
-                    height: *line_height,
-                    spacing: *letter_spacing,
-                    metrics: None,
-                },
-                TextElement::Box(value) => fit::Run::Box {
-                    entity: *entity,
-                    value: **value,
-                },
-            }))
+            .chain(
+                parsed
+                    .commands
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(ordinal, command)| {
+                        let entity = Entity::from_raw_u32(ordinal as u32).unwrap();
+                        let index = match command {
+                            fairygui_core::text::UbbCommand::Span(index) => *index,
+                            boundary => {
+                                return Some(fit::Run::Box {
+                                    entity,
+                                    value: bevy::text::InlineBox {
+                                        kind: bevy::text::InlineBoxKind::InFlow,
+                                        size: Vec2::ZERO,
+                                    },
+                                    boundary: Some(
+                                        if matches!(
+                                            boundary,
+                                            fairygui_core::text::UbbCommand::LinkStart { .. }
+                                        ) {
+                                            rich_text::RichLinkBoundary::Start
+                                        } else {
+                                            rich_text::RichLinkBoundary::End
+                                        },
+                                    ),
+                                });
+                            }
+                        };
+                        let span = &parsed.spans[index];
+                        Some(if span.image.is_none() {
+                            fit::Run::Text {
+                                entity,
+                                text: span.text.clone(),
+                                font: TextFont {
+                                    font: original_raster.clone(),
+                                    ..fonts[index].clone()
+                                },
+                                height: backend::text_line_height_for(data, span.size),
+                                spacing: backend::text_letter_spacing_for(data),
+                                metrics: None,
+                            }
+                        } else {
+                            fit::Run::Box {
+                                entity,
+                                value: boxes[index]?,
+                                boundary: None,
+                            }
+                        })
+                    }),
+            )
             .collect(),
         };
         // Parley quantizes glyph advances at the render target's scale. Shaping
@@ -381,7 +426,7 @@ impl TextMeasurer {
         let measured = if text.is_empty() {
             Vec2::new(0., 0.)
         } else {
-            Vec2::new(
+            let mut measured = Vec2::new(
                 native_key
                     .commands
                     .as_ref()
@@ -392,7 +437,14 @@ impl TextMeasurer {
                     || (buffer.height().ceil() / dpi).ceil(),
                     |rows| rows.logical_height.ceil(),
                 ),
-            ) + Vec2::splat(4.)
+            );
+            if measured.x > 0. {
+                measured.x += 4.;
+            }
+            if measured.y > 0. {
+                measured.y += 4.;
+            }
+            measured
         };
         Some(Vec2::new(
             if data.auto_size == 1 {
