@@ -79,6 +79,8 @@ mod button_properties;
 pub use button_properties::GuiButtonSettings;
 mod button_popup;
 pub use button_popup::GuiButtonPopup;
+#[cfg(test)]
+mod entity_scroll_tests;
 pub mod list;
 mod list_properties;
 pub use list_properties::GuiListLayout;

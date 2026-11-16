@@ -94,6 +94,30 @@ impl GuiMut<'_, '_> {
         true
     }
 
+    /// Reveal a parented target using current logical geometry. Direct children
+    /// use their untransformed bounds; nested targets convert the parent's two
+    /// rectangle corners, matching native ScrollPane. Accepts ready view/root/
+    /// window entities. Returns whether the scroll target or animation changed.
+    /// Missing targets, singular transforms and non-scroll containers return false.
+    /// For unmaterialized virtual rows, use scroll_list_item_to_view instead.
+    pub fn scroll_object_to_view(
+        &mut self,
+        container: Entity,
+        target: Entity,
+        animated: bool,
+        set_first: bool,
+    ) -> bool {
+        let Some((container, target)) = self
+            .object_for_entity(container)
+            .zip(self.object_for_entity(target))
+        else {
+            return false;
+        };
+        self.runtime
+            .store_mut()
+            .scroll_object_to_view(container, target, animated, set_first)
+    }
+
     /// Swap two ready siblings using native sorting restrictions. Both view
     /// entities and current root/window owners are accepted. Applies immediately;
     /// Sync publishes the logical and paint order without rebuilding views.
@@ -839,6 +863,14 @@ impl GuiObjectMut<'_> {
 /// Direct object access for exclusive systems and tests.
 pub trait GuiWorldExt {
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>>;
+    /// Equivalent of GuiMut::scroll_object_to_view for exclusive systems.
+    fn gui_scroll_object_to_view(
+        &mut self,
+        container: Entity,
+        target: Entity,
+        animated: bool,
+        set_first: bool,
+    ) -> bool;
     /// Equivalent of GuiMut::dispatch_custom for exclusive systems.
     fn gui_dispatch_custom(
         &mut self,
@@ -917,6 +949,25 @@ fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
     )
 }
 impl GuiWorldExt for World {
+    fn gui_scroll_object_to_view(
+        &mut self,
+        container: Entity,
+        target: Entity,
+        animated: bool,
+        set_first: bool,
+    ) -> bool {
+        let Some((container, target)) =
+            world_object(self, container).zip(world_object(self, target))
+        else {
+            return false;
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| {
+                runtime
+                    .store_mut()
+                    .scroll_object_to_view(container, target, animated, set_first)
+            })
+    }
     fn gui_dispatch_custom(
         &mut self,
         entity: Entity,

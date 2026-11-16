@@ -239,6 +239,11 @@ pub(super) fn drive(
             runtime.queue_subtree(background);
             runtime.store_mut().set_xy(list, 180., 200.);
             runtime.store_mut().set_size(list, 430., 138.);
+            // This fixture samples solid row paint up to the hard clip edge.
+            // The exported list's soft fade is covered by the soft-clip smoke.
+            runtime
+                .store_mut()
+                .set_clip_softness(list, fairygui_core::Point::ZERO);
             runtime
                 .store_mut()
                 .set_list_selection_mode(list, ListSelectionMode::None);
@@ -319,17 +324,11 @@ pub(super) fn drive(
         }
         15 if frames - state.since >= 10 => {
             let list = state.list.unwrap();
-            let index = runtime
-                .store()
-                .list_item_index(list, state.rows[7])
-                .unwrap();
-            assert!(
-                runtime
-                    .store_mut()
-                    .scroll_list_item_to_view(list, index, true, false)
-            );
-            let pane = runtime.store().scroll_pane(list).unwrap();
-            assert!(pane.pos().y > pane.display_pos().y);
+            let container = runtime.entity_of(list).unwrap();
+            let target = state.views[7];
+            commands.queue(move |world: &mut World| {
+                assert!(world.gui_scroll_object_to_view(container, target, true, false));
+            });
             state.stage = 3;
             state.since = frames;
         }

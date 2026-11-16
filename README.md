@@ -647,6 +647,18 @@ gui_edit.edit(list_entity, |object: &mut GuiObjectMut| object.set_scroll_percent
 
 `scroll_to_view { rect, animated, set_first }` 把内容坐标中的矩形滚入视口；
 `set_first` 为真时优先对齐矩形起点，最终位置仍受分页、条目吸附和边界约束。
+已有控件可直接按实体定位，无需业务代码计算矩形：
+
+```rust,ignore
+gui.scroll_object_to_view(container, target, true, false);
+```
+
+两个参数均接受控件视图、根或窗口拥有者；操作立即读取当前逻辑几何，返回滚动请求是否
+改变。目标需要有逻辑父节点，未就绪、失效实体、不可逆坐标变换或非滚动容器返回 `false`。
+直属目标使用未变换的逻辑外框，嵌套目标按原版从其父节点转换矩形两角，包含当前显示
+滚动偏移；目标自身缩放不参与直属外框计算。动画先设置逻辑终点，再逐帧更新显示位置。
+独占系统使用 `World::gui_scroll_object_to_view`；离屏虚拟行仍用 `scroll_list_item_to_view`
+的逻辑索引。`--smoke-scroll-view` 验证实体定位后的动画、可见行、裁剪和实际点击。
 原有 `set_scroll_position` 直接设置
 位置，允许选择是否越界；动画是否进行中可通过 `is_animating()` 查询。
 
