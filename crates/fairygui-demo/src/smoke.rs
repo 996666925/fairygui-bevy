@@ -67,6 +67,11 @@ mod text_decorations;
 pub(super) fn install_text_decorations(app: &mut App) {
     text_decorations::install(app);
 }
+#[path = "smoke_text_wrapping.rs"]
+mod text_wrapping;
+pub(super) fn install_text_wrapping(app: &mut App) {
+    text_wrapping::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {

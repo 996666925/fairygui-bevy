@@ -242,11 +242,10 @@ fn layout_strokes(
                 let Some(atlas) = cache.glyph(&key, font.data.as_ref(), glyph_id, images) else {
                     continue;
                 };
-                let baseline = Vec2::new(
-                    glyph.x,
-                    glyph.y
-                        + vertical.map_or(0., |v| v.shift(line_index as u32, brush.section_index)),
-                );
+                let baseline = Vec2::new(glyph.x, glyph.y)
+                    + vertical.map_or(Vec2::ZERO, |v| {
+                        v.shift(line_index as u32, brush.section_index)
+                    });
                 out.push(StrokeGlyph {
                     texture: atlas.texture,
                     rect: atlas.rect,

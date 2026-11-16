@@ -14,6 +14,8 @@ mod font_metrics;
 mod rows;
 #[path = "raster_vertical.rs"]
 pub(crate) mod vertical;
+#[path = "raster_wrapping.rs"]
+mod wrapping;
 
 #[cfg(test)]
 #[path = "text_measure_tests.rs"]
@@ -166,6 +168,16 @@ impl TextMeasurer {
 
     fn measure(&mut self, object: &fairygui_core::GObject, text: &str) -> Option<Vec2> {
         let data = object.control().as_text_field()?;
+        if text.is_empty() {
+            return Some(Vec2::new(
+                if data.auto_size == 1 {
+                    0.
+                } else {
+                    object.width()
+                },
+                0.,
+            ));
+        }
         let asset = self.packages.iter().find_map(|(_, asset)| {
             (Some(asset.package.id()) == object.source_package_id()).then_some(asset)
         });
@@ -292,34 +304,45 @@ impl TextMeasurer {
             font_size: data.font_size,
             leading: data.leading,
             native_vertical: !matches!(object.control(), ControlData::TextInput(_)),
+            wrap: wrapping::Config::for_object(object, data),
+            commands: None,
             layout,
             revision: self.revision,
-            runs: spans
-                .iter()
-                .map(|(entity, _, element)| match element {
-                    TextElement::Text {
-                        text,
-                        font,
-                        line_height,
-                        letter_spacing,
-                        ..
-                    } => fit::Run::Text {
-                        entity: *entity,
-                        text: (*text).into(),
-                        font: TextFont {
-                            font: original_raster.clone(),
-                            ..(*font).clone()
-                        },
-                        height: *line_height,
-                        spacing: *letter_spacing,
-                        metrics: None,
+            runs: std::iter::once(fit::Run::Text {
+                entity: Entity::PLACEHOLDER,
+                text: String::new(),
+                font: TextFont {
+                    font: original_raster.clone(),
+                    ..backend::text_font_for_span(data, None, None, false, false)
+                },
+                height: backend::text_line_height_for(data, None),
+                spacing: backend::text_letter_spacing_for(data),
+                metrics: None,
+            })
+            .chain(spans.iter().map(|(entity, _, element)| match element {
+                TextElement::Text {
+                    text,
+                    font,
+                    line_height,
+                    letter_spacing,
+                    ..
+                } => fit::Run::Text {
+                    entity: *entity,
+                    text: (*text).into(),
+                    font: TextFont {
+                        font: original_raster.clone(),
+                        ..(*font).clone()
                     },
-                    TextElement::Box(value) => fit::Run::Box {
-                        entity: *entity,
-                        value: **value,
-                    },
-                })
-                .collect(),
+                    height: *line_height,
+                    spacing: *letter_spacing,
+                    metrics: None,
+                },
+                TextElement::Box(value) => fit::Run::Box {
+                    entity: *entity,
+                    value: **value,
+                },
+            }))
+            .collect(),
         };
         // Parley quantizes glyph advances at the render target's scale. Shaping
         // at 1x and scaling the result can make a short line wrap at fractional
@@ -342,6 +365,13 @@ impl TextMeasurer {
                 bevy::text::RemSize::default(),
             )
             .ok()?;
+        let native_key = if native_key.wrap.is_some() {
+            let (key, shaped) = self.shape_native(&native_key, 1.)?;
+            computed = shaped;
+            key
+        } else {
+            native_key
+        };
         let buffer = computed.buffer();
         let dpi = self.scale_factor.max(f32::EPSILON);
         let native = native_key
@@ -352,7 +382,12 @@ impl TextMeasurer {
             Vec2::new(0., 0.)
         } else {
             Vec2::new(
-                (buffer.full_width().ceil() / dpi).ceil(),
+                native_key
+                    .commands
+                    .as_ref()
+                    .map_or((buffer.full_width().ceil() / dpi).ceil(), |geometry| {
+                        geometry.width
+                    }),
                 native.map_or_else(
                     || (buffer.height().ceil() / dpi).ceil(),
                     |rows| rows.logical_height.ceil(),

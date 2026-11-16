@@ -129,6 +129,14 @@ fn visible_size(app: &mut App, title: Entity) -> Vec2 {
                 font_size: 36,
                 leading,
                 native_vertical: true,
+                wrap: Some(super::super::wrapping::Config {
+                    width: Some((size.x - 4.).max(0.)),
+                    wrap: app.world().get::<TextLayout>(title).unwrap().linebreak
+                        != LineBreak::NoWrap,
+                    no_break_word: true,
+                    align: true,
+                }),
+                commands: None,
                 layout: *app.world().get::<TextLayout>(title).unwrap(),
                 revision: 0,
                 runs,

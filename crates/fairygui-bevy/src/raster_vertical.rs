@@ -6,28 +6,38 @@ use bevy::text::{EditableText, TextLayoutInfo, TextReader};
 mod tests;
 
 #[derive(Component, Debug)]
+#[require(backend::TextLineAlignment)]
 pub(crate) struct NativeTextLayout {
     source: TextLayoutInfo,
+    source_block: ComputedTextBlock,
     projected: TextLayoutInfo,
+    projected_block: ComputedTextBlock,
     key: fit::Key,
+    render_key: fit::Key,
     rows: rows::Rows,
 }
 impl NativeTextLayout {
-    pub(crate) fn shift(&self, line: u32, section: u32) -> f32 {
+    pub(crate) fn shift(&self, line: u32, section: u32) -> Vec2 {
         self.rows
             .lines
             .get(line as usize)
             .and_then(|row| row.shifts.iter().find(|(index, _, _)| *index == section))
-            .map_or(0., |(_, shift, _)| *shift)
+            .map_or(Vec2::ZERO, |(_, shift, _)| *shift)
     }
 }
 
 pub(crate) fn restore(
-    mut text: Query<(&NativeTextLayout, &mut TextLayoutInfo, Has<EditableText>)>,
+    mut text: Query<(
+        &NativeTextLayout,
+        &mut TextLayoutInfo,
+        &mut ComputedTextBlock,
+        Has<EditableText>,
+    )>,
 ) {
-    for (layout, mut info, editable) in &mut text {
+    for (layout, mut info, mut block, editable) in &mut text {
         if !editable {
             copy_info(info.bypass_change_detection(), &layout.source);
+            *block.bypass_change_detection() = layout.source_block.clone();
         }
     }
 }
@@ -73,21 +83,25 @@ fn same_info(a: &TextLayoutInfo, b: &TextLayoutInfo) -> bool {
         })
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub(crate) fn sync(
     mut commands: Commands,
     runtime: NonSend<GuiRuntime>,
     mut reader: TextReader<Text>,
+    mut atlas: ResMut<bevy::text::FontAtlasSet>,
+    mut images: ResMut<Assets<Image>>,
+    mut scale_cx: ResMut<bevy::text::ScaleCx>,
     mut text: Query<
         (
             Entity,
             &GObjectRef,
-            Ref<ComputedTextBlock>,
+            &mut ComputedTextBlock,
             &mut TextLayoutInfo,
             Option<&mut NativeTextLayout>,
             Option<&fit::RasterFit>,
             Option<&ellipsis::EllipsisState>,
             Option<&mut RichTextBlock>,
+            Option<&bevy::text::FontHinting>,
         ),
         (With<Text>, Without<EditableText>),
     >,
@@ -100,7 +114,9 @@ pub(crate) fn sync(
     >,
 ) {
     let mut service = runtime.text_measurer.borrow_mut();
-    for (entity, reference, block, mut info, previous, fit, ellipsis, mut rich) in &mut text {
+    for (entity, reference, mut block, mut info, previous, fit, ellipsis, mut rich, hint) in
+        &mut text
+    {
         let Some(object) = runtime.store().object(reference.0) else {
             continue;
         };
@@ -108,7 +124,9 @@ pub(crate) fn sync(
             continue;
         };
         if matches!(object.control(), ControlData::TextInput(_)) {
-            commands.entity(entity).remove::<NativeTextLayout>();
+            commands
+                .entity(entity)
+                .remove::<(NativeTextLayout, backend::TextLineAlignment)>();
             continue;
         }
         let key = ellipsis
@@ -119,6 +137,8 @@ pub(crate) fn sync(
                 font_size: data.font_size,
                 leading: data.leading,
                 native_vertical: true,
+                wrap: super::wrapping::Config::for_object(object, data),
+                commands: None,
                 layout: backend::text_layout_for_object(object, data),
                 revision: service.revision,
                 runs: reader
@@ -150,27 +170,58 @@ pub(crate) fn sync(
             .filter(|previous| previous.key == key && same_info(&info, &previous.source))
         {
             copy_info(info.bypass_change_detection(), &previous.projected);
+            *block.bypass_change_detection() = previous.projected_block.clone();
             continue;
         }
         if let Some(rich) = &mut rich {
             rich.set_image_rows(Vec::new());
         }
-        let Some(rows) = service.raster_rows(&key, &block, fit.map_or(1., fit::RasterFit::scale))
+        let source_info = info.clone();
+        let source_block = block.clone();
+        let Some((render_key, mut projected_block)) = service.shape_native(&key, 1.) else {
+            continue;
+        };
+        let mut projected_info = TextLayoutInfo::default();
+        if service
+            .pipeline
+            .update_text_layout_info(
+                &mut projected_info,
+                &mut atlas,
+                &mut images,
+                &mut projected_block,
+                &mut scale_cx,
+                TextBounds::UNBOUNDED,
+                Justify::Left,
+                hint.copied().unwrap_or_default(),
+            )
+            .is_err()
+        {
+            continue;
+        }
+        *block = projected_block;
+        *info = projected_info;
+        let Some(rows) =
+            service.raster_rows(&render_key, &block, fit.map_or(1., fit::RasterFit::scale))
         else {
-            commands.entity(entity).remove::<NativeTextLayout>();
+            commands
+                .entity(entity)
+                .remove::<(NativeTextLayout, backend::TextLineAlignment)>();
             continue;
         };
         let layout = NativeTextLayout {
-            source: info.clone(),
+            source: source_info,
+            source_block,
             projected: TextLayoutInfo::default(),
+            projected_block: block.clone(),
             key: key.clone(),
+            render_key,
             rows,
         };
         if layout.rows.lines.is_empty() {
             info.clear();
         }
         for glyph in &mut info.glyphs {
-            glyph.position.y += layout.shift(glyph.line_index, glyph.section_index);
+            glyph.position += layout.shift(glyph.line_index, glyph.section_index);
         }
         let dpi = info.scale_factor.max(f32::EPSILON);
         for run in &mut info.run_geometry {
@@ -187,6 +238,14 @@ pub(crate) fn sync(
                 .map_or(key.font_size as f32, |(_, _, size)| *size);
             run.bounds.min.y = row.top;
             run.bounds.max.y = row.top + row.height;
+            if let Some((_, shift, _)) = row
+                .shifts
+                .iter()
+                .find(|(section, _, _)| *section == run.section_index)
+            {
+                run.bounds.min.x += shift.x;
+                run.bounds.max.x += shift.x;
+            }
             crate::text_decorations::project_geometry(
                 run,
                 row.logical_top,
@@ -194,6 +253,29 @@ pub(crate) fn sync(
                 size,
                 dpi,
             );
+        }
+        if let Some(geometry) = &layout.render_key.commands {
+            let mut visited = HashSet::new();
+            info.run_geometry.retain_mut(|run| {
+                let Some((line, command)) = geometry.lines.iter().find_map(|line| {
+                    line.commands
+                        .iter()
+                        .find(|command| command.section == run.section_index as usize)
+                        .map(|cmd| (line, cmd))
+                }) else {
+                    return false;
+                };
+                if !visited.insert(run.section_index) || command.size.x <= 0. {
+                    return false;
+                }
+                run.bounds = Rect::new(
+                    command.position.x * dpi,
+                    line.top * dpi,
+                    (command.position.x + command.size.x) * dpi,
+                    (line.top + line.height) * dpi,
+                );
+                true
+            });
         }
         for row in &layout.rows.lines {
             for (entity, canvas, _) in &row.images {
@@ -205,6 +287,9 @@ pub(crate) fn sync(
             }
         }
         info.size.y = layout.rows.height;
+        if let Some(geometry) = &layout.render_key.commands {
+            info.size.x = geometry.width * dpi;
+        }
         if let Some(rich) = &mut rich {
             rich.set_image_rows(
                 layout
@@ -228,6 +313,8 @@ pub(crate) fn sync(
         }
     }
     for entity in &obsolete {
-        commands.entity(entity).remove::<NativeTextLayout>();
+        commands
+            .entity(entity)
+            .remove::<(NativeTextLayout, backend::TextLineAlignment)>();
     }
 }

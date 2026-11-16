@@ -254,20 +254,27 @@ pub(crate) fn text_layout_for_object(
 
 /// Align the measured text block inside its FairyGUI rectangle. With NoWrap,
 /// Bevy's Justify only aligns lines inside the block, not inside the UI node.
+/// Renderer marker indicating that each line already has horizontal alignment.
+#[doc(hidden)]
+#[derive(Component, Debug, Default)]
+pub struct TextLineAlignment;
+
 /// Padding offsets the content without moving the object or its hit rectangle.
 /// Bevy measures TextLayoutInfo.size in physical pixels; divide by its scale
 /// factor before comparing it with FairyGUI's logical object dimensions.
+#[allow(clippy::type_complexity)]
 pub fn align_text(
     runtime: NonSend<crate::runtime::GuiRuntime>,
     mut query: Query<(
         &crate::runtime::GObjectRef,
         &bevy::text::TextLayoutInfo,
         &TextLayout,
+        Has<TextLineAlignment>,
         &mut Node,
         &mut ComputedNode,
     )>,
 ) {
-    for (reference, layout, text_layout, mut node, mut computed) in &mut query {
+    for (reference, layout, text_layout, native, mut node, mut computed) in &mut query {
         let Some(object) = runtime.store().object(reference.0) else {
             continue;
         };
@@ -288,11 +295,15 @@ pub fn align_text(
         } else {
             0.
         };
+        let mut text_layout = *text_layout;
+        if native {
+            text_layout.linebreak = LineBreak::WordOrCharacter;
+        }
         align_text_block(
             object,
             data,
             layout,
-            text_layout,
+            &text_layout,
             &mut node,
             &mut computed,
             gutter,

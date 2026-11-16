@@ -70,7 +70,7 @@ struct Line {
     y: f64,
     height: f64,
 }
-fn round(v: f64) -> f64 {
+pub(crate) fn round(v: f64) -> f64 {
     (v + 0.5).floor()
 }
 fn advance(font: &BitmapFontData, code: u16, size: f64) -> f64 {
@@ -85,16 +85,16 @@ fn advance(font: &BitmapFontData, code: u16, size: f64) -> f64 {
 fn measure(font: &BitmapFontData, text: &[u16], size: f64) -> f64 {
     text.iter().map(|&c| advance(font, c, size)).sum()
 }
-fn alphanumeric(c: u16) -> bool {
+pub(crate) fn alphanumeric(c: u16) -> bool {
     c <= 127 && (c as u8).is_ascii_alphanumeric()
 }
-fn is_word(c: u16) -> bool {
+pub(crate) fn is_word(c: u16) -> bool {
     alphanumeric(c)
         || (b'!' as u16..=b'+' as u16).contains(&c)
         || c == b'/' as u16
         || c == b'_' as u16
 }
-fn is_punctuation(c: u16) -> bool {
+pub(crate) fn is_punctuation(c: u16) -> bool {
     [
         46, 44, 65292, 12290, 12289, 33, 65281, 65307, 59, 8221, 8217, 41, 65289, 93, 12305, 125,
         12299,

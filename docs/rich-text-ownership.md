@@ -70,8 +70,8 @@ before DPI/UiScale is applied. This runs after ellipsis projection and before
 quad placement, so wrapping, resizing, clipping and cached projections use the
 same image rectangles. Atlas trim offsets stay relative to that canvas.
 
-Non-editable raster paragraphs retain Parley's horizontal shaping and wrapping,
-then apply native vertical command layout. The actual selected font, weight and
+Non-editable raster paragraphs use native command wrapping and vertical layout,
+with Parley shaping each final text fragment. The actual selected font, weight and
 variation coordinates supply a 32px `g` / `有` pixel probe. Run heights scale that
 probe with ceiling; each row uses its highest command plus one underline pixel,
 and adds scaled leading only between rows. Mixed font sizes and images center in
@@ -79,15 +79,34 @@ that row. Text baselines use the font's typographic middle alignment and probe
 offset. Auto-size, Shrink, Ellipsis, fill, stroke, decorations and image link areas
 share these row metrics. Source text stays unchanged.
 
-`ComputedTextBlock` retains Parley's shaping geometry; the final `TextLayoutInfo`
-contains the projected positions. The original rendering data is restored after
+`ComputedTextBlock` contains the shaped virtual command fragments; the final
+`TextLayoutInfo` contains their projected positions. ECS `Text` and `TextSpan`
+strings and their entities keep the original source, including markup ownership. The original rendering data is restored after
 input and before UI measurement. Unchanged paragraph geometry reuses its cached vertical projection even when
 Bevy refreshes equivalent shaping data; paint-change notifications stay intact. Text inputs retain editor
 geometry so caret/selection behavior remains consistent.
 
 Glyph coverage depends on Bevy/Swash and can differ from browser Canvas even with
-the same font file. Horizontal wrapping remains Parley's. These rules do not
-claim browser framebuffer parity.
+the same font file. These rules do not claim browser framebuffer parity.
+
+Static raster wrapping measures complete fragments in logical pixels, applies
+Laya's ordinary-font prefix estimate and UTF-16 accounting, and supports native
+word boundaries, the 20-unit lookback, punctuation retreat and carrying words
+across style commands. Image objects retain the one-pixel fit tolerance and
+two reserved horizontal margin pixels. Command advances round independently;
+center/right offsets use the native measured row width. Measured row bounds
+retain the original pre-move finalization behavior. Both bitmap rich text and
+raster text use `fairygui_core::text::wrapping::wrap_commands`, supplying their
+own font measurements. The ordinary-font reference fixture covers 132 layouts
+from unchanged Laya `Text.doLayout` with a deterministic Canvas host; the existing
+bitmap fixtures validate the shared helper's bitmap path.
+
+Auto-size, font fitting, ellipsis and final rendering share native breaks.
+Shrink keeps image dimensions fixed. Ellipsis trims virtual fragments without
+changing source text. `--smoke-text-wrapping` checks cross-style word carry,
+CJK punctuation, inline images, linked styles and resize/restoration in a real
+window. Native browser font measurements can still differ from Parley, and the
+editable input path retains Bevy's editor wrapping and selection geometry.
 
 Static raster underlines and strikes use native centered-line bounds. Bevy's
 RunGeometry stores the top edge, so the adapter subtracts half the native

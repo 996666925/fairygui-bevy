@@ -132,6 +132,199 @@ fn baseline(glyph: &bevy::text::PositionedGlyph) -> f32 {
     glyph.position.y - glyph.atlas_info.offset.y - glyph.atlas_info.rect.size().y * 0.5
 }
 
+fn wrapped_text(app: &App, title: Entity) -> Vec<String> {
+    let key = &app
+        .world()
+        .get::<NativeTextLayout>(title)
+        .unwrap()
+        .render_key;
+    key.commands
+        .as_ref()
+        .unwrap()
+        .lines
+        .iter()
+        .map(|line| {
+            line.commands
+                .iter()
+                .filter_map(|cmd| match &key.runs[cmd.section] {
+                    fit::Run::Text { text, .. } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn word_fragments_cross_styles_together_and_resizing_keeps_ecs_sources_and_entities() {
+    const SOURCE: &str = "中<font color='#FF0000'>hel</font><font color='#00FF00'>lo</font>";
+    for scale in [0.7, 1., 1.3, 2.] {
+        let (mut app, owner, title) = fixture(SOURCE, scale, 3);
+        app.world_mut()
+            .get_mut::<GuiTextFormat>(owner)
+            .unwrap()
+            .auto_size = 2;
+        app.world_mut()
+            .gui_mut(title)
+            .unwrap()
+            .set_size(Vec2::new(64., 300.));
+        app.update();
+        assert_eq!(wrapped_text(&app, title), ["中", "hello"], "scale={scale}");
+        let root = app.world().get::<Text>(title).unwrap().0.clone();
+        let spans: Vec<_> = app
+            .world()
+            .get::<Children>(title)
+            .unwrap()
+            .iter()
+            .filter_map(|entity| {
+                app.world()
+                    .get::<TextSpan>(entity)
+                    .map(|span| (entity, span.0.clone()))
+            })
+            .collect();
+        let info = app.world().get::<TextLayoutInfo>(title).unwrap();
+        assert!((info.size.y / scale - 61.).abs() < 0.001);
+        for _ in 0..3 {
+            app.update();
+            assert_eq!(wrapped_text(&app, title), ["中", "hello"]);
+        }
+        app.world_mut()
+            .gui_mut(title)
+            .unwrap()
+            .set_size(Vec2::new(300., 300.));
+        app.update();
+        assert_eq!(wrapped_text(&app, title), ["中hello"]);
+        assert_eq!(app.world().get::<GuiText>(owner).unwrap().value(), SOURCE);
+        assert_eq!(app.world().get::<Text>(title).unwrap().0, root);
+        for (entity, source) in spans {
+            assert_eq!(app.world().get::<TextSpan>(entity).unwrap().0, source);
+        }
+    }
+}
+
+#[test]
+fn image_only_measurement_uses_native_one_pixel_fit_tolerance_and_original_canvas_margins() {
+    let (mut app, owner, title) = fixture(
+        "<img src='missing.png' width='18' height='10'/><img src='missing.png' width='18' height='33'/><img src='missing.png' width='18' height='10'/>",
+        1.3,
+        3,
+    );
+    app.world_mut()
+        .get_mut::<GuiTextFormat>(owner)
+        .unwrap()
+        .auto_size = 2;
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(43., 300.));
+    app.update();
+    let info = app.world().get::<TextLayoutInfo>(title).unwrap();
+    assert_eq!(info.inline_boxes.len(), 3);
+    assert_eq!(
+        app.world()
+            .get::<ComputedTextBlock>(title)
+            .unwrap()
+            .buffer()
+            .lines()
+            .count(),
+        2
+    );
+    assert_eq!(
+        app.world().get::<GuiTransform>(title).unwrap().size(),
+        Vec2::new(43., 52.)
+    );
+    for ((_, _, rect), expected) in
+        info.inline_boxes
+            .iter()
+            .zip([Vec2::new(0., 11.), Vec2::new(20., 0.), Vec2::new(0., 37.)])
+    {
+        assert!(
+            rect.min.abs_diff_eq(expected * 1.3, 0.001),
+            "{rect:?} != {expected:?}"
+        );
+    }
+}
+
+#[test]
+fn wrapped_links_hit_their_new_rows_and_leave_the_previous_line_gap_inactive() {
+    let (mut app, owner, title) = fixture(
+        "中<a href='event:word'><font color='#FF0000'>hel</font>lo</a>",
+        1.3,
+        3,
+    );
+    app.world_mut()
+        .get_mut::<GuiTextFormat>(owner)
+        .unwrap()
+        .auto_size = 2;
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(64., 300.));
+    app.update();
+    assert_eq!(wrapped_text(&app, title), ["中", "hello"]);
+    let info = app.world().get::<TextLayoutInfo>(title).unwrap();
+    let block = app.world().get::<ComputedTextBlock>(title).unwrap();
+    let node = app.world().get::<ComputedNode>(title).unwrap();
+    let rich = app.world().get::<RichTextBlock>(title).unwrap();
+    let runtime = app.world().non_send::<GuiRuntime>();
+    let object = app.world().get::<GObjectRef>(title).unwrap().0;
+    for (point, expected) in [
+        (Vec2::new(8., 40.), Some("event:word")),
+        (Vec2::new(50., 10.), None),
+        (Vec2::new(8., 30.), None),
+    ] {
+        let point = (point * 1.3 + node.content_inset().min_inset) / node.size();
+        assert_eq!(
+            rich.link_at(runtime, object, point, node, block, info)
+                .map(|hit| hit.href)
+                .as_deref(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn punctuation_and_centered_rows_use_native_breaks_and_logical_alignment() {
+    for scale in [0.7, 1., 1.3, 2.] {
+        let (mut app, owner, title) = fixture("中文，标点。", scale, 3);
+        let mut format = app.world_mut().get_mut::<GuiTextFormat>(owner).unwrap();
+        format.auto_size = 2;
+        format.align = 1;
+        app.world_mut()
+            .gui_mut(title)
+            .unwrap()
+            .set_size(Vec2::new(52., 300.));
+        app.update();
+        let lines = wrapped_text(&app, title);
+        assert_eq!(lines[0], "中", "scale={scale}: {lines:?}");
+        assert!(lines.iter().all(|line| !line.starts_with(['，', '。'])));
+        let layout = app.world().get::<NativeTextLayout>(title).unwrap();
+        let geometry = layout.render_key.commands.as_ref().unwrap();
+        for (row, native) in layout.rows.lines.iter().zip(&geometry.lines) {
+            let cmd = &native.commands[0];
+            let run = app
+                .world()
+                .get::<TextLayoutInfo>(title)
+                .unwrap()
+                .run_geometry
+                .iter()
+                .find(|run| run.section_index as usize == cmd.section)
+                .unwrap();
+            assert!(
+                (run.bounds.min.x / scale - ((48. - native.width) * 0.5).floor().max(0.)).abs()
+                    < 0.001
+            );
+            assert!((run.bounds.min.y - row.top).abs() < 0.001);
+        }
+        let info = app.world().get::<TextLayoutInfo>(title).unwrap();
+        assert!(
+            (info.size.y / scale + 4. - app.world().get::<GuiTransform>(title).unwrap().size().y)
+                .abs()
+                < 0.001
+        );
+    }
+}
+
 #[test]
 fn first_frame_auto_size_matches_rendered_rows_at_fractional_dpi_without_trailing_leading() {
     for scale in [0.7, 1., 1.25, 1.3, 1.75, 2.] {

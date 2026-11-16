@@ -431,13 +431,24 @@ fn image_only_markers_inherit_the_field_underline_and_retain_the_image_link() {
     assert_eq!(link_at_run(&app, title, 0).as_deref(), Some("only"));
 }
 
-fn original_layout(app: &App, title: Entity) -> ComputedTextBlock {
+fn original_rows(app: &App, title: Entity) -> super::super::rows::Rows {
     let key = app.world().get::<EllipsisState>(title).unwrap().key.clone();
+    let mut service = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .text_measurer
+        .borrow_mut();
+    let (key, block) = service.shape_native(&key, 1.).unwrap();
+    service.raster_rows(&key, &block, 1.).unwrap()
+}
+fn projected_rows(app: &App, title: Entity) -> super::super::rows::Rows {
+    let state = app.world().get::<EllipsisState>(title).unwrap();
+    let block = app.world().get::<ComputedTextBlock>(title).unwrap();
     app.world()
         .non_send::<GuiRuntime>()
         .text_measurer
         .borrow_mut()
-        .shape_block(&key, 1.)
+        .raster_rows(state.render_key(), block, 1.)
         .unwrap()
 }
 
@@ -452,29 +463,22 @@ fn soft_breaks_between_image_rows_do_not_introduce_font_height_or_move_retained_
     for scale in [1., 1.25, 2.] {
         app.insert_resource(bevy::ui::UiScale(scale));
         app.update();
-        let original = original_layout(&app, title);
-        let state = app.world().get::<EllipsisState>(title).unwrap();
-        let projected = state.projected.as_ref().unwrap();
-        let retained_lines = projected.0.buffer().lines().count();
+        let original = original_rows(&app, title);
+        let projected = projected_rows(&app, title);
+        let retained_lines = projected.lines.len();
         assert!(retained_lines > 1);
+        let info = app.world().get::<TextLayoutInfo>(title).unwrap();
         let mut checked = 0;
-        // The final retained row may grow to fit the ellipsis font.
-        for line in original.buffer().lines().take(retained_lines - 1) {
-            for item in line.items() {
-                let PositionedLayoutItem::InlineBox(source) = item else {
-                    continue;
-                };
-                let (_, _, visible) = projected
-                    .1
+        for line in original.lines.iter().take(retained_lines - 1) {
+            for (entity, source, _) in &line.images {
+                let (_, _, visible) = info
                     .inline_boxes
                     .iter()
-                    .find(|(entity, _, _)| entity.to_bits() == source.id)
+                    .find(|(id, _, _)| id == entity)
                     .unwrap();
                 assert!(
-                    visible.min.abs_diff_eq(Vec2::new(source.x, source.y), 0.01),
-                    "scale={scale}, source=({}, {}), visible={visible:?}",
-                    source.x,
-                    source.y
+                    visible.min.abs_diff_eq(source.min, 0.01),
+                    "scale={scale}: {visible:?} != {source:?}"
                 );
                 checked += 1;
             }
@@ -495,21 +499,46 @@ fn soft_breaks_preserve_text_row_heights_and_baselines_before_the_marker_row() {
     for scale in [1., 1.25, 2.] {
         app.insert_resource(bevy::ui::UiScale(scale));
         app.update();
-        let original = original_layout(&app, title);
-        let projected = app.world().get::<ComputedTextBlock>(title).unwrap();
-        let retained_lines = projected.buffer().lines().count();
+        let original = original_rows(&app, title);
+        let projected = projected_rows(&app, title);
+        let retained_lines = projected.lines.len();
         assert!(retained_lines >= 3);
         for (source, visible) in original
-            .buffer()
-            .lines()
-            .zip(projected.buffer().lines())
+            .lines
+            .iter()
+            .zip(&projected.lines)
             .take(retained_lines - 1)
         {
-            let source = source.metrics();
-            let visible = visible.metrics();
-            assert!((visible.line_height - source.line_height).abs() < 0.01);
-            assert!((visible.baseline - source.baseline).abs() < 0.01);
+            assert!((visible.height - source.height).abs() < 0.01);
+            assert!((visible.top - source.top).abs() < 0.01);
         }
+    }
+}
+
+#[test]
+fn ellipsis_keeps_pre_carry_metrics_on_rows_before_the_marker_when_a_large_word_moves() {
+    let source = "中<font size='48' color='#FF0000'>hel</font><font size='48'>lo</font><br/>Trailing text that must be removed";
+    let (mut app, _, title, _) = fixture(source, true, true, true);
+    app.world_mut()
+        .gui_mut(title)
+        .unwrap()
+        .set_size(Vec2::new(116., 124.));
+    app.update();
+    let original = original_rows(&app, title);
+    let projected = projected_rows(&app, title);
+    assert!(original.lines.len() > projected.lines.len());
+    assert!(projected.lines.len() > 1);
+    assert!((original.lines[0].logical_height - 57.).abs() < 0.001);
+    for (a, b) in original
+        .lines
+        .iter()
+        .zip(&projected.lines)
+        .take(projected.lines.len() - 1)
+    {
+        assert_eq!(
+            (a.logical_top, a.logical_height),
+            (b.logical_top, b.logical_height)
+        );
     }
 }
 
@@ -522,21 +551,19 @@ fn explicit_empty_lines_keep_their_original_height_when_following_content_is_ell
         .unwrap()
         .set_size(Vec2::new(100., 64.));
     app.update();
-    let original = original_layout(&app, title);
+    let original = original_rows(&app, title);
+    let visible = projected_rows(&app, title);
+    assert_eq!(visible.lines.len(), 2);
+    for (source, projected) in original.lines.iter().zip(&visible.lines) {
+        assert_eq!(
+            (projected.top, projected.height),
+            (source.top, source.height)
+        );
+    }
+    let expected = original.lines[1].top + original.lines[1].height;
+    assert!((app.world().get::<TextLayoutInfo>(title).unwrap().size.y - expected).abs() < 0.01);
     let state = app.world().get::<EllipsisState>(title).unwrap();
     let projected = state.projected.as_ref().unwrap();
-    let lines = projected.0.buffer().lines().count();
-    assert_eq!(lines, 2);
-    for (source, visible) in original.buffer().lines().zip(projected.0.buffer().lines()) {
-        assert_eq!(visible.metrics(), source.metrics());
-    }
-    let expected: f32 = original
-        .buffer()
-        .lines()
-        .take(lines)
-        .map(|line| line.metrics().line_height)
-        .sum();
-    assert!((projected.0.buffer().height() - expected).abs() < 0.01);
     assert!(
         projected
             .1

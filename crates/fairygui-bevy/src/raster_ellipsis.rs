@@ -131,7 +131,7 @@ fn plan(
     let fallback = key
         .runs
         .iter()
-        .rposition(|run| matches!(run, Run::Text { text, .. } if !text.is_empty()))
+        .rposition(|run| matches!(run, Run::Text { text, font, .. } if !text.is_empty() && matches!(font.font_size, FontSize::Px(size) if size >= 1.)))
         .unwrap_or(0);
     let mut commands = Vec::new();
     for line in lines.iter().take(count) {
@@ -396,6 +396,8 @@ pub(crate) fn sync(
             font_size: data.font_size,
             leading: data.leading,
             native_vertical: !matches!(object.control(), ControlData::TextInput(_)),
+            wrap: super::wrapping::Config::for_object(object, data),
+            commands: None,
             layout: backend::text_layout_for_object(object, data),
             revision: service.revision,
             runs: reader
@@ -443,10 +445,11 @@ pub(crate) fn sync(
             if measurement.layout.linebreak == LineBreak::NoWrap {
                 measurement.layout.linebreak = LineBreak::AnyCharacter;
             }
-            let Some(shaped) = service.shape_block(&measurement, 1.) else {
+            let Some((mut measurement, shaped)) = service.shape_native(&measurement, 1.) else {
                 info.clear();
                 continue;
             };
+            measurement.layout = key.layout;
             let mut markers = Vec::new();
             let native = if matches!(object.control(), ControlData::TextInput(_)) {
                 None
@@ -454,7 +457,7 @@ pub(crate) fn sync(
                 service.raster_rows(&measurement, &shaped, 1.)
             };
             let planned = plan(
-                &key,
+                &measurement,
                 &shaped,
                 service.scale_factor.max(f32::EPSILON),
                 native.as_ref(),
@@ -467,6 +470,10 @@ pub(crate) fn sync(
                     markers = plan.marker_styles;
                     projected.layout.linebreak = LineBreak::NoWrap;
                     projected.runs = plan.runs;
+                    if let Some(config) = &mut projected.wrap {
+                        config.wrap = false;
+                        config.no_break_word = false;
+                    }
                 }
                 let visible_text: String = projected
                     .runs
@@ -479,10 +486,14 @@ pub(crate) fn sync(
                         }
                     })
                     .collect();
-                let Some(mut computed) = service.shape_block(&projected, 1.) else {
+                let Some((mut projected, mut computed)) = service.shape_native(&projected, 1.)
+                else {
                     info.clear();
                     continue;
                 };
+                if truncated {
+                    super::wrapping::preserve_prefix(&measurement, &mut projected);
+                }
                 let mut projected_info = TextLayoutInfo::default();
                 let dpi = service.scale_factor.max(f32::EPSILON);
                 if service
@@ -493,8 +504,16 @@ pub(crate) fn sync(
                         &mut images,
                         &mut computed,
                         &mut scale_cx,
-                        TextBounds::new_horizontal((key.size.x - key.gutter * 2.).max(0.) * dpi),
-                        key.layout.justify,
+                        if projected.commands.is_some() {
+                            TextBounds::UNBOUNDED
+                        } else {
+                            TextBounds::new_horizontal((key.size.x - key.gutter * 2.).max(0.) * dpi)
+                        },
+                        if projected.commands.is_some() {
+                            Justify::Left
+                        } else {
+                            key.layout.justify
+                        },
                         hint,
                     )
                     .is_err()

@@ -49,6 +49,8 @@ pub(super) struct Key {
     pub(super) font_size: i32,
     pub(super) leading: i32,
     pub(super) native_vertical: bool,
+    pub(super) wrap: Option<super::wrapping::Config>,
+    pub(super) commands: Option<std::sync::Arc<super::wrapping::Geometry>>,
     pub(super) layout: TextLayout,
     pub(super) revision: u64,
     pub(super) runs: Vec<Run>,
@@ -60,6 +62,8 @@ impl PartialEq for Key {
             && self.font_size == other.font_size
             && self.leading == other.leading
             && self.native_vertical == other.native_vertical
+            && self.wrap == other.wrap
+            && self.commands == other.commands
             && self.layout.linebreak == other.layout.linebreak
             && self.layout.justify == other.layout.justify
             && self.revision == other.revision
@@ -139,6 +143,8 @@ pub(crate) fn sync(
             font_size: data.font_size,
             leading: data.leading,
             native_vertical: !matches!(object.control(), ControlData::TextInput(_)),
+            wrap: super::wrapping::Config::for_object(object, data),
+            commands: None,
             layout: backend::text_layout_for_object(object, data),
             revision: service.revision,
             runs,
@@ -230,7 +236,13 @@ impl TextMeasurer {
                 key.layout.linebreak,
                 key.layout.justify,
                 TextBounds {
-                    width: Some((key.size.x - key.gutter * 2.).max(0.) * dpi),
+                    // Native command fragments already contain every break.
+                    // Parley can otherwise wrap inline boxes again even with
+                    // NoWrap, losing the native one-pixel fit tolerance.
+                    width: key
+                        .commands
+                        .is_none()
+                        .then_some((key.size.x - key.gutter * 2.).max(0.) * dpi),
                     height: None,
                 },
                 dpi,
@@ -245,17 +257,20 @@ impl TextMeasurer {
     }
 
     fn shape_raster(&mut self, key: &Key, scale: f64) -> Option<(Vec2, usize)> {
-        let computed = self.shape_block(key, scale)?;
+        let (render_key, computed) = self.shape_native(key, scale)?;
         let layout = computed.buffer();
         let native = if key.native_vertical {
-            self.raster_rows(key, &computed, scale)
+            self.raster_rows(&render_key, &computed, scale)
         } else {
             None
         };
         let dpi = self.scale_factor.max(f32::EPSILON);
         Some((
             Vec2::new(
-                layout.full_width() / dpi,
+                render_key
+                    .commands
+                    .as_ref()
+                    .map_or(layout.full_width() / dpi, |geometry| geometry.width),
                 native.map_or(layout.height() / dpi, |rows| rows.logical_height),
             ),
             layout.lines().count(),

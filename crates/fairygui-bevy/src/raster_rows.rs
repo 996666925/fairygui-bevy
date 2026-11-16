@@ -8,7 +8,7 @@ pub(super) struct Row {
     pub logical_top: f32,
     pub logical_height: f32,
     pub height: f32,
-    pub shifts: Vec<(u32, f32, f32)>, // section, baseline delta, font size
+    pub shifts: Vec<(u32, Vec2, f32)>, // section, glyph offset, font size
     pub images: Vec<(Entity, Rect, Rect)>, // canvas, link area
     pub source_top: f32,
     pub source_bottom: f32,
@@ -56,7 +56,22 @@ impl TextMeasurer {
         let mut top = 0_f64;
         let mut lines = Vec::new();
         let mut last_font_height = None;
-        for line in block.buffer().lines() {
+        for (line_index, line) in block.buffer().lines().enumerate() {
+            let native = key.commands.as_ref().and_then(|g| g.lines.get(line_index));
+            let source_lefts: HashMap<_, f32> = line
+                .items()
+                .filter_map(|item| {
+                    let parley::PositionedLayoutItem::GlyphRun(glyphs) = item else {
+                        return None;
+                    };
+                    Some((glyphs.style().brush.section_index, glyphs.offset()))
+                })
+                .fold(HashMap::new(), |mut map, (section, x)| {
+                    map.entry(section)
+                        .and_modify(|value| *value = value.min(x))
+                        .or_insert(x);
+                    map
+                });
             let mut content = 0_f32;
             let mut text = Vec::new();
             let mut boxes = Vec::new();
@@ -135,15 +150,24 @@ impl TextMeasurer {
                     0.
                 };
             }
-            let row_top = top as f32;
-            let height = content + 1.;
+            let row_top = native.map_or(top as f32, |line| line.top);
+            let height = native.map_or(content + 1., |line| line.height);
             let shifts = text
                 .into_iter()
                 .map(|(section, own_height, baseline, source, size)| {
+                    let command = native.and_then(|line| {
+                        line.commands
+                            .iter()
+                            .find(|cmd| cmd.section == section as usize)
+                    });
+                    let y = command
+                        .map_or(((content - own_height) * 0.5).floor(), |cmd| cmd.position.y);
+                    let x = command.map_or(0., |cmd| {
+                        cmd.position.x * dpi - source_lefts.get(&section).copied().unwrap_or(0.)
+                    });
                     (
                         section,
-                        (row_top + ((content - own_height) * 0.5).floor() + baseline) * dpi
-                            - source,
+                        Vec2::new(x, (row_top + y + baseline) * dpi - source),
                         size,
                     )
                 })
@@ -152,15 +176,19 @@ impl TextMeasurer {
                 .into_iter()
                 .map(|image| {
                     let own_height = (image.height / dpi).round();
-                    let y = (row_top + ((content - own_height) * 0.5).floor()) * dpi;
+                    let command = native.and_then(|line| line.commands.iter().find(|cmd| {
+                        matches!(key.runs.get(cmd.section), Some(Run::Box { entity, .. }) if entity.to_bits() == image.id)
+                    }));
+                    let y = (row_top + command.map_or(((content - own_height) * 0.5).floor(), |cmd| cmd.position.y)) * dpi;
+                    let x = command.map_or(image.x, |cmd| cmd.position.x * dpi);
                     let canvas = Rect::from_corners(
-                        Vec2::new(image.x, y),
-                        Vec2::new(image.x + image.width, y + image.height),
+                        Vec2::new(x, y),
+                        Vec2::new(x + image.width, y + image.height),
                     );
                     let link = Rect::new(
-                        image.x,
+                        x,
                         row_top * dpi,
-                        image.x + image.width,
+                        x + image.width,
                         (row_top + height) * dpi,
                     );
                     (Entity::from_bits(image.id), canvas, link)

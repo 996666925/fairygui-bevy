@@ -7,6 +7,7 @@ pub mod font;
 pub mod input;
 pub mod markup;
 pub mod template;
+pub mod wrapping;
 pub use font::is_font_resource;
 pub use template::{TextVariables, expand_template};
 pub mod ubb;
