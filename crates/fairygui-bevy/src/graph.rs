@@ -70,7 +70,7 @@ fn colors(gui: &GuiRuntime, id: GObjectId, data: &GraphData) -> (Vec4, Vec4) {
         let c = backend::apply_alpha(gui.paint_tint(object, Some(source)), alpha).to_linear();
         Vec4::new(c.red, c.green, c.blue, c.alpha)
     };
-    (color(data.fill_color), color(data.line_color))
+    (color(data.drawn_fill_color()), color(data.line_color))
 }
 
 fn geometry(data: &GraphData, size: Size) -> Option<(Vec<Vec4>, Vec4, UVec4)> {

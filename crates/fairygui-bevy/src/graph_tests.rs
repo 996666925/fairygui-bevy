@@ -73,7 +73,7 @@ fn polygon_material_preserves_surface_buffer_and_updates_geometry_color_and_ance
         .get(&handle)
         .unwrap();
     assert_eq!(material.uniform.fill, Vec4::new(1.0, 0.0, 0.0, 0.25));
-    assert_eq!(material.uniform.stroke.w, 0.5);
+    assert_eq!(material.uniform.stroke.w, 0.25);
     assert_eq!(material.geometry, buffer);
     {
         let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
@@ -101,7 +101,7 @@ fn polygon_material_preserves_surface_buffer_and_updates_geometry_color_and_ance
         .unwrap();
     assert_eq!(material.uniform.counts.x, 7);
     assert_eq!(material.geometry, buffer);
-    assert_eq!(material.uniform.fill.w, 1.0);
+    assert_eq!(material.uniform.fill.w, 0.5);
 }
 
 #[test]
@@ -213,7 +213,7 @@ fn native_circle_surface_keeps_its_width_based_bounds_tint_and_entity_across_res
             .0
             .to_linear()
             .alpha,
-        0.25
+        0.5
     );
     app.world_mut()
         .non_send_mut::<GuiRuntime>()

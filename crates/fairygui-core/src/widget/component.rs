@@ -399,6 +399,9 @@ fn build_component(
             child_object.setup_before_add(&mut buffer, table, child_pos)?;
             leaf::setup_before_add(child_object, &mut buffer, table, child_pos)?;
         }
+        // GGraph redraws while reading block 5, before Look gears snapshot
+        // their initial value in setup_afterAdd.
+        store.refresh_graph_alpha(child);
 
         if !built_grayed && store.object(child).unwrap().grayed() {
             store.initialize_grayed(child);

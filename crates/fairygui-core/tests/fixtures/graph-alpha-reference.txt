@@ -1,0 +1,55 @@
+# Original GGraph executed with a geometry and graphics host.
+# .refs/FairyGUI-layabox/source/src/fairygui/GGraph.ts SHA256 8427a1f8fa3f3e21d503321789f536d08b687f807f839b3d0b2f866c852fb3a3
+# case shape (1 rect, 2 circle, 3 polygon, 4 regular polygon); output: object alpha, drawn fill alpha, drawn line alpha.
+case 1
+alpha 0.8 | 0.8 0 0
+draw 0.5 | 0.5 1 1
+alpha 0.3 | 0.3 1 1
+size 140 90 | 0.5 1 1
+color 1 | 0.5 1 1
+color 0 | 0.5 0 1
+alpha 0.7 | 0.7 0 1
+size 0 90 | 0.7 0 0
+draw 0.25 | 0.7 0 0
+size 100 80 | 0.25 1 1
+alpha 0.6 | 0.6 1 1
+stroke 0.4 | 0.25 1 0.4
+case 2
+alpha 0.8 | 0.8 0 0
+draw 0.5 | 0.5 1 1
+alpha 0.3 | 0.3 1 1
+size 140 90 | 0.5 1 1
+color 1 | 0.5 1 1
+color 0 | 0.5 0 1
+alpha 0.7 | 0.7 0 1
+size 0 90 | 0.7 0 0
+draw 0.25 | 0.7 0 0
+size 100 80 | 0.25 1 1
+alpha 0.6 | 0.6 1 1
+stroke 0.4 | 0.25 1 0.4
+case 3
+alpha 0.8 | 0.8 0 0
+draw 0.5 | 0.5 1 1
+alpha 0.3 | 0.3 1 1
+size 140 90 | 0.5 1 1
+color 1 | 0.5 1 1
+color 0 | 0.5 0 1
+alpha 0.7 | 0.7 0 1
+size 0 90 | 0.7 0 0
+draw 0.25 | 0.7 0 0
+size 100 80 | 0.25 1 1
+alpha 0.6 | 0.6 1 1
+stroke 0.4 | 0.25 1 0.4
+case 4
+alpha 0.8 | 0.8 0 0
+draw 0.5 | 0.5 1 1
+alpha 0.3 | 0.3 1 1
+size 140 90 | 0.5 1 1
+color 1 | 0.5 1 1
+color 0 | 0.5 0 1
+alpha 0.7 | 0.7 0 1
+size 0 90 | 0.7 0 0
+draw 0.25 | 0.7 0 0
+size 100 80 | 0.25 1 1
+alpha 0.6 | 0.6 1 1
+stroke 0.4 | 0.25 1 0.4

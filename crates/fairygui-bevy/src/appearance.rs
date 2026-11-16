@@ -20,7 +20,7 @@ pub(crate) fn base_color(
         ControlData::Loader(data) => data.color.unwrap_or(Color::WHITE),
         ControlData::Text(data) => data.color,
         ControlData::TextInput(data) => data.text_field.color,
-        ControlData::Graph(data) => data.fill_color,
+        ControlData::Graph(data) => data.drawn_fill_color(),
         _ => Color::WHITE,
     });
     // GTextField changes its default foreground before drawing glyphs. Explicit

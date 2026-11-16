@@ -270,3 +270,92 @@ fn direct_graph_edits_keep_identity_and_switch_surfaces_without_losing_applicati
     assert!(app.world().get_entity(graph).is_err());
     assert!(app.world().get_entity(child).is_err());
 }
+
+#[test]
+fn semi_transparent_graph_fill_owns_alpha_and_redraws_reset_subsequent_opacity_edits() {
+    let (mut app, owner, _) = fixture(true);
+    let graph = graph(&mut app, owner);
+    app.world_mut().gui_mut(owner).unwrap().set_alpha(0.5);
+    for kind in [
+        GraphType::Rect,
+        GraphType::Ellipse,
+        GraphType::Polygon,
+        GraphType::RegularPolygon,
+    ] {
+        *app.world_mut().get_mut::<GuiGraph>(graph).unwrap() = GuiGraph {
+            kind,
+            fill_color: Color::srgba(1., 0., 0., 0.5),
+            line_color: Color::srgba(0., 1., 0., 0.5),
+            line_size: 2,
+            polygon_points: vec![Vec2::ZERO, Vec2::new(100., 0.), Vec2::new(50., 80.)],
+            sides: 5,
+            ..default()
+        };
+        app.update();
+        let display = app.world().get::<GuiDisplay>(graph).unwrap();
+        assert_eq!((display.alpha(), display.effective_alpha()), (0.5, 0.25));
+        assert_eq!(
+            app.world()
+                .get::<GuiGraph>(graph)
+                .unwrap()
+                .fill_color
+                .to_srgba()
+                .alpha,
+            0.5
+        );
+        assert_eq!(
+            app.world()
+                .get::<GuiColor>(graph)
+                .unwrap()
+                .0
+                .to_srgba()
+                .alpha,
+            0.5
+        );
+        if matches!(kind, GraphType::Rect | GraphType::Ellipse) {
+            let drawn = if kind == GraphType::Rect {
+                graph
+            } else {
+                surface(&mut app, graph).unwrap()
+            };
+            assert_eq!(
+                app.world()
+                    .get::<BackgroundColor>(drawn)
+                    .unwrap()
+                    .0
+                    .to_srgba()
+                    .alpha,
+                0.25
+            );
+            assert_eq!(
+                app.world()
+                    .get::<BorderColor>(drawn)
+                    .unwrap()
+                    .top
+                    .to_srgba()
+                    .alpha,
+                0.125
+            );
+        }
+        app.world_mut().get_mut::<GuiDisplay>(graph).unwrap().alpha = 0.3;
+        for _ in 0..2 {
+            app.update();
+        }
+        assert_eq!(app.world().get::<GuiDisplay>(graph).unwrap().alpha(), 0.3);
+        app.world_mut()
+            .get_mut::<GuiTransform>(graph)
+            .unwrap()
+            .size
+            .x += 10.;
+        app.update();
+        assert_eq!(app.world().get::<GuiDisplay>(graph).unwrap().alpha(), 0.5);
+        for color in [Color::WHITE, Color::NONE] {
+            app.world_mut()
+                .get_mut::<GuiGraph>(graph)
+                .unwrap()
+                .fill_color = color;
+            app.update();
+            assert_eq!(app.world().get::<GuiDisplay>(graph).unwrap().alpha(), 0.5);
+        }
+    }
+}

@@ -486,6 +486,21 @@ impl GraphType {
 }
 
 impl GraphData {
+    /// GGraph.updateGraph converts a nonzero rgba fill to an opaque drawing
+    /// color and writes its alpha to the object. Keep the declared color intact.
+    pub fn fill_alpha_override(&self) -> Option<f32> {
+        (self.graph_type != 0 && self.fill_color.a > 0. && self.fill_color.a < 1.)
+            .then_some(self.fill_color.a)
+    }
+
+    pub fn drawn_fill_color(&self) -> Color {
+        let mut color = self.fill_color;
+        if self.fill_alpha_override().is_some() {
+            color.a = 1.;
+        }
+        color
+    }
+
     /// 图形种类。
     pub fn graph_kind(&self) -> GraphType {
         GraphType::from_code(self.graph_type)

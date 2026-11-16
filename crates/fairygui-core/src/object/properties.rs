@@ -319,7 +319,26 @@ impl ObjectStore {
         }
         *current = graph;
         self.touch(id, dirty::LOOK);
+        self.refresh_graph_alpha(id);
         true
+    }
+
+    /// Native redraws reset object alpha from a nonzero rgba fill. Empty and
+    /// zero-sized graphs return before this side effect; transparent/opaque
+    /// fills preserve the current alpha, including a preceding animation write.
+    pub(crate) fn refresh_graph_alpha(&mut self, id: GObjectId) {
+        let Some(object) = self.objects.get(id) else {
+            return;
+        };
+        let ControlData::Graph(data) = &object.control else {
+            return;
+        };
+        if object.width != 0.
+            && object.height != 0.
+            && let Some(alpha) = data.fill_alpha_override()
+        {
+            self.set_alpha(id, alpha);
+        }
     }
 
     /// Native showErrorSign flag. Changing it affects subsequent failures; it
@@ -702,6 +721,7 @@ impl ObjectStore {
         if capture {
             self.update_gear_state(id, crate::widget::GearKind::Color);
         }
+        self.refresh_graph_alpha(id);
         if let Some(outline) = outline {
             self.set_control_outline_color(id, outline);
         }
@@ -729,6 +749,10 @@ impl ObjectStore {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "graph_alpha_tests.rs"]
+mod graph_alpha_tests;
 
 #[cfg(test)]
 mod tests {

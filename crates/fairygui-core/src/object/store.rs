@@ -808,6 +808,7 @@ impl ObjectStore {
         object.requested_size = Some(requested);
         object.width = width;
         object.height = height;
+        self.refresh_graph_alpha(id);
         self.touch(id, dirty::SIZE);
         self.invalidate_list_layout(id);
         self.invalidate_parent_list_layout(id);

@@ -40,6 +40,33 @@ fn saved(store: &ObjectStore, id: GObjectId, page: Option<&str>) -> GearValue {
 }
 
 #[test]
+fn graph_redraw_updates_the_current_look_page_and_preserves_other_pages() {
+    let (mut store, root, graph) = fixture(ObjectType::Graph, GearKind::Look);
+    let other = saved(&store, graph, Some("b"));
+    store.set_graph(
+        graph,
+        crate::widget::GraphData {
+            graph_type: 1,
+            fill_color: Color::new(1., 0., 0., 0.5),
+            ..Default::default()
+        },
+    );
+    let half = saved(&store, graph, Some("a"));
+    assert_eq!(half, store.gear_snapshot(graph, GearKind::Look).unwrap());
+    assert!(matches!(half, GearValue::Look { alpha: 0.5, .. }));
+    store.set_alpha(graph, 0.3);
+    assert!(matches!(
+        saved(&store, graph, Some("a")),
+        GearValue::Look { alpha: 0.3, .. }
+    ));
+    store.set_size(graph, 60., 40.);
+    assert_eq!(saved(&store, graph, Some("a")), half);
+    assert_eq!(saved(&store, graph, Some("b")), other);
+    store.set_controller_page(root, "state", "B");
+    assert_eq!(store.object(graph).unwrap().alpha(), 1.);
+}
+
+#[test]
 fn forwarded_font_and_ubb_edits_dirty_the_resolved_title_without_capturing_gears() {
     for wrapper in [ObjectType::Button, ObjectType::Label, ObjectType::ComboBox] {
         for kind in [ObjectType::Text, ObjectType::InputText] {

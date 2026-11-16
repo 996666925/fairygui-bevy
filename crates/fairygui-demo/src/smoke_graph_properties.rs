@@ -428,10 +428,61 @@ fn drive(
                 );
             }
             21 => {
-                commands.entity(state.owner.unwrap()).despawn();
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(state.front.unwrap()).unwrap();
+                graph.kind = GraphType::Ellipse;
+                graph.fill_color = Color::srgba(0.1, 0.6, 1., 0.5);
                 next = true;
             }
             22 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.5);
+                let surface = drawing(front, &faces).unwrap();
+                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.5);
+                ui.p3().get_mut(front).unwrap().alpha = 0.2;
+                next = true;
+            }
+            23 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.2);
+                let surface = drawing(front, &faces).unwrap();
+                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.2);
+                ui.p2().get_mut(front).unwrap().size.x += 20.;
+                next = true;
+            }
+            24 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.5);
+                let surface = drawing(front, &faces).unwrap();
+                assert_eq!(backgrounds.get(surface).unwrap().0.to_srgba().alpha, 0.5);
+                ui.p1().get_mut(front).unwrap().fill_color = Color::srgb(0.6, 0.2, 0.8);
+                next = true;
+            }
+            25 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.5);
+                let mut graphs = ui.p1();
+                let mut graph = graphs.get_mut(front).unwrap();
+                graph.kind = GraphType::Rect;
+                graph.fill_color = Color::srgba(0.6, 0.2, 0.8, 0.25);
+                next = true;
+            }
+            26 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                assert_eq!(ui.p0().display(front).unwrap().alpha(), 0.25);
+                assert_eq!(backgrounds.get(front).unwrap().0.to_srgba().alpha, 0.25);
+                commands
+                    .spawn(Screenshot::primary_window())
+                    .observe(save_to_disk(
+                        "target/fairygui-demo-graph-properties-alpha.png",
+                    ));
+                next = true;
+            }
+            27 if elapsed >= 8 => {
+                commands.entity(state.owner.unwrap()).despawn();
+                next = true;
+            }
+            28 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -441,7 +492,7 @@ fn drive(
                 }
                 assert_eq!(clicks.0.len(), 8);
                 println!(
-                    "demo smoke PASSED: writable ECS graph shape/style/color, native expanded circle and out-of-rectangle hits, concave pass-through, regular polygon NaN distances/resize, rounded DrawPath hit policy, Empty transparency, retained polygon surface and disposal"
+                    "demo smoke PASSED: writable ECS graph shape/style/color, native expanded circle and out-of-rectangle hits, concave pass-through, regular polygon NaN distances/resize, rounded DrawPath hit policy, Empty transparency, native fill alpha and redraw resets, retained polygon surface and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;

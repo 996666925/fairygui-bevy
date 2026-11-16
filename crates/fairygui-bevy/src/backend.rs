@@ -100,7 +100,7 @@ pub fn graph_style(data: &fairygui_core::widget::GraphData) -> GraphStyle {
     use fairygui_core::widget::GraphType;
 
     let fill = if data.has_fill() {
-        to_bevy_color(data.fill_color)
+        to_bevy_color(data.drawn_fill_color())
     } else {
         bevy::prelude::Color::NONE
     };
