@@ -427,6 +427,78 @@ fn foreign_inline_image_arrival_and_removal_reflow_the_bitmap_commands_without_a
     );
     assert!(app.world().get_entity(part).is_err());
 }
+
+#[test]
+fn html_options_rebuild_bitmap_link_tints_decorations_and_layout_without_changing_text() {
+    let (mut app, _, _, owner, entity) = fixture(
+        "n8",
+        "[url=event:plain]U[/url][color=#00FF00][url=event:explicit]I[/url][/color]",
+    );
+    let previous = app
+        .world()
+        .get::<BitmapRichText>(entity)
+        .unwrap()
+        .parts
+        .clone();
+    let old_glyphs = app.world().get::<BitmapGlyphs>(entity).unwrap().0.clone();
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_html_options(
+            owner,
+            fairygui_core::text::HtmlParseOptions {
+                link_color: Some("red".into()),
+                link_underline: false,
+                ignore_whitespace: true,
+            },
+        );
+    app.update();
+    let glyphs = &app.world().get::<BitmapGlyphs>(entity).unwrap().0;
+    assert_eq!(glyphs.len(), 2);
+    for (i, expected) in [
+        fairygui_core::color::Color::new(1., 0., 0., 1.),
+        fairygui_core::color::Color::new(0., 1., 0., 1.),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(
+            app.world()
+                .get::<appearance::TextTintSource>(glyphs[i])
+                .unwrap()
+                .color,
+            Some(expected)
+        );
+    }
+    let block = app.world().get::<BitmapRichText>(entity).unwrap();
+    assert_eq!(block.links.len(), 2);
+    assert!(
+        block
+            .parts
+            .iter()
+            .all(|&e| app.world().get::<appearance::TextDecoration>(e).is_none())
+    );
+    assert!(
+        previous
+            .iter()
+            .chain(&old_glyphs)
+            .all(|&e| app.world().get_entity(e).is_err())
+    );
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .set_object_html_options(owner, default());
+    app.update();
+    let block = app.world().get::<BitmapRichText>(entity).unwrap();
+    assert_eq!(
+        block
+            .parts
+            .iter()
+            .filter(|&&e| app.world().get::<appearance::TextDecoration>(e).is_some())
+            .count(),
+        2
+    );
+}
 fn mouse(app: &mut App, down: bool) {
     let mut input = app.world_mut().resource_mut::<ButtonInput<MouseButton>>();
     if down {

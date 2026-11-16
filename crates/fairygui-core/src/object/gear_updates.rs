@@ -309,6 +309,28 @@ impl ObjectStore {
         true
     }
 
+    /// Update the resolved text field and invalidate its paragraph/measurement.
+    pub fn set_object_html_options(
+        &mut self,
+        id: GObjectId,
+        options: crate::text::HtmlParseOptions,
+    ) -> bool {
+        let Some(target) = self.text_field_of(id) else {
+            return false;
+        };
+        let field = match &mut self.objects[target].control {
+            ControlData::Text(data) => data,
+            ControlData::TextInput(data) => &mut data.text_field,
+            _ => return false,
+        };
+        if field.html_options == options {
+            return false;
+        }
+        field.html_options = options;
+        self.touch(target, dirty::TEXT);
+        true
+    }
+
     pub(crate) fn initialize_resource_title(&mut self, id: GObjectId) {
         if !matches!(
             self.object(id).map(|o| o.control()),

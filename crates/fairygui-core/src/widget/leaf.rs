@@ -749,6 +749,8 @@ pub struct TextFieldData {
     pub ubb_enabled: bool,
     /// Native Text.html. RichText objects enable it independently of UBB.
     pub html_enabled: bool,
+    /// Runtime HTML/link policy, used by both ordinary and bitmap paragraphs.
+    pub html_options: crate::text::HtmlParseOptions,
     /// 自动尺寸策略。
     pub auto_size: i32,
     /// 下划线。

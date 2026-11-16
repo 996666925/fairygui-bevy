@@ -203,6 +203,9 @@ pub(crate) fn parse_for(
         format!("#{:06X}{:02X}", argb & 0xffffff, argb >> 24)
     };
     let options = MarkupOptions {
+        link_underline: data.html_options.link_underline,
+        link_color: data.html_options.link_color.clone(),
+        ignore_whitespace: data.html_options.ignore_whitespace,
         style: MarkupStyle {
             font_size: data.font_size,
             color: color(data.color),

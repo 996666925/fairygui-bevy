@@ -34,6 +34,24 @@ impl Default for MarkupStyle {
         }
     }
 }
+/// Per-field Laya Text.htmlParseOptions, independent of the base text style.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HtmlParseOptions {
+    pub link_underline: bool,
+    /// Native color syntax; None keeps the inherited text color.
+    pub link_color: Option<String>,
+    pub ignore_whitespace: bool,
+}
+impl Default for HtmlParseOptions {
+    fn default() -> Self {
+        Self {
+            link_underline: true,
+            link_color: None,
+            ignore_whitespace: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MarkupOptions {
     pub style: MarkupStyle,

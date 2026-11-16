@@ -846,6 +846,23 @@ fn update_score(mut texts: Query<&mut GuiTextVars>) {
 输入框保留源模板，编辑器显示展开结果；用户编辑后以实际输入替换源文本，提示文字不展开。
 `--smoke-text-vars` 验证导出默认值、运行期变量、富文本、输入框、嵌套标题及尺寸更新。
 
+富文本的链接样式和空白处理可逐控件配置，普通字体、位图字体及 UBB 转换共用设置：
+
+```rust,ignore
+commands.entity(title).insert(GuiHtmlOptions {
+    link_color: Some("#FF8800".into()),
+    link_underline: false,
+    ignore_whitespace: true,
+});
+```
+
+修改 `Query<&mut GuiHtmlOptions>` 会在本帧重新解析并测量；也支持根/窗口拥有者及
+按钮、标签、下拉框的标题转发。`GuiQuery::html_options` 查询当前设置，
+`GuiObjectMut::set_html_options` 立即写入运行时。显式文字颜色优先于链接默认颜色，
+关闭链接下划线仍保留字段下划线和 `<u>`。颜色使用原生字符串语法，`None` 继承文字色；
+空白处理遵循原版 HTML 解析器的分段修剪规则。纯文本不受影响，关闭富文本后保留设置。
+`--smoke-html-options` 验证独立配置、HTML/UBB 样式、运行时恢复默认及实体复用。
+
 文字样式直接修改 `GuiTextFormat`，按钮、标签和下拉框会转发到其标题文字：
 
 ```rust,ignore

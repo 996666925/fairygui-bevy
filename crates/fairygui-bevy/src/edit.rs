@@ -392,6 +392,11 @@ impl GuiObjectMut<'_> {
             .store_mut()
             .set_object_text_variables(self.object, variables.0);
     }
+    pub fn set_html_options(&mut self, options: crate::GuiHtmlOptions) {
+        self.runtime
+            .store_mut()
+            .set_object_html_options(self.object, options.into());
+    }
     pub fn set_children_render_order(&mut self, order: crate::ChildrenRenderOrder) {
         self.runtime
             .store_mut()

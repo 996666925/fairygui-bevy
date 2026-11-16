@@ -11,8 +11,8 @@ pub use font::is_font_resource;
 pub use template::{TextVariables, expand_template};
 pub mod ubb;
 pub use markup::{
-    ImageDimensions, MarkupDocument, MarkupElement, MarkupKind, MarkupOptions, MarkupStyle,
-    decode_entities, parse_html, parse_markup, strip_ubb_tags, ubb_to_html,
+    HtmlParseOptions, ImageDimensions, MarkupDocument, MarkupElement, MarkupKind, MarkupOptions,
+    MarkupStyle, decode_entities, parse_html, parse_markup, strip_ubb_tags, ubb_to_html,
 };
 
 pub use ubb::{UbbDocument, UbbSpan, parse_rich_text, parse_ubb};

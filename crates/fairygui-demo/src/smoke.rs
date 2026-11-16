@@ -42,6 +42,11 @@ mod text_variables;
 pub(super) fn install_text_variables(app: &mut App) {
     text_variables::install(app);
 }
+#[path = "smoke_html_options.rs"]
+mod html_options;
+pub(super) fn install_html_options(app: &mut App) {
+    html_options::install(app);
+}
 #[path = "smoke_opaque.rs"]
 mod opaque;
 pub(super) fn install_opaque(app: &mut App) {
