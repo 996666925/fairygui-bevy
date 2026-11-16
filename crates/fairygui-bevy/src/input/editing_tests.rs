@@ -1100,6 +1100,7 @@ fn mouse_drag_stops_editing_when_focus_moves_to_another_control() {
     app.world_mut().resource_mut::<InputRouter>().capture = Some(crate::input::Capture {
         window,
         target: owner,
+        click_targets: Default::default(),
         start: Vec2::ZERO,
         last: Vec2::ZERO,
         moved: true,
@@ -1154,6 +1155,7 @@ fn explicit_blur_cancels_mouse_and_touch_selection_owners_before_refocus() {
         state.capture = Some(crate::input::Capture {
             window,
             target: owner,
+            click_targets: Default::default(),
             start: Vec2::ZERO,
             last: Vec2::ZERO,
             moved: true,
@@ -1168,6 +1170,7 @@ fn explicit_blur_cancels_mouse_and_touch_selection_owners_before_refocus() {
             crate::input::TouchCapture {
                 window,
                 target: owner,
+                click_targets: Default::default(),
                 start: Vec2::ZERO,
                 last: Vec2::ZERO,
                 moved: true,
@@ -1233,6 +1236,7 @@ fn selection_autoscroll_uses_captured_mouse_or_touch_and_stops_at_bounds_and_ree
     app.world_mut().resource_mut::<InputRouter>().capture = Some(crate::input::Capture {
         window,
         target: owner,
+        click_targets: Default::default(),
         start: Vec2::ZERO,
         last: Vec2::new(250., 160.),
         moved: true,
@@ -1285,6 +1289,7 @@ fn selection_autoscroll_uses_captured_mouse_or_touch_and_stops_at_bounds_and_ree
             crate::input::TouchCapture {
                 window,
                 target: owner,
+                click_targets: Default::default(),
                 start: Vec2::ZERO,
                 last: Vec2::new(50., 40.),
                 moved: true,

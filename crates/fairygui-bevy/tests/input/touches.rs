@@ -166,7 +166,7 @@ fn touch_movement_uses_its_own_position_and_cancels_click_after_returning() {
 }
 
 #[test]
-fn cancellation_and_policy_changes_release_stationary_touches_without_click() {
+fn cancellation_releases_contacts_while_policy_changes_only_filter_the_public_snapshot() {
     for policy in 0..6 {
         let (mut app, window) = fixture();
         let (entity, id) = target(&mut app, 1);
@@ -227,8 +227,19 @@ fn cancellation_and_policy_changes_release_stationary_touches_without_click() {
                 .iter()
                 .filter(|e| e.kind == EventKind::TouchEnd)
                 .count(),
-            usize::from(policy != 4)
+            usize::from(policy <= 1)
         );
+        if policy >= 2 {
+            send(&mut app, window, 42, TouchPhase::Ended, Vec2::splat(10.));
+            let released = self::events(&mut app);
+            assert_eq!(
+                released
+                    .iter()
+                    .filter(|e| e.kind == EventKind::Click && e.is_at_target())
+                    .count(),
+                usize::from(policy == 2 || policy == 5)
+            );
+        }
     }
 }
 
@@ -709,10 +720,14 @@ fn transparent_touch_pixels_are_rejected_and_a_foreign_window_is_ignored() {
     assert_eq!(captured_touch_object(&app, 3), None);
     send(&mut app, window, 3, TouchPhase::Started, Vec2::splat(10.0));
     assert_eq!(captured_touch_object(&app, 3), Some(back));
-    // Releasing over another eligible GUI target does not transfer a click.
+    // Empty release hit still clicks the originally pressed, staged back object.
     hits(&mut app, 3, &[]);
     send(&mut app, window, 3, TouchPhase::Ended, Vec2::splat(10.0));
-    assert!(!events(&mut app).iter().any(|e| e.kind == EventKind::Click));
+    assert!(
+        events(&mut app)
+            .iter()
+            .any(|e| e.kind == EventKind::Click && e.target == back && e.is_at_target())
+    );
 }
 
 #[test]

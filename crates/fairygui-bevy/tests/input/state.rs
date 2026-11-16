@@ -276,7 +276,7 @@ fn observers_read_current_capture_and_sync_filters_hidden_or_despawned_roots() {
         app.world().get_entity(view).is_ok(),
         "inactive roots retain their views"
     );
-    app.update(); // Native cancellation is routed by the next Input phase.
+    app.update(); // The inactive view stays excluded while its press path is retained.
     app.world_mut()
         .get_mut::<FairyGuiRoot>(owner)
         .unwrap()

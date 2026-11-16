@@ -524,7 +524,7 @@ fn single_click_toggle_none_mode_nested_hit_and_drag_suppression_keep_native_sel
             .list_selections(list),
         Some(vec![2, 3])
     );
-    // A press/release over different row targets never completes a click.
+    // Native clickTest keeps the pressed row even when the release hits another row.
     for &e in &entities {
         app.world_mut().entity_mut(e).insert(Hovered(false));
     }
@@ -544,10 +544,11 @@ fn single_click_toggle_none_mode_nested_hit_and_drag_suppression_keep_native_sel
         .for_each(drop);
     release(&mut app);
     assert!(
-        !app.world_mut()
+        app.world_mut()
             .non_send_mut::<GuiRuntime>()
             .drain_events()
-            .any(|e| e.kind == EventKind::ClickItem)
+            .any(|e| e.kind == EventKind::ClickItem
+                && e.data == fairygui_core::object::EventData::Item("0".into()))
     );
 }
 

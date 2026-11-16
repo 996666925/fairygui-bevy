@@ -30,7 +30,7 @@ fn transparent_component_passes_blank_clicks_to_lower_target_but_keeps_child_eve
         .store_mut()
         .set_component_opaque(upper, false);
     release(&mut app);
-    assert!(clicks(&mut app).is_empty());
+    assert_eq!(clicks(&mut app)[0].target, upper);
     assert_eq!(captured_object(&app), None);
     let (_, child) = target(&mut app, 3);
     app.world_mut()

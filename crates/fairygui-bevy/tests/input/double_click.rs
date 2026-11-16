@@ -99,19 +99,16 @@ fn right_clicks_share_mouse_button_history_but_never_dispatch_double_click() {
 
 #[test]
 fn dragged_or_invalidated_releases_reset_double_click_history() {
-    for hidden in [false, true] {
+    for focus_lost in [false, true] {
         let (mut app, window) = setup();
-        let (view, id) = target(&mut app, 1);
+        let (view, _) = target(&mut app, 1);
         advance(&mut app, 1000);
         click(&mut app);
         observed(&mut app);
         advance(&mut app, 50);
         press(&mut app);
-        if hidden {
-            app.world_mut()
-                .non_send_mut::<GuiRuntime>()
-                .store_mut()
-                .set_visible(id, false);
+        if focus_lost {
+            app.world_mut().get_mut::<Window>(window).unwrap().focused = false;
         } else {
             app.world_mut()
                 .get_mut::<Window>(window)
@@ -121,10 +118,7 @@ fn dragged_or_invalidated_releases_reset_double_click_history() {
         app.update();
         release(&mut app);
         assert!(observed(&mut app).is_empty());
-        app.world_mut()
-            .non_send_mut::<GuiRuntime>()
-            .store_mut()
-            .set_visible(id, true);
+        app.world_mut().get_mut::<Window>(window).unwrap().focused = true;
         app.world_mut().entity_mut(view).insert(Hovered(true));
         app.world_mut()
             .get_mut::<Window>(window)

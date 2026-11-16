@@ -1,5 +1,67 @@
-//! Native Laya contact release bookkeeping, independent of event recipients.
+//! Native Laya press paths, click recipients and contact release bookkeeping.
 use crate::Point;
+use crate::object::{GObjectId, ObjectStore};
+
+/// The native press-time ancestor path used by TouchInfo.clickTest. Object IDs
+/// retain their generations, so disposal cannot redirect a press to a reused slot.
+#[derive(Debug, Default)]
+pub struct ClickTargets(Vec<GObjectId>);
+
+impl ClickTargets {
+    /// Record the logical target and its ancestors before press handlers mutate
+    /// the tree. A built-in mouse-down propagation stop bounds this path.
+    pub fn begin(store: &ObjectStore, target: GObjectId, stop: Option<GObjectId>) -> Self {
+        let mut targets = Vec::new();
+        let mut current = Some(target);
+        while let Some(id) = current {
+            let Some(object) = store.object(id) else {
+                break;
+            };
+            targets.push(id);
+            if Some(id) == stop {
+                break;
+            }
+            current = object.parent();
+        }
+        Self(targets)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Consume one press using native clickTest: prefer the original target
+    /// while its display tree remains staged, regardless of the release hit or
+    /// its visible/touchable flags. Otherwise walk the release target's current
+    /// ancestors to the first staged member of the saved path.
+    pub fn resolve(
+        &mut self,
+        store: &ObjectStore,
+        release: Option<GObjectId>,
+        cancelled: bool,
+    ) -> Option<GObjectId> {
+        let targets = std::mem::take(&mut self.0);
+        if cancelled {
+            return None;
+        }
+        let &original = targets.first()?;
+        if store.is_on_stage(original) {
+            return Some(original);
+        }
+        let mut current = release;
+        while let Some(id) = current {
+            if targets.contains(&id) && store.is_on_stage(id) {
+                return Some(id);
+            }
+            current = store.object(id).and_then(|object| object.parent());
+        }
+        None
+    }
+}
+
+#[cfg(test)]
+#[path = "pointer_target_tests.rs"]
+mod target_tests;
 
 /// Laya's double-click interval and per-axis pointer distance, in milliseconds
 /// and logical stage pixels. Release distance is inclusive; repeated-click

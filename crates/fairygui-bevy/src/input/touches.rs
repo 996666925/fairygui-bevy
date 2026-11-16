@@ -75,15 +75,14 @@ pub(super) fn route_touches(
             .window
             .map_or(primary.is_some(), |chosen| chosen == *entity)
     });
-    // Capture policy can change without a new OS touch message.
+    // Window focus/selection can change without a new OS touch message.
     let cancelled: Vec<_> = state
         .touches
         .iter()
         .filter_map(|(&id, c)| {
-            (window.is_none_or(|(entity, w, _)| entity != c.window || !w.focused)
-                || !eligible(&runtime, c.target)
-                || !c.gesture.valid(&runtime))
-            .then_some(id)
+            window
+                .is_none_or(|(entity, w, _)| entity != c.window || !w.focused)
+                .then_some(id)
         })
         .collect();
     for id in cancelled {
@@ -260,6 +259,8 @@ pub(super) fn route_touches(
                 event.id,
             );
             let stop = pointer_down_stop(&runtime, target);
+            let click_targets =
+                fairygui_core::pointer::ClickTargets::begin(runtime.store(), target, stop);
             runtime.dispatch_event_until(
                 touch_event(EventKind::TouchBegin, target, position, event.id),
                 stop,
@@ -321,6 +322,7 @@ pub(super) fn route_touches(
                 event.id,
                 TouchCapture {
                     target,
+                    click_targets,
                     window: event.window,
                     start: position,
                     last: position,
@@ -347,6 +349,11 @@ pub(super) fn route_touches(
         if capture.window != event.window {
             state.touches.insert(event.id, capture);
             continue;
+        }
+        if !eligible(&runtime, capture.target) || !capture.gesture.valid(&runtime) {
+            capture.gesture.finish(&mut runtime, dt);
+            capture.gesture = Gesture::None;
+            capture.editing = None;
         }
         let previous_hover = capture.hovered;
         let pressed_target = capture.target;
@@ -443,7 +450,7 @@ pub(super) fn route_touches(
                     start: Point::new(capture.start.x, capture.start.y),
                     position: Point::new(position.x, position.y),
                     button: 0,
-                    has_target: runtime.store().object(capture.target).is_some(),
+                    has_target: !capture.click_targets.is_empty(),
                     // Native OS touch cancellation still runs end() bookkeeping;
                     // it only skips click dispatch. Movement/drop cancellation is
                     // separately reflected by clickCancelled.
@@ -451,12 +458,14 @@ pub(super) fn route_touches(
                 },
             );
             finish(&mut runtime, &capture, event.id, 0.0);
+            let click_target = capture
+                .click_targets
+                .resolve(runtime.store(), hit, click.cancelled);
             if event.phase == TouchPhase::Ended
                 && !capture.moved
                 && !click.cancelled
-                && hit == Some(capture.target)
-                && eligible(&runtime, capture.target)
                 && !runtime.is_dragging()
+                && let Some(click_target) = click_target
             {
                 if let Some(link) = capture
                     .link
@@ -469,13 +478,13 @@ pub(super) fn route_touches(
                     );
                 }
                 runtime.dispatch_event(
-                    touch_event(EventKind::Click, capture.target, position, event.id)
+                    touch_event(EventKind::Click, click_target, position, event.id)
                         .with_click_count(click.count),
                 );
                 apply_click(
                     &mut runtime,
                     &mut commands,
-                    capture.target,
+                    click_target,
                     position,
                     keys.pressed(bevy::input::keyboard::Key::Shift),
                     keys.pressed(bevy::input::keyboard::Key::Control),
@@ -484,7 +493,7 @@ pub(super) fn route_touches(
                 );
                 if click.count == 2 {
                     runtime.dispatch_event(
-                        touch_event(EventKind::DoubleClick, capture.target, position, event.id)
+                        touch_event(EventKind::DoubleClick, click_target, position, event.id)
                             .with_click_count(2),
                     );
                 }

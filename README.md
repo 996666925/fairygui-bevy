@@ -70,6 +70,11 @@ let template = ui::basics::WindowA::ITEM_NAME;
 entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输入窗口，
 `GuiInputState` 提供悬停、指针捕获与游戏输入仲裁状态。
 
+点击保存按下时的目标及祖先路径。原目标仍连接舞台时，即使抬起命中其他对象或空白，
+仍点击原目标；原目标已退场时，沿抬起目标的祖先查找按下路径中最近的在舞台对象。
+`visible` / `touchable` 影响新命中和 `GuiInputState` 快照，不会单独撤销已开始的点击。
+窗口失焦、触摸取消和拖动仍会终止点击。
+
 弹出菜单可用 `GuiPopup::show_menu` 配置稳定名称、动作编号、图标、勾选状态和
 分隔项模板；业务系统读取 `GuiMenuAction`，消息在点击 100 ms 后、菜单关闭后发布。
 支持按名称动态编辑与增删、保留对象复用，详见 [菜单生命周期](docs/popup-lifecycle.md)。

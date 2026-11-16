@@ -351,6 +351,7 @@ impl InputRouter {
 struct Capture {
     window: Entity,
     target: GObjectId,
+    click_targets: fairygui_core::pointer::ClickTargets,
     start: Vec2,
     last: Vec2,
     moved: bool,
@@ -365,6 +366,7 @@ struct Capture {
 struct RightCapture {
     window: Entity,
     target: GObjectId,
+    click_targets: fairygui_core::pointer::ClickTargets,
     start: Vec2,
     last: Vec2,
     moved: bool,
@@ -374,6 +376,7 @@ struct RightCapture {
 #[derive(Debug)]
 struct TouchCapture {
     target: GObjectId,
+    click_targets: fairygui_core::pointer::ClickTargets,
     window: Entity,
     start: Vec2,
     last: Vec2,
@@ -729,10 +732,13 @@ fn route_pointer(
             capture.gesture = Gesture::None;
             capture.moved = true;
         }
-        let valid = cursor.is_some()
-            && window.is_some_and(|(entity, _, _)| entity == capture.window)
-            && eligible(&runtime, capture.target)
-            && capture.gesture.valid(&runtime);
+        let valid =
+            cursor.is_some() && window.is_some_and(|(entity, _, _)| entity == capture.window);
+        if !eligible(&runtime, capture.target) || !capture.gesture.valid(&runtime) {
+            capture.gesture.finish(&mut runtime, time.delta_secs());
+            capture.gesture = Gesture::None;
+            capture.editing = None;
+        }
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
         if valid && position != capture.last {
             capture.dragged = true;
@@ -783,7 +789,7 @@ fn route_pointer(
                     start: Point::new(capture.start.x, capture.start.y),
                     position: Point::new(position.x, position.y),
                     button: 0,
-                    has_target: runtime.store().object(capture.target).is_some(),
+                    has_target: !capture.click_targets.is_empty(),
                     cancelled: !valid
                         || !mouse.just_released(MouseButton::Left)
                         || capture.moved
@@ -808,12 +814,15 @@ fn route_pointer(
                 }
                 update_button_from_pointers(&mut runtime, &state, capture.target);
             }
+            let click_target = capture
+                .click_targets
+                .resolve(runtime.store(), hit, click.cancelled);
             if valid
                 && mouse.just_released(MouseButton::Left)
                 && !capture.moved
                 && !click.cancelled
-                && hit == Some(capture.target)
                 && !runtime.is_dragging()
+                && let Some(click_target) = click_target
             {
                 if let Some(link) = capture
                     .link
@@ -826,14 +835,14 @@ fn route_pointer(
                     );
                 }
                 runtime.dispatch_event(
-                    UiEvent::new(EventKind::Click, capture.target)
+                    UiEvent::new(EventKind::Click, click_target)
                         .with_pointer(Point::new(position.x, position.y))
                         .with_click_count(click.count),
                 );
                 apply_click(
                     &mut runtime,
                     &mut commands,
-                    capture.target,
+                    click_target,
                     position,
                     keys.pressed(bevy::input::keyboard::Key::Shift),
                     keys.pressed(bevy::input::keyboard::Key::Control),
@@ -842,7 +851,7 @@ fn route_pointer(
                 );
                 if click.count == 2 {
                     runtime.dispatch_event(
-                        UiEvent::new(EventKind::DoubleClick, capture.target)
+                        UiEvent::new(EventKind::DoubleClick, click_target)
                             .with_pointer(Point::new(position.x, position.y))
                             .with_click_count(2),
                     );
@@ -852,9 +861,8 @@ fn route_pointer(
     }
     if let Some(mut capture) = state.right_capture.take() {
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
-        let valid = cursor.is_some()
-            && window.is_some_and(|(entity, _, _)| entity == capture.window)
-            && eligible(&runtime, capture.target);
+        let valid =
+            cursor.is_some() && window.is_some_and(|(entity, _, _)| entity == capture.window);
         if valid && position != capture.last {
             capture.dragged = true;
             if runtime.store().object(capture.target).is_some() {
@@ -873,7 +881,7 @@ fn route_pointer(
                     start: Point::new(capture.start.x, capture.start.y),
                     position: Point::new(position.x, position.y),
                     button: 2,
-                    has_target: runtime.store().object(capture.target).is_some(),
+                    has_target: !capture.click_targets.is_empty(),
                     cancelled: !valid
                         || !mouse.just_released(MouseButton::Right)
                         || capture.moved
@@ -897,15 +905,18 @@ fn route_pointer(
                     );
                 }
             }
+            let click_target = capture
+                .click_targets
+                .resolve(runtime.store(), hit, click.cancelled);
             if valid
                 && mouse.just_released(MouseButton::Right)
                 && !capture.moved
                 && !click.cancelled
-                && hit == Some(capture.target)
                 && !runtime.is_dragging()
+                && let Some(click_target) = click_target
             {
                 runtime.dispatch_event(
-                    UiEvent::new(EventKind::RightClick, capture.target)
+                    UiEvent::new(EventKind::RightClick, click_target)
                         .with_pointer(Point::new(position.x, position.y))
                         .with_click_count(click.count),
                 );
@@ -929,6 +940,11 @@ fn route_pointer(
         state.right_capture = Some(RightCapture {
             window: window_entity,
             target,
+            click_targets: fairygui_core::pointer::ClickTargets::begin(
+                runtime.store(),
+                target,
+                stop,
+            ),
             start: position,
             last: position,
             moved: false,
@@ -995,6 +1011,8 @@ fn route_pointer(
         runtime.check_popups(raw_hit.map(|(_, object, ..)| object.0));
         if let Some(target) = hit {
             let stop = pointer_down_stop(&runtime, target);
+            let click_targets =
+                fairygui_core::pointer::ClickTargets::begin(runtime.store(), target, stop);
             runtime.dispatch_event_until(
                 UiEvent::new(EventKind::MouseDown, target)
                     .with_pointer(Point::new(position.x, position.y)),
@@ -1071,6 +1089,7 @@ fn route_pointer(
             state.capture = Some(Capture {
                 window: window_entity,
                 target,
+                click_targets,
                 start: position,
                 last: position,
                 moved: false,

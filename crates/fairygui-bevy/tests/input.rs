@@ -5,6 +5,8 @@ mod bar_visibility;
 mod button_effects;
 #[path = "input/button_fire.rs"]
 mod button_fire;
+#[path = "input/click_targets.rs"]
+mod click_targets;
 #[path = "input/double_click.rs"]
 mod double_click;
 #[path = "input/list_selection.rs"]
@@ -623,7 +625,7 @@ fn drag_drop_finish_rechecks_cached_receiver_policy_and_retains_its_result() {
 }
 
 #[test]
-fn release_over_another_target_does_not_click_or_transfer_capture() {
+fn release_over_another_target_clicks_the_original_staged_target() {
     let (mut app, _) = setup();
     let (entity, first) = target(&mut app, 0);
     press(&mut app);
@@ -632,7 +634,9 @@ fn release_over_another_target_does_not_click_or_transfer_capture() {
     app.update();
     assert_eq!(captured_object(&app), Some(first));
     release(&mut app);
-    assert!(clicks(&mut app).is_empty());
+    let events = clicks(&mut app);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].target, first);
 }
 
 #[test]
@@ -652,7 +656,7 @@ fn focus_loss_cancels_capture_without_click() {
 }
 
 #[test]
-fn removed_hidden_or_offstage_capture_is_cancelled() {
+fn removed_or_offstage_targets_lose_clicks_but_visible_flag_alone_does_not() {
     for state in 0..3 {
         let (mut app, _) = setup();
         let (_, id) = target(&mut app, 0);
@@ -668,7 +672,7 @@ fn removed_hidden_or_offstage_capture_is_cancelled() {
         app.update();
         assert_eq!(captured_object(&app), None);
         release(&mut app);
-        assert!(clicks(&mut app).is_empty());
+        assert_eq!(clicks(&mut app).len(), usize::from(state == 1));
     }
 }
 
@@ -938,9 +942,9 @@ fn wheel_pixels_and_lines_have_distinct_units_and_ignore_other_windows() {
 }
 
 #[test]
-fn opening_modal_cancels_existing_background_capture() {
+fn opening_modal_blocks_new_background_hits_but_retains_native_press_path() {
     let (mut app, _) = setup();
-    target(&mut app, 1);
+    let (_, original) = target(&mut app, 1);
     press(&mut app);
     let package = fairygui_core::package::FuiPackage::parse(
         "MainMenu",
@@ -959,7 +963,9 @@ fn opening_modal_cancels_existing_background_capture() {
     app.update();
     assert_eq!(captured_object(&app), None);
     release(&mut app);
-    assert!(clicks(&mut app).is_empty());
+    let events = clicks(&mut app);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].target, original);
 }
 
 #[test]
@@ -1041,7 +1047,7 @@ fn right_pointer_events_bubble_without_emitting_left_click_events() {
 }
 
 #[test]
-fn right_release_on_another_target_sends_up_to_capture_but_does_not_click() {
+fn right_release_on_another_target_still_clicks_the_original_target() {
     let (mut app, _) = setup();
     let (entity, captured) = target(&mut app, 1);
     press_right(&mut app);
@@ -1059,9 +1065,11 @@ fn right_release_on_another_target_sends_up_to_capture_but_does_not_click() {
         event.kind == EventKind::RightMouseUp && event.target == captured && event.is_at_target()
     }));
     assert!(
-        !events
+        events
             .iter()
-            .any(|event| event.kind == EventKind::RightClick)
+            .any(|event| event.kind == EventKind::RightClick
+                && event.target == captured
+                && event.is_at_target())
     );
     assert!(!events.iter().any(|event| {
         matches!(

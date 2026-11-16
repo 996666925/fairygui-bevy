@@ -45,8 +45,7 @@ impl GuiPointerCapture {
         self.dragged
     }
     /// A threshold crossing or application drag has cancelled this press's
-    /// native click. Other click rules, such as releasing over a different
-    /// target, still apply independently.
+    /// native click. The native press-path recipient test still runs separately.
     pub fn suppresses_click(&self) -> bool {
         self.suppress_click
     }
@@ -56,6 +55,8 @@ impl GuiPointerCapture {
 /// Captures are ordered left mouse, right mouse, then ascending touch ID. Stale,
 /// hidden or modal-blocked views are excluded; unchanged snapshots retain their
 /// change tick. Application code never needs to resolve a native object ID.
+/// Filtering a view here does not erase its native press path: a later release
+/// can still click a staged original target or a shared staged ancestor.
 #[derive(Resource, Debug, Default, Clone, PartialEq)]
 pub struct GuiInputState {
     hovered: Option<Entity>,
