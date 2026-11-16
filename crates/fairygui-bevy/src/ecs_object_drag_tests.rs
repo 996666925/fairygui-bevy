@@ -183,6 +183,145 @@ fn draggable_threshold_native_start_events_rounding_state_ticks_and_release_supp
 }
 
 #[test]
+fn draggable_owner_configuration_drives_view_motion_and_projects_state_to_both_entities() {
+    for window_owner in [false, true] {
+        let (mut app, window, page, _, _) = fixture();
+        let asset = app.world().get::<FairyGuiRoot>(page).unwrap().asset.clone();
+        let owner = if window_owner {
+            let mut source = crate::FairyGuiWindow::new(asset, "Button1");
+            source.center_on_create = false;
+            source.draggable = false;
+            app.world_mut().spawn(source).id()
+        } else {
+            app.world_mut()
+                .spawn(FairyGuiRoot::new(asset, "Button1"))
+                .id()
+        };
+        app.world_mut()
+            .entity_mut(owner)
+            .insert((GuiDraggable::default(), crate::GuiOpaque(true)));
+        app.update();
+        let view = app.world().get::<crate::GuiRootView>(owner).unwrap().0;
+        assert_eq!(
+            app.world().get::<GuiObjectDragState>(owner),
+            Some(&GuiObjectDragState::default())
+        );
+        assert_eq!(
+            app.world().get::<GuiObjectDragState>(view),
+            Some(&GuiObjectDragState::default())
+        );
+        hover(&mut app, view);
+        app.update();
+        let initial = at(&app, view);
+        mouse(&mut app, true);
+        move_mouse(&mut app, window, Vec2::splat(40.));
+        assert!(
+            app.world()
+                .get::<GuiObjectDragState>(owner)
+                .unwrap()
+                .is_dragging()
+        );
+        assert_eq!(
+            app.world().get::<GuiObjectDragState>(owner),
+            app.world().get::<GuiObjectDragState>(view)
+        );
+        move_mouse(&mut app, window, Vec2::new(70., 85.));
+        assert_eq!(at(&app, view), initial + Vec2::new(30., 45.));
+        app.world_mut().entity_mut(owner).remove::<GuiDraggable>();
+        app.update();
+        assert!(app.world().get::<GuiObjectDragState>(owner).is_none());
+        assert!(app.world().get::<GuiObjectDragState>(view).is_none());
+        let stopped = at(&app, view);
+        move_mouse(&mut app, window, Vec2::splat(200.));
+        assert_eq!(at(&app, view), stopped);
+        mouse(&mut app, false);
+    }
+}
+
+#[test]
+fn draggable_owner_waits_for_assets_rebuilds_and_yields_to_view_configuration() {
+    let (mut app, _, page, _, _) = fixture();
+    let asset = app.world().get::<FairyGuiRoot>(page).unwrap().asset.clone();
+    let pending = app.world().resource::<Assets<FuiAsset>>().reserve_handle();
+    let owner = app
+        .world_mut()
+        .spawn((
+            FairyGuiRoot::new(pending.clone(), "Button1"),
+            GuiDraggable {
+                bounds: Some(GuiDragBounds::Stage(fairygui_core::Rect::new(
+                    10., 20., 500., 400.,
+                ))),
+            },
+        ))
+        .id();
+    app.update();
+    assert!(app.world().get::<GuiObjectDragState>(owner).is_none());
+    let loaded = {
+        let assets = app.world().resource::<Assets<FuiAsset>>();
+        let source = assets.get(&asset).unwrap();
+        FuiAsset {
+            package: source.package.clone(),
+            res_key: source.res_key.clone(),
+        }
+    };
+    app.world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .insert(pending.id(), loaded)
+        .unwrap();
+    app.update();
+    let view = app.world().get::<crate::GuiRootView>(owner).unwrap().0;
+    let object = app.world().get::<GObjectRef>(view).unwrap().0;
+    let expected = Some(fairygui_core::Rect::new(10., 20., 500., 400.));
+    assert_eq!(
+        app.world().non_send::<GuiRuntime>().object_drag_bindings[&object].bounds,
+        expected
+    );
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiDraggable::default());
+    app.update();
+    assert_eq!(
+        app.world().non_send::<GuiRuntime>().object_drag_bindings[&object].bounds,
+        None
+    );
+    app.world_mut().entity_mut(view).remove::<GuiDraggable>();
+    app.update();
+    assert_eq!(
+        app.world().non_send::<GuiRuntime>().object_drag_bindings[&object].bounds,
+        expected
+    );
+    app.world_mut()
+        .get_mut::<FairyGuiRoot>(owner)
+        .unwrap()
+        .item_name = "Button2".into();
+    app.update();
+    let new_view = app.world().get::<crate::GuiRootView>(owner).unwrap().0;
+    assert_ne!(new_view, view);
+    assert!(app.world().get_entity(view).is_err());
+    let new = app.world().get::<GObjectRef>(new_view).unwrap().0;
+    assert_eq!(
+        app.world().non_send::<GuiRuntime>().object_drag_bindings[&new].bounds,
+        expected
+    );
+    assert_eq!(
+        app.world().get::<GuiObjectDragState>(owner),
+        app.world().get::<GuiObjectDragState>(new_view)
+    );
+    app.world_mut()
+        .entity_mut(new_view)
+        .insert(crate::GuiDragSource::default());
+    app.update();
+    assert!(
+        !app.world()
+            .non_send::<GuiRuntime>()
+            .object_drag_eligible(new)
+    );
+    app.world_mut().entity_mut(owner).remove::<FairyGuiRoot>();
+    app.update();
+    assert!(app.world().get::<GuiObjectDragState>(owner).is_none());
+}
+
+#[test]
 fn draggable_control_bounds_and_live_stage_bounds_clamp_and_component_removal_cancels_once() {
     let (mut app, window, _, control, bounds) = fixture();
     app.world_mut()

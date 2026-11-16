@@ -13,7 +13,7 @@ use crate::object::{GObjectId, ObjectStore};
 #[derive(Debug, Clone)]
 pub struct ObjectDrag {
     owner: GObjectId,
-    parent: GObjectId,
+    parent: Option<GObjectId>,
     pointer_start: Point,
     global_rect: Rect,
 }
@@ -23,8 +23,10 @@ impl ObjectDrag {
             return None;
         }
         let object = store.object(owner)?;
-        let parent = object.parent()?;
-        store.global_to_local(parent, pointer)?;
+        let parent = object.parent();
+        if let Some(parent) = parent {
+            store.global_to_local(parent, pointer)?;
+        }
         Some(Self {
             owner,
             parent,
@@ -33,7 +35,7 @@ impl ObjectDrag {
                 .local_to_global_rect(owner, Rect::new(0., 0., object.width(), object.height()))?,
         })
     }
-    pub fn parent(&self) -> GObjectId {
+    pub fn parent(&self) -> Option<GObjectId> {
         self.parent
     }
 
@@ -50,7 +52,7 @@ impl ObjectDrag {
             || !pointer.y.is_finite()
             || store
                 .object(self.owner)
-                .is_none_or(|object| object.parent() != Some(self.parent))
+                .is_none_or(|object| object.parent() != self.parent)
         {
             return false;
         }
@@ -82,8 +84,14 @@ impl ObjectDrag {
                 y = (bounds.bottom() - self.global_rect.height).max(bounds.y);
             }
         }
-        let Some(local) = store.global_to_local(self.parent, Point::new(x, y)) else {
-            return false;
+        let local = match self.parent {
+            Some(parent) => {
+                let Some(local) = store.global_to_local(parent, Point::new(x, y)) else {
+                    return false;
+                };
+                local
+            }
+            None => Point::new(x, y),
         };
         // Math.round(-0.5) is zero, unlike Rust's round-away-from-zero.
         store.set_xy(self.owner, (local.x + 0.5).floor(), (local.y + 0.5).floor());
@@ -228,6 +236,38 @@ impl DragDrop {
 mod tests {
     use super::*;
     use crate::package::ObjectType;
+
+    #[test]
+    fn top_level_object_drag_moves_in_global_coordinates_and_cancels_on_reparenting() {
+        let mut store = ObjectStore::new();
+        let owner = store.create(ObjectType::Component);
+        store.set_xy(owner, 30., 40.);
+        store.set_size(owner, 20., 30.);
+        let drag = ObjectDrag::begin(&store, owner, Point::new(100., 100.)).unwrap();
+        assert_eq!(drag.parent(), None);
+        assert!(drag.update(&mut store, Point::new(120.4, 129.5), None, None));
+        assert_eq!(
+            store.object(owner).unwrap().position(),
+            Point::new(50., 70.)
+        );
+        assert!(drag.update(
+            &mut store,
+            Point::new(900., 900.),
+            Some(Rect::new(10., 20., 100., 100.)),
+            None
+        ));
+        assert_eq!(
+            store.object(owner).unwrap().position(),
+            Point::new(90., 90.)
+        );
+        let parent = store.create(ObjectType::Component);
+        store.set_parent(owner, Some(parent));
+        assert!(!drag.update(&mut store, Point::new(1000., 1000.), None, None));
+        assert_eq!(
+            store.object(owner).unwrap().position(),
+            Point::new(90., 90.)
+        );
+    }
 
     #[test]
     fn object_drag_discards_sensitivity_motion_rounds_like_js_and_clamps_oversized_bounds() {

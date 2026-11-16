@@ -70,7 +70,7 @@ pub(super) enum Gesture {
     },
     Object {
         owner: GObjectId,
-        parent: GObjectId,
+        parent: Option<GObjectId>,
         motion: Option<fairygui_core::drag_drop::ObjectDrag>,
         touch_id: Option<u64>,
     },
@@ -207,14 +207,10 @@ impl Gesture {
                 if occupied.contains(&owner) {
                     return Self::None;
                 }
-                if let Some(parent) = runtime
-                    .store()
-                    .object(owner)
-                    .and_then(|object| object.parent())
-                {
+                if let Some(object) = runtime.store().object(owner) {
                     return Self::Object {
                         owner,
-                        parent,
+                        parent: object.parent(),
                         motion: None,
                         touch_id: None,
                     };
@@ -563,7 +559,7 @@ impl Gesture {
                     && runtime
                         .store()
                         .object(*owner)
-                        .is_some_and(|object| object.parent() == Some(*parent))
+                        .is_some_and(|object| object.parent() == *parent)
                     && (motion.is_none() || runtime.active_object_drags.contains_key(owner))
             }
             Self::Window { owner, .. } => runtime

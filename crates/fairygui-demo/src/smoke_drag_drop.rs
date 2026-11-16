@@ -56,8 +56,14 @@ fn drive(
     };
     window.focused = true;
     let elapsed = state.frame - state.since;
-    let center =
-        |entity| nodes.get(entity).unwrap().1.transform_point2(Vec2::ZERO) / window.scale_factor();
+    let center = |entity| {
+        nodes
+            .get(gui.view(entity).unwrap())
+            .unwrap()
+            .1
+            .transform_point2(Vec2::ZERO)
+            / window.scale_factor()
+    };
     let mut next = false;
     match state.step {
         0 => {
@@ -89,6 +95,23 @@ fn drive(
             state.source = Some(source);
             state.receiver = Some(receiver);
             state.free = gui.child_by_name(state.page.unwrap(), "a");
+            let free = state.free.unwrap();
+            let geometry = gui.transform(free).unwrap();
+            let mut display = *gui.display(free).unwrap();
+            display.visible = false;
+            commands.entity(free).insert(display);
+            state.free = Some(
+                commands
+                    .spawn((
+                        FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Button1")
+                            .with_parent(state.page.unwrap())
+                            .with_position(geometry.position())
+                            .with_size(geometry.size()),
+                        GuiDraggable::default(),
+                        GuiText::new("Owner drag"),
+                    ))
+                    .id(),
+            );
             state.bounded = gui.child_by_name(state.page.unwrap(), "d");
             state.bounds = gui.child_by_name(state.page.unwrap(), "bounds");
             // Exercise owner aliases using the same rectangle as the exported
