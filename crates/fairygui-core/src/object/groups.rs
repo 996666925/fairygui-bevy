@@ -535,6 +535,10 @@ impl ObjectStore {
 mod resize_tests;
 
 #[cfg(test)]
+#[path = "group_dynamic_alignment_tests.rs"]
+mod dynamic_alignment_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
