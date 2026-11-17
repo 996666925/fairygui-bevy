@@ -79,9 +79,8 @@ pub(super) enum Gesture {
         bar: GObjectId,
         container: GObjectId,
         vertical: bool,
-        track: f32,
-        initial: f32,
-        transform: PointerTransform,
+        offset: Option<Vec2>,
+        point: Option<Vec2>,
     },
     Window {
         owner: GObjectId,
@@ -159,27 +158,18 @@ impl Gesture {
                 if object.name() == fairygui_core::scroll::GRIP_NAME
                     && let Some(container) = runtime.store().scroll_container_of_bar(bar)
                     && let Some(vertical) = runtime.store().scroll_bar_axis(bar)
-                    && let Some(track) = runtime.store().scroll_grip_track(bar)
-                    && track > 0.0
-                    && let Some(pane) = runtime.store().scroll_pane(container)
+                    && runtime.store().scroll_grip_track(bar).is_some()
                 {
                     if occupied.contains(&container) {
                         return Self::None;
                     }
-                    let initial = if vertical {
-                        pane.display_perc_y()
-                    } else {
-                        pane.display_perc_x()
-                    };
-                    let transform = pointer_transform(runtime, bar, transforms);
                     runtime.store_mut().set_scroll_bar_grip_dragging(bar, true);
                     return Self::Grip {
                         bar,
                         container,
                         vertical,
-                        track,
-                        initial,
-                        transform,
+                        offset: None,
+                        point: None,
                     };
                 }
                 // A nested graphic inside the grip can still resolve its parent.
@@ -463,19 +453,38 @@ impl Gesture {
                 }
             }
             Self::Grip {
-                bar: _,
+                bar,
                 container,
                 vertical,
-                track,
-                initial,
-                transform,
-            } if moved => {
-                let delta = transform.displacement(cursor - start);
-                runtime.store_mut().set_scroll_perc(
-                    *container,
-                    *vertical,
-                    *initial + (if *vertical { delta.y } else { delta.x }) / *track,
-                );
+                offset,
+                point,
+            } => {
+                // Native grip movement has no content-drag threshold. Idle
+                // frames must not overwrite programmatic scroll changes.
+                if cursor == last {
+                    return;
+                }
+                let Some((point, offset)) = point.zip(*offset) else {
+                    return;
+                };
+                let Some(track) = runtime.store().scroll_grip_track(*bar) else {
+                    return;
+                };
+                let Some(part) = runtime
+                    .store()
+                    .child_by_name(*bar, fairygui_core::scroll::BAR_NAME)
+                    .and_then(|id| runtime.store().object(id))
+                else {
+                    return;
+                };
+                let position = if *vertical {
+                    point.y - offset.y - part.y()
+                } else {
+                    point.x - offset.x - part.x()
+                };
+                runtime
+                    .store_mut()
+                    .set_scroll_perc(*container, *vertical, position / track);
             }
             Self::Window {
                 owner,

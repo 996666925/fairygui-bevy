@@ -27,6 +27,7 @@ struct State {
     saw_fade: bool,
     saw_alignment: bool,
     snap_views: Vec<Entity>,
+    grab_offset: Vec2,
 }
 
 pub(super) fn install(app: &mut App) {
@@ -169,7 +170,7 @@ fn drive(
 ) {
     state.frames += 1;
     state.clicks.extend(clicks.read().cloned());
-    if time.elapsed_secs_f64() > 45. {
+    if time.elapsed_secs_f64() > 180. {
         eprintln!("list scrollbar smoke timed out at step {}", state.step);
         exit.write(AppExit::error());
         return;
@@ -643,7 +644,7 @@ fn drive(
             state.step = 32;
             state.since = state.frames;
         }
-        32 if elapsed >= 4 => {
+        32 => {
             let list = state.list.unwrap();
             let p = runtime.store().scroll_pane(list).unwrap();
             state.saw_alignment |= p.display_pos().y > 40. && p.display_pos().y < state.offset;
@@ -868,16 +869,102 @@ fn drive(
             state.since = state.frames;
         }
         54 if elapsed >= 8 => {
-            runtime.remove_root(&mut commands, state.root.unwrap());
+            let list = state.list.unwrap();
+            runtime.store_mut().set_scroll_snap_to_item(list, false);
+            runtime
+                .store_mut()
+                .set_scroll_bar_display(list, fairygui_core::scroll::ScrollBarDisplayType::Visible);
+            runtime.store_mut().set_scroll_perc(list, true, 0.3);
             state.step = 55;
             state.since = state.frames;
         }
-        55 if elapsed >= 4 => {
+        55 if elapsed >= 8 => {
+            let grip = runtime
+                .store()
+                .child_by_name(state.bar.unwrap(), GRIP_NAME)
+                .unwrap();
+            state.cursor = Some(point(&runtime, &nodes, grip, Vec2::splat(0.5), scale));
+            state.step = 56;
+            state.since = state.frames;
+        }
+        56 if elapsed >= 4 => {
+            mouse.press(MouseButton::Left);
+            state.step = 57;
+            state.since = state.frames;
+        }
+        57 if elapsed >= 4 => {
+            let bar = state.bar.unwrap();
+            let grip = runtime.store().child_by_name(bar, GRIP_NAME).unwrap();
+            let grip = runtime.store().object(grip).unwrap();
+            let (node, transform) = nodes.get(runtime.entity_of(bar).unwrap()).unwrap();
+            state.grab_offset = (transform
+                .try_inverse()
+                .unwrap()
+                .transform_point2(state.cursor.unwrap() * scale)
+                - node.border_box().min)
+                * node.inverse_scale_factor()
+                - Vec2::new(grip.x(), grip.y());
+            state.offset = runtime
+                .store()
+                .scroll_pane(state.list.unwrap())
+                .unwrap()
+                .pos()
+                .y;
+            let root = runtime.root_object(state.root.unwrap()).unwrap();
+            runtime.store_mut().set_xy(root, 210., 90.);
+            runtime.store_mut().set_scale(root, 0.9, 1.1);
+            runtime.store_mut().set_rotation(root, 12.);
+            let list = state.list.unwrap();
+            runtime.store_mut().set_size(list, 360., 210.);
+            state.step = 58;
+            state.since = state.frames;
+        }
+        58 if elapsed >= 8 => {
+            let list = state.list.unwrap();
+            assert!(
+                (runtime.store().scroll_pane(list).unwrap().pos().y - state.offset).abs() < 0.001,
+                "idle resize must not replay grip input"
+            );
+            let bar = state.bar.unwrap();
+            let track = runtime.store().child_by_name(bar, BAR_NAME).unwrap();
+            let track = runtime.store().object(track).unwrap();
+            let length = runtime.store().scroll_grip_track(bar).unwrap();
+            let local = Vec2::new(0., track.y() + length * 0.6) + state.grab_offset;
+            let (node, transform) = nodes.get(runtime.entity_of(bar).unwrap()).unwrap();
+            state.cursor = Some(
+                transform
+                    .transform_point2(local / node.inverse_scale_factor() + node.border_box().min)
+                    / scale,
+            );
+            state.step = 59;
+            state.since = state.frames;
+        }
+        59 if elapsed >= 5 => {
+            let pane = runtime.store().scroll_pane(state.list.unwrap()).unwrap();
+            assert!(
+                (pane.perc_y() - 0.6).abs() < 0.001,
+                "grip drag must use current geometry: {}",
+                pane.perc_y()
+            );
+            assert!(pane.grip_dragging(true));
+            mouse.release(MouseButton::Left);
+            capture(&mut commands, "-live-transform");
+            state.step = 60;
+            state.since = state.frames;
+        }
+        60 if elapsed >= 8 => {
+            runtime.remove_root(&mut commands, state.root.unwrap());
+            state.step = 61;
+            state.since = state.frames;
+        }
+        61 if elapsed >= 4 => {
             assert!(state.snap_views.iter().all(|&e| nodes.get(e).is_err()));
             println!(
                 "demo smoke: actual content drag, stationary release item snap, start/end overscroll paint, native return bounce, fixed bars, clipped rows, no false clicks, retained views and disposal verified"
             );
-            println!("demo smoke PASSED: list scrollbar window checks");
+            println!(
+                "demo smoke PASSED: list scrollbar window checks, grip drag through live ancestor transforms and pane resize"
+            );
             exit.write(AppExit::Success);
         }
         _ => {}

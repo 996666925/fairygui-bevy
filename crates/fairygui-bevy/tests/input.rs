@@ -25,6 +25,8 @@ mod popup_stack;
 mod releases;
 #[path = "input/scroll_alignment.rs"]
 mod scroll_alignment;
+#[path = "input/scroll_grip.rs"]
+mod scroll_grip;
 #[path = "input/scroll_motion.rs"]
 mod scroll_motion;
 #[path = "input/scroll_pages.rs"]

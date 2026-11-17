@@ -3,10 +3,9 @@ use super::*;
 use fairygui_core::widget::ControlData;
 
 impl Gesture {
-    /// GSlider stores the press point in its local space, then converts every
-    /// move through its current transform. Translation, rotation and ancestor
-    /// changes during a drag must not reuse the inverse captured at press.
-    pub(super) fn sample_slider_point(
+    /// Sample through the current view transform. Sliders retain the local press
+    /// point; scrollbars retain the offset from the grip origin at press.
+    pub(super) fn sample_control_point(
         &mut self,
         runtime: &GuiRuntime,
         cursor: Vec2,
@@ -15,21 +14,17 @@ impl Gesture {
         views: &PointerViews,
         scale: f32,
     ) {
-        let Self::Slider {
-            owner,
-            origin,
-            point,
-            ..
-        } = self
-        else {
-            return;
+        let owner = match self {
+            Self::Slider { owner, .. } => *owner,
+            Self::Grip { bar, .. } => *bar,
+            _ => return,
         };
-        let entity = runtime.entity_of(*owner).or_else(|| {
+        let entity = runtime.entity_of(owner).or_else(|| {
             targets
                 .iter()
-                .find_map(|(entity, reference, ..)| (reference.0 == *owner).then_some(entity))
+                .find_map(|(entity, reference, ..)| (reference.0 == owner).then_some(entity))
         });
-        *point = if let Some((entity, (transform, node))) =
+        let local = if let Some((entity, (transform, node))) =
             entity.and_then(|entity| geometry.get(entity).ok().map(|geometry| (entity, geometry)))
         {
             transform.try_inverse().map(|inverse| {
@@ -37,7 +32,7 @@ impl Gesture {
                     .transform_point2(views.physical_position(entity, cursor, scale))
                     - node.border_box().min)
                     * node.inverse_scale_factor();
-                if let Some(object) = runtime.store().object(*owner)
+                if let Some(object) = runtime.store().object(owner)
                     && object.pivot_as_anchor()
                 {
                     point -= Vec2::new(
@@ -50,12 +45,31 @@ impl Gesture {
         } else {
             runtime
                 .store()
-                .global_to_local(*owner, Point::new(cursor.x, cursor.y))
+                .global_to_local(owner, Point::new(cursor.x, cursor.y))
                 .map(|point| Vec2::new(point.x, point.y))
         }
         .filter(|point| point.is_finite());
-        if origin.is_none() {
-            *origin = *point;
+        match self {
+            Self::Slider { origin, point, .. } => {
+                *point = local;
+                if origin.is_none() {
+                    *origin = local;
+                }
+            }
+            Self::Grip { offset, point, .. } => {
+                *point = local;
+                if offset.is_none() {
+                    *offset = local
+                        .zip(
+                            runtime
+                                .store()
+                                .child_by_name(owner, fairygui_core::scroll::GRIP_NAME)
+                                .and_then(|id| runtime.store().object(id)),
+                        )
+                        .map(|(point, grip)| point - Vec2::new(grip.x(), grip.y()));
+                }
+            }
+            _ => unreachable!(),
         }
     }
 }

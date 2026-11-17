@@ -780,7 +780,7 @@ fn route_pointer(
                 settings.drag_threshold.max(0.),
                 &state.gesture_owners(&runtime),
             );
-            capture.gesture.sample_slider_point(
+            capture.gesture.sample_control_point(
                 &runtime,
                 position,
                 &targets,
@@ -1129,7 +1129,7 @@ fn route_pointer(
                     .collect();
                 Gesture::begin_excluding(&mut runtime, target, &gesture_transforms, &occupied)
             };
-            gesture.sample_slider_point(
+            gesture.sample_control_point(
                 &runtime,
                 position,
                 &targets,
