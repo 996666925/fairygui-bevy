@@ -9,22 +9,12 @@ use bevy::{
 
 #[derive(Resource, Default)]
 struct Seen {
-    items: Vec<(Entity, usize, i32)>,
+    items: Vec<(Entity, usize)>,
     actions: Vec<GuiMenuAction>,
     parent_actions: usize,
 }
-fn selected(
-    event: On<GuiListItemClick>,
-    controllers: Query<&GuiControllers>,
-    mut seen: ResMut<Seen>,
-) {
-    let checked = controllers
-        .get(event.item)
-        .unwrap()
-        .get("checked")
-        .unwrap()
-        .selected_index();
-    seen.items.push((event.item, event.index, checked));
+fn selected(event: On<GuiListItemClick>, mut seen: ResMut<Seen>) {
+    seen.items.push((event.item, event.index));
 }
 fn action(event: On<GuiMenuAction>, popup: Res<GuiPopupState>, mut seen: ResMut<Seen>) {
     assert!(!popup.is_open(event.menu));
@@ -110,7 +100,7 @@ fn mouse_and_touch_publish_list_item_then_delayed_target_only_entity_action() {
     for touch in [false, true] {
         let (mut app, _, menu, list, row, window) = setup();
         click(&mut app, row, window, touch);
-        assert_eq!(app.world().resource::<Seen>().items, [(row, 0, 1)]);
+        assert_eq!(app.world().resource::<Seen>().items, [(row, 0)]);
         assert!(app.world().resource::<Seen>().actions.is_empty());
         assert_eq!(app.world().get::<GuiListSelection>(list).unwrap().0, [0]);
         // The native delay has not toggled checked or hidden the retained menu.
@@ -242,7 +232,16 @@ fn ecs_caption_enable_and_checked_edits_are_read_at_delayed_activation() {
         },
     );
     click(&mut app, row, window, false);
-    assert_eq!(app.world().resource::<Seen>().items, [(row, 0, 1)]);
+    assert_eq!(app.world().resource::<Seen>().items, [(row, 0)]);
+    assert_eq!(
+        app.world()
+            .get::<GuiControllers>(row)
+            .unwrap()
+            .get("checked")
+            .unwrap()
+            .selected_index(),
+        2
+    );
     assert!(
         app.world()
             .get::<GuiListSelection>(list)
