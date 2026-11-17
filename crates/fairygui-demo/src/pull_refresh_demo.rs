@@ -3,7 +3,6 @@ use crate::demos;
 use crate::ui::pull_to_refresh::{self as ui, Footer, FooterC1Page, Header, HeaderC1Page};
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
-use fairygui_core::object::EventKind;
 
 #[derive(Default, Resource)]
 pub(crate) struct PullDemo {
@@ -42,16 +41,22 @@ fn lock(gui: &mut GuiMut, target: Entity, size: f32, header: bool) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn update(
     mut state: ResMut<PullDemo>,
     controller: Res<demos::DemoController>,
     mut gui: ParamSet<(GuiQuery, Query<&mut GuiControllers>)>,
-    mut releases: MessageReader<GuiPullRelease>,
+    mut down_releases: MessageReader<GuiPullDownRelease>,
+    mut up_releases: MessageReader<GuiPullUpRelease>,
     mut commands: Commands,
     time: Res<Time>,
     mut edit: GuiMut,
 ) {
-    let events: Vec<_> = releases.read().cloned().collect();
+    let events: Vec<_> = down_releases
+        .read()
+        .map(|release| (release.entity, true))
+        .chain(up_releases.read().map(|release| (release.entity, false)))
+        .collect();
     let root = controller.root_owner;
     if controller.package.as_deref() != Some(ui::PACKAGE_NAME) || root.is_none() {
         state.root = None;
@@ -100,9 +105,9 @@ pub(crate) fn update(
         };
         page(&mut gui.p1(), header_ui.c_c1, status);
     }
-    for release in events {
-        let is_header = release.event.kind == EventKind::PullDownRelease && release.entity == first;
-        let is_footer = release.event.kind == EventKind::PullUpRelease && release.entity == second;
+    for (entity, is_down) in events {
+        let is_header = is_down && entity == first;
+        let is_footer = !is_down && entity == second;
         if is_header {
             if status != HeaderC1Page::Page1 {
                 continue;
@@ -117,7 +122,7 @@ pub(crate) fn update(
             continue;
         }
         state.jobs.push(Job {
-            list: release.entity,
+            list: entity,
             header: is_header,
             due: time.elapsed_secs_f64() + 2.,
             completion: false,

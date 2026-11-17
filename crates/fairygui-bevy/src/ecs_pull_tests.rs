@@ -1,10 +1,7 @@
 use crate::prelude::*;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
-use fairygui_core::{
-    object::{EventKind, GObjectId},
-    package::FuiPackage,
-};
+use fairygui_core::{object::GObjectId, package::FuiPackage};
 
 fn fixture() -> (App, Entity, GObjectId, Entity, GObjectId, Entity) {
     let mut app = App::new();
@@ -278,13 +275,12 @@ fn ecs_ordinary_list_configuration_errors_preserve_content_and_virtual_mode() {
 struct Responses(usize);
 fn respond(
     gui: GuiQuery,
-    mut events: MessageReader<GuiPullRelease>,
+    mut events: MessageReader<GuiPullDownRelease>,
     mut responses: ResMut<Responses>,
     mut gui_edit: crate::GuiMut,
 ) {
     for event in events.read() {
         assert!(event.event.is_at_target() && !event.event.bubbling);
-        assert_eq!(event.event.kind, EventKind::PullDownRelease);
         let scroll = gui.scroll(event.entity).unwrap();
         assert_eq!(scroll.display_position().y, -90.);
         let header = scroll.header().unwrap();
@@ -463,6 +459,18 @@ fn ecs_pull_response_applies_lock_before_first_release_tick_and_updates_entity_s
 
 #[derive(Resource, Default)]
 struct TypedPullSeen(Vec<(bool, Entity)>);
+#[derive(Resource, Default)]
+struct TypedPullMessages(Vec<(bool, Entity)>);
+
+fn read_typed_pull_messages(
+    mut downs: MessageReader<GuiPullDownRelease>,
+    mut ups: MessageReader<GuiPullUpRelease>,
+    mut seen: ResMut<TypedPullMessages>,
+) {
+    seen.0
+        .extend(downs.read().map(|event| (true, event.entity)));
+    seen.0.extend(ups.read().map(|event| (false, event.entity)));
+}
 
 #[test]
 fn typed_pull_release_observers_receive_directional_target_only_events() {
@@ -478,7 +486,9 @@ fn typed_pull_release_observers_receive_directional_target_only_events() {
     }
 
     let (mut app, _owner, list, view, _footer_list, _footer_view) = fixture();
-    app.init_resource::<TypedPullSeen>();
+    app.init_resource::<TypedPullSeen>()
+        .init_resource::<TypedPullMessages>()
+        .add_systems(Update, read_typed_pull_messages.in_set(GuiSystems::Respond));
     app.world_mut().entity_mut(view).observe(down).observe(up);
     let parent = app
         .world()
@@ -518,6 +528,10 @@ fn typed_pull_release_observers_receive_directional_target_only_events() {
     app.update();
     assert_eq!(
         app.world().resource::<TypedPullSeen>().0,
+        vec![(true, view), (false, view)]
+    );
+    assert_eq!(
+        app.world().resource::<TypedPullMessages>().0,
         vec![(true, view), (false, view)]
     );
 }

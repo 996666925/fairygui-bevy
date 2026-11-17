@@ -160,16 +160,12 @@ struct Responses(usize);
 
 fn respond(
     mut gui: NonSendMut<GuiRuntime>,
-    mut events: MessageReader<GuiPullRelease>,
+    mut events: MessageReader<GuiPullDownRelease>,
     mut responses: ResMut<Responses>,
 ) {
     for release in events.read() {
         assert!(release.event.is_at_target());
         assert!(!release.event.bubbling);
-        assert_eq!(
-            release.event.kind,
-            fairygui_core::object::EventKind::PullDownRelease
-        );
         assert_eq!(
             gui.store()
                 .scroll_pane(release.event.target)
@@ -188,10 +184,11 @@ fn advance(mut gui: NonSendMut<GuiRuntime>) {
 }
 
 #[test]
-fn pull_message_is_target_only_and_response_lock_precedes_first_release_tick() {
+fn pull_down_message_is_target_only_and_response_lock_precedes_first_release_tick() {
     let (mut app, _, list, _) = fixture();
     app.init_resource::<Responses>()
-        .add_message::<GuiPullRelease>()
+        .add_message::<GuiPullDownRelease>()
+        .add_message::<GuiPullUpRelease>()
         .configure_sets(
             Update,
             (

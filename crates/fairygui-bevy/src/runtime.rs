@@ -370,40 +370,28 @@ struct PendingListItemClick {
     views: Option<(Entity, Entity)>,
 }
 
-/// Native target-only pull release, published before application Respond.
-/// Assign header/footer locks there before the release tween is finalized.
-#[derive(Message, Debug, Clone)]
-pub struct GuiPullRelease {
-    pub entity: Entity,
-    pub event: fairygui_core::object::UiEvent,
-}
-
 pub fn emit_pull_release_messages(
     mut commands: Commands,
     mut runtime: NonSendMut<GuiRuntime>,
-    mut messages: MessageWriter<GuiPullRelease>,
+    mut down_messages: MessageWriter<crate::GuiPullDownRelease>,
+    mut up_messages: MessageWriter<crate::GuiPullUpRelease>,
 ) {
     for (target, direction) in runtime.store_mut().drain_pull_releases() {
         let Some(entity) = runtime.entity_of(target) else {
             continue;
         };
-        let kind = match direction {
-            fairygui_core::scroll::PullRelease::Down => {
-                fairygui_core::object::EventKind::PullDownRelease
-            }
-            fairygui_core::scroll::PullRelease::Up => {
-                fairygui_core::object::EventKind::PullUpRelease
-            }
-        };
-        let event = fairygui_core::object::UiEvent::new(kind, target);
-        runtime.events.push(event.clone());
-        messages.write(GuiPullRelease { entity, event });
         match direction {
             fairygui_core::scroll::PullRelease::Down => {
-                commands.trigger(crate::GuiPullDownRelease::new(entity, target));
+                let event = crate::GuiPullDownRelease::new(entity, target);
+                runtime.events.push(event.event.clone());
+                down_messages.write(event.clone());
+                commands.trigger(event);
             }
             fairygui_core::scroll::PullRelease::Up => {
-                commands.trigger(crate::GuiPullUpRelease::new(entity, target));
+                let event = crate::GuiPullUpRelease::new(entity, target);
+                runtime.events.push(event.event.clone());
+                up_messages.write(event.clone());
+                commands.trigger(event);
             }
         }
     }

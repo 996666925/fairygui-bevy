@@ -212,6 +212,12 @@ event_types! {
     GuiPullDownRelease => PullDownRelease, GuiPullUpRelease => PullUpRelease,
 }
 
+// Pull notifications are also buffered messages so Respond systems can lock
+// the released pane before Advance. The direction-specific message type keeps
+// consumers from inspecting EventKind.
+impl Message for GuiPullDownRelease {}
+impl Message for GuiPullUpRelease {}
+
 /// A dynamically named FairyGUI `Other(name)` notification.
 #[derive(EntityEvent, Debug, Clone)]
 #[entity_event(trigger = PropagateEntityTrigger<true, Self, GuiEventTraversal>)]

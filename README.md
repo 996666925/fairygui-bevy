@@ -474,6 +474,7 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 | 悬停进入、离开 | `On<GuiRollOver>`、`On<GuiRollOut>` |
 | 按钮、下拉框、滑块的值变化 | `On<GuiStateChanged>` |
 | 滚动、滚动结束 | `On<GuiScroll>`、`On<GuiScrollEnd>` |
+| 下拉刷新、上拉刷新 | `On<GuiPullDownRelease>`、`On<GuiPullUpRelease>` |
 | 输入、提交变化、回车 | `On<GuiInputEvent>`、`On<GuiChange>`、`On<GuiEnter>`，`value()` 读取原始提交文本 |
 | 富文本链接 | `On<GuiLink>`，`href` 读取原始链接地址；同时保留 `GuiLink` Message 和 `GuiLinkEvent` 通知 |
 | 窗口显示、隐藏 | `On<GuiWindowShown>`、`On<GuiWindowHide>` |
@@ -1548,8 +1549,8 @@ commands.spawn((
 头尾状态；`--smoke-controllers` 验证真实按钮、齿轮动画和同帧 observer 修改。
 
 下拉刷新可直接观察 `On<GuiPullDownRelease>` 或 `On<GuiPullUpRelease>`，分别对应
-头部和尾部释放；事件只投递给滚动容器，不向父级冒泡。兼容的
-`GuiPullRelease` Message 仍同时发布，`entity` 直接提供滚动容器实体。
+头部和尾部释放；事件只投递给滚动容器，不向父级冒泡。两个方向的类型也分别实现
+`Message`，可在 `GuiSystems::Respond` 使用 `MessageReader`，`entity` 直接提供滚动容器实体。
 `GuiScrollState::header()`、`footer()` 提供刷新控件实体、当前尺寸和导出尺寸，
 另可读取刷新轴向及头尾锁定尺寸。在 `Respond` 通过 `GuiMut` 直接锁定：
 
@@ -1791,7 +1792,8 @@ commands.entity(movie).observe(|event: On<GuiAnimationComplete>, gui: GuiQuery| 
 详见 [滚动对齐](docs/scroll-alignment.md)。
 内容拖拽支持原版速度采样、释放惯性、分页限制、条目吸附和双向回弹；Bevy 保留
 逻辑边界并绘制越界内容。时序参数与验证范围见 [拖拽与释放](docs/scroll-motion.md)。
-下拉/上拉刷新会创建导出的页头/页脚，发布 `GuiPullRelease`，支持响应期间锁定和
+下拉/上拉刷新会创建导出的页头/页脚，分别发布 `GuiPullDownRelease` 与
+`GuiPullUpRelease`，支持响应期间锁定和
 解锁回弹；`--smoke-pull-refresh` 验证完整示例流程，详见 [下拉刷新](docs/pull-refresh.md)。
 
 解析器自带命令行工具，可脱离渲染查看包结构：

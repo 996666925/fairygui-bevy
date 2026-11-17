@@ -155,9 +155,9 @@ pub use runtime::windows::{FairyGuiWindow, GuiWindowState};
 pub use runtime::{
     FairyGuiRoot, GObjectRef, GuiAnimationComplete, GuiButtonSelected, GuiConfig, GuiEvent,
     GuiFont, GuiLink, GuiListItemClick, GuiListSelection, GuiLoaderFailure, GuiLoaderState,
-    GuiMenuAction, GuiProgressValue, GuiPullRelease, GuiRootBuildProgress, GuiRootInstance,
-    GuiRuntime, GuiSliderValue, GuiTextInput, GuiTransitionCallback, GuiTransitionComplete,
-    GuiTransitionHook, PopupMenuTemplates,
+    GuiMenuAction, GuiProgressValue, GuiRootBuildProgress, GuiRootInstance, GuiRuntime,
+    GuiSliderValue, GuiTextInput, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+    PopupMenuTemplates,
 };
 pub use tree::{
     GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem, GuiTreeNode,
@@ -221,18 +221,19 @@ pub mod prelude {
         GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
         GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
         GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
-        GuiProgressTweenComplete, GuiProgressValue, GuiPullPart, GuiPullRelease, GuiQuery,
-        GuiRenderOrder, GuiRootBuildProgress, GuiRootInstance, GuiRootMountState, GuiRootView,
-        GuiRuntime, GuiScrollSettings, GuiScrollState, GuiSizeConstraints, GuiSliderState,
-        GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems, GuiText, GuiTextFormat,
-        GuiTextInput, GuiTextInputSettings, GuiTextSelection, GuiTextVars, GuiTooltip,
-        GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips, GuiTransform,
-        GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook, GuiTransitionState,
-        GuiTransitions, GuiTreeContent, GuiTreeContentError, GuiTreeContentState, GuiTreeItem,
-        GuiTreeNode, GuiTreeNodeState, GuiTreeSettings, GuiTreeState, GuiTweenComplete,
-        GuiTweenProperty, GuiTweenTarget, GuiVirtualList, GuiVirtualListState, GuiWindowState,
-        GuiWorldExt, ListInteractionSettings, ListLayoutSettings, ListLayoutType,
-        ListNavigationDirection, ListSelectionMode, PopupMenuTemplates, RelationType, TreeSettings,
+        GuiProgressTweenComplete, GuiProgressValue, GuiPullDownRelease, GuiPullPart,
+        GuiPullUpRelease, GuiQuery, GuiRenderOrder, GuiRootBuildProgress, GuiRootInstance,
+        GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollSettings, GuiScrollState,
+        GuiSizeConstraints, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems,
+        GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTextSelection, GuiTextVars,
+        GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips,
+        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
+        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
+        GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
+        GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
+        ListLayoutSettings, ListLayoutType, ListNavigationDirection, ListSelectionMode,
+        PopupMenuTemplates, RelationType, TreeSettings,
     };
     pub use crate::{FairyGuiAppExt, GuiExtension, GuiExtensionError, GuiExtensionState};
     pub use crate::{
@@ -295,7 +296,8 @@ impl Plugin for FairyGuiPlugin {
         .add_message::<GuiAnimationComplete>()
         .add_message::<GuiTextInput>()
         .add_message::<GuiListItemClick>()
-        .add_message::<GuiPullRelease>()
+        .add_message::<GuiPullDownRelease>()
+        .add_message::<GuiPullUpRelease>()
         .init_resource::<GuiDragState>()
         .init_resource::<GuiGlobalWaitSettings>()
         .init_resource::<GuiGlobalWaitState>()

@@ -346,7 +346,7 @@ The binding lifetime follows its tree view, so root disposal reclaims everything
 
 GuiTreeState node snapshots expose optional content keys; exported unconfigured
 nodes have no key. node_by_key resolves the current logical index and entity.
-CLICK_ITEM also enters the ordinary GuiEvent entity observer path once on its
+CLICK_ITEM also enters the typed GuiListItemClick entity notification path once on its
 list/tree, without logical bubbling. GuiListItemClick is both an EntityEvent and
 a buffered Message. It targets the list/tree view and carries the clicked row
 entity and logical data index, Shift/Ctrl and native pointer/touch payload. View
@@ -416,8 +416,10 @@ Controls without controllers omit the component and unchanged values preserve
 change ticks. The pull-refresh demo directly edits the header/footer controller
 components while retaining its own timing and lock requests.
 
-`GuiPullRelease.entity` identifies the original scroll container view. The scroll
-snapshot includes header/footer view entities, current/exported sizes, refresh
+`GuiPullDownRelease` and `GuiPullUpRelease` identify the released scroll container
+through their `entity` field. Both are target-only entity events and typed messages,
+so applications can subscribe to one direction without inspecting `EventKind`.
+The scroll snapshot includes header/footer view entities, current/exported sizes, refresh
 axis and lock extents. `GuiPullCommand` locks a materialized header/footer using
 logical pixels, with zero releasing it. Commands execute in stream order after
 Respond and before Advance so the first release tick uses the response boundary.
@@ -508,7 +510,7 @@ Bevy 0.20 picking updates `Hovered` during `PreUpdate`. FairyGUI then runs these
 `Update` sets:
 
 1. `GuiSystems::Input`: choose a target, update capture, apply built-in behavior.
-2. `GuiSystems::Publish`: refresh text/display/scroll snapshots, trigger routed `GuiEvent` entity events and publish rich-text `GuiLink` messages.
+2. `GuiSystems::Publish`: refresh text/display/scroll snapshots, trigger routed typed GUI entity events and publish rich-text `GuiLink` messages.
 3. `GuiSystems::Respond`: application systems consume events and edit UI properties or call direct methods.
    Pull lock commands are applied immediately after this set, before Advance.
 4. `GuiSystems::Advance`: advance builds, scrolling, transitions and animations.
@@ -562,10 +564,8 @@ maximum from the preceding snapshot. All coordinates are logical pixels.
 use bevy::prelude::*;
 use fairygui_bevy::prelude::*;
 
-fn react(event: On<GuiEvent>, mut texts: Query<&mut GuiText>) {
-    if event.event().event.kind == fairygui_bevy::core::object::EventKind::Click {
-        if let Ok(mut text) = texts.get_mut(event.entity) { text.set("Clicked"); }
-    }
+fn react(event: On<GuiClick>, mut texts: Query<&mut GuiText>) {
+    if let Ok(mut text) = texts.get_mut(event.entity) { text.set("Clicked"); }
 }
 
 fn attach_observer(commands: &mut Commands, gui: &GuiQuery, root: Entity) {
@@ -575,16 +575,19 @@ fn attach_observer(commands: &mut Commands, gui: &GuiQuery, root: Entity) {
 }
 ```
 
-Attach observers to control entities returned by `GuiQuery`. Click events
-use Bevy's `PropagateEntityTrigger` to visit the captured FairyGUI logical path.
-Each observer receives its current entity in `GuiEvent::entity` and matching
-native `current_target`/`bubbling` metadata in `GuiEvent::event`. The original view
-remains in `target`. `On<GuiEvent>::propagate(false)` prevents later ancestor
+Attach observers to control entities returned by `GuiQuery`. Each native kind
+has a distinct event type such as `GuiClick`, `GuiMouseDown` or `GuiScroll`;
+handlers do not inspect `kind`. These events use Bevy's `PropagateEntityTrigger`
+to visit the captured FairyGUI logical path. Each observer receives its current
+entity in the shared `GuiEvent::entity` payload and matching native
+`current_target`/`bubbling` metadata in `GuiEvent::event`. The original view
+remains in `target`. `On<GuiClick>::propagate(false)` prevents later ancestor
 delivery; other observers on the same entity still run, and payload changes are
 shared with later recipients. Native grip/arrow stops bound the path even if an
 observer enables propagation. Render-only `ChildOf` links are never traversed.
 Missing views are skipped, and reparenting after input does not reroute a queued
-notification. `GuiEvent::new` constructs a direct single-entity notification.
+notification. `GuiClick::new` and the other typed event constructors create a
+direct single-entity notification.
 
 Button/list selection and control values refresh before Publish as well as
 after Sync. Observer propagation controls notification delivery: built-in input
@@ -1548,6 +1551,6 @@ geometry within the existing boxed motion state. core::object::scroll_refresh
 owns resource creation, content exclusion, stage connection, constrained sizes,
 queued releases and lock commands. A pending release permits response-time locks
 before committing the native return target. The adapter publishes target-only
-GuiPullRelease messages before Respond and finalizes in Advance. Refresh views
+direction-specific pull messages before Respond and finalizes in Advance. Refresh views
 share pane ownership while native stage membership follows actual reveal, keeping
 auto-transition start/stop separate from authored visibility. See pull-refresh.md.

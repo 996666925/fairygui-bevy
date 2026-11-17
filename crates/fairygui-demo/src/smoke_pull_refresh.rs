@@ -115,13 +115,22 @@ fn drive(
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut pointers: MessageWriter<PointerInput>,
     mut commands: Commands,
-    mut releases: MessageReader<GuiPullRelease>,
+    mut down_releases: MessageReader<GuiPullDownRelease>,
+    mut up_releases: MessageReader<GuiPullUpRelease>,
     mut clicks: MessageReader<GuiListItemClick>,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<bevy::time::Real>>,
 ) {
     state.frame += 1;
-    for release in releases.read() {
+    for release in down_releases.read() {
+        for i in 0..2 {
+            if state.lists[i] == Some(release.event.target) {
+                assert!(!release.event.bubbling);
+                state.releases[i] += 1;
+            }
+        }
+    }
+    for release in up_releases.read() {
         for i in 0..2 {
             if state.lists[i] == Some(release.event.target) {
                 assert!(!release.event.bubbling);
