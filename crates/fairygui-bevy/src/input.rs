@@ -780,6 +780,14 @@ fn route_pointer(
                 settings.drag_threshold.max(0.),
                 &state.gesture_owners(&runtime),
             );
+            capture.gesture.sample_slider_point(
+                &runtime,
+                position,
+                &targets,
+                &geometry,
+                views,
+                window.map_or(1., |(_, w, _)| w.scale_factor()),
+            );
             capture.gesture.update(
                 &mut runtime,
                 position,
@@ -1121,6 +1129,14 @@ fn route_pointer(
                     .collect();
                 Gesture::begin_excluding(&mut runtime, target, &gesture_transforms, &occupied)
             };
+            gesture.sample_slider_point(
+                &runtime,
+                position,
+                &targets,
+                &geometry,
+                views,
+                window_scale_factor,
+            );
             gesture.update(&mut runtime, position, position, position, false, 0.);
             state.capture = Some(Capture {
                 window: window_entity,

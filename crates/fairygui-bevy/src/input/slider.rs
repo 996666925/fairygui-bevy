@@ -2,6 +2,64 @@
 use super::*;
 use fairygui_core::widget::ControlData;
 
+impl Gesture {
+    /// GSlider stores the press point in its local space, then converts every
+    /// move through its current transform. Translation, rotation and ancestor
+    /// changes during a drag must not reuse the inverse captured at press.
+    pub(super) fn sample_slider_point(
+        &mut self,
+        runtime: &GuiRuntime,
+        cursor: Vec2,
+        targets: &PointerTargets,
+        geometry: &Query<(&UiGlobalTransform, &ComputedNode)>,
+        views: &PointerViews,
+        scale: f32,
+    ) {
+        let Self::Slider {
+            owner,
+            origin,
+            point,
+            ..
+        } = self
+        else {
+            return;
+        };
+        let entity = runtime.entity_of(*owner).or_else(|| {
+            targets
+                .iter()
+                .find_map(|(entity, reference, ..)| (reference.0 == *owner).then_some(entity))
+        });
+        *point = if let Some((entity, (transform, node))) =
+            entity.and_then(|entity| geometry.get(entity).ok().map(|geometry| (entity, geometry)))
+        {
+            transform.try_inverse().map(|inverse| {
+                let mut point = (inverse
+                    .transform_point2(views.physical_position(entity, cursor, scale))
+                    - node.border_box().min)
+                    * node.inverse_scale_factor();
+                if let Some(object) = runtime.store().object(*owner)
+                    && object.pivot_as_anchor()
+                {
+                    point -= Vec2::new(
+                        object.pivot().x * object.width(),
+                        object.pivot().y * object.height(),
+                    );
+                }
+                point
+            })
+        } else {
+            runtime
+                .store()
+                .global_to_local(*owner, Point::new(cursor.x, cursor.y))
+                .map(|point| Vec2::new(point.x, point.y))
+        }
+        .filter(|point| point.is_finite());
+        if origin.is_none() {
+            *origin = *point;
+        }
+    }
+}
+
 pub(super) fn pointer_down_stop(runtime: &GuiRuntime, target: GObjectId) -> Option<GObjectId> {
     let store = runtime.store();
     let stops = [

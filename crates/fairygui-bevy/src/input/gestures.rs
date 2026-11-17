@@ -65,7 +65,8 @@ pub(super) enum Gesture {
     Slider {
         owner: GObjectId,
         initial: f64,
-        transform: PointerTransform,
+        origin: Option<Vec2>,
+        point: Option<Vec2>,
         touch_id: Option<u64>,
     },
     Object {
@@ -143,13 +144,13 @@ impl Gesture {
                     return Self::None;
                 }
                 let initial = runtime.store().slider_percent(id).unwrap_or_default();
-                let transform = pointer_transform(runtime, id, transforms);
                 // GSlider's grip-down handler explicitly enables this flag.
                 runtime.store_mut().set_slider_can_drag(id, true);
                 return Self::Slider {
                     owner: id,
                     initial,
-                    transform,
+                    origin: None,
+                    point: None,
                     touch_id: None,
                 };
             }
@@ -421,7 +422,8 @@ impl Gesture {
             Self::Slider {
                 owner,
                 initial,
-                transform,
+                origin,
+                point,
                 touch_id,
             } => {
                 // Native sliders update on pointer movement, not on press
@@ -445,7 +447,9 @@ impl Gesture {
                 else {
                     return;
                 };
-                let delta = transform.displacement(cursor - start);
+                let Some(delta) = origin.zip(*point).map(|(origin, point)| point - origin) else {
+                    return;
+                };
                 let delta = f64::from(if vertical { delta.y } else { delta.x }) / f64::from(track);
                 let changed = runtime.store_mut().set_slider_percent_from_input(
                     *owner,

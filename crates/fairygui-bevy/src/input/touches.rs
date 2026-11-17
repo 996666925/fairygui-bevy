@@ -334,6 +334,7 @@ pub(super) fn route_touches(
                 Gesture::begin_excluding(&mut runtime, target, &transforms, &occupied)
             };
             gesture.set_touch_id(event.id);
+            gesture.sample_slider_point(&runtime, position, &targets, &geometry, views, scale);
             gesture.update(&mut runtime, position, position, position, false, 0.0);
             state.touches.insert(
                 event.id,
@@ -446,6 +447,9 @@ pub(super) fn route_touches(
                 settings.drag_threshold.max(0.),
                 &state.gesture_owners(&runtime),
             );
+            capture
+                .gesture
+                .sample_slider_point(&runtime, position, &targets, &geometry, views, scale);
             capture.gesture.update(
                 &mut runtime,
                 position,

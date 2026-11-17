@@ -8,6 +8,9 @@ use bevy::{
 };
 use fairygui_core::package::FuiPackage;
 
+#[path = "ecs_slider_transform_tests.rs"]
+mod transforms;
+
 fn load(app: &mut App, handle: &Handle<FuiAsset>) {
     app.world_mut()
         .resource_mut::<Assets<FuiAsset>>()

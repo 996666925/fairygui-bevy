@@ -8,6 +8,7 @@ struct State {
     since: u32,
     owners: Vec<Entity>,
     cursor: Option<Vec2>,
+    press_local: Vec2,
 }
 #[derive(Resource, Default)]
 struct Events(Vec<(Entity, f64)>);
@@ -264,15 +265,77 @@ fn drive(
             verify(&gui, state.owners[0], false, 4., 32.);
             verify(&gui, state.owners[1], true, 0.375, 126.);
             assert_eq!(events.0.len(), 3, "range edits do not emit input changes");
+            let mut slider = gui_edit.get_mut(state.owners[0]).unwrap();
+            slider.set_slider_range(0., 1.);
+            slider.set_slider_whole_numbers(false);
+            slider.set_slider_value(0.25);
+            next = true;
+        }
+        21 if elapsed >= 8 => {
+            let owner = state.owners[0];
+            state.cursor = Some(grip_center(owner));
+            let (node, transform) = nodes.get(gui.view(owner).unwrap()).unwrap();
+            state.press_local = (transform
+                .try_inverse()
+                .unwrap()
+                .transform_point2(state.cursor.unwrap() * window.scale_factor())
+                - node.border_box().min)
+                * node.inverse_scale_factor();
+            next = true;
+        }
+        22 if elapsed >= 3 => {
+            mouse.press(MouseButton::Left);
+            next = true;
+        }
+        23 if elapsed >= 4 => {
+            let owner = state.owners[0];
+            verify(&gui, owner, false, 0.25, 72.);
+            let mut transform = *gui.transform(owner).unwrap();
+            transform.position += Vec2::new(80., 60.);
+            transform.scale = Vec2::new(2., 0.8);
+            transform.rotation = 25.;
+            commands.entity(gui.view(owner).unwrap()).insert(transform);
+            next = true;
+        }
+        24 if elapsed >= 8 => {
+            let owner = state.owners[0];
+            verify(&gui, owner, false, 0.25, 72.);
+            assert_eq!(
+                events.0.len(),
+                3,
+                "idle transform changes must not emit input"
+            );
+            let (node, transform) = nodes.get(gui.view(owner).unwrap()).unwrap();
+            let local = state.press_local + Vec2::new(72., 0.);
+            state.cursor = Some(
+                transform
+                    .transform_point2(local / node.inverse_scale_factor() + node.border_box().min)
+                    / window.scale_factor(),
+            );
+            next = true;
+        }
+        25 if elapsed >= 5 => {
+            verify(&gui, state.owners[0], false, 0.5, 144.);
+            assert_eq!(events.0.len(), 4);
+            near(events.0[3].1, 0.5);
+            mouse.release(MouseButton::Left);
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(
+                    "target/fairygui-demo-slider-live-transform.png",
+                ));
+            next = true;
+        }
+        26 if elapsed >= 5 => {
             for &owner in &state.owners {
                 commands.entity(owner).despawn();
             }
             next = true;
         }
-        21 if elapsed >= 5 => {
+        27 if elapsed >= 5 => {
             assert!(state.owners.iter().all(|&owner| !existing.contains(owner)));
             println!(
-                "demo smoke PASSED: ECS slider ranges with concurrent per-bound native edits, scaled horizontal/vertical grip drags, no press jump, fractional setters, input rounding, drag/click switches, current observer snapshots and disposal"
+                "demo smoke PASSED: slider drag follows live position/scale/rotation, idle transforms preserve value, ECS ranges, horizontal/vertical grips, fractional setters, rounding, switches, observer snapshots and disposal"
             );
             exit.write(AppExit::Success);
             next = true;
