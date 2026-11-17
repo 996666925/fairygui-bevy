@@ -143,15 +143,18 @@ the target's GuiObjectInfo ancestry without accessing GuiRuntime. Missing origin
 views produce None; the native UiEvent remains available for pointer payloads.
 
 Scroll gestures retain eligible, unoccupied ancestor panes until a local axis
-crosses GuiInputSettings.drag_threshold. Opposing horizontal/vertical candidates
-also require that axis to dominate the other local displacement; equal values
-prefer the nearest candidate. Both-axis panes accept either axis. Transforms use
-each pane's inverse UI matrix (with model-scale fallback), including DPI. The
-winner exclusively owns that pane until release; other pointers recheck ownership
-when choosing, while independent panes can scroll simultaneously. A pending
-pointer reserves its nearest candidate, preserving first-press ownership when two
-fingers press the same pane before either crosses the threshold. Outer candidates
-remain available until claimed by a direction that can use them.
+crosses `GuiInputSettings.scroll_sensitivity` (20 logical pixels by default,
+matching FairyGUI-Laya `UIConfig.touchScrollSensitivity`). This is independent
+from `drag_threshold`, which controls click suppression and application drags.
+Opposing horizontal/vertical candidates also require that axis to dominate the
+other local displacement; equal values prefer the nearest candidate. Both-axis
+panes accept either axis. Transforms use each pane's inverse UI matrix (with
+model-scale fallback), including DPI. The winner exclusively owns that pane
+until release; other pointers recheck ownership when choosing, while independent
+panes can scroll simultaneously. A pending pointer reserves its nearest
+candidate, preserving first-press ownership when two fingers press the same pane
+before either crosses the threshold. Outer candidates remain available until
+claimed by a direction that can use them.
 
 CancelScrollDrag is an entity-addressed GuiInputCommand. It removes only the
 specified pane from pending mouse/touch candidates, or releases its active scroll
@@ -936,13 +939,15 @@ modal/disabled-state change.
 
 The default drag threshold is six logical window pixels. Crossing it permanently
 suppresses the click for that press, even if the pointer returns to its starting
-position. Content scrolling only starts after that threshold. Sliders respond
+position. Content scrolling uses its separate 20-pixel default sensitivity and
+also suppresses the click once a pane claims the gesture. Sliders respond
 immediately and continue using their relative cursor coordinates while captured.
 Wheel line units use the core scroll step; pixel units retain their pixel distance.
 Window and scroll drag deltas account for ancestor axis scaling.
 
-Use `GuiInputSettings` to change the threshold or select the mouse/keyboard
-window (the primary window by default). Add other window entities to
+Use `GuiInputSettings` to change the drag threshold or scroll sensitivity, or
+select the mouse/keyboard window (the primary window by default). Add other
+window entities to
 `additional_touch_windows` to route independent touch pointers there as well;
 this enables touch interaction with controls, lists and scroll panes. Removing
 a window from this list cancels its active touch captures. Mouse, text keyboard

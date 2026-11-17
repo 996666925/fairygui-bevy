@@ -237,7 +237,10 @@ pub struct GuiInputSettings {
     pub window: Option<Entity>,
     /// Additional windows that may receive independent touch input.
     pub additional_touch_windows: Vec<Entity>,
+    /// Distance before a press is treated as a drag and cannot click.
     pub drag_threshold: f32,
+    /// Distance before a scroll pane claims an axis gesture, in logical pixels.
+    pub scroll_sensitivity: f32,
 }
 impl Default for GuiInputSettings {
     fn default() -> Self {
@@ -245,6 +248,7 @@ impl Default for GuiInputSettings {
             window: None,
             additional_touch_windows: Vec::new(),
             drag_threshold: 6.0,
+            scroll_sensitivity: 20.0,
         }
     }
 }
@@ -786,12 +790,14 @@ fn route_pointer(
                     + editor.viewport.offset;
                 editor.queue_edit(bevy::text::TextEdit::ExtendSelectionToPoint(point));
             }
-            capture.gesture.select_scroll(
+            if capture.gesture.select_scroll(
                 &runtime,
                 position - capture.start,
-                settings.drag_threshold.max(0.),
+                settings.scroll_sensitivity.max(0.),
                 &state.gesture_owners(&runtime),
-            );
+            ) {
+                capture.moved = true;
+            }
             capture.gesture.sample_control_point(
                 &runtime,
                 position,

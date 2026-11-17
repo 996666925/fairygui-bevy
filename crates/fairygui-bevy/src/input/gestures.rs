@@ -272,7 +272,10 @@ impl Gesture {
         displacement: Vec2,
         sensitivity: f32,
         occupied: &[GObjectId],
-    ) {
+    ) -> bool {
+        if !displacement.is_finite() || displacement == Vec2::ZERO {
+            return false;
+        }
         let Self::Scroll {
             container,
             transform,
@@ -280,7 +283,7 @@ impl Gesture {
             ..
         } = self
         else {
-            return;
+            return false;
         };
         let available = |id: GObjectId| {
             !occupied.contains(&id)
@@ -330,7 +333,9 @@ impl Gesture {
             if let Self::Scroll { candidates, .. } = self {
                 *candidates = None;
             }
+            return true;
         }
+        false
     }
 
     pub(super) fn cancel_scroll(&mut self, target: GObjectId) {
@@ -510,7 +515,7 @@ impl Gesture {
                 candidates,
             } => {
                 *elapsed += dt;
-                if !moved || candidates.is_some() {
+                if candidates.is_some() {
                     return;
                 }
                 let delta = transform.displacement(cursor - if *started { last } else { start });

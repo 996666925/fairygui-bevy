@@ -67,7 +67,7 @@ let template = ui::basics::WindowA::ITEM_NAME;
 输入与帧调度的设计见 [架构说明](docs/architecture.md)。应用可通过
 `fairygui_bevy::prelude::*` 导入常用类型，将事件处理系统放入
 `GuiSystems::Respond`，保证本帧点击在本帧同步到视图。`GuiClick` 等具体事件以 Bevy
-entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输入窗口，
+entity observer 事件形式发布；`GuiInputSettings` 配置点击/拖动阈值、滚动手势灵敏度与输入窗口，
 `GuiInputState` 提供悬停、指针捕获与游戏输入仲裁状态。
 鼠标、键盘和根节点窗口尺寸跟随 `window` 选择的窗口；其他窗口可加入
 `additional_touch_windows`，为按钮、列表和滚动等触摸交互提供独立捕获与命中路由。

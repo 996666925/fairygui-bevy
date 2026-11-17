@@ -355,6 +355,132 @@ fn nested_scroll_axes_choose_the_inner_horizontal_or_outer_vertical_and_lock_the
 }
 
 #[test]
+fn mouse_scroll_sensitivity_is_independent_from_application_drag_threshold() {
+    for (sensitivity, before, at) in [(20., 19., 20.), (8., 7., 8.)] {
+        let (mut app, window, list, rows) = fixture();
+        {
+            let mut settings = app.world_mut().resource_mut::<GuiInputSettings>();
+            settings.drag_threshold = 32.;
+            settings.scroll_sensitivity = sensitivity;
+        }
+        press(&mut app, rows[0]);
+
+        move_to(&mut app, window, Vec2::new(200., 200. - before));
+        assert_eq!(offset(&app, list), Vec2::ZERO);
+        assert!(
+            !app.world()
+                .resource::<GuiInputState>()
+                .capture(GuiPointerId::Mouse(MouseButton::Left))
+                .unwrap()
+                .suppresses_click(),
+            "movement below configured drag threshold should remain eligible for click"
+        );
+
+        move_to(&mut app, window, Vec2::new(200., 200. - at));
+        assert!((offset(&app, list).y - at).abs() < 0.01);
+        assert!(
+            app.world()
+                .resource::<GuiInputState>()
+                .capture(GuiPointerId::Mouse(MouseButton::Left))
+                .unwrap()
+                .suppresses_click(),
+            "claiming the scroll gesture must cancel the click even below drag_threshold"
+        );
+    }
+}
+
+#[test]
+fn touch_scroll_starts_at_native_sensitivity_even_when_drag_threshold_is_higher() {
+    use bevy::input::touch::{TouchInput, TouchPhase};
+    use bevy::picking::{backend::HitData, hover::HoverMap};
+
+    let (mut app, window, list, rows) = fixture();
+    app.world_mut()
+        .resource_mut::<GuiInputSettings>()
+        .drag_threshold = 32.;
+    app.init_resource::<HoverMap>();
+    app.world_mut().resource_mut::<HoverMap>().insert(
+        PointerId::Touch(81),
+        [(
+            rows[0],
+            HitData::new(Entity::PLACEHOLDER, 0., Some(Vec3::ZERO), None),
+        )]
+        .into(),
+    );
+    app.world_mut().write_message(TouchInput {
+        id: 81,
+        window,
+        phase: TouchPhase::Started,
+        position: Vec2::splat(200.),
+        force: None,
+    });
+    app.update();
+
+    for (distance, expected) in [(19., 0.), (20., 20.)] {
+        app.world_mut().write_message(TouchInput {
+            id: 81,
+            window,
+            phase: TouchPhase::Moved,
+            position: Vec2::new(200., 200. - distance),
+            force: None,
+        });
+        app.update();
+        assert!((offset(&app, list).y - expected).abs() < 0.01);
+        assert_eq!(
+            app.world()
+                .resource::<GuiInputState>()
+                .capture(GuiPointerId::Touch(81))
+                .unwrap()
+                .suppresses_click(),
+            expected > 0.
+        );
+    }
+}
+
+#[test]
+fn zero_scroll_sensitivity_does_not_claim_a_stationary_touch() {
+    use bevy::input::touch::{TouchInput, TouchPhase};
+    use bevy::picking::{backend::HitData, hover::HoverMap};
+
+    let (mut app, window, list, rows) = fixture();
+    app.world_mut()
+        .resource_mut::<GuiInputSettings>()
+        .scroll_sensitivity = 0.;
+    app.init_resource::<HoverMap>();
+    app.world_mut().resource_mut::<HoverMap>().insert(
+        PointerId::Touch(82),
+        [(
+            rows[0],
+            HitData::new(Entity::PLACEHOLDER, 0., Some(Vec3::ZERO), None),
+        )]
+        .into(),
+    );
+    app.world_mut().write_message(TouchInput {
+        id: 82,
+        window,
+        phase: TouchPhase::Started,
+        position: Vec2::splat(200.),
+        force: None,
+    });
+    app.update();
+    app.update();
+
+    assert!(
+        !app.world()
+            .get::<crate::GuiScrollState>(list)
+            .unwrap()
+            .is_dragging()
+    );
+    assert!(
+        !app.world()
+            .resource::<GuiInputState>()
+            .capture(GuiPointerId::Touch(82))
+            .unwrap()
+            .suppresses_click()
+    );
+}
+
+#[test]
 fn direct_scroll_cancel_keeps_animation_and_prevents_capture_restart_or_release_inertia() {
     let (mut app, window, list, rows) = fixture();
     press(&mut app, rows[0]);
