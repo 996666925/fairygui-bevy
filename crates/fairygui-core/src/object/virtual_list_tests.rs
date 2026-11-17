@@ -430,6 +430,34 @@ fn renderer_may_remove_the_list_without_panicking_or_retaining_pool_objects() {
 }
 
 #[test]
+fn renderer_panic_releases_refresh_guards_and_returns_rows_to_the_pool() {
+    let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, true, false);
+    let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));
+    store.enable_virtual_list(list, "a", &mut create).unwrap();
+    store.set_virtual_item_count(list, 1000).unwrap();
+
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = store.refresh_virtual_list(list, &mut create, &mut |_| None, &mut |_, _, _| {
+            panic!("renderer failure");
+        });
+    }));
+
+    assert!(panic.is_err());
+    assert!(!store.refreshing_virtual_lists.contains(&list));
+    assert!(!store.list_selection_batches.contains(&list));
+    assert_eq!(store.virtual_list_info(list).unwrap().active_count, 0);
+    assert_eq!(store.list_item_count(list), 0);
+
+    store.invalidate_virtual_list(list, false);
+    assert!(
+        store
+            .refresh_virtual_list(list, &mut create, &mut |_| None, &mut |_, _, _| {})
+            .is_ok()
+    );
+    assert!(store.virtual_list_info(list).unwrap().active_count > 0);
+}
+
+#[test]
 fn renderer_cannot_recursively_refresh_the_same_virtual_list() {
     let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, true, false);
     let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));

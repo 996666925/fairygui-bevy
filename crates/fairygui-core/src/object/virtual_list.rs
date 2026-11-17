@@ -421,9 +421,17 @@ impl ObjectStore {
         if !self.refreshing_virtual_lists.insert(list) {
             return Err(VirtualListError::ReentrantRefresh);
         }
-        let result = self.refresh_virtual_list_inner(list, create, provider, render);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.refresh_virtual_list_inner(list, create, provider, render)
+        }));
         self.refreshing_virtual_lists.remove(&list);
-        result
+        match result {
+            Ok(result) => result,
+            Err(payload) => {
+                self.list_selection_batches.remove(&list);
+                std::panic::resume_unwind(payload)
+            }
+        }
     }
 
     fn refresh_virtual_list_inner(
@@ -487,7 +495,7 @@ impl ObjectStore {
             self.virtual_states.get_mut(&list).unwrap().alignment = alignment;
             self.update_scroll_content_size(list, content);
         }
-        let result = (|| {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut rendered = 0;
             for pass in 0..=20 {
                 self.virtual_sync_anchor(list);
@@ -570,7 +578,7 @@ impl ObjectStore {
                 }
             }
             unreachable!()
-        })();
+        }));
         if batch {
             self.list_selection_batches.remove(&list);
         }
@@ -580,7 +588,10 @@ impl ObjectStore {
         if let Some(state) = self.virtual_states.get_mut(&list) {
             state.last_scroll_revision = revision;
         }
-        if result.is_err() && self.virtual_states.contains_key(&list) {
+        let panicked = result.is_err();
+        if (panicked || result.as_ref().is_ok_and(Result::is_err))
+            && self.virtual_states.contains_key(&list)
+        {
             // A failed factory can interrupt directional reuse mid-pass. Return
             // all live rows before retrying so physical children remain a valid
             // contiguous range rather than mixing two logical windows.
@@ -599,7 +610,10 @@ impl ObjectStore {
             state.geometry.first_position = None;
             self.refresh_list_selection_snapshot(list);
         }
-        result
+        match result {
+            Ok(result) => result,
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
     }
     fn virtual_take_object(
         &mut self,
