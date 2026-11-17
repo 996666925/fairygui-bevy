@@ -109,3 +109,42 @@ fn tree_settings_match_native_assignment_cell_creation_and_click_policy() {
     }
     assert_eq!((indents, clicks), (27, 20));
 }
+
+#[test]
+fn tree_visible_indices_map_to_stable_nodes_and_skip_collapsed_descendants() {
+    let mut store = ObjectStore::new();
+    let tree = store.create(ObjectType::Tree);
+    let ControlData::Tree(data) = &mut store.objects[tree].control else {
+        unreachable!()
+    };
+    data.nodes = vec![
+        TreeNodeData {
+            is_folder: true,
+            level: 0,
+            ..Default::default()
+        },
+        TreeNodeData {
+            level: 1,
+            ..Default::default()
+        },
+        TreeNodeData {
+            is_folder: true,
+            level: 0,
+            ..Default::default()
+        },
+        TreeNodeData {
+            level: 1,
+            ..Default::default()
+        },
+    ];
+    data.expanded = vec![false, true, true, true];
+
+    assert_eq!(store.tree_node_at_visible_index(tree, 0), Some(0));
+    assert_eq!(store.tree_node_at_visible_index(tree, 1), Some(2));
+    assert_eq!(store.tree_node_at_visible_index(tree, 2), Some(3));
+    assert_eq!(store.tree_node_at_visible_index(tree, 3), None);
+    assert_eq!(store.tree_visible_index_of_node(tree, 0), Some(0));
+    assert_eq!(store.tree_visible_index_of_node(tree, 1), None);
+    assert_eq!(store.tree_visible_index_of_node(tree, 2), Some(1));
+    assert_eq!(store.tree_visible_index_of_node(tree, 3), Some(2));
+}

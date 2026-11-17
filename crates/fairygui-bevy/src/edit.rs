@@ -769,6 +769,21 @@ impl GuiObjectMut<'_> {
                 .add_list_selection_with_scroll(object, index, scroll_to_view);
         }
     }
+    /// Select a node by its current visible GTree child index.
+    pub fn select_tree_visible_node(&mut self, visible_index: usize, scroll_to_view: bool) -> bool {
+        let runtime = &mut *self.runtime;
+        let object = self.object;
+        let Some(index) = runtime
+            .store()
+            .tree_node_at_visible_index(object, visible_index)
+        else {
+            return false;
+        };
+        runtime.expand_tree_to(object, index);
+        runtime
+            .store_mut()
+            .add_list_selection_with_scroll(object, index, scroll_to_view)
+    }
     /// Lock a scroll header in logical pixels; zero releases it. Call in Respond
     /// to set the boundary before the first release animation tick. Returns
     /// whether the lock changed; invalid sizes and non-scroll objects are ignored.

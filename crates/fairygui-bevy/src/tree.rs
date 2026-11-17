@@ -226,6 +226,16 @@ impl GuiTreeState {
     pub fn visible_nodes(&self) -> &[usize] {
         &self.visible
     }
+    /// Tree node at the current visible child index used by native GTree APIs.
+    pub fn node_at_visible_index(&self, visible_index: usize) -> Option<&GuiTreeNodeState> {
+        self.visible
+            .get(visible_index)
+            .and_then(|&node_index| self.nodes.get(node_index))
+    }
+    /// Current visible child index for a stable logical node index.
+    pub fn visible_index_of_node(&self, node_index: usize) -> Option<usize> {
+        self.visible.iter().position(|&index| index == node_index)
+    }
     pub fn selected_nodes(&self) -> &[usize] {
         &self.selected
     }

@@ -352,7 +352,8 @@ pub struct GuiTextInput {
 }
 
 /// One completed click on a list row, published after selection. Virtual rows
-/// report their logical item index, independent of the current physical child.
+/// Virtual rows report their logical item index. Tree rows report their current
+/// visible child index, matching GTree after folders are collapsed.
 /// Native CLICK_ITEM is emitted on the list even when selection did not change.
 #[derive(EntityEvent, Message, Debug, Clone)]
 pub struct GuiListItemClick {
@@ -2159,6 +2160,16 @@ impl GuiRuntime {
     ) {
         let Some((list, item, index)) = self.store.list_item_of(target) else {
             return;
+        };
+        let index = if matches!(
+            self.store.object(list).map(|object| object.control()),
+            Some(ControlData::Tree(_))
+        ) {
+            self.store
+                .tree_visible_index_of_node(list, index)
+                .unwrap_or(index)
+        } else {
+            index
         };
         let mut event =
             fairygui_core::object::UiEvent::new(fairygui_core::object::EventKind::ClickItem, list)

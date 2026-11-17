@@ -1465,7 +1465,10 @@ fn register(app: &mut App) {
 树控件的可写 `GuiTreeSettings` 提供 `indent` 和 `click_to_expand`，可用 `gui.tree_settings(entity)` 查询。
 按原版赋值规则，缩进在创建单元格时读取；修改后已有行的 `indent` 子控件保留尺寸，新增行使用新值。
 点击策略 `0` 只允许箭头展开，`1` 点击文件夹切换，`2` 保留原版未实现双击切换的行为。
-索引在展开/收起间保持稳定，收起的行保留实体但隐藏并从布局中折叠。
+节点逻辑索引在展开/收起间保持稳定；`node_at_visible_index` 和
+`visible_index_of_node` 可在稳定索引与原版可见子项索引间转换。树的
+`GuiListItemClick.index` 使用当前可见子项索引，`select_tree_visible_node` 可按该索引选择；
+`select_tree_node` 仍接受稳定逻辑索引。收起的行保留实体但隐藏并从布局中折叠。
 
 ```rust,ignore
 gui_edit.edit(tree, |object: &mut GuiObjectMut| object.collapse_tree());

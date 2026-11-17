@@ -7,6 +7,29 @@ use crate::widget::ControlData;
 mod click_tests;
 
 impl ObjectStore {
+    /// Logical preorder node at a currently visible GTree child index.
+    pub fn tree_node_at_visible_index(
+        &self,
+        tree: GObjectId,
+        visible_index: usize,
+    ) -> Option<usize> {
+        let ControlData::Tree(data) = self.object(tree)?.control() else {
+            return None;
+        };
+        data.visible_nodes().get(visible_index).copied()
+    }
+
+    /// Current visible GTree child index for a logical preorder node.
+    /// Collapsed descendants have no visible child index.
+    pub fn tree_visible_index_of_node(&self, tree: GObjectId, node_index: usize) -> Option<usize> {
+        let ControlData::Tree(data) = self.object(tree)?.control() else {
+            return None;
+        };
+        data.visible_nodes()
+            .iter()
+            .position(|&visible| visible == node_index)
+    }
+
     /// Sample folder expansion while MouseDown visits the logical path. Leaf
     /// cells leave the previous sample intact. Like native GTree, the sample
     /// belongs to the tree rather than a pointer or node, and is not consumed.

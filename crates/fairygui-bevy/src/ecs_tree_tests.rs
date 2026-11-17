@@ -735,6 +735,40 @@ fn tree_body_and_expander_clicks_each_toggle_once_and_publish_state_before_obser
 }
 
 #[test]
+fn tree_item_click_reports_native_visible_index_after_a_folder_is_collapsed() {
+    let (mut app, _, owner) = fixture(true);
+    let mut window = Window {
+        focused: true,
+        ..default()
+    };
+    window.set_cursor_position(Some(Vec2::splat(10.)));
+    app.world_mut().spawn((window, PrimaryWindow));
+    app.update();
+    let tree = tree(&mut app, owner);
+    send(&mut app, tree, |object| object.set_tree_expanded(0, false));
+    app.update();
+    app.init_resource::<TypedItemClicks>();
+    app.world_mut()
+        .entity_mut(tree)
+        .observe(observe_typed_item_click);
+    let second_folder = app
+        .world()
+        .get::<GuiTreeState>(tree)
+        .unwrap()
+        .node_at_visible_index(1)
+        .unwrap()
+        .view()
+        .unwrap();
+
+    click(&mut app, second_folder);
+
+    assert_eq!(
+        app.world().resource::<TypedItemClicks>().0,
+        [(tree, second_folder, 1, "Folder 2".into())]
+    );
+}
+
+#[test]
 fn folder_release_preserves_expansion_changed_between_down_and_click_for_mouse_and_touch() {
     use bevy::{
         input::touch::{TouchInput, TouchPhase},
