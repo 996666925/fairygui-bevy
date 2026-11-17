@@ -3,6 +3,7 @@
 mod actions;
 mod clicks;
 pub(crate) mod editing;
+mod releases;
 pub use editing::{GuiInput, GuiTextSelection};
 mod gestures;
 mod masks;
@@ -796,24 +797,37 @@ fn route_pointer(
                         || runtime.is_dragging(),
                 },
             );
-            if runtime.store().object(capture.target).is_some() {
-                let release_position = if valid { position } else { capture.last };
-                dispatch(
+            let release_position = if valid { position } else { capture.last };
+            let release_target = if valid && mouse.just_released(MouseButton::Left) {
+                releases::dispatch(
                     &mut runtime,
                     EventKind::MouseUp,
-                    capture.target,
+                    &capture.click_targets,
+                    hit,
                     release_position,
-                );
-                if capture.dragged {
+                    None,
+                )
+            } else {
+                if runtime.store().contains(capture.target) {
                     dispatch(
                         &mut runtime,
-                        EventKind::MouseDragEnd,
+                        EventKind::MouseUp,
                         capture.target,
                         release_position,
                     );
                 }
-                update_button_from_pointers(&mut runtime, &state, capture.target);
+                capture.target
+            };
+            if capture.dragged {
+                releases::drag_end(
+                    &mut runtime,
+                    &capture.click_targets,
+                    release_target,
+                    release_position,
+                    None,
+                );
             }
+            update_button_from_pointers(&mut runtime, &state, capture.target);
             let click_target = capture
                 .click_targets
                 .resolve(runtime.store(), hit, click.cancelled);
@@ -888,22 +902,35 @@ fn route_pointer(
                         || runtime.is_dragging(),
                 },
             );
-            if runtime.store().object(capture.target).is_some() {
-                let release_position = if valid { position } else { capture.last };
-                dispatch(
+            let release_position = if valid { position } else { capture.last };
+            let release_target = if valid && mouse.just_released(MouseButton::Right) {
+                releases::dispatch(
                     &mut runtime,
                     EventKind::RightMouseUp,
-                    capture.target,
+                    &capture.click_targets,
+                    hit,
                     release_position,
-                );
-                if capture.dragged {
+                    None,
+                )
+            } else {
+                if runtime.store().contains(capture.target) {
                     dispatch(
                         &mut runtime,
-                        EventKind::MouseDragEnd,
+                        EventKind::RightMouseUp,
                         capture.target,
                         release_position,
                     );
                 }
+                capture.target
+            };
+            if capture.dragged {
+                releases::drag_end(
+                    &mut runtime,
+                    &capture.click_targets,
+                    release_target,
+                    release_position,
+                    None,
+                );
             }
             let click_target = capture
                 .click_targets

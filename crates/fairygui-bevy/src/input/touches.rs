@@ -13,7 +13,13 @@ fn emit(runtime: &mut GuiRuntime, kind: EventKind, target: GObjectId, position: 
     runtime.dispatch_event(touch_event(kind, target, position, id));
 }
 
-fn finish(runtime: &mut GuiRuntime, capture: &TouchCapture, id: u64, dt: f32) {
+fn finish(
+    runtime: &mut GuiRuntime,
+    capture: &TouchCapture,
+    id: u64,
+    dt: f32,
+    release: releases::Target,
+) {
     capture.gesture.finish(runtime, dt);
     if runtime.store().object(capture.target).is_some() {
         emit(
@@ -23,22 +29,36 @@ fn finish(runtime: &mut GuiRuntime, capture: &TouchCapture, id: u64, dt: f32) {
             capture.last,
             id,
         );
-        emit(
+    }
+    let target = if let releases::Target::Hit(hit) = release {
+        releases::dispatch(
             runtime,
             EventKind::MouseUp,
-            capture.target,
+            &capture.click_targets,
+            hit,
             capture.last,
-            id,
-        );
-        if capture.dragged {
+            Some(id),
+        )
+    } else {
+        if runtime.store().contains(capture.target) {
             emit(
                 runtime,
-                EventKind::MouseDragEnd,
+                EventKind::MouseUp,
                 capture.target,
                 capture.last,
                 id,
             );
         }
+        capture.target
+    };
+    if capture.dragged {
+        releases::drag_end(
+            runtime,
+            &capture.click_targets,
+            target,
+            capture.last,
+            Some(id),
+        );
     }
 }
 
@@ -99,7 +119,13 @@ pub(super) fn route_touches(
                 cancelled: true,
             },
         );
-        finish(&mut runtime, &capture, id, time.delta_secs());
+        finish(
+            &mut runtime,
+            &capture,
+            id,
+            time.delta_secs(),
+            releases::Target::Cancelled,
+        );
         roll_out(&mut runtime, &capture, id);
         update_button_from_pointers(&mut runtime, &state, capture.target);
         if let Some(old) = capture.hovered {
@@ -340,6 +366,13 @@ pub(super) fn route_touches(
         let Some(mut capture) = state.touches.remove(&event.id) else {
             continue;
         };
+        // Native touchcancel skips the coordinate update and releases at the
+        // last accepted sample, even if the OS supplied a different position.
+        let position = if event.phase == TouchPhase::Canceled {
+            capture.last
+        } else {
+            position
+        };
         if capture
             .editing
             .is_some_and(|entity| focus.get() != Some(entity))
@@ -457,7 +490,13 @@ pub(super) fn route_touches(
                     cancelled: capture.moved,
                 },
             );
-            finish(&mut runtime, &capture, event.id, 0.0);
+            finish(
+                &mut runtime,
+                &capture,
+                event.id,
+                0.0,
+                releases::Target::Hit(hit),
+            );
             let click_target = capture
                 .click_targets
                 .resolve(runtime.store(), hit, click.cancelled);

@@ -17,32 +17,75 @@ use std::{
 };
 
 #[cfg(test)]
+#[path = "ecs_release_event_tests.rs"]
+mod release_tests;
+#[cfg(test)]
 #[path = "ecs_event_tests.rs"]
 mod tests;
 
 pub(crate) struct PendingGuiEvent {
     pub event: UiEvent,
     pub route: Vec<GObjectId>,
+    pub release_tail: Vec<GObjectId>,
 }
 impl PendingGuiEvent {
     pub fn direct(event: UiEvent) -> Self {
         Self {
             route: vec![event.current_target],
             event,
+            release_tail: Vec::new(),
         }
     }
+}
+
+/// Native MouseUp always enters the first saved press recipient omitted from
+/// the hit path, even when the hit-path observer stopped propagation. The stop
+/// flag is carried into that second phase. Safe Bevy triggers let us retain
+/// that flag without implementing a custom unsafe Trigger.
+fn trigger_release<E>(
+    commands: &mut Commands,
+    context: GuiEvent,
+    tail: Arc<[(Entity, GObjectId)]>,
+    first_is_resolved: bool,
+    make: fn(GuiEvent) -> E,
+) where
+    E: GuiEventType + SetEntityEventTarget,
+    for<'a> E: Event<Trigger<'a> = PropagateEntityTrigger<true, E, GuiEventTraversal>>,
+{
+    commands.queue(move |world: &mut World| {
+        let mut event = make(context);
+        let mut trigger = PropagateEntityTrigger::<true, E, GuiEventTraversal>::default();
+        if !event.route.is_empty() {
+            world.trigger_ref_with(&mut event, &mut trigger);
+        }
+        let mut context = event.context().clone();
+        if let Some(&(entity, _)) = tail.first()
+            && (trigger.propagate || first_is_resolved)
+        {
+            context.route = tail;
+            context.set_recipient(entity);
+            let mut event = make(context);
+            let mut tail_trigger = PropagateEntityTrigger::<true, E, GuiEventTraversal>::default();
+            tail_trigger.propagate = trigger.propagate;
+            world.trigger_ref_with(&mut event, &mut tail_trigger);
+        }
+    });
 }
 
 /// Shared payload of typed FairyGUI notifications. Observe GuiClick,
 /// GuiMouseDown, GuiStateChanged, etc. instead of filtering a kind in a callback.
 /// Each typed notification dereferences to this data and follows one captured
 /// logical path. `event.propagate(false)` stops that dispatch at this recipient.
+/// Physical MouseUp/RightMouseUp additionally enter their saved press phase:
+/// its first omitted press recipient runs even if the hit path stopped, then
+/// inherits that stop flag as in native TouchInfo.bubble.
 #[derive(Debug, Clone)]
 pub struct GuiEvent {
     /// Current recipient, updated together with event.current_target.
     pub entity: Entity,
-    /// Original control view, independent of the current recipient. None if
-    /// the original native object did not have a view when Publish resolved it.
+    /// Original control view, independent of the current recipient. For physical
+    /// MouseUp/RightMouseUp this is the release hit, including at saved press
+    /// recipients. None for the external stage or a missing original view.
     pub target: Option<Entity>,
     pub event: UiEvent,
     route: Arc<[(Entity, GObjectId)]>,
@@ -257,20 +300,42 @@ pub fn emit_gui_events(
             .into_iter()
             .filter_map(|object| resolve(object).map(|entity| (entity, object)))
             .collect();
-        let Some(&(entity, current_target)) = route.first() else {
+        let first_saved = pending.release_tail.first().copied();
+        let tail: Arc<[(Entity, GObjectId)]> = pending
+            .release_tail
+            .into_iter()
+            .filter(|&object| runtime.store().contains(object))
+            .filter_map(|object| resolve(object).map(|entity| (entity, object)))
+            .collect();
+        let Some(&(entity, current_target)) = route.first().or_else(|| tail.first()) else {
             continue;
         };
         let mut event = pending.event;
         event.current_target = current_target;
         event.bubbling = current_target != event.target;
-        trigger_typed(
-            &mut commands,
-            GuiEvent {
-                entity,
-                target,
-                event,
-                route,
-            },
-        );
+        let context = GuiEvent {
+            entity,
+            target,
+            event,
+            route,
+        };
+        if !tail.is_empty() {
+            let first_is_resolved = tail.first().map(|(_, id)| *id) == first_saved;
+            match context.event.kind {
+                EventKind::MouseUp => {
+                    trigger_release(&mut commands, context, tail, first_is_resolved, |context| {
+                        GuiMouseUp { context }
+                    })
+                }
+                EventKind::RightMouseUp => {
+                    trigger_release(&mut commands, context, tail, first_is_resolved, |context| {
+                        GuiRightMouseUp { context }
+                    })
+                }
+                _ => unreachable!("only pointer releases have a saved press phase"),
+            }
+        } else {
+            trigger_typed(&mut commands, context);
+        }
     }
 }

@@ -566,6 +566,9 @@ pub struct GuiRuntime {
     pool: fairygui_core::pool::ObjectPool,
     /// 根节点。界面与窗口都是它的子对象，因此共享同一套层级顺序。
     root: Option<fairygui_core::root::Root>,
+    /// External input-stage identity. It has no GUI view or hit surface and is
+    /// distinct from FairyGUI's GRoot, which can receive saved press releases.
+    pointer_stage: Option<GObjectId>,
     /// 已创建的窗口，按显示顺序排列。
     windows: Vec<fairygui_core::window::Window>,
     /// 运行时新加入对象树、但还没有实体的对象。
@@ -1952,7 +1955,49 @@ impl GuiRuntime {
             route.push(parent);
             current = parent;
         }
-        self.gui_events.push(PendingGuiEvent { event: base, route });
+        self.gui_events.push(PendingGuiEvent {
+            event: base,
+            route,
+            release_tail: Vec::new(),
+        });
+    }
+
+    pub(crate) fn dispatch_pointer_release(
+        &mut self,
+        base: fairygui_core::object::UiEvent,
+        route: fairygui_core::pointer::PointerReleaseRoute,
+    ) {
+        for &current_target in route.bubble.iter().chain(&route.pressed) {
+            if !self.store.contains(current_target) {
+                continue;
+            }
+            let mut event = base.clone();
+            event.current_target = current_target;
+            event.bubbling = current_target != base.target;
+            self.events.push(event);
+        }
+        self.gui_events.push(PendingGuiEvent {
+            event: base,
+            route: route.bubble,
+            release_tail: route.pressed,
+        });
+    }
+
+    pub(crate) fn pointer_stage_target(&mut self) -> GObjectId {
+        if let Some(target) = self.pointer_stage.filter(|&id| self.store.contains(id)) {
+            return target;
+        }
+        let target = self
+            .store
+            .create(fairygui_core::package::ObjectType::Component);
+        self.store.attach_to_stage(target);
+        self.pointer_stage = Some(target);
+        target
+    }
+
+    pub(crate) fn dispatch_direct_event(&mut self, event: fairygui_core::object::UiEvent) {
+        self.gui_events.push(PendingGuiEvent::direct(event.clone()));
+        self.events.push(event);
     }
 
     pub(crate) fn take_gui_events(&mut self) -> Vec<PendingGuiEvent> {

@@ -7,6 +7,15 @@ use crate::object::{GObjectId, ObjectStore};
 #[derive(Debug, Default)]
 pub struct ClickTargets(Vec<GObjectId>);
 
+/// Native MouseUp delivery: the current staged hit path, followed by saved
+/// press recipients absent from that entire path. The two phases have distinct
+/// stop-propagation behavior in TouchInfo.bubble.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct PointerReleaseRoute {
+    pub bubble: Vec<GObjectId>,
+    pub pressed: Vec<GObjectId>,
+}
+
 impl ClickTargets {
     /// Record the logical target and its ancestors before press handlers mutate
     /// the tree. A built-in mouse-down propagation stop bounds this path.
@@ -28,6 +37,33 @@ impl ClickTargets {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Saved press-time recipients, including the mouse-down stop boundary.
+    pub fn targets(&self) -> &[GObjectId] {
+        &self.0
+    }
+
+    /// Build both MouseUp phases without consuming the path needed by clickTest.
+    /// Saved press recipients exclude the complete staged release path.
+    /// Saved recipients can be off stage. Disposed identities retain their
+    /// position because an inherited stop still terminates at that empty slot.
+    pub fn release_route(&self, store: &ObjectStore, target: GObjectId) -> PointerReleaseRoute {
+        let mut bubble = Vec::new();
+        let mut current = Some(target);
+        while let Some(id) = current {
+            if store.is_on_stage(id) {
+                bubble.push(id);
+            }
+            current = store.object(id).and_then(|object| object.parent());
+        }
+        let pressed = self
+            .0
+            .iter()
+            .copied()
+            .filter(|id| !bubble.contains(id))
+            .collect();
+        PointerReleaseRoute { bubble, pressed }
     }
 
     /// Consume one press using native clickTest: prefer the original target

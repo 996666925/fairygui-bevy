@@ -2,14 +2,47 @@
 use super::*;
 
 #[derive(Resource, Default)]
-struct Seen(Vec<(bool, Entity, Option<Entity>, Option<u64>)>);
+struct Seen {
+    clicks: Vec<(bool, Entity, Option<Entity>, Option<u64>)>,
+    releases: Vec<Release>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Release {
+    right: bool,
+    entity: Entity,
+    target: Option<Entity>,
+    touch: Option<u64>,
+    stopped: bool,
+}
 fn click(event: On<GuiClick>, mut seen: ResMut<Seen>) {
-    seen.0
+    seen.clicks
         .push((false, event.entity, event.target, event.event.touch_id));
 }
 fn right(event: On<GuiRightClick>, mut seen: ResMut<Seen>) {
-    seen.0
+    seen.clicks
         .push((true, event.entity, event.target, event.event.touch_id));
+}
+
+fn up(event: On<GuiMouseUp>, mut seen: ResMut<Seen>) {
+    seen.releases.push(Release {
+        right: false,
+        entity: event.entity,
+        target: event.target,
+        touch: event.event.touch_id,
+        stopped: !event.get_propagate(),
+    });
+}
+fn right_up(mut event: On<GuiRightMouseUp>, state: Res<State>, mut seen: ResMut<Seen>) {
+    seen.releases.push(Release {
+        right: true,
+        entity: event.entity,
+        target: event.target,
+        touch: event.event.touch_id,
+        stopped: !event.get_propagate(),
+    });
+    if state.case == 1 && Some(event.entity) == state.root {
+        event.propagate(false);
+    }
 }
 
 #[derive(Resource, Default)]
@@ -104,8 +137,15 @@ fn drive(
                     GuiButtonSelected(false),
                 ))
                 .observe(click)
-                .observe(right);
-            commands.entity(root).observe(click).observe(right);
+                .observe(right)
+                .observe(up)
+                .observe(right_up);
+            commands
+                .entity(root)
+                .observe(click)
+                .observe(right)
+                .observe(up)
+                .observe(right_up);
             commands.queue(move |world: &mut World| {
                 let object = world.get::<GObjectRef>(root).unwrap().0;
                 world
@@ -118,7 +158,8 @@ fn drive(
             }
             state.root = Some(root);
             state.button = Some(button);
-            seen.0.clear();
+            seen.clicks.clear();
+            seen.releases.clear();
             next = true;
         }
         2 if elapsed > 10 => {
@@ -169,6 +210,10 @@ fn drive(
                         }
                     });
                 }
+                4 => edit
+                    .get_mut(state.root.unwrap())
+                    .unwrap()
+                    .set_visible(false),
                 _ => unreachable!(),
             }
             next = true;
@@ -194,22 +239,57 @@ fn drive(
         6 if elapsed > 6 => {
             let root = state.root.unwrap();
             let button = state.button.unwrap();
-            let expected = if state.case < 2 {
+            let expected = if state.case < 2 || state.case == 4 {
                 let right = state.case == 1;
+                let touch = (state.case >= 2).then_some(touch_id);
                 vec![
-                    (right, button, Some(button), None),
-                    (right, root, Some(button), None),
+                    (right, button, Some(button), touch),
+                    (right, root, Some(button), touch),
                 ]
             } else {
                 vec![(false, root, Some(root), Some(touch_id))]
             };
-            assert_eq!(seen.0, expected, "case {}", state.case);
-            if state.case < 2 {
-                assert_eq!(selected.get(button).unwrap().0, state.case == 0);
+            assert_eq!(seen.clicks, expected, "case {}", state.case);
+            let touch = (state.case >= 2).then_some(touch_id);
+            let right = state.case == 1;
+            let mut expected_up = vec![Release {
+                right,
+                entity: root,
+                target: Some(root),
+                touch,
+                stopped: false,
+            }];
+            if state.case != 3 {
+                expected_up.push(Release {
+                    right,
+                    entity: button,
+                    target: Some(root),
+                    touch,
+                    stopped: right,
+                });
+            }
+            if state.case == 4 {
+                expected_up = [button, root]
+                    .map(|entity| Release {
+                        right: false,
+                        entity,
+                        target: None,
+                        touch,
+                        stopped: false,
+                    })
+                    .to_vec();
+            }
+            assert_eq!(seen.releases, expected_up, "release case {}", state.case);
+            println!(
+                "release recipient smoke case {} PASSED: {:?}",
+                state.case, seen.releases
+            );
+            if state.case < 2 || state.case == 4 {
+                assert_eq!(selected.get(button).unwrap().0, state.case != 1);
             }
             println!(
                 "click recipient smoke case {} PASSED: {:?}",
-                state.case, seen.0
+                state.case, seen.clicks
             );
             if state.case == 0 {
                 commands
@@ -219,14 +299,26 @@ fn drive(
             next = true;
         }
         7 if elapsed > 10 => {
+            if state.case == 2 {
+                let button = state.button.unwrap();
+                commands.queue(move |world: &mut World| {
+                    if let Some(reference) = world.get::<GObjectRef>(button) {
+                        let object = reference.0;
+                        world
+                            .non_send_mut::<GuiRuntime>()
+                            .store_mut()
+                            .remove(object);
+                    }
+                });
+            }
             commands.entity(state.owner.unwrap()).despawn();
             next = true;
         }
         8 if elapsed > 8 => {
             assert!(gui.view(state.owner.unwrap()).is_none());
-            if state.case == 3 {
+            if state.case == 4 {
                 println!(
-                    "demo smoke PASSED: original click recipients after moving/hiding controls, native ancestor fallback after detach/disposal, typed observers and one button toggle"
+                    "demo smoke PASSED: original click recipients after moving/hiding controls, native ancestor fallback after detach/disposal, hit-path release then saved press recipients, inherited stops, external stage targets, typed observers and one button toggle"
                 );
                 exit.write(AppExit::Success);
             } else {

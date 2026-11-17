@@ -17,6 +17,8 @@ mod opaque;
 mod polygons;
 #[path = "input/popup_stack.rs"]
 mod popup_stack;
+#[path = "input/releases.rs"]
+mod releases;
 #[path = "input/scroll_alignment.rs"]
 mod scroll_alignment;
 #[path = "input/scroll_motion.rs"]
@@ -430,11 +432,19 @@ fn mouse_move_uses_current_hit_while_drag_uses_the_pressed_target() {
         .collect();
     let up = events
         .iter()
-        .position(|event| event.kind == EventKind::MouseUp && event.target == pressed_target)
+        .position(|event| {
+            event.kind == EventKind::MouseUp
+                && event.target == move_target
+                && event.current_target == pressed_target
+        })
         .unwrap();
     let drag_end = events
         .iter()
-        .position(|event| event.kind == EventKind::MouseDragEnd && event.target == pressed_target)
+        .position(|event| {
+            event.kind == EventKind::MouseDragEnd
+                && event.target == move_target
+                && event.current_target == pressed_target
+        })
         .unwrap();
     assert!(up < drag_end);
     assert!(!events.iter().any(|event| event.kind == EventKind::Click));
@@ -1052,7 +1062,7 @@ fn right_release_on_another_target_still_clicks_the_original_target() {
     let (entity, captured) = target(&mut app, 1);
     press_right(&mut app);
     app.world_mut().entity_mut(entity).insert(Hovered(false));
-    target(&mut app, 2);
+    let (_, hit) = target(&mut app, 2);
     app.update();
     release_right(&mut app);
 
@@ -1062,7 +1072,9 @@ fn right_release_on_another_target_still_clicks_the_original_target() {
         .drain_events()
         .collect();
     assert!(events.iter().any(|event| {
-        event.kind == EventKind::RightMouseUp && event.target == captured && event.is_at_target()
+        event.kind == EventKind::RightMouseUp
+            && event.target == hit
+            && event.current_target == captured
     }));
     assert!(
         events

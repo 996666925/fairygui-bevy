@@ -75,6 +75,11 @@ entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输
 `visible` / `touchable` 影响新命中和 `GuiInputState` 快照，不会单独撤销已开始的点击。
 窗口失焦、触摸取消和拖动仍会终止点击。
 
+物理 `GuiMouseUp` / `GuiRightMouseUp` 先沿抬起命中对象冒泡，再依次通知尚未收到
+该事件的按下路径对象；各接收者的 `target` 都保留抬起命中，GUI 外抬起时为 `None`。
+共同祖先只收到一次。命中路径停止传播后，原版仍会进入第一个额外的按下接收者，
+并把停止状态带入该阶段。拖拽结束通知使用保存的按下路径，不随中途重挂载改变。
+
 弹出菜单可用 `GuiPopup::show_menu` 配置稳定名称、动作编号、图标、勾选状态和
 分隔项模板；业务系统读取 `GuiMenuAction`，消息在点击 100 ms 后、菜单关闭后发布。
 支持按名称动态编辑与增删、保留对象复用，详见 [菜单生命周期](docs/popup-lifecycle.md)。
