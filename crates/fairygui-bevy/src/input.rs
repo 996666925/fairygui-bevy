@@ -3,6 +3,7 @@
 mod actions;
 mod clicks;
 pub(crate) mod editing;
+mod motion;
 mod releases;
 pub use editing::{GuiInput, GuiTextSelection};
 mod gestures;
@@ -743,9 +744,7 @@ fn route_pointer(
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
         if valid && position != capture.last {
             capture.dragged = true;
-            if runtime.store().object(capture.target).is_some() {
-                dispatch(&mut runtime, EventKind::MouseDrag, capture.target, position);
-            }
+            motion::drag(&mut runtime, &capture.click_targets, hit, position, None);
         }
         if valid && mouse.pressed(MouseButton::Left) {
             if let Some(entity) = capture.editing
@@ -879,9 +878,7 @@ fn route_pointer(
             cursor.is_some() && window.is_some_and(|(entity, _, _)| entity == capture.window);
         if valid && position != capture.last {
             capture.dragged = true;
-            if runtime.store().object(capture.target).is_some() {
-                dispatch(&mut runtime, EventKind::MouseDrag, capture.target, position);
-            }
+            motion::drag(&mut runtime, &capture.click_targets, hit, position, None);
         }
         if valid && mouse.pressed(MouseButton::Right) {
             capture.last = position;

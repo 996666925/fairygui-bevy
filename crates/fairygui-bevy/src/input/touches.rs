@@ -417,7 +417,7 @@ pub(super) fn route_touches(
         }
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
         let changed = position != capture.last;
-        if changed && event.phase != TouchPhase::Canceled {
+        if changed && event.phase == TouchPhase::Moved {
             capture.dragged = true;
             emit(
                 &mut runtime,
@@ -435,18 +435,18 @@ pub(super) fn route_touches(
                     event.id,
                 );
             }
-            emit(
+            motion::drag(
                 &mut runtime,
-                EventKind::MouseDrag,
-                capture.target,
+                &capture.click_targets,
+                hit,
                 position,
-                event.id,
+                Some(event.id),
             );
         }
         if let Some(entity) = capture.editing
             && focus.get() == Some(entity)
             && capture.moved
-            && event.phase != TouchPhase::Canceled
+            && event.phase == TouchPhase::Moved
             && let Ok((transform, node)) = geometry.get(entity)
             && let Some(inverse) = transform.try_inverse()
             && let Ok(mut editor) = editors.get_mut(entity)
@@ -457,7 +457,7 @@ pub(super) fn route_touches(
                 + editor.viewport.offset;
             editor.queue_edit(bevy::text::TextEdit::ExtendSelectionToPoint(point));
         }
-        if event.phase != TouchPhase::Canceled {
+        if event.phase == TouchPhase::Moved {
             capture.gesture.select_scroll(
                 &runtime,
                 position - capture.start,

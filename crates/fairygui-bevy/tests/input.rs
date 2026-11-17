@@ -11,6 +11,8 @@ mod click_targets;
 mod double_click;
 #[path = "input/list_selection.rs"]
 mod list_selection;
+#[path = "input/motion.rs"]
+mod motion;
 #[path = "input/opaque.rs"]
 mod opaque;
 #[path = "input/polygons.rs"]
@@ -393,7 +395,7 @@ fn moving_away_and_back_does_not_click_after_drag() {
 }
 
 #[test]
-fn mouse_move_uses_current_hit_while_drag_uses_the_pressed_target() {
+fn mouse_move_and_drag_share_current_hit_but_keep_distinct_recipients() {
     let (mut app, window) = setup();
     let (pressed_entity, pressed_target) = target(&mut app, 1);
     press(&mut app);
@@ -421,7 +423,9 @@ fn mouse_move_uses_current_hit_while_drag_uses_the_pressed_target() {
         event.kind == EventKind::MouseMove && event.target == move_target && event.is_at_target()
     }));
     assert!(events.iter().any(|event| {
-        event.kind == EventKind::MouseDrag && event.target == pressed_target && event.is_at_target()
+        event.kind == EventKind::MouseDrag
+            && event.target == move_target
+            && event.current_target == pressed_target
     }));
 
     release(&mut app);

@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_drag_targets.rs"]
+mod drag_targets;
+pub(super) fn install_drag_targets(app: &mut App) {
+    drag_targets::install(app);
+}
 #[path = "smoke_click_targets.rs"]
 mod click_targets;
 pub(super) fn install_click_targets(app: &mut App) {

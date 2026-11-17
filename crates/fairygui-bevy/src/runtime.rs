@@ -2000,6 +2000,34 @@ impl GuiRuntime {
         self.events.push(event);
     }
 
+    /// Captured motion follows press-time recipients, including existing offstage
+    /// controls. Reparenting cannot insert new ancestors; disposal clears listeners.
+    pub(crate) fn dispatch_press_path(
+        &mut self,
+        base: fairygui_core::object::UiEvent,
+        targets: &[GObjectId],
+    ) {
+        let route: Vec<_> = targets
+            .iter()
+            .copied()
+            .filter(|&id| self.store.contains(id))
+            .collect();
+        if route.is_empty() {
+            return;
+        }
+        for &current_target in &route {
+            let mut event = base.clone();
+            event.current_target = current_target;
+            event.bubbling = current_target != base.target;
+            self.events.push(event);
+        }
+        self.gui_events.push(PendingGuiEvent {
+            event: base,
+            route,
+            release_tail: Vec::new(),
+        });
+    }
+
     pub(crate) fn take_gui_events(&mut self) -> Vec<PendingGuiEvent> {
         std::mem::take(&mut self.gui_events)
     }

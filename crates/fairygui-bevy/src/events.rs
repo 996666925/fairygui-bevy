@@ -17,6 +17,9 @@ use std::{
 };
 
 #[cfg(test)]
+#[path = "ecs_drag_event_tests.rs"]
+mod drag_tests;
+#[cfg(test)]
 #[path = "ecs_release_event_tests.rs"]
 mod release_tests;
 #[cfg(test)]
@@ -84,7 +87,7 @@ pub struct GuiEvent {
     /// Current recipient, updated together with event.current_target.
     pub entity: Entity,
     /// Original control view, independent of the current recipient. For physical
-    /// MouseUp/RightMouseUp this is the release hit, including at saved press
+    /// MouseDrag/MouseUp/RightMouseUp this is the current hit, including at saved press
     /// recipients. None for the external stage or a missing original view.
     pub target: Option<Entity>,
     pub event: UiEvent,
