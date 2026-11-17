@@ -733,3 +733,206 @@ fn tree_body_and_expander_clicks_each_toggle_once_and_publish_state_before_obser
         vec![(tree, folder, 0, "Folder 1".into()); 3]
     );
 }
+
+#[test]
+fn folder_release_preserves_expansion_changed_between_down_and_click_for_mouse_and_touch() {
+    use bevy::{
+        input::touch::{TouchInput, TouchPhase},
+        picking::{backend::HitData, hover::HoverMap, pointer::PointerId},
+    };
+    for touch in [false, true] {
+        for mutation in 0..4 {
+            let (mut app, _, owner) = fixture(true);
+            let mut window = Window {
+                focused: true,
+                ..default()
+            };
+            window.set_cursor_position(Some(Vec2::splat(10.)));
+            let window = app.world_mut().spawn((window, PrimaryWindow)).id();
+            app.update();
+            let tree = tree(&mut app, owner);
+            let folder = app
+                .world()
+                .get::<GuiTreeState>(tree)
+                .unwrap()
+                .node(0)
+                .unwrap()
+                .view()
+                .unwrap();
+            let initial = mutation % 2 == 0;
+            send(&mut app, tree, |object| {
+                object.set_tree_expanded(0, initial)
+            });
+            app.update();
+            app.init_resource::<TypedItemClicks>();
+            app.world_mut()
+                .entity_mut(tree)
+                .observe(observe_typed_item_click);
+            if touch {
+                app.init_resource::<HoverMap>();
+                app.world_mut().resource_mut::<HoverMap>().insert(
+                    PointerId::Touch(71),
+                    [(
+                        folder,
+                        HitData::new(Entity::PLACEHOLDER, 0., Some(Vec3::ZERO), None),
+                    )]
+                    .into(),
+                );
+                app.world_mut().write_message(TouchInput {
+                    window,
+                    id: 71,
+                    phase: TouchPhase::Started,
+                    position: Vec2::splat(10.),
+                    force: None,
+                });
+            } else {
+                hover(&mut app, folder);
+                app.world_mut()
+                    .resource_mut::<ButtonInput<MouseButton>>()
+                    .press(MouseButton::Left);
+            }
+            app.update();
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .clear();
+            match mutation {
+                0 => {
+                    app.world_mut()
+                        .get_mut::<GuiTreeNode>(folder)
+                        .unwrap()
+                        .expanded = !initial
+                }
+                1 => send(&mut app, tree, |object| {
+                    object.set_tree_expanded(0, !initial)
+                }),
+                2 => send(&mut app, folder, |object| {
+                    object.set_controller_page("expanded", i32::from(!initial))
+                }),
+                _ => {
+                    send(&mut app, tree, |object| {
+                        object.set_tree_expanded(0, !initial)
+                    });
+                    send(&mut app, tree, |object| {
+                        object.set_tree_expanded(0, initial)
+                    });
+                }
+            }
+            if touch {
+                app.world_mut().write_message(TouchInput {
+                    window,
+                    id: 71,
+                    phase: TouchPhase::Ended,
+                    position: Vec2::splat(10.),
+                    force: None,
+                });
+            } else {
+                app.world_mut()
+                    .resource_mut::<ButtonInput<MouseButton>>()
+                    .release(MouseButton::Left);
+            }
+            app.update();
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .clear();
+            let expanded = app
+                .world()
+                .get::<GuiTreeState>(tree)
+                .unwrap()
+                .node(0)
+                .unwrap()
+                .is_expanded();
+            assert_eq!(expanded, !initial, "touch={touch} mutation={mutation}");
+            assert_eq!(
+                app.world().get::<GuiTreeNode>(folder).unwrap().expanded,
+                expanded
+            );
+            assert_eq!(
+                app.world()
+                    .get::<GuiControllers>(folder)
+                    .unwrap()
+                    .get("expanded")
+                    .unwrap()
+                    .selected_index(),
+                i32::from(expanded)
+            );
+            assert_eq!(
+                app.world().resource::<TypedItemClicks>().0,
+                [(tree, folder, 0, "Folder 1".into())]
+            );
+        }
+    }
+}
+
+#[test]
+fn simultaneous_touch_downs_share_the_native_tree_expansion_snapshot() {
+    use bevy::{
+        input::touch::{TouchInput, TouchPhase},
+        picking::{backend::HitData, hover::HoverMap, pointer::PointerId},
+    };
+    let (mut app, _, owner) = fixture(true);
+    let window = app
+        .world_mut()
+        .spawn((
+            Window {
+                focused: true,
+                ..default()
+            },
+            PrimaryWindow,
+        ))
+        .id();
+    app.update();
+    let tree = tree(&mut app, owner);
+    let state = app.world().get::<GuiTreeState>(tree).unwrap();
+    let first = state.node(0).unwrap().view().unwrap();
+    let second = state.node(5).unwrap().view().unwrap();
+    send(&mut app, tree, |object| object.set_tree_expanded(5, false));
+    app.update();
+    app.init_resource::<HoverMap>();
+    for (id, row, phase) in [
+        (11, first, TouchPhase::Started),
+        (22, second, TouchPhase::Started),
+        (11, first, TouchPhase::Ended),
+    ] {
+        app.world_mut().resource_mut::<HoverMap>().insert(
+            PointerId::Touch(id),
+            [(
+                row,
+                HitData::new(Entity::PLACEHOLDER, 0., Some(Vec3::ZERO), None),
+            )]
+            .into(),
+        );
+        app.world_mut().write_message(TouchInput {
+            window,
+            id,
+            phase,
+            position: Vec2::splat(10.),
+            force: None,
+        });
+        app.update();
+    }
+    assert!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .node(0)
+            .unwrap()
+            .is_expanded(),
+        "second folder down overwrites the shared sample; first folder click must stay expanded"
+    );
+    app.world_mut().write_message(TouchInput {
+        window,
+        id: 22,
+        phase: TouchPhase::Ended,
+        position: Vec2::splat(10.),
+        force: None,
+    });
+    app.update();
+    assert!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .node(5)
+            .unwrap()
+            .is_expanded()
+    );
+}

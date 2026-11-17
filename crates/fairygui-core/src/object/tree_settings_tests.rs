@@ -96,6 +96,7 @@ fn tree_settings_match_native_assignment_cell_creation_and_click_policy() {
                     click_to_expand: v[0],
                 },
             );
+            store.record_tree_pointer_down(row, None);
             store.toggle_clicked_tree_node(row);
             let ControlData::Tree(data) = store.object(tree).unwrap().control() else {
                 unreachable!()

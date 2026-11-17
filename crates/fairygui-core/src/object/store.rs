@@ -1332,26 +1332,25 @@ impl ObjectStore {
 
     /// 点击树项时按其策略切换展开状态。
     ///
-    /// `0` 与原版未实现的 `2` 不切换；其它非零值点击文件夹时切换。
+    /// `0` 与原版未实现的 `2` 不切换；其它非零值在当前展开状态与按下快照一致时切换。
     /// 返回展开状态是否变化。
     pub fn toggle_clicked_tree_node(&mut self, item: GObjectId) -> bool {
-        let Some(parent) = self.objects.get(item).and_then(|object| object.parent) else {
-            return false;
-        };
-        let Some(index) = self.list_item_index(parent, item) else {
+        let Some((parent, _, index)) = self.list_item_of(item) else {
             return false;
         };
 
         // 先把需要的两个值取出来，避免与随后的可变借用冲突。
-        let (click_to_expand, is_folder) =
+        let (click_to_expand, is_folder, unchanged) =
             match self.objects.get(parent).map(|object| &object.control) {
-                Some(crate::widget::ControlData::Tree(data)) => {
-                    (data.click_to_expand, data.is_folder(index))
-                }
+                Some(crate::widget::ControlData::Tree(data)) => (
+                    data.click_to_expand,
+                    data.is_folder(index),
+                    data.pressed_expanded == Some(data.is_expanded(index)),
+                ),
                 _ => return false,
             };
 
-        if click_to_expand == 0 || click_to_expand == 2 || !is_folder {
+        if click_to_expand == 0 || click_to_expand == 2 || !is_folder || !unchanged {
             return false;
         }
 

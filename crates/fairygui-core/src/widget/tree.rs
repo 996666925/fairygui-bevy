@@ -40,6 +40,9 @@ pub struct TreeData {
     ///
     /// 字段对 crate 内可见：结构体更新语法要求所有字段可访问。
     pub(crate) expanded: Vec<bool>,
+    /// Native GTree._expandedStatusInEvt, shared by all folder cells/contacts.
+    /// A row click only toggles if its current state equals this press sample.
+    pub(crate) pressed_expanded: Option<bool>,
 }
 
 impl TreeData {

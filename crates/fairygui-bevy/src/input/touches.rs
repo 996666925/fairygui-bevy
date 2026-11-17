@@ -275,6 +275,7 @@ pub(super) fn route_touches(
             };
             rollover::dispatch(&mut runtime, None, Some(target), position, Some(event.id));
             let stop = pointer_down_stop(&runtime, target);
+            runtime.store_mut().record_tree_pointer_down(target, stop);
             let click_targets =
                 fairygui_core::pointer::ClickTargets::begin(runtime.store(), target, stop);
             runtime.dispatch_event_until(

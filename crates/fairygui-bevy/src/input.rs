@@ -1029,6 +1029,7 @@ fn route_pointer(
         runtime.check_popups(raw_hit.map(|(_, object, ..)| object.0));
         if let Some(target) = hit {
             let stop = pointer_down_stop(&runtime, target);
+            runtime.store_mut().record_tree_pointer_down(target, stop);
             let click_targets =
                 fairygui_core::pointer::ClickTargets::begin(runtime.store(), target, stop);
             runtime.dispatch_event_until(

@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_tree_click.rs"]
+mod tree_click;
+pub(super) fn install_tree_click(app: &mut App) {
+    tree_click::install(app);
+}
 #[path = "smoke_hover_targets.rs"]
 mod hover_targets;
 pub(super) fn install_hover_targets(app: &mut App) {

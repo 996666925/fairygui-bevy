@@ -2,7 +2,37 @@
 use super::*;
 use crate::widget::ControlData;
 
+#[cfg(test)]
+#[path = "tree_click_tests.rs"]
+mod click_tests;
+
 impl ObjectStore {
+    /// Sample folder expansion while MouseDown visits the logical path. Leaf
+    /// cells leave the previous sample intact. Like native GTree, the sample
+    /// belongs to the tree rather than a pointer or node, and is not consumed.
+    /// A mouse-down propagation stop includes its boundary and excludes ancestors.
+    pub fn record_tree_pointer_down(&mut self, target: GObjectId, stop: Option<GObjectId>) -> bool {
+        let mut current = Some(target);
+        let mut sampled = false;
+        while let Some(row) = current {
+            let parent = self.object(row).and_then(|object| object.parent());
+            if let Some(tree) = parent
+                && let Some(index) = self.list_item_index(tree, row)
+                && let Some(ControlData::Tree(data)) =
+                    self.objects.get_mut(tree).map(|object| &mut object.control)
+                && data.is_folder(index)
+            {
+                data.pressed_expanded = Some(data.is_expanded(index));
+                sampled = true;
+            }
+            if Some(row) == stop {
+                break;
+            }
+            current = parent;
+        }
+        sampled
+    }
+
     /// GTree.createCell samples indent once. Keyed reparenting to a new level
     /// represents a new native cell binding; ordinary layout/collapse retains it.
     pub(super) fn prepare_tree_indents(&mut self, tree: GObjectId) {

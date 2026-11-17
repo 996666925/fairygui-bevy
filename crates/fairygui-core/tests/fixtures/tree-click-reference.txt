@@ -1,0 +1,745 @@
+# Unchanged FairyGUI-Laya GTree folder MouseDown and dispatchItemEvent methods.
+# Three cells: folder 0, folder 1, leaf 2; callbacks run only on folder MouseDown.
+# case mode initial-first initial-second scenario; op arg state snapshot expanded-first expanded-second events
+# private __cellMouseDown( SHA256 adaa0505de3155185d2a22b9aa33025f36bd3f1127aae5f5b9e5f49f439fa94e
+# protected dispatchItemEvent( SHA256 58fc75fb6ea7bafb3dc4f39bf6e9425386f24d544f29a2398c12074a0cb345f3
+case -1 0 0 no_press
+click 0 0 -1 0 0 0
+case -1 0 0 body
+down 0 0 0 0 0 _
+click 0 0 0 1 0 1
+case -1 0 0 changed
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+click 0 0 0 1 0 1
+case -1 0 0 restored
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+flip 0 0 0 0 0 _
+click 0 0 0 1 0 1
+case -1 0 0 other
+down 0 0 0 0 0 _
+down 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case -1 0 0 leaf
+down 0 0 0 0 0 _
+down 2 0 0 0 0 _
+click 0 0 0 1 0 1
+case -1 0 0 stopped
+blocked 0 0 -1 0 0 _
+click 0 0 -1 0 0 0
+case -1 0 0 stale
+down 0 0 0 0 0 _
+click 0 0 0 1 0 1
+click 0 0 0 1 0 1,1
+case -1 0 0 leaf_click
+down 0 0 0 0 0 _
+click 2 0 0 0 0 1
+click 0 0 0 1 0 1,1
+case -1 0 0 mode_change
+down 0 0 0 0 0 _
+mode 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case -1 0 1 no_press
+click 0 0 -1 0 1 0
+case -1 0 1 body
+down 0 0 0 0 1 _
+click 0 0 0 1 1 1
+case -1 0 1 changed
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+click 0 0 0 1 1 1
+case -1 0 1 restored
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+flip 0 0 0 0 1 _
+click 0 0 0 1 1 1
+case -1 0 1 other
+down 0 0 0 0 1 _
+down 1 0 1 0 1 _
+click 0 0 1 0 1 0
+case -1 0 1 leaf
+down 0 0 0 0 1 _
+down 2 0 0 0 1 _
+click 0 0 0 1 1 1
+case -1 0 1 stopped
+blocked 0 0 -1 0 1 _
+click 0 0 -1 0 1 0
+case -1 0 1 stale
+down 0 0 0 0 1 _
+click 0 0 0 1 1 1
+click 0 0 0 1 1 1,1
+case -1 0 1 leaf_click
+down 0 0 0 0 1 _
+click 2 0 0 0 1 1
+click 0 0 0 1 1 1,1
+case -1 0 1 mode_change
+down 0 0 0 0 1 _
+mode 1 0 0 0 1 _
+click 0 0 0 1 1 1
+case -1 1 0 no_press
+click 0 0 -1 1 0 1
+case -1 1 0 body
+down 0 0 1 1 0 _
+click 0 0 1 0 0 0
+case -1 1 0 changed
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+click 0 0 1 0 0 0
+case -1 1 0 restored
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+flip 0 0 1 1 0 _
+click 0 0 1 0 0 0
+case -1 1 0 other
+down 0 0 1 1 0 _
+down 1 0 0 1 0 _
+click 0 0 0 1 0 1
+case -1 1 0 leaf
+down 0 0 1 1 0 _
+down 2 0 1 1 0 _
+click 0 0 1 0 0 0
+case -1 1 0 stopped
+blocked 0 0 -1 1 0 _
+click 0 0 -1 1 0 1
+case -1 1 0 stale
+down 0 0 1 1 0 _
+click 0 0 1 0 0 0
+click 0 0 1 0 0 0,0
+case -1 1 0 leaf_click
+down 0 0 1 1 0 _
+click 2 0 1 1 0 1
+click 0 0 1 0 0 1,0
+case -1 1 0 mode_change
+down 0 0 1 1 0 _
+mode 1 0 1 1 0 _
+click 0 0 1 0 0 0
+case -1 1 1 no_press
+click 0 0 -1 1 1 1
+case -1 1 1 body
+down 0 0 1 1 1 _
+click 0 0 1 0 1 0
+case -1 1 1 changed
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+click 0 0 1 0 1 0
+case -1 1 1 restored
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+flip 0 0 1 1 1 _
+click 0 0 1 0 1 0
+case -1 1 1 other
+down 0 0 1 1 1 _
+down 1 0 1 1 1 _
+click 0 0 1 0 1 0
+case -1 1 1 leaf
+down 0 0 1 1 1 _
+down 2 0 1 1 1 _
+click 0 0 1 0 1 0
+case -1 1 1 stopped
+blocked 0 0 -1 1 1 _
+click 0 0 -1 1 1 1
+case -1 1 1 stale
+down 0 0 1 1 1 _
+click 0 0 1 0 1 0
+click 0 0 1 0 1 0,0
+case -1 1 1 leaf_click
+down 0 0 1 1 1 _
+click 2 0 1 1 1 1
+click 0 0 1 0 1 1,0
+case -1 1 1 mode_change
+down 0 0 1 1 1 _
+mode 1 0 1 1 1 _
+click 0 0 1 0 1 0
+case 0 0 0 no_press
+click 0 0 -1 0 0 0
+case 0 0 0 body
+down 0 0 0 0 0 _
+click 0 0 0 0 0 0
+case 0 0 0 changed
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+click 0 0 0 1 0 1
+case 0 0 0 restored
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+flip 0 0 0 0 0 _
+click 0 0 0 0 0 0
+case 0 0 0 other
+down 0 0 0 0 0 _
+down 1 0 0 0 0 _
+click 0 0 0 0 0 0
+case 0 0 0 leaf
+down 0 0 0 0 0 _
+down 2 0 0 0 0 _
+click 0 0 0 0 0 0
+case 0 0 0 stopped
+blocked 0 0 -1 0 0 _
+click 0 0 -1 0 0 0
+case 0 0 0 stale
+down 0 0 0 0 0 _
+click 0 0 0 0 0 0
+click 0 0 0 0 0 0,0
+case 0 0 0 leaf_click
+down 0 0 0 0 0 _
+click 2 0 0 0 0 1
+click 0 0 0 0 0 1,0
+case 0 0 0 mode_change
+down 0 0 0 0 0 _
+mode 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case 0 0 1 no_press
+click 0 0 -1 0 1 0
+case 0 0 1 body
+down 0 0 0 0 1 _
+click 0 0 0 0 1 0
+case 0 0 1 changed
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+click 0 0 0 1 1 1
+case 0 0 1 restored
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+flip 0 0 0 0 1 _
+click 0 0 0 0 1 0
+case 0 0 1 other
+down 0 0 0 0 1 _
+down 1 0 1 0 1 _
+click 0 0 1 0 1 0
+case 0 0 1 leaf
+down 0 0 0 0 1 _
+down 2 0 0 0 1 _
+click 0 0 0 0 1 0
+case 0 0 1 stopped
+blocked 0 0 -1 0 1 _
+click 0 0 -1 0 1 0
+case 0 0 1 stale
+down 0 0 0 0 1 _
+click 0 0 0 0 1 0
+click 0 0 0 0 1 0,0
+case 0 0 1 leaf_click
+down 0 0 0 0 1 _
+click 2 0 0 0 1 1
+click 0 0 0 0 1 1,0
+case 0 0 1 mode_change
+down 0 0 0 0 1 _
+mode 1 0 0 0 1 _
+click 0 0 0 1 1 1
+case 0 1 0 no_press
+click 0 0 -1 1 0 1
+case 0 1 0 body
+down 0 0 1 1 0 _
+click 0 0 1 1 0 1
+case 0 1 0 changed
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+click 0 0 1 0 0 0
+case 0 1 0 restored
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+flip 0 0 1 1 0 _
+click 0 0 1 1 0 1
+case 0 1 0 other
+down 0 0 1 1 0 _
+down 1 0 0 1 0 _
+click 0 0 0 1 0 1
+case 0 1 0 leaf
+down 0 0 1 1 0 _
+down 2 0 1 1 0 _
+click 0 0 1 1 0 1
+case 0 1 0 stopped
+blocked 0 0 -1 1 0 _
+click 0 0 -1 1 0 1
+case 0 1 0 stale
+down 0 0 1 1 0 _
+click 0 0 1 1 0 1
+click 0 0 1 1 0 1,1
+case 0 1 0 leaf_click
+down 0 0 1 1 0 _
+click 2 0 1 1 0 1
+click 0 0 1 1 0 1,1
+case 0 1 0 mode_change
+down 0 0 1 1 0 _
+mode 1 0 1 1 0 _
+click 0 0 1 0 0 0
+case 0 1 1 no_press
+click 0 0 -1 1 1 1
+case 0 1 1 body
+down 0 0 1 1 1 _
+click 0 0 1 1 1 1
+case 0 1 1 changed
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+click 0 0 1 0 1 0
+case 0 1 1 restored
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+flip 0 0 1 1 1 _
+click 0 0 1 1 1 1
+case 0 1 1 other
+down 0 0 1 1 1 _
+down 1 0 1 1 1 _
+click 0 0 1 1 1 1
+case 0 1 1 leaf
+down 0 0 1 1 1 _
+down 2 0 1 1 1 _
+click 0 0 1 1 1 1
+case 0 1 1 stopped
+blocked 0 0 -1 1 1 _
+click 0 0 -1 1 1 1
+case 0 1 1 stale
+down 0 0 1 1 1 _
+click 0 0 1 1 1 1
+click 0 0 1 1 1 1,1
+case 0 1 1 leaf_click
+down 0 0 1 1 1 _
+click 2 0 1 1 1 1
+click 0 0 1 1 1 1,1
+case 0 1 1 mode_change
+down 0 0 1 1 1 _
+mode 1 0 1 1 1 _
+click 0 0 1 0 1 0
+case 1 0 0 no_press
+click 0 0 -1 0 0 0
+case 1 0 0 body
+down 0 0 0 0 0 _
+click 0 0 0 1 0 1
+case 1 0 0 changed
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+click 0 0 0 1 0 1
+case 1 0 0 restored
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+flip 0 0 0 0 0 _
+click 0 0 0 1 0 1
+case 1 0 0 other
+down 0 0 0 0 0 _
+down 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case 1 0 0 leaf
+down 0 0 0 0 0 _
+down 2 0 0 0 0 _
+click 0 0 0 1 0 1
+case 1 0 0 stopped
+blocked 0 0 -1 0 0 _
+click 0 0 -1 0 0 0
+case 1 0 0 stale
+down 0 0 0 0 0 _
+click 0 0 0 1 0 1
+click 0 0 0 1 0 1,1
+case 1 0 0 leaf_click
+down 0 0 0 0 0 _
+click 2 0 0 0 0 1
+click 0 0 0 1 0 1,1
+case 1 0 0 mode_change
+down 0 0 0 0 0 _
+mode 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case 1 0 1 no_press
+click 0 0 -1 0 1 0
+case 1 0 1 body
+down 0 0 0 0 1 _
+click 0 0 0 1 1 1
+case 1 0 1 changed
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+click 0 0 0 1 1 1
+case 1 0 1 restored
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+flip 0 0 0 0 1 _
+click 0 0 0 1 1 1
+case 1 0 1 other
+down 0 0 0 0 1 _
+down 1 0 1 0 1 _
+click 0 0 1 0 1 0
+case 1 0 1 leaf
+down 0 0 0 0 1 _
+down 2 0 0 0 1 _
+click 0 0 0 1 1 1
+case 1 0 1 stopped
+blocked 0 0 -1 0 1 _
+click 0 0 -1 0 1 0
+case 1 0 1 stale
+down 0 0 0 0 1 _
+click 0 0 0 1 1 1
+click 0 0 0 1 1 1,1
+case 1 0 1 leaf_click
+down 0 0 0 0 1 _
+click 2 0 0 0 1 1
+click 0 0 0 1 1 1,1
+case 1 0 1 mode_change
+down 0 0 0 0 1 _
+mode 1 0 0 0 1 _
+click 0 0 0 1 1 1
+case 1 1 0 no_press
+click 0 0 -1 1 0 1
+case 1 1 0 body
+down 0 0 1 1 0 _
+click 0 0 1 0 0 0
+case 1 1 0 changed
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+click 0 0 1 0 0 0
+case 1 1 0 restored
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+flip 0 0 1 1 0 _
+click 0 0 1 0 0 0
+case 1 1 0 other
+down 0 0 1 1 0 _
+down 1 0 0 1 0 _
+click 0 0 0 1 0 1
+case 1 1 0 leaf
+down 0 0 1 1 0 _
+down 2 0 1 1 0 _
+click 0 0 1 0 0 0
+case 1 1 0 stopped
+blocked 0 0 -1 1 0 _
+click 0 0 -1 1 0 1
+case 1 1 0 stale
+down 0 0 1 1 0 _
+click 0 0 1 0 0 0
+click 0 0 1 0 0 0,0
+case 1 1 0 leaf_click
+down 0 0 1 1 0 _
+click 2 0 1 1 0 1
+click 0 0 1 0 0 1,0
+case 1 1 0 mode_change
+down 0 0 1 1 0 _
+mode 1 0 1 1 0 _
+click 0 0 1 0 0 0
+case 1 1 1 no_press
+click 0 0 -1 1 1 1
+case 1 1 1 body
+down 0 0 1 1 1 _
+click 0 0 1 0 1 0
+case 1 1 1 changed
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+click 0 0 1 0 1 0
+case 1 1 1 restored
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+flip 0 0 1 1 1 _
+click 0 0 1 0 1 0
+case 1 1 1 other
+down 0 0 1 1 1 _
+down 1 0 1 1 1 _
+click 0 0 1 0 1 0
+case 1 1 1 leaf
+down 0 0 1 1 1 _
+down 2 0 1 1 1 _
+click 0 0 1 0 1 0
+case 1 1 1 stopped
+blocked 0 0 -1 1 1 _
+click 0 0 -1 1 1 1
+case 1 1 1 stale
+down 0 0 1 1 1 _
+click 0 0 1 0 1 0
+click 0 0 1 0 1 0,0
+case 1 1 1 leaf_click
+down 0 0 1 1 1 _
+click 2 0 1 1 1 1
+click 0 0 1 0 1 1,0
+case 1 1 1 mode_change
+down 0 0 1 1 1 _
+mode 1 0 1 1 1 _
+click 0 0 1 0 1 0
+case 2 0 0 no_press
+click 0 0 -1 0 0 0
+case 2 0 0 body
+down 0 0 0 0 0 _
+click 0 0 0 0 0 0
+case 2 0 0 changed
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+click 0 0 0 1 0 1
+case 2 0 0 restored
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+flip 0 0 0 0 0 _
+click 0 0 0 0 0 0
+case 2 0 0 other
+down 0 0 0 0 0 _
+down 1 0 0 0 0 _
+click 0 0 0 0 0 0
+case 2 0 0 leaf
+down 0 0 0 0 0 _
+down 2 0 0 0 0 _
+click 0 0 0 0 0 0
+case 2 0 0 stopped
+blocked 0 0 -1 0 0 _
+click 0 0 -1 0 0 0
+case 2 0 0 stale
+down 0 0 0 0 0 _
+click 0 0 0 0 0 0
+click 0 0 0 0 0 0,0
+case 2 0 0 leaf_click
+down 0 0 0 0 0 _
+click 2 0 0 0 0 1
+click 0 0 0 0 0 1,0
+case 2 0 0 mode_change
+down 0 0 0 0 0 _
+mode 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case 2 0 1 no_press
+click 0 0 -1 0 1 0
+case 2 0 1 body
+down 0 0 0 0 1 _
+click 0 0 0 0 1 0
+case 2 0 1 changed
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+click 0 0 0 1 1 1
+case 2 0 1 restored
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+flip 0 0 0 0 1 _
+click 0 0 0 0 1 0
+case 2 0 1 other
+down 0 0 0 0 1 _
+down 1 0 1 0 1 _
+click 0 0 1 0 1 0
+case 2 0 1 leaf
+down 0 0 0 0 1 _
+down 2 0 0 0 1 _
+click 0 0 0 0 1 0
+case 2 0 1 stopped
+blocked 0 0 -1 0 1 _
+click 0 0 -1 0 1 0
+case 2 0 1 stale
+down 0 0 0 0 1 _
+click 0 0 0 0 1 0
+click 0 0 0 0 1 0,0
+case 2 0 1 leaf_click
+down 0 0 0 0 1 _
+click 2 0 0 0 1 1
+click 0 0 0 0 1 1,0
+case 2 0 1 mode_change
+down 0 0 0 0 1 _
+mode 1 0 0 0 1 _
+click 0 0 0 1 1 1
+case 2 1 0 no_press
+click 0 0 -1 1 0 1
+case 2 1 0 body
+down 0 0 1 1 0 _
+click 0 0 1 1 0 1
+case 2 1 0 changed
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+click 0 0 1 0 0 0
+case 2 1 0 restored
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+flip 0 0 1 1 0 _
+click 0 0 1 1 0 1
+case 2 1 0 other
+down 0 0 1 1 0 _
+down 1 0 0 1 0 _
+click 0 0 0 1 0 1
+case 2 1 0 leaf
+down 0 0 1 1 0 _
+down 2 0 1 1 0 _
+click 0 0 1 1 0 1
+case 2 1 0 stopped
+blocked 0 0 -1 1 0 _
+click 0 0 -1 1 0 1
+case 2 1 0 stale
+down 0 0 1 1 0 _
+click 0 0 1 1 0 1
+click 0 0 1 1 0 1,1
+case 2 1 0 leaf_click
+down 0 0 1 1 0 _
+click 2 0 1 1 0 1
+click 0 0 1 1 0 1,1
+case 2 1 0 mode_change
+down 0 0 1 1 0 _
+mode 1 0 1 1 0 _
+click 0 0 1 0 0 0
+case 2 1 1 no_press
+click 0 0 -1 1 1 1
+case 2 1 1 body
+down 0 0 1 1 1 _
+click 0 0 1 1 1 1
+case 2 1 1 changed
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+click 0 0 1 0 1 0
+case 2 1 1 restored
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+flip 0 0 1 1 1 _
+click 0 0 1 1 1 1
+case 2 1 1 other
+down 0 0 1 1 1 _
+down 1 0 1 1 1 _
+click 0 0 1 1 1 1
+case 2 1 1 leaf
+down 0 0 1 1 1 _
+down 2 0 1 1 1 _
+click 0 0 1 1 1 1
+case 2 1 1 stopped
+blocked 0 0 -1 1 1 _
+click 0 0 -1 1 1 1
+case 2 1 1 stale
+down 0 0 1 1 1 _
+click 0 0 1 1 1 1
+click 0 0 1 1 1 1,1
+case 2 1 1 leaf_click
+down 0 0 1 1 1 _
+click 2 0 1 1 1 1
+click 0 0 1 1 1 1,1
+case 2 1 1 mode_change
+down 0 0 1 1 1 _
+mode 1 0 1 1 1 _
+click 0 0 1 0 1 0
+case 3 0 0 no_press
+click 0 0 -1 0 0 0
+case 3 0 0 body
+down 0 0 0 0 0 _
+click 0 0 0 1 0 1
+case 3 0 0 changed
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+click 0 0 0 1 0 1
+case 3 0 0 restored
+down 0 0 0 0 0 _
+flip 0 0 0 1 0 _
+flip 0 0 0 0 0 _
+click 0 0 0 1 0 1
+case 3 0 0 other
+down 0 0 0 0 0 _
+down 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case 3 0 0 leaf
+down 0 0 0 0 0 _
+down 2 0 0 0 0 _
+click 0 0 0 1 0 1
+case 3 0 0 stopped
+blocked 0 0 -1 0 0 _
+click 0 0 -1 0 0 0
+case 3 0 0 stale
+down 0 0 0 0 0 _
+click 0 0 0 1 0 1
+click 0 0 0 1 0 1,1
+case 3 0 0 leaf_click
+down 0 0 0 0 0 _
+click 2 0 0 0 0 1
+click 0 0 0 1 0 1,1
+case 3 0 0 mode_change
+down 0 0 0 0 0 _
+mode 1 0 0 0 0 _
+click 0 0 0 1 0 1
+case 3 0 1 no_press
+click 0 0 -1 0 1 0
+case 3 0 1 body
+down 0 0 0 0 1 _
+click 0 0 0 1 1 1
+case 3 0 1 changed
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+click 0 0 0 1 1 1
+case 3 0 1 restored
+down 0 0 0 0 1 _
+flip 0 0 0 1 1 _
+flip 0 0 0 0 1 _
+click 0 0 0 1 1 1
+case 3 0 1 other
+down 0 0 0 0 1 _
+down 1 0 1 0 1 _
+click 0 0 1 0 1 0
+case 3 0 1 leaf
+down 0 0 0 0 1 _
+down 2 0 0 0 1 _
+click 0 0 0 1 1 1
+case 3 0 1 stopped
+blocked 0 0 -1 0 1 _
+click 0 0 -1 0 1 0
+case 3 0 1 stale
+down 0 0 0 0 1 _
+click 0 0 0 1 1 1
+click 0 0 0 1 1 1,1
+case 3 0 1 leaf_click
+down 0 0 0 0 1 _
+click 2 0 0 0 1 1
+click 0 0 0 1 1 1,1
+case 3 0 1 mode_change
+down 0 0 0 0 1 _
+mode 1 0 0 0 1 _
+click 0 0 0 1 1 1
+case 3 1 0 no_press
+click 0 0 -1 1 0 1
+case 3 1 0 body
+down 0 0 1 1 0 _
+click 0 0 1 0 0 0
+case 3 1 0 changed
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+click 0 0 1 0 0 0
+case 3 1 0 restored
+down 0 0 1 1 0 _
+flip 0 0 1 0 0 _
+flip 0 0 1 1 0 _
+click 0 0 1 0 0 0
+case 3 1 0 other
+down 0 0 1 1 0 _
+down 1 0 0 1 0 _
+click 0 0 0 1 0 1
+case 3 1 0 leaf
+down 0 0 1 1 0 _
+down 2 0 1 1 0 _
+click 0 0 1 0 0 0
+case 3 1 0 stopped
+blocked 0 0 -1 1 0 _
+click 0 0 -1 1 0 1
+case 3 1 0 stale
+down 0 0 1 1 0 _
+click 0 0 1 0 0 0
+click 0 0 1 0 0 0,0
+case 3 1 0 leaf_click
+down 0 0 1 1 0 _
+click 2 0 1 1 0 1
+click 0 0 1 0 0 1,0
+case 3 1 0 mode_change
+down 0 0 1 1 0 _
+mode 1 0 1 1 0 _
+click 0 0 1 0 0 0
+case 3 1 1 no_press
+click 0 0 -1 1 1 1
+case 3 1 1 body
+down 0 0 1 1 1 _
+click 0 0 1 0 1 0
+case 3 1 1 changed
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+click 0 0 1 0 1 0
+case 3 1 1 restored
+down 0 0 1 1 1 _
+flip 0 0 1 0 1 _
+flip 0 0 1 1 1 _
+click 0 0 1 0 1 0
+case 3 1 1 other
+down 0 0 1 1 1 _
+down 1 0 1 1 1 _
+click 0 0 1 0 1 0
+case 3 1 1 leaf
+down 0 0 1 1 1 _
+down 2 0 1 1 1 _
+click 0 0 1 0 1 0
+case 3 1 1 stopped
+blocked 0 0 -1 1 1 _
+click 0 0 -1 1 1 1
+case 3 1 1 stale
+down 0 0 1 1 1 _
+click 0 0 1 0 1 0
+click 0 0 1 0 1 0,0
+case 3 1 1 leaf_click
+down 0 0 1 1 1 _
+click 2 0 1 1 1 1
+click 0 0 1 0 1 1,0
+case 3 1 1 mode_change
+down 0 0 1 1 1 _
+mode 1 0 1 1 1 _
+click 0 0 1 0 1 0
