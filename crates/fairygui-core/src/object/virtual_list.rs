@@ -168,6 +168,11 @@ impl ObjectStore {
         let child = self.list_item_at(list, index)?;
         if self.is_virtual_list(list) {
             self.virtual_item_index(list, child)
+        } else if matches!(
+            self.object(list).map(|object| object.control()),
+            Some(crate::widget::ControlData::Tree(_))
+        ) {
+            self.tree_visible_index_of_node(list, index)
         } else {
             Some(index)
         }
@@ -175,6 +180,11 @@ impl ObjectStore {
     pub fn list_item_index_to_child_index(&self, list: GObjectId, index: usize) -> Option<usize> {
         if self.is_virtual_list(list) {
             self.list_item_index(list, self.virtual_item_object(list, index)?)
+        } else if matches!(
+            self.object(list).map(|object| object.control()),
+            Some(crate::widget::ControlData::Tree(_))
+        ) {
+            self.tree_node_at_visible_index(list, index)
         } else {
             self.list_item_at(list, index).map(|_| index)
         }

@@ -138,6 +138,10 @@ fn tree_visible_indices_map_to_stable_nodes_and_skip_collapsed_descendants() {
         },
     ];
     data.expanded = vec![false, true, true, true];
+    for _ in 0..4 {
+        let row = store.create(ObjectType::Component);
+        store.set_parent(row, Some(tree));
+    }
 
     assert_eq!(store.tree_node_at_visible_index(tree, 0), Some(0));
     assert_eq!(store.tree_node_at_visible_index(tree, 1), Some(2));
@@ -147,6 +151,10 @@ fn tree_visible_indices_map_to_stable_nodes_and_skip_collapsed_descendants() {
     assert_eq!(store.tree_visible_index_of_node(tree, 1), None);
     assert_eq!(store.tree_visible_index_of_node(tree, 2), Some(1));
     assert_eq!(store.tree_visible_index_of_node(tree, 3), Some(2));
+    assert_eq!(store.list_child_index_to_item_index(tree, 1), None);
+    assert_eq!(store.list_child_index_to_item_index(tree, 2), Some(1));
+    assert_eq!(store.list_item_index_to_child_index(tree, 1), Some(2));
+    assert_eq!(store.list_item_index_to_child_index(tree, 2), Some(3));
 }
 
 #[test]
