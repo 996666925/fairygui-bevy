@@ -325,7 +325,7 @@ pub use events::*;
 /// One rich-text link activation, published before `GuiSystems::Respond`.
 /// The href is preserved verbatim (including `event:`). Applications decide how
 /// to handle it; the runtime never opens a browser. Core events also bubble.
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Message, Debug, Clone)]
 pub struct GuiLink {
     /// Bevy control entity that originally activated the link.
     pub entity: Entity,
@@ -444,6 +444,7 @@ pub fn emit_list_item_messages(
 }
 
 pub fn emit_link_messages(
+    mut commands: Commands,
     mut runtime: NonSendMut<GuiRuntime>,
     mut messages: MessageWriter<GuiLink>,
 ) {
@@ -452,11 +453,13 @@ pub fn emit_link_messages(
         if let Some(entity) = runtime.entity_of(event.target)
             && let fairygui_core::object::EventData::Text(href) = &event.data
         {
-            messages.write(GuiLink {
+            let event = GuiLink {
                 entity,
                 href: href.clone(),
                 event,
-            });
+            };
+            messages.write(event.clone());
+            commands.trigger(event);
         }
     }
 }

@@ -827,6 +827,15 @@ fn touch_link_activation_retains_both_finger_id_and_verbatim_href() {
 #[test]
 fn link_capture_spans_nested_styles_and_lines_and_publishes_verbatim_payload_once() {
     let (mut app, _, entity, text) = pointer_fixture();
+    #[derive(Resource, Default)]
+    struct Seen(Vec<String>);
+    app.init_resource::<Seen>();
+    app.world_mut().entity_mut(entity).observe(
+        move |event: On<GuiLink>, mut seen: ResMut<Seen>| {
+            assert_eq!(event.entity, entity);
+            seen.0.push(event.href.clone());
+        },
+    );
     mouse(&mut app, true);
     point_at(&mut app, entity, Vec2::new(45.0, 10.0));
     mouse(&mut app, false);
@@ -856,6 +865,7 @@ fn link_capture_spans_nested_styles_and_lines_and_publishes_verbatim_payload_onc
         "published during the release frame, once per activation"
     );
     assert_eq!(messages[0].href, "event:xx");
+    assert_eq!(app.world().resource::<Seen>().0, vec!["event:xx"]);
     point_at(&mut app, entity, Vec2::new(15.0, 50.0));
     mouse(&mut app, true);
     mouse(&mut app, false);

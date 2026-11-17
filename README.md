@@ -475,6 +475,7 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 | 按钮、下拉框、滑块的值变化 | `On<GuiStateChanged>` |
 | 滚动、滚动结束 | `On<GuiScroll>`、`On<GuiScrollEnd>` |
 | 输入、提交变化、回车 | `On<GuiInputEvent>`、`On<GuiChange>`、`On<GuiEnter>`，`value()` 读取原始提交文本 |
+| 富文本链接 | `On<GuiLink>`，`href` 读取原始链接地址；同时保留 `GuiLink` Message 和 `GuiLinkEvent` 通知 |
 | 窗口显示、隐藏 | `On<GuiWindowShown>`、`On<GuiWindowHide>` |
 | 控件拖动生命周期 | `On<GuiDragStart>`、`On<GuiDragMove>`、`On<GuiDragEnd>` |
 | 自定义通知 | `On<GuiCustomEvent>`，`name()` 读取名称 |
