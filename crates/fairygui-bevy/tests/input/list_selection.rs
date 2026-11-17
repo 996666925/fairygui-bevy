@@ -195,6 +195,10 @@ fn registered_bar_track_and_arrows_scroll_without_row_events_or_selection() {
                 .ok()
             });
         let bar = gui.store().scroll_pane(source).unwrap().vt_bar.unwrap();
+        // Exercise track/arrow routing with an available hit surface. The Chat
+        // export uses Auto, whose hidden bar stays hidden on immediate scrolls.
+        gui.store_mut()
+            .set_scroll_bar_display(source, fairygui_core::scroll::ScrollBarDisplayType::Visible);
         for &row in &rows {
             gui.store_mut().set_parent(row, Some(source));
             gui.store_mut().set_size(row, 180., 40.);
