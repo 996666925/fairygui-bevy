@@ -592,7 +592,16 @@ impl ScrollPane {
         if !dt.is_finite() || dt <= 0.0 {
             return false;
         }
+        let refresh_pending = self.motion.scroll_refresh;
         self.flush_scroll_refresh();
+
+        // Native callLater refresh runs before the frame-loop tween callback.
+        // Keep the first tween sample on the following frame so one position
+        // command produces one Scroll notification in its refresh frame.
+        if refresh_pending {
+            self.sync_bar_activity();
+            return false;
+        }
 
         self.complete_drag_release();
 

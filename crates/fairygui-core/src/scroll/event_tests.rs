@@ -81,3 +81,22 @@ fn geometry_rebasing_and_invalid_or_idle_updates_do_not_notify() {
     pane.stop();
     assert_eq!(pane.drain_scroll_events().count(), 0);
 }
+
+#[test]
+fn animated_position_refresh_does_not_advance_until_the_next_frame() {
+    let mut pane = ScrollPane::default();
+    pane.set_view_size(Size::new(100., 80.));
+    pane.set_content_size(Size::new(100., 600.));
+    assert!(pane.set_pos_animated(0., 240., true));
+
+    assert!(!pane.advance(0.1));
+    let first: Vec<_> = pane.drain_scroll_events().collect();
+    assert_eq!(first, vec![ScrollEvent::Refresh]);
+    assert_eq!(pane.display_pos().y, 0.);
+    assert!(pane.is_animating());
+
+    assert!(pane.advance(0.1));
+    let second: Vec<_> = pane.drain_scroll_events().collect();
+    assert_eq!(second, vec![ScrollEvent::Scroll]);
+    assert!(pane.display_pos().y > 0. && pane.display_pos().y < 240.);
+}
