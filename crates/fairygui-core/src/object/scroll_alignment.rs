@@ -48,7 +48,14 @@ impl ObjectStore {
             return None;
         }
         if let Some(state) = self.virtual_states.get(&container) {
-            return Some(state.geometry.snapping_position(position, Point::ZERO));
+            let threshold = self
+                .scroll_pane(container)
+                .map_or(0.1, |pane| pane.snapping_threshold());
+            return Some(state.geometry.snapping_position_with_threshold(
+                position,
+                Point::ZERO,
+                threshold,
+            ));
         }
         Some(crate::scroll::snapping_position(
             &self.scroll_snap_items(container),

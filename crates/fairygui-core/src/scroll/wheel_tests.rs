@@ -133,7 +133,9 @@ fn scroll_setup_uses_global_defaults_only_when_the_export_keeps_defaults() {
                         touch_effect: effects,
                         bounceback_effect: effects,
                         scroll_step: 12.5,
+                        deceleration_rate: 0.91,
                         paging_threshold: 0.45,
+                        snapping_threshold: 0.25,
                     };
                     let mut bytes = vec![1, exported_display];
                     bytes.extend_from_slice(&flags.to_be_bytes());
@@ -167,7 +169,9 @@ fn scroll_setup_uses_global_defaults_only_when_the_export_keeps_defaults() {
                         flags & 64 != 0 || (flags & 128 == 0 && effects)
                     );
                     assert_eq!(pane.scroll_step(), 12.5);
+                    assert_eq!(pane.physics().deceleration_rate, 0.91);
                     assert_eq!(pane.paging_threshold(), 0.45);
+                    assert_eq!(pane.snapping_threshold(), 0.25);
                     assert!(pane.set_scroll_step(50.));
                     assert!(pane.set_scroll_step(0.));
                     assert_eq!(pane.scroll_step(), 12.5);
@@ -198,4 +202,27 @@ fn global_paging_threshold_changes_short_drag_page_snapping() {
     pane.set_paging_threshold(0.3);
     assert!(pane.set_pos_animated(0., 40., false));
     assert_eq!(pane.pos().y, 100.);
+}
+
+#[test]
+fn global_scroll_defaults_sanitize_deceleration_and_virtual_snap_thresholds() {
+    for invalid in [0.0, 1.0, f64::NAN, f64::INFINITY] {
+        let defaults = ScrollDefaults {
+            deceleration_rate: invalid,
+            snapping_threshold: f64::NAN,
+            ..ScrollDefaults::default()
+        }
+        .sanitized();
+        assert_eq!(defaults.deceleration_rate, 0.967);
+        assert_eq!(defaults.snapping_threshold, 0.1);
+    }
+
+    let defaults = ScrollDefaults {
+        deceleration_rate: 0.91,
+        snapping_threshold: 1.5,
+        ..ScrollDefaults::default()
+    }
+    .sanitized();
+    assert_eq!(defaults.deceleration_rate, 0.91);
+    assert_eq!(defaults.snapping_threshold, 1.0);
 }

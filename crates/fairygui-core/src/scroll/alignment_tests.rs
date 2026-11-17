@@ -1,5 +1,9 @@
 use super::*;
-use crate::{geom::Size, scroll::ScrollType};
+use crate::{
+    geom::Size,
+    scroll::ScrollType,
+    widget::{ListLayoutType, VirtualGeometry, VirtualLayout},
+};
 
 pub(crate) fn items(profile: usize) -> Vec<Rect> {
     let values: &[[f32; 6]] = match profile {
@@ -113,6 +117,67 @@ fn stopping_after_one_axis_clamps_matches_native_remaining_tween_change() {
         count += 1;
     }
     assert_eq!(count, 3);
+}
+
+#[test]
+fn virtual_list_release_uses_the_captured_global_item_snapping_threshold() {
+    let config = VirtualLayout {
+        layout: ListLayoutType::SingleColumn,
+        view: Size::new(100., 50.),
+        auto_resize: true,
+        columns: 0,
+        rows: 0,
+        column_gap: 0,
+        line_gap: 0,
+        align: 0,
+        vertical_align: 0,
+    };
+    let geometry = std::sync::Arc::new(VirtualGeometry {
+        config,
+        item_size: Size::new(100., 40.),
+        sizes: vec![Size::new(100., 40.); 4],
+        count: 4,
+        line_items: 1,
+        page_rows: 1,
+        first: 0,
+        first_position: None,
+    });
+    let make_pane = |snapping_threshold| {
+        let mut bytes = vec![1, 0];
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        bytes.push(0);
+        for _ in 0..4 {
+            bytes.extend_from_slice(&65534_u16.to_be_bytes());
+        }
+        let defaults = crate::scroll::ScrollDefaults {
+            snapping_threshold,
+            ..Default::default()
+        };
+        let mut pane = ScrollPane::default();
+        pane.setup_with_defaults(
+            &mut crate::binary::ByteBuffer::new(&bytes),
+            &crate::binary::StringTable::default(),
+            defaults,
+        )
+        .unwrap();
+        pane.snap_to_item = true;
+        pane.set_view_size(config.view);
+        pane.set_content_size(Size::new(100., 160.));
+        pane.set_virtual_snap_geometry(geometry.clone());
+        pane
+    };
+    let pane = make_pane(0.1);
+    assert_eq!(
+        pane.aligned_release_position([0., -8.], [0., 0.], [0., 0.])[1],
+        -40.,
+        "the native 0.1 threshold advances after eight pixels of a 40px row"
+    );
+    let pane = make_pane(0.25);
+    assert_eq!(
+        pane.aligned_release_position([0., -8.], [0., 0.], [0., 0.])[1],
+        0.,
+        "a 0.25 override aligns the short release to the current row"
+    );
 }
 
 #[test]

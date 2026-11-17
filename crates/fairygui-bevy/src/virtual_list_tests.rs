@@ -350,7 +350,9 @@ fn gui_config_is_captured_by_ecs_roots_without_rebuilding_existing_panes() {
         touch_effect: false,
         bounceback_effect: false,
         scroll_step: 14.0,
+        deceleration_rate: 0.91,
         paging_threshold: 0.4,
+        snapping_threshold: 0.25,
     };
 
     app.update();
@@ -365,7 +367,9 @@ fn gui_config_is_captured_by_ecs_roots_without_rebuilding_existing_panes() {
         let runtime = app.world().non_send::<GuiRuntime>();
         let pane = runtime.store().scroll_pane(first_list).unwrap();
         assert_eq!(pane.scroll_step(), 14.0);
+        assert_eq!(pane.physics().deceleration_rate, 0.91);
         assert_eq!(pane.paging_threshold(), 0.4);
+        assert_eq!(pane.snapping_threshold(), 0.25);
     }
 
     app.world_mut()
@@ -388,6 +392,12 @@ fn gui_config_is_captured_by_ecs_roots_without_rebuilding_existing_panes() {
             .scroll_step(),
         21.0
     );
+    let second_pane = runtime.store().scroll_pane(second_list).unwrap();
+    assert_eq!(second_pane.physics().deceleration_rate, 0.91);
+    assert_eq!(second_pane.snapping_threshold(), 0.25);
+    let first_pane = runtime.store().scroll_pane(first_list).unwrap();
+    assert_eq!(first_pane.physics().deceleration_rate, 0.91);
+    assert_eq!(first_pane.snapping_threshold(), 0.25);
     assert_eq!(
         runtime
             .store()

@@ -103,8 +103,12 @@ pub struct ScrollDefaults {
     pub bounceback_effect: bool,
     /// Non-page wheel step in logical pixels.
     pub scroll_step: f32,
+    /// Touch release deceleration rate used by newly created panes.
+    pub deceleration_rate: f64,
     /// Page snap fraction used for short drags and programmatic alignment.
     pub paging_threshold: f64,
+    /// Virtual-list item snap fraction, matching UIConfig.defaultScrollSnappingThreshold.
+    pub snapping_threshold: f64,
 }
 
 impl Default for ScrollDefaults {
@@ -121,7 +125,9 @@ impl ScrollDefaults {
             touch_effect: true,
             bounceback_effect: true,
             scroll_step: SCROLL_STEP,
+            deceleration_rate: 0.967,
             paging_threshold: 0.3,
+            snapping_threshold: 0.1,
         }
     }
 
@@ -134,10 +140,23 @@ impl ScrollDefaults {
             } else {
                 fallback.scroll_step
             },
+            deceleration_rate: if self.deceleration_rate.is_finite()
+                && self.deceleration_rate > 0.0
+                && self.deceleration_rate < 1.0
+            {
+                self.deceleration_rate
+            } else {
+                fallback.deceleration_rate
+            },
             paging_threshold: if self.paging_threshold.is_finite() {
                 self.paging_threshold.clamp(0.0, 1.0)
             } else {
                 fallback.paging_threshold
+            },
+            snapping_threshold: if self.snapping_threshold.is_finite() {
+                self.snapping_threshold.clamp(0.0, 1.0)
+            } else {
+                fallback.snapping_threshold
             },
             ..self
         }
@@ -286,6 +305,11 @@ impl ScrollPane {
         changed
     }
 
+    /// Captured virtual-list item snap fraction.
+    pub fn snapping_threshold(&self) -> f64 {
+        self.motion.snapping_threshold
+    }
+
     pub(crate) fn scroll_revision(&self) -> u64 {
         self.motion.scroll_revision
     }
@@ -311,6 +335,8 @@ impl ScrollPane {
         self.bounceback_effect = defaults.bounceback_effect;
         self.scroll_step = defaults.scroll_step;
         self.motion.default_scroll_step = defaults.scroll_step;
+        self.motion.physics.deceleration_rate = defaults.deceleration_rate;
+        self.motion.snapping_threshold = defaults.snapping_threshold;
         self.set_paging_threshold(defaults.paging_threshold);
 
         self.scroll_type = ScrollType::from_code(buffer.read_i8()?);

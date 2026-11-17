@@ -59,7 +59,9 @@ fn package_registry_scroll_defaults_reach_nested_component_and_list_panes() {
         touch_effect: false,
         bounceback_effect: false,
         scroll_step: 12.5,
+        deceleration_rate: 0.91,
         paging_threshold: 0.45,
+        snapping_threshold: 0.25,
     });
 
     let mut list_panes = 0;
@@ -76,7 +78,9 @@ fn package_registry_scroll_defaults_reach_nested_component_and_list_panes() {
         for object in objects {
             if let Some(pane) = store.scroll_pane(object) {
                 assert_eq!(pane.scroll_step(), 12.5);
+                assert_eq!(pane.physics().deceleration_rate, 0.91);
                 assert_eq!(pane.paging_threshold(), 0.45);
+                assert_eq!(pane.snapping_threshold(), 0.25);
                 if matches!(
                     store.object(object).unwrap().control(),
                     fairygui_core::widget::ControlData::List(_)

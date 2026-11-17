@@ -77,7 +77,13 @@ impl ScrollPane {
     fn item_snap_position(&self, value: Point, direction: Point) -> Point {
         self.motion.virtual_snap.as_ref().map_or_else(
             || snapping_position(&self.snap_items, value),
-            |geometry| geometry.snapping_position(value, direction),
+            |geometry| {
+                geometry.snapping_position_with_threshold(
+                    value,
+                    direction,
+                    self.motion.snapping_threshold,
+                )
+            },
         )
     }
 

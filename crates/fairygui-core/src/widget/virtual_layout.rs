@@ -230,7 +230,20 @@ impl VirtualGeometry {
         }
         (self.count - self.line_items, pos as f32)
     }
-    pub fn snapping_position(&self, mut value: Point, direction: Point) -> Point {
+    pub fn snapping_position(&self, value: Point, direction: Point) -> Point {
+        self.snapping_position_with_threshold(value, direction, 0.1)
+    }
+    pub fn snapping_position_with_threshold(
+        &self,
+        mut value: Point,
+        direction: Point,
+        threshold: f64,
+    ) -> Point {
+        let threshold = if threshold.is_finite() {
+            threshold.clamp(0.0, 1.0)
+        } else {
+            0.1
+        };
         let vertical = self.config.vertical();
         let (saved, dir) = if vertical {
             (value.y, direction.y)
@@ -245,9 +258,9 @@ impl VirtualGeometry {
                 self.sizes[index].width
             };
             let threshold = if dir < 0. {
-                0.1
+                threshold
             } else if dir > 0. {
-                1. - 0.1
+                1. - threshold
             } else {
                 0.5
             };
