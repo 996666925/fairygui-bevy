@@ -198,6 +198,7 @@ pub enum GuiSystems {
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum SyncPhase {
     Materialize,
+    NotifyScroll,
     Prepare,
     Project,
 }
@@ -278,6 +279,7 @@ impl Plugin for FairyGuiPlugin {
             (
                 SyncPhase::Materialize,
                 GuiSystems::Initialize,
+                SyncPhase::NotifyScroll,
                 SyncPhase::Prepare,
                 GuiSystems::PostLayout,
                 SyncPhase::Project,
@@ -348,6 +350,7 @@ impl Plugin for FairyGuiPlugin {
                 runtime::object_drag::sync_object_drag_state,
                 tree::sync_tree_state,
                 runtime::sync_loader_states,
+                events::emit_scroll_events,
                 (
                     runtime::emit_gui_events,
                     runtime::emit_link_messages,
@@ -538,6 +541,17 @@ impl Plugin for FairyGuiPlugin {
                 .chain()
                 .in_set(SyncPhase::Project)
                 .after(runtime::play_queued_sounds),
+        );
+
+        app.add_systems(
+            Update,
+            (
+                ecs::sync_gui_scroll_state,
+                events::emit_scroll_events,
+                properties::sync,
+            )
+                .chain()
+                .in_set(SyncPhase::NotifyScroll),
         );
 
         app.add_systems(

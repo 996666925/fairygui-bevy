@@ -4,6 +4,9 @@
 //! 可选的滚动条边距，以及四个资源地址（纵横滚动条、页头、页脚）。
 
 use super::visibility::BarVisibility;
+#[path = "events.rs"]
+mod events;
+pub use events::ScrollEvent;
 #[path = "alignment.rs"]
 mod alignment;
 #[path = "motion.rs"]
@@ -523,6 +526,10 @@ impl ScrollPane {
     /// `allow_bounce` 为真时允许暂时越界（拖拽中或惯性未收敛时会用到）。
     /// 返回位置是否发生变化。
     pub fn set_pos(&mut self, x: f32, y: f32, allow_bounce: bool) -> bool {
+        self.set_pos_impl(x, y, allow_bounce, true)
+    }
+
+    fn set_pos_impl(&mut self, x: f32, y: f32, allow_bounce: bool, notify: bool) -> bool {
         if !x.is_finite() || !y.is_finite() {
             return false;
         }
@@ -544,6 +551,9 @@ impl ScrollPane {
         if x == self.pos.x && y == self.pos.y {
             return false;
         }
+        if notify {
+            self.interrupt_scroll_events();
+        }
         self.pos = Point::new(x, y);
         self.raw_bounce = allow_bounce;
         self.display_pos = self.pos;
@@ -552,17 +562,19 @@ impl ScrollPane {
         self.motion.pending_release = None;
         self.note_scroll();
         self.sync_bar_activity();
+        self.motion.scroll_refresh |= notify;
         true
     }
 
     /// 把位置收回合法范围。
     pub fn clamp_pos(&mut self) {
         let current = self.pos;
-        self.set_pos(current.x, current.y, false);
+        self.set_pos_impl(current.x, current.y, false, false);
     }
 
     /// 停止滚动。
     pub fn stop(&mut self) {
+        self.interrupt_scroll_events();
         if let Some(animation) = self.animation.take() {
             self.display_pos = animation.end;
             self.note_scroll();
@@ -580,6 +592,7 @@ impl ScrollPane {
         if !dt.is_finite() || dt <= 0.0 {
             return false;
         }
+        self.flush_scroll_refresh();
 
         self.complete_drag_release();
 
@@ -632,6 +645,7 @@ impl ScrollPane {
                 self.loop_check_current();
             }
             self.sync_bar_activity();
+            self.scroll_tick(self.animation.is_none());
             return self.display_pos != before;
         }
 

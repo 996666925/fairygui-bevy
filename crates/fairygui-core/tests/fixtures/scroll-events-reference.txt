@@ -1,0 +1,121 @@
+# Unchanged FairyGUI-layabox ScrollPane methods: refresh, mouse, wheel, tween and locks.
+# case name bounce inertia_disabled initial_y; action args | emitted events (S=Scroll,E=End,-=none)
+# Commands remain deferred until refresh. Native stationary holds omit mouseMove, matching the adapter.
+case coalesced-immediate 0 1 0
+command 40 0 | -
+command 80 0 | -
+refresh | S
+refresh | -
+command 80 0 | -
+refresh | -
+tick 1 | -
+case coalesced-animation-cancel 0 1 0
+command 200 1 | -
+command 80 0 | -
+refresh | S
+tick 1 | -
+case coalesced-animated-targets 0 1 0
+command 200 1 | -
+command 300 1 | -
+refresh | S
+tick 0.5 | SE
+case animated-completion 0 1 0
+command 200 1 | -
+refresh | S
+tick 0.125 | S
+tick 0.125 | S
+tick 0.125 | S
+tick 0.125 | SE
+tick 0.125 | -
+case quantized-ticks 0 1 0
+command 1 1 | -
+refresh | S
+tick 0.01 | S
+tick 0.01 | S
+tick 0.48 | SE
+tick 0.1 | -
+case replace-tween 0 1 0
+command 200 1 | -
+refresh | S
+tick 0.125 | S
+command 300 1 | -
+refresh | S
+tick 0.5 | SE
+case immediate-interruption 0 1 0
+command 200 1 | -
+refresh | S
+tick 0.125 | S
+command 50 0 | -
+refresh | SES
+tick 1 | -
+case stop-type1 0 1 0
+command 200 1 | -
+refresh | S
+tick 0.125 | S
+kill | SE
+kill | -
+case down-type1 0 1 0
+command 200 1 | -
+refresh | S
+tick 0.125 | S
+down | SE
+up | -
+tick 1 | -
+case drag-no-inertia 0 1 100
+down | -
+move -30 0.02 | S
+wait 0.1 | -
+up | -
+tick 1 | -
+case boundary-drag 0 1 0
+down | -
+move 20 0.02 | S
+move 10 0.02 | S
+up | -
+tick 1 | -
+case stationary 0 1 100
+down | -
+wait 0.1 | -
+up | -
+tick 1 | -
+case inertia-completion 0 0 100
+down | -
+move -60 0.016 | S
+move -60 0.016 | S
+up | -
+tick 0.1 | S
+tick 10 | SE
+tick 1 | -
+case inertia-interruption 0 0 100
+down | -
+move -60 0.016 | S
+move -60 0.016 | S
+up | -
+tick 0.05 | S
+down | E
+up | -
+tick 1 | -
+case bounce-completion 1 1 0
+down | -
+move 60 0.02 | S
+up | -
+tick 0.1 | S
+tick 0.2 | SE
+tick 0.1 | -
+case header-lock 1 1 0
+lock 30 | -
+tick 0.1 | S
+tick 0.2 | SE
+lock 0 | -
+tick 0.3 | SE
+tick 1 | -
+case wheel 0 1 0
+wheel 1 | -
+wheel 1 | -
+refresh | S
+wheel -1 | -
+refresh | S
+wheel -1 | -
+refresh | S
+wheel -1 | -
+refresh | -

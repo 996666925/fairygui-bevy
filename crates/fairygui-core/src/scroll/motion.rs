@@ -26,6 +26,9 @@ impl Default for ScrollPhysics {
 
 #[derive(Debug, Clone)]
 pub(super) struct Motion {
+    pub events: Vec<super::ScrollEvent>,
+    pub scroll_refresh: bool,
+    pub programmatic_tween_announced: bool,
     pub scroll_revision: u64,
     pub paging_threshold: f64,
     pub default_scroll_step: f32,
@@ -46,6 +49,9 @@ pub(super) struct Motion {
 impl Default for Motion {
     fn default() -> Self {
         Self {
+            events: Vec::new(),
+            scroll_refresh: false,
+            programmatic_tween_announced: false,
             scroll_revision: 0,
             paging_threshold: 0.3,
             default_scroll_step: super::SCROLL_STEP,
@@ -159,6 +165,7 @@ impl ScrollPane {
         if !self.touch_effect {
             return;
         }
+        self.interrupt_scroll_events();
         if let Some(animation) = self.animation.take() {
             self.display_pos = animation.end;
             self.note_scroll();
@@ -294,6 +301,7 @@ impl ScrollPane {
         }
         self.note_scroll();
         self.sync_bar_activity();
+        self.scroll_tick(false);
     }
 
     pub fn end_drag(&mut self) {
@@ -478,6 +486,7 @@ impl ScrollPane {
             self.loop_check_current();
         }
         self.sync_bar_activity();
+        self.scroll_tick(self.motion.tween.is_none());
         before != self.display_pos
     }
 }

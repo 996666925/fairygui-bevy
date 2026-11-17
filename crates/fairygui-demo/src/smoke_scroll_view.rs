@@ -40,17 +40,26 @@ struct Focused {
     original: Option<GObjectId>,
     frames: u32,
     cursor: Option<Vec2>,
+    observing_scroll: bool,
+}
+
+#[derive(Resource, Default)]
+struct ScrollNotifications {
+    scrolls: usize,
+    ends: usize,
 }
 
 pub(super) fn install_focused(app: &mut App) {
-    app.init_resource::<Focused>().add_systems(
-        PreUpdate,
-        focused
-            .after(InputSystems)
-            .before(bevy::input_focus::InputFocusSystems::Dispatch)
-            .before(UiSystems::Focus)
-            .before(PickingSystems::ProcessInput),
-    );
+    app.init_resource::<ScrollNotifications>()
+        .init_resource::<Focused>()
+        .add_systems(
+            PreUpdate,
+            focused
+                .after(InputSystems)
+                .before(bevy::input_focus::InputFocusSystems::Dispatch)
+                .before(UiSystems::Focus)
+                .before(PickingSystems::ProcessInput),
+        );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -65,6 +74,7 @@ fn focused(
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut commands: Commands,
     mut pointers: MessageWriter<PointerInput>,
+    notifications: Res<ScrollNotifications>,
     mut exit: MessageWriter<AppExit>,
 ) {
     state.frames += 1;
@@ -110,9 +120,42 @@ fn focused(
         &mut commands,
         original,
     );
+    if !state.observing_scroll
+        && let Some(entity) = state.state.list.and_then(|list| runtime.entity_of(list))
+    {
+        commands
+            .entity(entity)
+            .observe(
+                |event: On<GuiScroll>, gui: GuiQuery, mut counts: ResMut<ScrollNotifications>| {
+                    assert_eq!(event.target, Some(event.entity));
+                    assert!(gui.scroll(event.entity).is_some());
+                    counts.scrolls += 1;
+                },
+            )
+            .observe(
+                |event: On<GuiScrollEnd>,
+                 gui: GuiQuery,
+                 mut counts: ResMut<ScrollNotifications>| {
+                    let pane = gui.scroll(event.entity).unwrap();
+                    assert!(!pane.is_animating());
+                    assert_eq!(pane.position(), pane.display_position());
+                    counts.ends += 1;
+                },
+            );
+        state.observing_scroll = true;
+    }
     state.cursor = window.cursor_position();
     move_pointer(window_entity, state.cursor, &mut pointers);
     if state.state.complete() {
+        assert!(notifications.scrolls >= 4);
+        assert_eq!(
+            notifications.ends, 2,
+            "programmatic and partial-row click tweens each end once"
+        );
+        println!(
+            "demo smoke: typed scroll notifications: {} Scroll, {} ScrollEnd",
+            notifications.scrolls, notifications.ends
+        );
         println!("demo smoke PASSED: focused scroll-to-view window checks");
         exit.write(AppExit::Success);
     }

@@ -6,6 +6,7 @@
 
 pub(crate) mod bar;
 mod pane;
+pub use pane::ScrollEvent;
 mod visibility;
 
 pub use bar::{

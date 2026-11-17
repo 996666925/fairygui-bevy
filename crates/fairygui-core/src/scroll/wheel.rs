@@ -124,6 +124,7 @@ impl ScrollPane {
         }
         self.pos = next;
         self.raw_bounce = false;
+        self.interrupt_scroll_events();
         self.motion.tween = None;
         self.motion.pending_release = None;
         self.animation = None;
@@ -136,6 +137,7 @@ impl ScrollPane {
         self.loop_check_current();
         self.note_scroll();
         self.sync_bar_activity();
+        self.motion.scroll_refresh = true;
         true
     }
 }

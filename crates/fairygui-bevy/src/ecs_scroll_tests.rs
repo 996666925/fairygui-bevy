@@ -7,6 +7,9 @@ use fairygui_core::{
     package::FuiPackage,
 };
 
+#[path = "ecs_scroll_event_tests.rs"]
+mod event_tests;
+
 fn fixture() -> (App, Entity, GObjectId, Entity) {
     let mut app = App::new();
     app.add_plugins((

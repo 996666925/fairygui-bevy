@@ -133,10 +133,16 @@ impl ScrollPane {
         }
         self.pos = next;
         self.raw_bounce = false;
+        if !animated || self.dragging {
+            self.interrupt_scroll_events();
+        }
         self.motion.tween = None;
         self.motion.pending_release = None;
         if animated && !self.dragging {
             let end = Point::new(next.x.floor(), next.y.floor());
+            if end == self.display_pos {
+                self.interrupt_scroll_events();
+            }
             self.animation = (end != self.display_pos).then_some(ScrollAnimation {
                 start: self.display_pos,
                 end,
@@ -149,6 +155,7 @@ impl ScrollPane {
         }
         self.note_scroll();
         self.sync_bar_activity();
+        self.motion.scroll_refresh = true;
         true
     }
 }

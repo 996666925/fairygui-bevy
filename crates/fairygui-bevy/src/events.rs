@@ -296,6 +296,54 @@ pub(crate) fn emit_combo_events(
     emit_pending_events(&mut commands, &runtime, &entities, pending);
 }
 
+/// ScrollPane notifications are direct, with current ECS scroll snapshots.
+pub(crate) fn emit_scroll_events(
+    mut commands: Commands,
+    mut runtime: NonSendMut<GuiRuntime>,
+    entities: Query<(Entity, &GObjectRef)>,
+) {
+    for (target, kind) in runtime.store_mut().drain_scroll_events() {
+        let Some(entity) = runtime.entity_of(target).filter(|&entity| {
+            entities
+                .get(entity)
+                .is_ok_and(|(_, reference)| reference.0 == target)
+        }) else {
+            continue;
+        };
+        let native_kind = match kind {
+            fairygui_core::scroll::ScrollEvent::Refresh
+            | fairygui_core::scroll::ScrollEvent::Scroll => EventKind::Scroll,
+            fairygui_core::scroll::ScrollEvent::End => EventKind::ScrollEnd,
+        };
+        let context = GuiEvent::new(entity, UiEvent::new(native_kind.clone(), target));
+        commands.queue(move |world: &mut World| {
+            if !world
+                .get::<GObjectRef>(entity)
+                .is_some_and(|reference| reference.0 == target)
+                || !world.non_send::<GuiRuntime>().store().contains(target)
+            {
+                return;
+            }
+            world
+                .non_send_mut::<GuiRuntime>()
+                .events
+                .push(context.event.clone());
+            match native_kind {
+                EventKind::Scroll => world.trigger(GuiScroll { context }),
+                EventKind::ScrollEnd => world.trigger(GuiScrollEnd { context }),
+                _ => unreachable!(),
+            }
+            if kind == fairygui_core::scroll::ScrollEvent::Refresh {
+                crate::properties::sync(world);
+                world
+                    .non_send_mut::<GuiRuntime>()
+                    .store_mut()
+                    .acknowledge_scroll_refresh(target);
+            }
+        });
+    }
+}
+
 fn emit_pending_events(
     commands: &mut Commands,
     runtime: &GuiRuntime,

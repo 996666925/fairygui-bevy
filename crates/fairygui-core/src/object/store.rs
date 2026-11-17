@@ -2133,6 +2133,34 @@ impl ObjectStore {
             .and_then(|data| data.scroll_pane.as_ref())
     }
 
+    /// Drain native scroll notifications after the caller has refreshed views.
+    pub fn drain_scroll_events(&mut self) -> Vec<(GObjectId, crate::scroll::ScrollEvent)> {
+        let mut events = Vec::new();
+        for (id, object) in self.objects.iter_mut() {
+            if let Some(pane) = object
+                .control
+                .component_mut()
+                .and_then(|data| data.scroll_pane.as_mut())
+            {
+                events.extend(pane.drain_scroll_events().map(|event| (id, event)));
+            }
+        }
+        events
+    }
+
+    /// Native refresh consumes position commands issued by its Scroll callback
+    /// in the same refresh, without a second Scroll dispatch.
+    pub fn acknowledge_scroll_refresh(&mut self, id: GObjectId) {
+        if let Some(pane) = self
+            .objects
+            .get_mut(id)
+            .and_then(|object| object.control.component_mut())
+            .and_then(|data| data.scroll_pane.as_mut())
+        {
+            pane.acknowledge_scroll_refresh();
+        }
+    }
+
     /// Configure native frame-rate/mobile velocity thresholds and deceleration.
     /// Assignment is inert; an active release keeps its already planned tween.
     pub fn set_scroll_physics(
