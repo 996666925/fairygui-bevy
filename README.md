@@ -766,6 +766,9 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 停止、重播替换、离开舞台和销毁不会伪造自然完成。业务可比较当前状态的
 `play_generation()`，避免把旧一次播放的完成消息用于新一次播放。
 消息在 Sync 后发布，Respond 系统下一帧读取；放在 Sync 后的业务系统可同帧读取。
+`On<GuiTransitionComplete>`、`On<GuiTransitionHook>` 和
+`On<GuiTransitionCallback>` 可直接绑定到过渡所属控件；它们与对应 Message
+同步发布，observer 不需要再按实体筛选消息。
 `GuiTransitionHook` 使用 `entity` 与 `hook` 字段，`GuiTransitionCallback` 使用
 `entity` 与 `callback` 字段，也在 Sync 后发布。demo 通过完成消息回收临时界面。
 
@@ -1543,7 +1546,9 @@ commands.spawn((
 未变化的组件保留变更标记，无控制器的控件不带该组件。下拉刷新示例使用该方式更新
 头尾状态；`--smoke-controllers` 验证真实按钮、齿轮动画和同帧 observer 修改。
 
-下拉刷新消息 `GuiPullRelease.entity` 直接提供滚动容器实体。
+下拉刷新可直接观察 `On<GuiPullDownRelease>` 或 `On<GuiPullUpRelease>`，分别对应
+头部和尾部释放；事件只投递给滚动容器，不向父级冒泡。兼容的
+`GuiPullRelease` Message 仍同时发布，`entity` 直接提供滚动容器实体。
 `GuiScrollState::header()`、`footer()` 提供刷新控件实体、当前尺寸和导出尺寸，
 另可读取刷新轴向及头尾锁定尺寸。在 `Respond` 通过 `GuiMut` 直接锁定：
 
