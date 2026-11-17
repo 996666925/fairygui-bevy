@@ -461,6 +461,67 @@ fn ecs_pull_response_applies_lock_before_first_release_tick_and_updates_entity_s
     assert!(app.world().get_entity(header).is_err());
 }
 
+#[derive(Resource, Default)]
+struct TypedPullSeen(Vec<(bool, Entity)>);
+
+#[test]
+fn typed_pull_release_observers_receive_directional_target_only_events() {
+    fn down(event: On<GuiPullDownRelease>, mut seen: ResMut<TypedPullSeen>) {
+        assert!(event.event.is_at_target());
+        assert!(!event.event.bubbling);
+        seen.0.push((true, event.entity));
+    }
+    fn up(event: On<GuiPullUpRelease>, mut seen: ResMut<TypedPullSeen>) {
+        assert!(event.event.is_at_target());
+        assert!(!event.event.bubbling);
+        seen.0.push((false, event.entity));
+    }
+
+    let (mut app, _owner, list, view, _footer_list, _footer_view) = fixture();
+    app.init_resource::<TypedPullSeen>();
+    app.world_mut().entity_mut(view).observe(down).observe(up);
+    let parent = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .object(list)
+        .unwrap()
+        .parent()
+        .and_then(|id| app.world().non_send::<GuiRuntime>().entity_of(id))
+        .unwrap();
+    app.world_mut()
+        .entity_mut(parent)
+        .observe(|_: On<GuiPullDownRelease>| panic!("down release must not bubble"))
+        .observe(|_: On<GuiPullUpRelease>| panic!("up release must not bubble"));
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        runtime.store_mut().begin_scroll_drag(list);
+        runtime.store_mut().drag_scroll_by(list, 0., 180., 0.1);
+        runtime.store_mut().end_scroll_drag(list);
+    }
+    app.update();
+    let max = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .scroll_pane(list)
+        .unwrap()
+        .max_scroll_pos()
+        .y;
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        runtime.store_mut().set_scroll_pos(list, 0., max, false);
+        runtime.store_mut().begin_scroll_drag(list);
+        runtime.store_mut().drag_scroll_by(list, 0., -180., 0.1);
+        runtime.store_mut().end_scroll_drag(list);
+    }
+    app.update();
+    assert_eq!(
+        app.world().resource::<TypedPullSeen>().0,
+        vec![(true, view), (false, view)]
+    );
+}
+
 #[test]
 fn ecs_controller_snapshots_match_native_pages_and_observe_indirect_changes_before_publish() {
     #[derive(Resource)]

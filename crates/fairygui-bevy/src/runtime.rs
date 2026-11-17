@@ -379,6 +379,7 @@ pub struct GuiPullRelease {
 }
 
 pub fn emit_pull_release_messages(
+    mut commands: Commands,
     mut runtime: NonSendMut<GuiRuntime>,
     mut messages: MessageWriter<GuiPullRelease>,
 ) {
@@ -397,6 +398,14 @@ pub fn emit_pull_release_messages(
         let event = fairygui_core::object::UiEvent::new(kind, target);
         runtime.events.push(event.clone());
         messages.write(GuiPullRelease { entity, event });
+        match direction {
+            fairygui_core::scroll::PullRelease::Down => {
+                commands.trigger(crate::GuiPullDownRelease::new(entity, target));
+            }
+            fairygui_core::scroll::PullRelease::Up => {
+                commands.trigger(crate::GuiPullUpRelease::new(entity, target));
+            }
+        }
     }
 }
 
