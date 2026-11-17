@@ -246,6 +246,38 @@ fn geometry_writes_merge_with_native_changes_and_do_not_replay_during_tweens() {
 }
 
 #[test]
+fn transform_component_writes_publish_typed_geometry_events() {
+    use fairygui_core::object::EventKind;
+
+    #[derive(Resource, Default)]
+    struct Seen(Vec<EventKind>);
+
+    let (mut app, owner, _) = fixture("Button1", true);
+    app.init_resource::<Seen>();
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    app.world_mut()
+        .entity_mut(view)
+        .observe(|event: On<GuiXyChanged>, mut seen: ResMut<Seen>| {
+            seen.0.push(event.event.kind.clone());
+        });
+    app.world_mut().entity_mut(view).observe(
+        |event: On<GuiSizeChanged>, mut seen: ResMut<Seen>| {
+            seen.0.push(event.event.kind.clone());
+        },
+    );
+    {
+        let mut transform = app.world_mut().get_mut::<GuiTransform>(view).unwrap();
+        transform.position += Vec2::new(13., 17.);
+        transform.size += Vec2::new(21., 9.);
+    }
+    app.update();
+    assert_eq!(
+        app.world().resource::<Seen>().0,
+        vec![EventKind::XyChanged, EventKind::SizeChanged]
+    );
+}
+
+#[test]
 fn scalar_and_full_slider_properties_do_not_undo_each_other() {
     let (mut app, owner, _) = fixture("Slider_HZ", true);
     let view = app.world().get::<GuiRootView>(owner).unwrap().0;

@@ -331,6 +331,8 @@ impl Property for GuiTransform {
         runtime.store().object(object).map(Self::from_object)
     }
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
+        let previous_position = runtime.store().position_of(object);
+        let previous_size = runtime.store().size_of(object);
         // A write to one axis retains the other requested axis, even when the
         // previous frame projected a clamped size there.
         if self.size != previous.size && self.size.is_finite() && self.size.min_element() >= 0. {
@@ -391,6 +393,7 @@ impl Property for GuiTransform {
                 runtime.store_mut().set_rotation(object, self.rotation);
             }
         });
+        runtime.dispatch_geometry_changes(object, previous_position, previous_size);
     }
 }
 impl Property for GuiDisplay {

@@ -122,6 +122,17 @@ fn direct_geometry_edits_publish_typed_xy_and_size_events() {
         app.world().resource::<Seen>().0,
         vec![EventKind::XyChanged, EventKind::SizeChanged]
     );
+
+    app.world_mut().resource_mut::<Seen>().0.clear();
+    send(&mut app, owner, |object| {
+        object.set_pivot(Vec2::splat(0.5), false);
+        object.set_size(Vec2::new(740., 530.));
+    });
+    app.update();
+    assert_eq!(
+        app.world().resource::<Seen>().0,
+        vec![EventKind::XyChanged, EventKind::SizeChanged]
+    );
 }
 
 #[test]

@@ -2024,6 +2024,31 @@ impl GuiRuntime {
         self.events.push(event);
     }
 
+    /// Publish geometry notifications after a native mutation. Position is
+    /// checked first because resizing a pivoted object can also move it, which
+    /// matches FairyGUI's setSize ordering.
+    pub(crate) fn dispatch_geometry_changes(
+        &mut self,
+        object: GObjectId,
+        previous_position: Option<fairygui_core::Point>,
+        previous_size: Option<fairygui_core::Size>,
+    ) {
+        let position_changed = previous_position != self.store.position_of(object);
+        let size_changed = previous_size != self.store.size_of(object);
+        if position_changed {
+            self.dispatch_direct_event(fairygui_core::object::UiEvent::new(
+                fairygui_core::object::EventKind::XyChanged,
+                object,
+            ));
+        }
+        if size_changed {
+            self.dispatch_direct_event(fairygui_core::object::UiEvent::new(
+                fairygui_core::object::EventKind::SizeChanged,
+                object,
+            ));
+        }
+    }
+
     /// Captured motion follows press-time recipients, including existing offstage
     /// controls. Reparenting cannot insert new ancestors; disposal clears listeners.
     pub(crate) fn dispatch_press_path(

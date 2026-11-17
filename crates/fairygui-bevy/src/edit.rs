@@ -481,73 +481,51 @@ impl GuiObjectMut<'_> {
         let runtime = &mut *self.runtime;
         let object = self.object;
         if position.is_finite() {
-            let changed = runtime.store().position_of(object).is_some_and(|previous| {
-                previous != fairygui_core::Point::new(position.x, position.y)
-            });
+            let previous_position = runtime.store().position_of(object);
+            let previous_size = runtime.store().size_of(object);
             runtime.store_mut().set_xy(object, position.x, position.y);
-            if changed {
-                runtime.dispatch_direct_event(fairygui_core::object::UiEvent::new(
-                    fairygui_core::object::EventKind::XyChanged,
-                    object,
-                ));
-            }
+            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_size_constraints(&mut self, constraints: crate::GuiSizeConstraints) {
         use crate::properties::Property;
-        if let Some(native) = crate::GuiSizeConstraints::read(self.runtime, self.object) {
-            constraints.apply(&native, &native, self.runtime, self.object);
+        let object = self.object;
+        let runtime = &mut *self.runtime;
+        let previous_position = runtime.store().position_of(object);
+        let previous_size = runtime.store().size_of(object);
+        if let Some(native) = crate::GuiSizeConstraints::read(runtime, object) {
+            constraints.apply(&native, &native, runtime, object);
         }
+        runtime.dispatch_geometry_changes(object, previous_position, previous_size);
     }
     pub fn set_width(&mut self, width: f32) {
         if width.is_finite() && width >= 0. {
-            let changed = self
-                .runtime
-                .store()
-                .size_of(self.object)
-                .is_some_and(|previous| previous.width != width);
-            self.runtime.store_mut().set_width(self.object, width);
-            if changed {
-                self.runtime
-                    .dispatch_direct_event(fairygui_core::object::UiEvent::new(
-                        fairygui_core::object::EventKind::SizeChanged,
-                        self.object,
-                    ));
-            }
+            let runtime = &mut *self.runtime;
+            let object = self.object;
+            let previous_position = runtime.store().position_of(object);
+            let previous_size = runtime.store().size_of(object);
+            runtime.store_mut().set_width(object, width);
+            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_height(&mut self, height: f32) {
         if height.is_finite() && height >= 0. {
-            let changed = self
-                .runtime
-                .store()
-                .size_of(self.object)
-                .is_some_and(|previous| previous.height != height);
-            self.runtime.store_mut().set_height(self.object, height);
-            if changed {
-                self.runtime
-                    .dispatch_direct_event(fairygui_core::object::UiEvent::new(
-                        fairygui_core::object::EventKind::SizeChanged,
-                        self.object,
-                    ));
-            }
+            let runtime = &mut *self.runtime;
+            let object = self.object;
+            let previous_position = runtime.store().position_of(object);
+            let previous_size = runtime.store().size_of(object);
+            runtime.store_mut().set_height(object, height);
+            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_size(&mut self, size: Vec2) {
         let runtime = &mut *self.runtime;
         let object = self.object;
         if size.is_finite() && size.min_element() >= 0.0 {
-            let changed = runtime
-                .store()
-                .size_of(object)
-                .is_some_and(|previous| previous != fairygui_core::Size::new(size.x, size.y));
+            let previous_position = runtime.store().position_of(object);
+            let previous_size = runtime.store().size_of(object);
             runtime.store_mut().set_size(object, size.x, size.y);
-            if changed {
-                runtime.dispatch_direct_event(fairygui_core::object::UiEvent::new(
-                    fairygui_core::object::EventKind::SizeChanged,
-                    object,
-                ));
-            }
+            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_visible(&mut self, visible: bool) {
