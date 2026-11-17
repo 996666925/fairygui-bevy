@@ -25,7 +25,21 @@ impl ScrollPane {
 
     pub(super) fn scroll_tick(&mut self, ended: bool) {
         self.flush_scroll_refresh();
-        self.motion.events.push(ScrollEvent::Scroll);
+        self.emit_scroll_tick(ended, true);
+    }
+
+    /// A refresh and the first tween sample may share a backend frame. Native
+    /// dispatch already emitted Scroll for the refresh, so suppress the
+    /// intermediate duplicate. A final sample still emits its own Scroll
+    /// before ScrollEnd, matching tweenUpdate.
+    pub(super) fn scroll_tick_after_refresh(&mut self, ended: bool) {
+        self.emit_scroll_tick(ended, ended);
+    }
+
+    fn emit_scroll_tick(&mut self, ended: bool, emit_scroll: bool) {
+        if emit_scroll {
+            self.motion.events.push(ScrollEvent::Scroll);
+        }
         if ended {
             self.motion.programmatic_tween_announced = false;
             self.motion.events.push(ScrollEvent::End);

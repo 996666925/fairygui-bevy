@@ -595,18 +595,10 @@ impl ScrollPane {
         let refresh_pending = self.motion.scroll_refresh;
         self.flush_scroll_refresh();
 
-        // Native callLater refresh runs before the frame-loop tween callback.
-        // Keep the first tween sample on the following frame so one position
-        // command produces one Scroll notification in its refresh frame.
-        if refresh_pending {
-            self.sync_bar_activity();
-            return false;
-        }
-
         self.complete_drag_release();
 
         if self.motion.tween.is_some() {
-            return self.advance_release(dt);
+            return self.advance_release(dt, refresh_pending);
         }
 
         let bounds = self.motion_bounds();
@@ -654,7 +646,11 @@ impl ScrollPane {
                 self.loop_check_current();
             }
             self.sync_bar_activity();
-            self.scroll_tick(self.animation.is_none());
+            if refresh_pending {
+                self.scroll_tick_after_refresh(self.animation.is_none());
+            } else {
+                self.scroll_tick(self.animation.is_none());
+            }
             return self.display_pos != before;
         }
 

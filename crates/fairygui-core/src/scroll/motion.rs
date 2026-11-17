@@ -453,7 +453,7 @@ impl ScrollPane {
         }
     }
 
-    pub(super) fn advance_release(&mut self, dt: f32) -> bool {
+    pub(super) fn advance_release(&mut self, dt: f32, refresh_pending: bool) -> bool {
         if self.motion.tween.is_some() {
             self.note_scroll();
         }
@@ -486,7 +486,11 @@ impl ScrollPane {
             self.loop_check_current();
         }
         self.sync_bar_activity();
-        self.scroll_tick(self.motion.tween.is_none());
+        if refresh_pending {
+            self.scroll_tick_after_refresh(self.motion.tween.is_none());
+        } else {
+            self.scroll_tick(self.motion.tween.is_none());
+        }
         before != self.display_pos
     }
 }
