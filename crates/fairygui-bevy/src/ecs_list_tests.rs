@@ -45,6 +45,71 @@ fn config(count: usize) -> GuiVirtualList {
 }
 
 #[test]
+fn resize_to_fit_from_a_system_projects_list_and_pane_geometry_in_the_same_frame() {
+    use crate::{GuiListLayout, GuiMut};
+    let (mut app, owner, list, view) = fixture(
+        "ListEffect",
+        include_bytes!("../../fairygui-demo/assets/ui/ListEffect.fui"),
+        "mailList",
+    );
+    {
+        let mut layout = app.world_mut().get_mut::<GuiListLayout>(view).unwrap();
+        layout.auto_resize_item = false;
+        layout.line_gap = 2;
+    }
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiListContent::new(4, |index, row| {
+            row.set_size(Vec2::new(
+                80. + index as f32 * 20.,
+                20. + index as f32 * 10.,
+            ));
+        }));
+    app.update();
+    app.add_systems(
+        Update,
+        (move |mut gui: GuiMut, mut done: Local<bool>| {
+            if !*done {
+                let mut list = gui.get_mut(view).unwrap();
+                assert_eq!(list.max_list_item_width(), Some(140.));
+                assert!(list.resize_list_to_fit(Some(2), 0.));
+                assert!(!list.resize_list_to_fit(Some(2), 0.));
+                *done = true;
+            }
+        })
+        .in_set(GuiSystems::Respond),
+    );
+    app.update();
+    assert_eq!(app.world().get::<GuiTransform>(view).unwrap().size.y, 52.);
+    assert_eq!(
+        app.world().get::<GuiListState>(view).unwrap().item_count(),
+        4
+    );
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .scroll_pane(list)
+            .unwrap()
+            .view_size()
+            .height,
+        52.
+    );
+    // Exclusive ECS access uses the same service and survives projection.
+    assert!(
+        app.world_mut()
+            .gui_mut(view)
+            .unwrap()
+            .resize_list_to_fit(None, 0.)
+    );
+    app.update();
+    assert_eq!(app.world().get::<GuiTransform>(view).unwrap().size.y, 146.);
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(app.world_mut().gui_mut(view).is_none());
+}
+
+#[test]
 fn ecs_arrow_navigation_reveals_offscreen_selection_without_click_events() {
     use crate::{GuiButtonSelected, GuiListSelection, GuiMut, ListNavigationDirection};
     let (mut app, owner, list, view) = fixture(

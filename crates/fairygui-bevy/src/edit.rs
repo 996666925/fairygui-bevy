@@ -821,6 +821,35 @@ impl GuiObjectMut<'_> {
             .store_mut()
             .scroll_list_item_to_view(self.object, index, animated, false);
     }
+    /// Native resizeToFit: fit height for SingleColumn/FlowHorizontal, width
+    /// otherwise. None uses the native 100000-item limit. Ordinary lists apply
+    /// min_size; virtual lists use template dimensions and ignore that minimum.
+    /// Measures ready text before fitting and preserves margins/bar gutters.
+    /// Returns whether the effective size changed; Sync projects ECS geometry.
+    pub fn resize_list_to_fit(&mut self, item_count: Option<usize>, min_size: f32) -> bool {
+        if !min_size.is_finite()
+            || min_size < 0.
+            || self
+                .runtime
+                .store()
+                .list_layout_settings(self.object)
+                .is_none()
+        {
+            return false;
+        }
+        self.runtime
+            .text_measurer
+            .borrow_mut()
+            .ensure_subtree(&mut self.runtime.store, self.object);
+        self.runtime
+            .store_mut()
+            .resize_list_to_fit(self.object, item_count, min_size)
+    }
+    /// Native getMaxItemWidth: maximum unscaled materialized row width,
+    /// including hidden rows. Returns None for a non-list object.
+    pub fn max_list_item_width(&self) -> Option<f32> {
+        self.runtime.store().list_max_item_width(self.object)
+    }
     /// Read a cached virtual-row rectangle in logical content coordinates.
     /// Returns None for non-virtual lists or indices outside the logical count.
     pub fn virtual_item_rect(&self, index: usize) -> Option<fairygui_core::Rect> {

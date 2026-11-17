@@ -69,6 +69,8 @@ mod construction;
 mod list_items;
 #[path = "list_layout.rs"]
 mod list_layout;
+#[path = "list_sizing.rs"]
+mod list_sizing;
 #[path = "selection_controllers.rs"]
 mod selection_controllers;
 pub use list_layout::ListLayoutSettings;
