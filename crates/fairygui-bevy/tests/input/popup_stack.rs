@@ -21,7 +21,7 @@ fn menu_row_release_keeps_immediate_click_and_publishes_delayed_action_with_orig
         include_bytes!("../../../fairygui-core/tests/fixtures/Basics.fui"),
     )
     .unwrap();
-    let row = app
+    let (menu, row) = app
         .world_mut()
         .run_system_once(
             move |mut commands: Commands, mut gui: NonSendMut<GuiRuntime>| {
@@ -41,10 +41,14 @@ fn menu_row_release_keeps_immediate_click_and_publishes_delayed_action_with_orig
                     Point::ZERO,
                 )
                 .unwrap();
-                gui.popup_menu_item("toggle").unwrap().1
+                (
+                    gui.popup_menu_content().unwrap(),
+                    gui.popup_menu_item("toggle").unwrap().1,
+                )
             },
         )
         .unwrap();
+    let menu_entity = app.world_mut().spawn(GObjectRef(menu)).id();
     let (row_entity, _) = target(&mut app, 40);
     app.world_mut()
         .entity_mut(row_entity)
@@ -81,8 +85,12 @@ fn menu_row_release_keeps_immediate_click_and_publishes_delayed_action_with_orig
         .collect();
     assert_eq!(actions.len(), 1);
     assert_eq!(
-        (&*actions[0].name, actions[0].action, actions[0].item),
-        ("toggle", Some(912), row)
+        (actions[0].menu, actions[0].entity),
+        (menu_entity, row_entity)
+    );
+    assert_eq!(
+        (&*actions[0].name, actions[0].action),
+        ("toggle", Some(912))
     );
     assert!(actions[0].checked);
     assert_eq!(actions[0].pointer, Some(Point::new(10.0, 10.0)));

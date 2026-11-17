@@ -436,34 +436,28 @@ pub fn show_basics_menu(
     );
 }
 
-pub fn handle_menu_actions(
-    mut actions: MessageReader<GuiMenuAction>,
+pub fn menu_action(
+    action: On<GuiMenuAction>,
     mut controller: ResMut<DemoController>,
     gui: GuiQuery,
     mut objects: GuiMut,
 ) {
-    for action in actions.read() {
-        if controller.package.as_deref() != Some("Basics")
-            || !action
-                .action
-                .is_some_and(|id| (BASICS_MENU_ACTION..BASICS_MENU_ACTION + 4).contains(&id))
-        {
-            continue;
-        }
-        let Some(page) = controller.basics_page_owner else {
-            continue;
-        };
-        if let Some(target) = gui.child_by_name(page, "n0") {
-            objects.edit(target, |object: &mut GuiObjectMut| {
-                object.set_text(format!(
-                    "{}{}",
-                    action.caption,
-                    if action.checked { " ✓" } else { "" }
-                ))
-            });
-        }
-        controller.last_menu_action = Some(action.clone());
+    if controller.package.as_deref() != Some("Basics") {
+        return;
     }
+    let Some(page) = controller.basics_page_owner else {
+        return;
+    };
+    if let Some(target) = gui.child_by_name(page, "n0") {
+        objects.edit(target, |object: &mut GuiObjectMut| {
+            object.set_text(format!(
+                "{}{}",
+                action.caption,
+                if action.checked { " ✓" } else { "" }
+            ))
+        });
+    }
+    controller.last_menu_action = Some((*action).clone());
 }
 
 /// 推进 Laya CooldownDemo 的两个循环进度条。

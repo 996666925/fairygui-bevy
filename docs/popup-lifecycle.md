@@ -39,9 +39,16 @@ template's `checked` controller: 0 is disabled, 1 unchecked, 2 checked.
 A row activation waits 100 ms, toggles that controller, hides the menu and entries
 above it, then queues one `GuiMenuAction`. `GuiSystems::Publish` publishes it before
 `Respond`, where applications may modify objects or reopen the menu in the same
-frame. Its payload includes menu/item IDs, stable name, current caption, action ID,
-resulting checked state and the original click position. Ordinary `GuiEvent`
-observers retain their immediate timing. Disabled, hidden, detached and non-button
+frame. Attach `On<GuiMenuAction>` to a row entity to handle that action directly;
+it is a target-only entity event and is also available as a Message. `entity`
+identifies the retained row and `menu` the retained popup content. The payload
+also includes stable name, current caption, action ID, resulting checked state
+and the original click position. Menu rows use the ordinary list selection mode
+and publish `GuiListItemClick` immediately, including disabled rows. Their
+checked controller changes only when the delayed activation completes.
+Activation reads the current row caption, grayed flag and checked controller,
+including changes made through ECS components or item observers.
+Ordinary pointer observers retain their immediate timing. Disabled, hidden, detached and non-button
 rows cannot activate; disabled rows clear the highlight and leave the menu open.
 Removing, replacing, clearing, hiding or reopening cancels the pending activation,
 including when a removed object's ID is subsequently reused from the pool.
@@ -82,7 +89,11 @@ runtime.show_popup_menu_items(
     PopupMenuTemplates { content: "PopupMenu", item: "PopupMenuItem", separator: None },
     &items, Point::new(100.0, 100.0),
 );
-// An application system in GuiSystems::Respond reads MessageReader<GuiMenuAction>.
+// After the menu is materialized, find a row through GuiPopupState::menu and
+// GuiQuery::child_by_name, then attach its observer:
+commands.entity(row).observe(|action: On<GuiMenuAction>| {
+    println!("{} checked={}", action.name, action.checked);
+});
 ```
 
 The existing `close_popup_menu` and `close_combo_dropdown` signatures retain their

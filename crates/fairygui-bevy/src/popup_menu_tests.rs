@@ -44,14 +44,21 @@ fn named_action_waits_toggles_closes_then_publishes_payload_and_can_reopen_in_re
         mut messages: MessageReader<GuiMenuAction>,
         mut gui: NonSendMut<GuiRuntime>,
         mut received: ResMut<Received>,
+        objects: Query<&GObjectRef>,
     ) {
         for message in messages.read() {
             assert!(
                 !gui.is_popup_menu_open(),
                 "menu closed before application handler"
             );
-            assert!(!gui.popup_stack().contains(&message.menu));
-            assert_eq!(checked_index(&gui, message.item), 2);
+            assert!(
+                !gui.popup_stack()
+                    .contains(&objects.get(message.menu).unwrap().0)
+            );
+            assert_eq!(
+                checked_index(&gui, objects.get(message.entity).unwrap().0),
+                2
+            );
             gui.update_popup_menu_item(&message.name, |item| item.caption = "Handled".into());
             gui.reopen_popup_menu(Point::ZERO).unwrap();
             received.0.push(message.clone());
@@ -63,6 +70,7 @@ fn named_action_waits_toggles_closes_then_publishes_payload_and_can_reopen_in_re
         ..MenuItem::action("toggle", "Toggle", 73)
     };
     let content = show(&mut app, &package, &[item]);
+    app.update();
     let row = app
         .world()
         .non_send::<GuiRuntime>()
@@ -84,6 +92,8 @@ fn named_action_waits_toggles_closes_then_publishes_payload_and_can_reopen_in_re
         .add_systems(Update, receive.in_set(crate::GuiSystems::Respond));
     {
         let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        gui.store
+            .select_clicked_item_with_modifiers(row, false, false);
         gui.activate_menu_item(row, Some(Point::new(42.0, 84.0)));
         let list = gui.store.child_by_name(content, "list").unwrap();
         assert_eq!(gui.store.list_selection(list), Some(0));
@@ -97,7 +107,16 @@ fn named_action_waits_toggles_closes_then_publishes_payload_and_can_reopen_in_re
     let received = &app.world().resource::<Received>().0;
     assert_eq!(received.len(), 1);
     let message = &received[0];
-    assert_eq!((message.menu, message.item), (content, row));
+    assert_eq!(
+        (message.menu, message.entity),
+        (
+            app.world()
+                .non_send::<GuiRuntime>()
+                .entity_of(content)
+                .unwrap(),
+            app.world().non_send::<GuiRuntime>().entity_of(row).unwrap()
+        )
+    );
     assert_eq!(
         (&*message.name, &*message.caption, message.action),
         ("toggle", "Toggle", Some(73))

@@ -1220,11 +1220,13 @@ fn apply_click(
         } else {
             runtime.close_window(commands, index);
         }
-    } else if let Some(hit) = runtime.popup_menu_hit(target) {
-        if hit.is_some() {
-            runtime.activate_menu_item(target, Some(Point::new(cursor.x, cursor.y)));
-        }
-    } else if !actions::combo_click(runtime, target, cursor, touch_id, click_count) {
+        return;
+    }
+    let menu = runtime.popup_menu_hit(target);
+    if matches!(menu, Some(Some(_))) {
+        runtime.activate_menu_item(target, Some(Point::new(cursor.x, cursor.y)));
+    }
+    if menu.is_some() || !actions::combo_click(runtime, target, cursor, touch_id, click_count) {
         runtime
             .store_mut()
             .select_clicked_item_with_modifiers(target, shift, ctrl);

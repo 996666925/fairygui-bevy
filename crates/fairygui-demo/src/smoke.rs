@@ -378,6 +378,7 @@ struct Smoke {
     menu_item: Option<GObjectId>,
     menu_view: Option<Entity>,
     menu_since: f32,
+    menu_clicks: u8,
     cross_popups: popup_templates::State,
     loader_components: loader_components::State,
     polygons: polygons::State,
@@ -434,6 +435,34 @@ pub(super) fn install_popup(app: &mut App) {
         .iter()
         .position(|page| *page == "Popup")
         .unwrap();
+}
+
+fn menu_item_clicked(
+    event: On<GuiListItemClick>,
+    mut smoke: ResMut<Smoke>,
+    gui: GuiQuery,
+    popup: Res<GuiPopupState>,
+) {
+    let menu = popup
+        .menu()
+        .expect("item event must precede delayed menu closure");
+    assert!(popup.is_open(menu));
+    let name = gui.get(event.item).unwrap().name();
+    let checked = gui
+        .controllers(event.item)
+        .unwrap()
+        .get("checked")
+        .unwrap()
+        .selected_index();
+    assert_eq!(
+        checked,
+        if name == "toggle" {
+            i32::from(smoke.menu_clicks)
+        } else {
+            0
+        }
+    );
+    smoke.menu_clicks += 1;
 }
 
 pub(super) fn install_button_fire(app: &mut App) {
@@ -1325,6 +1354,9 @@ fn drive(
                     3 if smoke.frames - smoke.button_since >= 8 => {
                         let menu = runtime.popup_menu_content().unwrap();
                         let list = runtime.store().child_by_name(menu, "list").unwrap();
+                        commands
+                            .entity(runtime.entity_of(list).unwrap())
+                            .observe(menu_item_clicked);
                         runtime
                             .store_mut()
                             .set_list_fold_invisible_items(list, true);
@@ -1394,6 +1426,7 @@ fn drive(
                                 smoke.frames - smoke.button_since));
                         assert_eq!(action.action, Some(demos::BASICS_MENU_ACTION + 1));
                         assert_eq!(action.name, "toggle");
+                        assert_eq!(smoke.menu_clicks, 2);
                         assert_eq!(action.caption, "Toggle option");
                         assert!(action.checked);
                         assert!(action.pointer.is_some());
@@ -1430,7 +1463,8 @@ fn drive(
                     {
                         let action = controller.last_menu_action.as_ref().unwrap();
                         assert!(!action.checked);
-                        assert_eq!(Some(action.item), smoke.menu_item);
+                        assert_eq!(smoke.menu_clicks, 3);
+                        assert_eq!(Some(action.entity), smoke.menu_view);
                         assert!(!runtime.is_popup_menu_open());
                         smoke.menu_stage = 17;
                         println!(

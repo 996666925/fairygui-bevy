@@ -96,7 +96,8 @@ entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输
 更新。展开箭头的控制器变化不会被行点击再次反向切换，模式 `2` 仍保留原版不展开行为。
 
 弹出菜单可用 `GuiPopup::show_menu` 配置稳定名称、动作编号、图标、勾选状态和
-分隔项模板；业务系统读取 `GuiMenuAction`，消息在点击 100 ms 后、菜单关闭后发布。
+分隔项模板；菜单项实体可绑定 `On<GuiMenuAction>`，动作在点击 100 ms 后、菜单关闭后
+发布，`entity` 和 `menu` 分别指向保留的菜单项和弹层实体；也支持消息读取。
 支持按名称动态编辑与增删、保留对象复用，详见 [菜单生命周期](docs/popup-lifecycle.md)。
 
 业务系统通过 `GuiPopup` 系统参数直接管理弹出层：

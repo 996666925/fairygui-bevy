@@ -163,7 +163,6 @@ fn main() -> AppExit {
         Update,
         (
             demos::handle_links,
-            demos::handle_menu_actions,
             advance_demo_behaviors,
             demos::advance_transition_demo,
             keep_close_button_on_top,
@@ -550,7 +549,23 @@ fn bind_demo_observers(
     demo: Res<Demo>,
     controller: Res<demos::DemoController>,
     bound: Query<(), With<DemoObserverBound>>,
+    popups: Res<GuiPopupState>,
 ) {
+    if controller.package.as_deref() == Some("Basics")
+        && controller.basics_page_owner.is_some()
+        && let Some(menu) = popups.menu()
+        && let Some(list) = gui.child_by_name(menu, "list")
+        && let Some(list) = gui.get(list)
+    {
+        for &row in list.children() {
+            if bound.get(row).is_err() {
+                commands
+                    .entity(row)
+                    .insert(DemoObserverBound)
+                    .observe(demos::menu_action);
+            }
+        }
+    }
     if let Some(owner) = demo.close_owner
         && let Some(entity) = gui.view(owner)
         && bound.get(entity).is_err()

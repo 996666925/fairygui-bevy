@@ -583,7 +583,7 @@ pub struct GuiRuntime {
     pub(crate) combo_events: Vec<PendingGuiEvent>,
     retained_menu: Option<popup_menu::RetainedMenu>,
     pending_menu_click: Option<popup_menu::PendingMenuClick>,
-    menu_actions: Vec<GuiMenuAction>,
+    menu_actions: Vec<popup_menu::PendingMenuAction>,
     loader_components: HashMap<GObjectId, loader_components::LoadedComponent>,
     failed_loader_components: std::collections::HashSet<(GObjectId, String)>,
     loader_status: HashMap<GObjectId, loader_status::LoaderStatus>,

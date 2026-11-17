@@ -4,6 +4,9 @@ use crate::{FairyGuiPlugin, GuiQuery, GuiRootView, GuiSystems};
 use bevy::ecs::system::SystemState;
 use fairygui_core::package::FuiPackage;
 
+#[path = "ecs_menu_event_tests.rs"]
+mod menu_events;
+
 fn fixture() -> (App, Handle<FuiAsset>) {
     let mut app = App::new();
     app.add_plugins((

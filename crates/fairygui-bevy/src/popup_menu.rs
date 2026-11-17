@@ -12,11 +12,14 @@ pub struct PopupMenuTemplates<'a> {
 }
 
 /// A delayed menu activation, published after closing, before `GuiSystems::Respond`.
-/// `GuiEvent` observers still receive the original, immediate pointer click.
-#[derive(Message, Debug, Clone)]
+/// Observe this target-only event on the clicked row entity, or read its Message.
+/// List item observers receive the immediate click before this delayed action.
+#[derive(EntityEvent, Message, Debug, Clone)]
 pub struct GuiMenuAction {
-    pub menu: GObjectId,
-    pub item: GObjectId,
+    /// Retained menu row receiving the action; it remains alive after hiding.
+    pub entity: Entity,
+    /// Retained popup content, already closed when this event publishes.
+    pub menu: Entity,
     pub name: String,
     pub caption: String,
     pub action: Option<u64>,
@@ -53,11 +56,64 @@ pub(super) struct PendingMenuClick {
     pointer: Option<Point>,
 }
 
+pub(super) struct PendingMenuAction {
+    menu: GObjectId,
+    item: GObjectId,
+    pub name: String,
+    caption: String,
+    action: Option<u64>,
+    pub checked: bool,
+    pointer: Option<Point>,
+    views: Option<(Entity, Entity)>,
+}
+
 pub fn emit_menu_actions(
+    mut commands: Commands,
     mut runtime: NonSendMut<GuiRuntime>,
     mut messages: MessageWriter<GuiMenuAction>,
+    entities: Query<(Entity, &GObjectRef)>,
 ) {
-    messages.write_batch(runtime.menu_actions.drain(..));
+    let pending = std::mem::take(&mut runtime.menu_actions);
+    let resolve = |object| {
+        runtime.entity_of(object).or_else(|| {
+            entities
+                .iter()
+                .find_map(|(entity, reference)| (reference.0 == object).then_some(entity))
+        })
+    };
+    for pending in pending {
+        if !runtime.store.contains(pending.menu) || !runtime.store.contains(pending.item) {
+            continue;
+        }
+        let Some((menu, entity)) = pending
+            .views
+            .or_else(|| resolve(pending.menu).zip(resolve(pending.item)))
+        else {
+            continue;
+        };
+        // Disposal or rebinding between activation and Publish must not notify
+        // a newly recycled row. A hidden retained view is still a live target.
+        if !entities
+            .get(menu)
+            .is_ok_and(|(_, reference)| reference.0 == pending.menu)
+            || !entities
+                .get(entity)
+                .is_ok_and(|(_, reference)| reference.0 == pending.item)
+        {
+            continue;
+        }
+        let event = GuiMenuAction {
+            entity,
+            menu,
+            name: pending.name,
+            caption: pending.caption,
+            action: pending.action,
+            checked: pending.checked,
+            pointer: pending.pointer,
+        };
+        messages.write(event.clone());
+        commands.trigger(event);
+    }
 }
 
 impl GuiRuntime {
@@ -450,11 +506,6 @@ impl GuiRuntime {
         {
             return;
         }
-        self.store.set_list_selection(menu.list, index as i32);
-        for (other_index, other) in menu.rows.iter().enumerate() {
-            self.store
-                .set_button_selected(other.object, other_index == index);
-        }
         self.pending_menu_click = Some(PendingMenuClick {
             menu: menu.content,
             item: row.object,
@@ -486,7 +537,7 @@ impl GuiRuntime {
             return;
         };
         let mut row = menu.rows[index].clone();
-        if !row.definition.is_actionable()
+        if row.definition.separator
             || self.store.object(click.item).is_none_or(|item| {
                 item.grayed()
                     || !item.visible()
@@ -506,6 +557,13 @@ impl GuiRuntime {
             .map_or(0, |controller| controller.selected_index);
         row.definition.checked = checked_index == 1;
         row.definition.checkable = checked_index != 0;
+        row.definition.caption = self
+            .store
+            .object_text(click.item)
+            .unwrap_or_default()
+            .into();
+        row.definition.enabled = true;
+        row.definition.visible = true;
         if checked_index != 0 {
             self.store.set_controller_page_index(
                 click.item,
@@ -515,7 +573,7 @@ impl GuiRuntime {
         }
         self.retained_menu.as_mut().unwrap().rows[index] = row.clone();
         self.hide_popup(Some(click.menu));
-        self.menu_actions.push(GuiMenuAction {
+        self.menu_actions.push(PendingMenuAction {
             menu: click.menu,
             item: click.item,
             name: row.definition.name,
@@ -523,6 +581,7 @@ impl GuiRuntime {
             action: row.definition.action,
             checked: row.definition.checked,
             pointer: click.pointer,
+            views: self.entity_of(click.menu).zip(self.entity_of(click.item)),
         });
     }
 }
