@@ -320,6 +320,10 @@ impl ScrollPane {
         self.motion.scroll_revision
     }
 
+    pub(crate) fn has_pending_command(&self) -> bool {
+        self.motion.pending_command.is_some()
+    }
+
     pub(super) fn note_scroll(&mut self) {
         self.motion.scroll_revision = self.motion.scroll_revision.wrapping_add(1);
     }
@@ -409,7 +413,8 @@ impl ScrollPane {
     }
 
     pub fn is_animating(&self) -> bool {
-        self.animation.is_some()
+        self.motion.pending_command == Some(true)
+            || self.animation.is_some()
             || self.motion.tween.is_some()
             || self.motion.pending_release.is_some()
     }
@@ -422,6 +427,11 @@ impl ScrollPane {
             .all(f32::is_finite)
         {
             return false;
+        }
+        // Native scrollToView observes pending positioning before choosing the
+        // reveal target, and flushes its own request synchronously without ani.
+        if self.flush_pending_command() {
+            self.flush_scroll_refresh();
         }
         let max = self.max_scroll_pos();
         let axis = |start: f32, extent: f32, pos: f32, view: f32, overlap: f32| {
@@ -446,7 +456,7 @@ impl ScrollPane {
                 pos
             }
         };
-        self.set_pos_animated(
+        let changed = self.set_pos_animated(
             axis(rect.x, rect.width, self.pos.x, self.view_size.width, max.x),
             axis(
                 rect.y,
@@ -456,11 +466,17 @@ impl ScrollPane {
                 max.y,
             ),
             animated,
-        )
+        );
+        if !animated {
+            self.flush_pending_command();
+        }
+        changed
     }
 
-    /// Programmatic scroll with native half-second cubic-out timing. A repeated
-    /// endpoint preserves progress. Dragging uses the immediate setter instead.
+    /// Queue a programmatic position; logical coordinates change immediately.
+    /// Requests coalesce until advance (advance(0.) refreshes without ticking).
+    /// Any nonanimated request makes the whole batch immediate. Animated batches
+    /// use native half-second cubic-out timing. Raw set_pos bypasses this queue.
     pub fn set_pos_animated(&mut self, x: f32, y: f32, animated: bool) -> bool {
         if !x.is_finite() || !y.is_finite() {
             return false;
@@ -480,7 +496,7 @@ impl ScrollPane {
                 self.pos.y
             },
         );
-        self.commit_command_position(next, animated)
+        self.request_command_position(next, animated)
     }
 
     /// 视口尺寸。
@@ -580,11 +596,16 @@ impl ScrollPane {
             y = y.clamp(0.0, max.y);
         }
 
-        if x == self.pos.x && y == self.pos.y {
+        if x == self.pos.x && y == self.pos.y && (!notify || self.motion.pending_command.is_none())
+        {
             return false;
         }
         if notify {
             self.interrupt_scroll_events();
+        }
+        if notify {
+            self.motion.pending_command = None;
+            self.motion.refresh_animated = false;
         }
         self.pos = Point::new(x, y);
         self.raw_bounce = allow_bounce;
@@ -606,6 +627,9 @@ impl ScrollPane {
 
     /// 停止滚动。
     pub fn stop(&mut self) {
+        if self.motion.pending_command.take().is_some() {
+            self.apply_command_position(self.aligned_position(self.pos), false);
+        }
         self.interrupt_scroll_events();
         if let Some(animation) = self.animation.take() {
             self.display_pos = animation.end;
@@ -617,15 +641,21 @@ impl ScrollPane {
         self.sync_bar_activity();
     }
 
-    /// 每帧推进：先按惯性滑动，再处理越界回弹。
+    /// Submit pending programmatic positions and then advance animation time.
+    /// Zero seconds refreshes without ticking; negative/nonfinite time is ignored.
     ///
     /// 返回滚动位置是否发生变化。
     pub fn advance(&mut self, dt: f32) -> bool {
-        if !dt.is_finite() || dt <= 0.0 {
+        if !dt.is_finite() || dt < 0. {
             return false;
         }
+        let before_display = self.display_pos;
+        let pending_command = self.flush_pending_command();
         let refresh_pending = self.motion.scroll_refresh;
         self.flush_scroll_refresh();
+        if dt == 0. {
+            return pending_command || self.display_pos != before_display;
+        }
 
         self.complete_drag_release();
 
@@ -683,7 +713,7 @@ impl ScrollPane {
             } else {
                 self.scroll_tick(self.animation.is_none());
             }
-            return self.display_pos != before;
+            return pending_command || self.display_pos != before;
         }
 
         let before = self.pos;
@@ -710,7 +740,7 @@ impl ScrollPane {
             self.display_pos = self.pos;
         }
         self.sync_bar_activity();
-        self.pos.x != before.x || self.pos.y != before.y
+        pending_command || self.pos.x != before.x || self.pos.y != before.y
     }
 
     fn bars_are_moving(&self) -> bool {
@@ -1093,6 +1123,7 @@ mod tests {
 
         // 再次滚动立刻拉回不透明。
         pane.set_pos_animated(200., 0., true);
+        pane.advance(0.);
         assert_eq!(pane.bar_alpha(), 1.0);
         assert!(pane.bars_visible());
     }

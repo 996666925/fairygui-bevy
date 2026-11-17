@@ -152,3 +152,41 @@ fn component_edits_from_scroll_callbacks_apply_with_scroll_edits_in_the_same_fra
     app.update();
     assert_eq!(app.world().resource::<Seen>().0.len(), 1);
 }
+
+#[test]
+fn mixed_animation_requests_and_callback_retargets_keep_the_batch_immediate() {
+    let (mut app, owner, list, view) = fixture();
+    watch(&mut app, owner, list, view);
+    app.world_mut()
+        .entity_mut(view)
+        .observe(|event: On<GuiScroll>, mut gui: GuiMut| {
+            gui.edit(event.entity, |object| {
+                object.scroll_to(Vec2::new(0., 3000.), true)
+            });
+        });
+    send(&mut app, view, |object| {
+        object.scroll_to(Vec2::new(0., 500.), true);
+        object.scroll_to(Vec2::new(0., 1000.), false);
+        object.scroll_to(Vec2::new(0., 1500.), true);
+    });
+    let pane = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .scroll_pane(list)
+        .unwrap();
+    assert_eq!(pane.pos().y, 1500.);
+    assert_eq!(pane.display_pos().y, 0.);
+    app.update();
+
+    let state = app.world().get::<GuiScrollState>(view).unwrap();
+    assert_eq!(state.position().y, 3000.);
+    assert_eq!(state.display_position().y, 3000.);
+    assert!(!state.is_animating());
+    assert_eq!(app.world().get::<ScrollPosition>(view).unwrap().0.y, 3000.);
+    assert_eq!(app.world().resource::<Seen>().0.len(), 1);
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<Seen>().0.len(), 1);
+}

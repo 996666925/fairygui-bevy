@@ -390,6 +390,7 @@ impl Plugin for FairyGuiPlugin {
                     list::sync_list_content,
                     tree::sync_tree_content,
                     list::sync_virtual_list_bindings,
+                    runtime::refresh_scroll_commands,
                     runtime::sync_virtual_lists,
                     runtime::sync_component_scroll_content,
                 )
@@ -429,6 +430,7 @@ impl Plugin for FairyGuiPlugin {
                     .chain(),
                 (
                     runtime::text_measure::sync_sizes,
+                    runtime::refresh_scroll_commands,
                     runtime::sync_virtual_lists,
                     runtime::tooltip::sync_tooltips,
                     runtime::spawn_pending_objects,

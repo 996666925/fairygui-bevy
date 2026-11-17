@@ -26,6 +26,9 @@ impl Default for ScrollPhysics {
 
 #[derive(Debug, Clone)]
 pub(super) struct Motion {
+    /// Native _aniFlag: None = idle; false wins within one refresh batch.
+    pub pending_command: Option<bool>,
+    pub refresh_animated: bool,
     pub events: Vec<super::ScrollEvent>,
     pub scroll_refresh: bool,
     pub programmatic_tween_announced: bool,
@@ -50,6 +53,8 @@ pub(super) struct Motion {
 impl Default for Motion {
     fn default() -> Self {
         Self {
+            pending_command: None,
+            refresh_animated: true,
             events: Vec::new(),
             scroll_refresh: false,
             programmatic_tween_announced: false,
@@ -167,6 +172,7 @@ impl ScrollPane {
         if !self.touch_effect {
             return;
         }
+        self.flush_pending_command();
         self.interrupt_scroll_events();
         if let Some(animation) = self.animation.take() {
             self.display_pos = animation.end;

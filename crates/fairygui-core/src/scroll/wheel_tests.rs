@@ -62,6 +62,7 @@ fn wheel_setup_steps_axes_pages_and_boundaries_match_1422_native_cases() {
 fn invalid_zero_and_boundary_wheel_preserve_animation_but_real_wheel_cancels_it() {
     let mut p = pane(1, 1, false, 25., 100., 180., 0.);
     p.set_pos_animated(0., 100., true);
+    p.flush_pending_command();
     for delta in [0., f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1.] {
         assert!(!p.mouse_wheel(delta));
         assert!(p.is_animating());
@@ -198,10 +199,12 @@ fn global_paging_threshold_changes_short_drag_page_snapping() {
     pane.set_view_size(Size::new(100., 100.));
     pane.set_content_size(Size::new(300., 300.));
     assert!(pane.set_pos_animated(0., 40., false));
+    pane.flush_pending_command();
     assert_eq!(pane.pos().y, 0.);
 
     pane.set_paging_threshold(0.3);
     assert!(pane.set_pos_animated(0., 40., false));
+    pane.flush_pending_command();
     assert_eq!(pane.pos().y, 100.);
 }
 

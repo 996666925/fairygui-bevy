@@ -59,6 +59,10 @@ fn exported_snap_flag_aligns_retained_commands_and_refreshes_resized_item_geomet
         .non_send_mut::<GuiRuntime>()
         .store_mut()
         .set_scroll_pos_animated(list, 0., 55., true);
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .store_mut()
+        .advance_scrolls(0.);
     assert_eq!(
         app.world()
             .non_send::<GuiRuntime>()
@@ -93,6 +97,7 @@ fn exported_snap_flag_aligns_retained_commands_and_refreshes_resized_item_geomet
         gui.store_mut().layout_list(list);
         gui.store_mut()
             .set_scroll_pos_animated(list, 0., 80., false);
+        gui.store_mut().advance_scrolls(0.);
         assert_eq!(
             gui.store().scroll_pane(list).unwrap().pos().y,
             130.,
@@ -106,6 +111,7 @@ fn exported_snap_flag_aligns_retained_commands_and_refreshes_resized_item_geomet
         );
         gui.store_mut()
             .set_scroll_pos_animated(list, 0., 135.25, false);
+        gui.store_mut().advance_scrolls(0.);
     }
     app.update();
     assert_eq!(app.world().get::<ScrollPosition>(entity).unwrap().0.y, 136.);

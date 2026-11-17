@@ -78,6 +78,7 @@ fn scroll_view_tween_matches_native_logical_and_display_positions_with_retargets
                 command[3].parse().unwrap(),
                 command[4] == "1",
             );
+            p.advance(0.);
         } else {
             p.advance(command[2].parse().unwrap());
         }
@@ -246,6 +247,7 @@ fn scroll_view_animation_interruptions_resize_and_invalid_inputs_preserve_finite
     p.stop();
     assert_eq!(p.display_pos(), p.pos());
     p.set_pos_animated(350., 300., true);
+    p.advance(0.);
     p.set_content_size(Size::new(120., 130.));
     assert!(!p.is_animating());
     assert_eq!(p.display_pos(), Point::new(20., 30.));

@@ -142,6 +142,7 @@ fn loop_lists_match_native_sixfold_records_commands_drag_tweens_and_selection() 
                 }
                 "go" => {
                     store.set_scroll_pos_animated(list, a, b, c != 0.);
+                    store.advance_scrolls(0.);
                 }
                 "wheel" => {
                     store.scroll_mouse_wheel(list, a);

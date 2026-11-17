@@ -745,6 +745,11 @@ fn configure_scroll(mut panes: Query<&mut GuiScrollSettings>) {
 gui_edit.edit(list_entity, |object: &mut GuiObjectMut| object.set_scroll_percentage(Vec2::Y, false));
 ```
 
+同一刷新阶段的 `scroll_to`、比例与分页请求会合并，逻辑目标位置立即更新，吸附与显示位置在
+插件刷新时统一计算；其中只要有一次有效的非动画请求，整批就立即定位。滚动事件回调中再次
+修改位置会在同帧生效，不会重复派发该次刷新通知。低层直接使用 `ObjectStore` 时可调用
+`advance_scrolls(0.)` 仅提交刷新，正时间还会推进动画。无动画的 `scroll_to_view` 保留原版同步刷新。
+
 `scroll_to_view { rect, animated, set_first }` 把内容坐标中的矩形滚入视口；
 `set_first` 为真时优先对齐矩形起点，最终位置仍受分页、条目吸附和边界约束。
 已有控件可直接按实体定位，无需业务代码计算矩形：

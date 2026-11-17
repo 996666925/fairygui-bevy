@@ -49,9 +49,8 @@ impl ScrollPane {
     /// killTween emits Scroll then End for a programmatic tween, and only End
     /// for inertia. Geometry changes and stationary input do not imply an end.
     pub(super) fn interrupt_scroll_events(&mut self) {
-        // Position commands are applied eagerly by the model, but native
-        // refresh has not started their tween until its first notification.
-        // Coalescing an animated command into an immediate one has no End.
+        // A queued animated request has no started tween to end. Only an
+        // already announced programmatic tween or release emits cancellation.
         if self.animation.is_some() && self.motion.programmatic_tween_announced
             || self.motion.tween.is_some()
         {
@@ -69,6 +68,11 @@ impl ScrollPane {
     }
 
     pub(crate) fn acknowledge_scroll_refresh(&mut self) {
+        // Native refresh2 runs once more after Scroll callbacks, without a
+        // second refresh notification for position writes made by the callback.
+        if let Some(animated) = self.motion.pending_command.take() {
+            self.apply_command_position(self.pos, animated && self.motion.refresh_animated);
+        }
         self.motion.scroll_refresh = false;
         self.motion.programmatic_tween_announced = self.animation.is_some();
     }

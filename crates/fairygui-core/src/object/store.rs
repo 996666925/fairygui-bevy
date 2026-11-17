@@ -2226,8 +2226,30 @@ impl ObjectStore {
 
     /// 推进全部滚动容器的惯性，返回位置发生变化的容器。
     ///
-    /// 惯性与回弹都需要跨帧累积，因此每帧调用一次。
+    /// 惯性与回弹都需要跨帧累积，因此每帧调用一次。零时间仅提交合并的位置刷新。
     pub fn advance_scrolls(&mut self, dt: f32) -> Vec<GObjectId> {
+        if !dt.is_finite() || dt < 0. {
+            return Vec::new();
+        }
+        // Row geometry can change after a queued setter, before its refresh.
+        let snapping: Vec<_> = self
+            .objects
+            .iter()
+            .filter_map(|(id, object)| {
+                object
+                    .control
+                    .component()?
+                    .scroll_pane
+                    .as_ref()
+                    .filter(|pane| {
+                        pane.has_pending_command() && pane.snap_to_item && !pane.page_mode
+                    })
+                    .map(|_| id)
+            })
+            .collect();
+        for id in snapping {
+            self.prepare_scroll_snapping(id);
+        }
         let mut moved = Vec::new();
         let mut position_changed = Vec::new();
 

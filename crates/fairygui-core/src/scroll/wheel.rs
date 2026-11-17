@@ -122,6 +122,8 @@ impl ScrollPane {
         if axis.is_some() {
             return self.commit_command_position(next, false);
         }
+        self.motion.pending_command = None;
+        self.motion.refresh_animated = false;
         self.pos = next;
         self.raw_bounce = false;
         self.interrupt_scroll_events();

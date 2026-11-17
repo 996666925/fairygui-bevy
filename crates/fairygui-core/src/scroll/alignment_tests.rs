@@ -73,6 +73,9 @@ fn mid_tween_page_requests_follow_native_displayed_direction_and_restart_rules()
             }
             _ => panic!("unknown sequence action: {line}"),
         }
+        if action == "set" {
+            p.flush_pending_command();
+        }
         assert_eq!(p.pos(), Point::new(v[3], v[4]), "logical {line}");
         assert_eq!(p.display_pos(), Point::new(v[5], v[6]), "display {line}");
         assert_eq!(p.is_animating(), v[7] != 0., "tween {line}");
@@ -102,6 +105,7 @@ fn stopping_after_one_axis_clamps_matches_native_remaining_tween_change() {
         p.set_content_size(Size::new(500., 400.));
         p.set_snap_items(items(5));
         p.set_pos_animated(v[0], v[1], true);
+        p.flush_pending_command();
         p.advance(0.25);
         let (states, remainder) = v[2..].as_chunks::<5>();
         assert!(remainder.is_empty());
@@ -219,6 +223,7 @@ fn aligned_requests_and_tween_boundaries_match_native_refresh() {
             v[14] != 0.,
             "accepted {line}"
         );
+        p.flush_pending_command();
         let (states, remainder) = v[15..].as_chunks::<5>();
         assert!(remainder.is_empty());
         assert_eq!(states.len(), 4);
@@ -252,16 +257,139 @@ fn repeated_raw_target_keeps_tween_but_a_distinct_request_snapping_back_restarts
     p.set_view_size(Size::new(100., 100.));
     p.set_content_size(Size::new(100., 500.));
     p.set_pos_animated(0., 100., true);
+    p.flush_pending_command();
     p.advance(0.125);
     let before = p.display_pos().y;
     assert!(!p.set_pos_animated(0., 100., true));
     p.advance(0.125);
     assert!(p.display_pos().y > before);
     assert!(p.set_pos_animated(0., 110., true));
+    p.flush_pending_command();
     assert_eq!(p.pos().y, 100.);
     let at = p.display_pos().y;
     p.advance(0.125);
     assert!(p.display_pos().y > at);
     p.set_pos_animated(0., f32::NAN, false);
     assert!(p.is_animating());
+}
+
+#[test]
+fn same_frame_position_requests_coalesce_and_animation_starts_after_refresh() {
+    let mut pane = ScrollPane {
+        scroll_type: ScrollType::Both,
+        ..Default::default()
+    };
+    pane.set_view_size(Size::new(100., 80.));
+    pane.set_content_size(Size::new(500., 400.));
+
+    assert!(pane.set_pos_animated(120., 0., true));
+    assert!(pane.set_pos_animated(120., 180., true));
+    assert_eq!(pane.pos(), Point::new(120., 180.));
+    assert_eq!(pane.display_pos(), Point::ZERO);
+
+    pane.advance(0.);
+    assert_eq!(pane.pos(), Point::new(120., 180.));
+    assert_eq!(pane.display_pos(), Point::ZERO);
+    assert!(pane.is_animating());
+
+    pane.advance(0.125);
+    assert!(pane.display_pos().x > 0. && pane.display_pos().x < 120.);
+    assert!(pane.display_pos().y > 0. && pane.display_pos().y < 180.);
+
+    assert!(pane.set_pos_animated(220., 180., true));
+    assert!(pane.set_pos_animated(220., 260., false));
+    pane.advance(0.);
+    assert_eq!(pane.pos(), Point::new(220., 260.));
+    assert_eq!(pane.display_pos(), Point::new(220., 260.));
+    assert!(!pane.is_animating());
+}
+
+#[test]
+fn deferred_command_batches_match_native_setters_refresh_and_tween_snapshots() {
+    let mut pane = ScrollPane::default();
+    let (mut cases, mut snapshots) = (0, 0);
+    for line in include_str!("../../tests/fixtures/scroll-command-batch-reference.txt").lines() {
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        let mut fields = line.split_whitespace();
+        let kind = fields.next().unwrap();
+        let values: Vec<f32> = fields.map(|v| v.parse().unwrap()).collect();
+        if kind == "case" {
+            pane = ScrollPane {
+                scroll_type: ScrollType::from_code(values[1] as i8),
+                page_mode: values[2] == 1.,
+                snap_to_item: values[2] == 2.,
+                ..Default::default()
+            };
+            pane.set_view_size(Size::new(100., 80.));
+            pane.set_content_size(Size::new(500., 400.));
+            let max = pane.max_scroll_pos();
+            pane.set_pos(max.x * values[3], max.y * values[3], false);
+            pane.set_snap_items(items(5));
+            cases += 1;
+            continue;
+        }
+        let offset = match kind {
+            "set" => {
+                pane.set_pos_animated(values[0], values[1], values[2] != 0.);
+                3
+            }
+            "refresh" => {
+                pane.advance(0.);
+                0
+            }
+            "callback" => {
+                pane.advance(0.);
+                pane.set_pos_animated(values[0], values[1], values[2] != 0.);
+                pane.acknowledge_scroll_refresh();
+                3
+            }
+            "tick" => {
+                pane.advance(values[0]);
+                1
+            }
+            _ => panic!("{line}"),
+        };
+        let expected = &values[offset..];
+        assert_eq!(
+            pane.pos(),
+            Point::new(expected[0], expected[1]),
+            "case {cases}: {line}"
+        );
+        assert_eq!(
+            pane.display_pos(),
+            Point::new(expected[2], expected[3]),
+            "case {cases}: {line}"
+        );
+        // Native _tweening reports the started tween. is_animating additionally
+        // advertises a queued animated request to the public state projection.
+        assert_eq!(
+            pane.animation.is_some(),
+            expected[4] != 0.,
+            "case {cases}: {line}"
+        );
+        snapshots += 1;
+    }
+    assert_eq!((cases, snapshots), (270, 1215));
+}
+
+#[test]
+fn pending_commands_follow_resized_bounds_and_raw_position_overrides() {
+    let mut pane = ScrollPane::default();
+    pane.set_view_size(Size::new(100., 80.));
+    pane.set_content_size(Size::new(100., 600.));
+    pane.set_pos_animated(0., 400., true);
+    pane.change_content_size_on_scrolling(Size::new(0., -400.), Point::ZERO);
+    pane.advance(0.);
+    assert_eq!(pane.pos().y, 120.);
+    pane.advance(0.5);
+    assert_eq!(pane.display_pos().y, 120.);
+
+    pane.set_pos_animated(0., 80., true);
+    assert!(pane.set_pos(0., 80., false));
+    assert_eq!(pane.display_pos().y, 80.);
+    assert!(!pane.is_animating());
+    pane.advance(0.5);
+    assert_eq!(pane.display_pos().y, 80.);
 }

@@ -110,6 +110,7 @@ mod tests {
             match kind {
                 "go" => {
                     pane.set_pos_animated(v[0], v[1], true);
+                    pane.flush_pending_command();
                 }
                 "down" => pane.begin_drag(),
                 "move" => pane.drag(v[0], v[1], v[4]),

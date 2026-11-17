@@ -3372,6 +3372,10 @@ pub fn advance_scrolls(mut runtime: NonSendMut<GuiRuntime>, time: Res<Time>) {
     runtime.store_mut().advance_scrolls(time.delta_secs());
 }
 
+pub(crate) fn refresh_scroll_commands(mut runtime: NonSendMut<GuiRuntime>) {
+    runtime.store_mut().advance_scrolls(0.);
+}
+
 /// 每帧推进过渡动画。
 pub fn advance_transitions(mut runtime: NonSendMut<GuiRuntime>, time: Res<Time>) {
     runtime.store_mut().advance_transitions(time.delta_secs());

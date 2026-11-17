@@ -109,7 +109,8 @@ impl ObjectStore {
         }
     }
 
-    /// Native programmatic refresh, including page/item alignment and rounding.
+    /// Queue a native programmatic refresh, including page/item alignment and
+    /// rounding when advance_scrolls runs (zero seconds refreshes without ticking).
     /// set_scroll_pos remains the explicit raw-position/bounce escape hatch.
     pub fn set_scroll_pos_animated(
         &mut self,

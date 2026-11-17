@@ -35,7 +35,10 @@ fn scroll_event_lifecycles_match_native_refresh_drag_wheel_and_tween_traces() {
                 pane.mouse_wheel(n(1));
                 continue;
             }
-            "refresh" => {}
+            "refresh" => {
+                pane.flush_pending_command();
+                pane.flush_scroll_refresh();
+            }
             "down" => pane.begin_drag(),
             "move" => pane.drag(0., n(1), n(2)),
             "wait" => pane.drag(0., 0., n(1)),
@@ -69,6 +72,8 @@ fn geometry_rebasing_and_invalid_or_idle_updates_do_not_notify() {
     pane.set_view_size(Size::new(100., 80.));
     pane.set_content_size(Size::new(100., 600.));
     pane.set_pos_animated(0., 400., false);
+    pane.flush_pending_command();
+    pane.flush_scroll_refresh();
     assert_eq!(pane.drain_scroll_events().count(), 1);
     pane.set_content_size(Size::new(100., 120.));
     assert_eq!(pane.pos().y, 40.);
@@ -89,11 +94,15 @@ fn animated_position_refresh_does_not_duplicate_the_first_tween_scroll() {
     pane.set_content_size(Size::new(100., 600.));
     assert!(pane.set_pos_animated(0., 240., true));
 
-    assert!(pane.advance(0.1));
+    assert!(pane.advance(0.));
     let first: Vec<_> = pane.drain_scroll_events().collect();
     assert_eq!(first, vec![ScrollEvent::Refresh]);
-    assert!(pane.display_pos().y > 0. && pane.display_pos().y < 240.);
+    assert_eq!(pane.display_pos().y, 0.);
     assert!(pane.is_animating());
+
+    assert!(pane.advance(0.1));
+    pane.drain_scroll_events().for_each(drop);
+    assert!(pane.display_pos().y > 0. && pane.display_pos().y < 240.);
 
     assert!(pane.advance(0.1));
     let second: Vec<_> = pane.drain_scroll_events().collect();
@@ -101,6 +110,7 @@ fn animated_position_refresh_does_not_duplicate_the_first_tween_scroll() {
     assert!(pane.display_pos().y > 0. && pane.display_pos().y < 240.);
 
     pane.set_pos_animated(0., 120., true);
+    pane.advance(0.);
     assert!(pane.advance(0.5));
     assert_eq!(
         pane.drain_scroll_events().collect::<Vec<_>>(),

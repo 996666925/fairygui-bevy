@@ -135,9 +135,11 @@ fn materialized_snap_geometry_tracks_dynamic_scaled_children_excludes_bars_and_k
     );
     store.set_visible(rows[1], false);
     store.set_scroll_pos_animated(owner, 0., 90., false);
+    store.advance_scrolls(0.);
     assert_eq!(store.scroll_pane(owner).unwrap().pos().y, 150.);
-    store.set_scale(rows[1], 1., -2.);
     store.set_scroll_pos_animated(owner, 0., 90., false);
+    store.set_scale(rows[1], 1., -2.);
+    store.advance_scrolls(0.);
     assert_eq!(store.scroll_pane(owner).unwrap().pos().y, 60.);
     store.set_xy(rows[2], 0., 180.);
     store.scroll_mouse_wheel(owner, 1.);
@@ -149,6 +151,7 @@ fn materialized_snap_geometry_tracks_dynamic_scaled_children_excludes_bars_and_k
         "step can align back to the same item"
     );
     store.set_scroll_perc(owner, true, 0.15);
+    store.advance_scrolls(0.);
     assert_eq!(store.scroll_pane(owner).unwrap().pos().y, 60.);
     store.scroll_mouse_wheel_pixels(owner, 0., 0.25);
     assert_eq!(

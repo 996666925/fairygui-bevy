@@ -87,7 +87,7 @@ impl ScrollPane {
         )
     }
 
-    fn aligned_position(&self, value: Point) -> Point {
+    pub(super) fn aligned_position(&self, value: Point) -> Point {
         let max = self.max_scroll_pos();
         if self.page_mode {
             Point::new(
@@ -127,17 +127,40 @@ impl ScrollPane {
         }
     }
 
+    pub(super) fn request_command_position(&mut self, request: Point, animated: bool) -> bool {
+        if !request.x.is_finite() || !request.y.is_finite() || request == self.pos {
+            return false;
+        }
+        self.pos = request;
+        self.raw_bounce = false;
+        self.motion.pending_command = Some(self.motion.pending_command.unwrap_or(true) && animated);
+        true
+    }
+
+    pub(super) fn flush_pending_command(&mut self) -> bool {
+        let Some(animated) = self.motion.pending_command.take() else {
+            return false;
+        };
+        self.apply_command_position(self.aligned_position(self.pos), animated);
+        true
+    }
+
     pub(super) fn commit_command_position(&mut self, request: Point, animated: bool) -> bool {
         // Native setters compare their clamped request before deferred alignment.
         // A different request may align back to the same endpoint and refresh it.
         if request == self.pos {
             return false;
         }
-        let next = self.aligned_position(request);
+        self.motion.pending_command = None;
+        self.apply_command_position(self.aligned_position(request), animated)
+    }
+
+    pub(super) fn apply_command_position(&mut self, next: Point, animated: bool) -> bool {
         if !next.x.is_finite() || !next.y.is_finite() {
             return false;
         }
         self.pos = next;
+        self.motion.refresh_animated = animated;
         self.raw_bounce = false;
         if !animated || self.dragging {
             self.interrupt_scroll_events();
