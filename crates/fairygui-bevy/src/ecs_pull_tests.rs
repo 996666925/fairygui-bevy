@@ -50,7 +50,7 @@ fn titles(count: usize) -> GuiListContent {
 }
 
 #[test]
-fn ecs_ordinary_list_content_retains_leading_rows_disposes_trailing_rows_and_keeps_overlays() {
+fn ecs_ordinary_list_content_retains_leading_rows_pools_trailing_rows_and_keeps_overlays() {
     let (mut app, owner, list, view, _, _) = fixture();
     let header = *app
         .world()
@@ -74,7 +74,8 @@ fn ecs_ordinary_list_content_retains_leading_rows_disposes_trailing_rows_and_kee
     assert!(
         original[1..]
             .iter()
-            .all(|&row| app.world().get_entity(row).is_err())
+            .all(|&row| app.world().get_entity(row).is_ok()
+                && app.world().get::<GuiListRow>(row).is_none())
     );
     assert!(app.world().get_entity(header.entity).is_ok());
     assert_eq!(
@@ -86,6 +87,7 @@ fn ecs_ordinary_list_content_retains_leading_rows_disposes_trailing_rows_and_kee
     let state = app.world().get::<GuiListState>(view).unwrap();
     assert_eq!(state.item_count(), 6);
     assert_eq!(state.items()[0], original[0]);
+    assert_eq!(&state.items()[..original.len()], &original);
     assert!(!state.items().contains(&header.entity));
     assert!(
         app.world()
@@ -156,7 +158,10 @@ fn ecs_ordinary_list_content_retains_leading_rows_disposes_trailing_rows_and_kee
     assert_eq!(app.world().get::<GuiListState>(view).unwrap().items(), rows);
     app.world_mut().entity_mut(view).insert(titles(0));
     app.update();
-    assert!(rows.iter().all(|&row| app.world().get_entity(row).is_err()));
+    assert!(
+        rows.iter().all(|&row| app.world().get_entity(row).is_ok()
+            && app.world().get::<GuiListRow>(row).is_none())
+    );
     assert!(
         app.world()
             .get::<GuiListState>(view)
@@ -169,6 +174,7 @@ fn ecs_ordinary_list_content_retains_leading_rows_disposes_trailing_rows_and_kee
     app.update();
     assert!(app.world().get_entity(view).is_err());
     assert!(app.world().get_entity(header.entity).is_err());
+    assert!(rows.iter().all(|&row| app.world().get_entity(row).is_err()));
 }
 
 #[test]

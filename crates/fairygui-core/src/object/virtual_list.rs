@@ -308,10 +308,20 @@ impl ObjectStore {
         // Validate the sample before detaching authored children. A failed
         // factory or malformed item must leave the original list intact.
         let rows = self.list_items(list).unwrap_or_default();
-        let existing = rows
-            .iter()
-            .copied()
-            .find(|&row| self.virtual_resource_url(row, default_url) == default_url);
+        let existing = self
+            .list_item_pools
+            .get(&list)
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find(|(url, row)| url == default_url && self.contains(*row))
+                    .map(|(_, row)| *row)
+            })
+            .or_else(|| {
+                rows.iter()
+                    .copied()
+                    .find(|&row| self.virtual_resource_url(row, default_url) == default_url)
+            });
         let sample = existing
             .or_else(|| create(self, default_url))
             .ok_or_else(|| VirtualListError::MissingResource(default_url.into()))?;
@@ -329,7 +339,9 @@ impl ObjectStore {
             return Err(VirtualListError::InvalidGeometry);
         }
         self.set_visible(sample, true);
-        let mut pool = VecDeque::new();
+        self.finish_construction(sample);
+        let mut pool = self.list_item_pools.remove(&list).unwrap_or_default();
+        pool.retain(|(_, row)| *row != sample && self.contains(*row));
         for row in rows {
             let url = self.virtual_resource_url(row, default_url);
             self.detach_from_parent(row);
@@ -666,6 +678,8 @@ impl ObjectStore {
             };
             let object = s.pool.remove(index).unwrap().1;
             if self.contains(object) {
+                self.finish_construction(object);
+                self.set_visible(object, true);
                 return Ok(object);
             }
         }

@@ -178,7 +178,7 @@ fn prepared_rows_stay_off_stage_and_are_consumed_in_native_fifo_order_without_al
             let expected = expected.next().unwrap();
             assert!(!store.is_on_stage(expected));
             assert!(store.is_constructing(expected));
-            let row = store.take_prepared_list_item(list, &canonical).unwrap();
+            let row = store.take_list_item_from_pool(list, &canonical).unwrap();
             assert_eq!(row, expected);
             assert!(!store.is_constructing(row));
             assert!(!store.is_on_stage(row));
@@ -186,7 +186,7 @@ fn prepared_rows_stay_off_stage_and_are_consumed_in_native_fifo_order_without_al
             assert!(store.is_on_stage(row));
             assert_eq!(store.len(), total);
         }
-        assert!(store.take_prepared_list_item(list, &canonical).is_none());
+        assert!(store.take_list_item_from_pool(list, &canonical).is_none());
     }
     assert!(expected.next().is_none());
     store.remove(root);
@@ -229,7 +229,7 @@ fn nested_prepared_pools_share_ownership_and_remain_unpublished_until_their_own_
         )
     };
     let row = store
-        .take_prepared_list_item(list, &canonical("Dropdown2"))
+        .take_list_item_from_pool(list, &canonical("Dropdown2"))
         .unwrap();
     store.set_parent(row, Some(list));
     let inner = store.child_by_name(row, "list").unwrap();
@@ -242,7 +242,7 @@ fn nested_prepared_pools_share_ownership_and_remain_unpublished_until_their_own_
         _ => panic!("nested list"),
     };
     let total = store.len();
-    let nested = store.take_prepared_list_item(inner, &url).unwrap();
+    let nested = store.take_list_item_from_pool(inner, &url).unwrap();
     assert!(!store.is_constructing(nested));
     store.set_parent(nested, Some(inner));
     assert_eq!(store.len(), total);

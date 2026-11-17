@@ -265,7 +265,7 @@ pub struct ObjectStore {
     slider_bars: std::collections::HashMap<GObjectId, slider::SliderBars>,
     virtual_states: std::collections::HashMap<GObjectId, virtual_list::VirtualState>,
     constructing: HashSet<GObjectId>,
-    prepared_list_items:
+    list_item_pools:
         std::collections::HashMap<GObjectId, std::collections::VecDeque<(String, GObjectId)>>,
 }
 
@@ -336,7 +336,7 @@ impl ObjectStore {
 
         let removed_set: HashSet<GObjectId> = removed.iter().copied().collect();
         self.constructing.retain(|id| !removed_set.contains(id));
-        self.prepared_list_items.retain(|owner, items| {
+        self.list_item_pools.retain(|owner, items| {
             items.retain(|(_, item)| !removed_set.contains(item));
             !removed_set.contains(owner) && !items.is_empty()
         });
@@ -447,7 +447,7 @@ impl ObjectStore {
                 self.collect_subtree(child, out);
             }
         }
-        if let Some(items) = self.prepared_list_items.get(&id) {
+        if let Some(items) = self.list_item_pools.get(&id) {
             for &(_, child) in items {
                 self.collect_subtree(child, out);
             }

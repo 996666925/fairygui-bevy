@@ -2,6 +2,9 @@
 use crate::{GObjectRef, GuiRuntime};
 
 #[cfg(test)]
+#[path = "ordinary_list_tests.rs"]
+mod ordinary_tests;
+#[cfg(test)]
 #[path = "ecs_item_provider_tests.rs"]
 mod provider_tests;
 #[cfg(test)]
@@ -83,18 +86,20 @@ impl GuiListItem<'_> {
 type ItemRenderer = dyn Fn(usize, &mut GuiListItem<'_>) + Send + Sync;
 type ItemProvider = dyn Fn(usize) -> Option<String> + Send + Sync;
 
-/// Configure every row of an ordinary list using its default item template.
-/// Existing leading rows keep their identity; shrinking disposes trailing rows.
-/// Removing the component stops configuration and keeps the current content.
+/// Configure every row of an ordinary list. Existing leading rows keep their
+/// identity; shrinking returns trailing rows to the list's native FIFO pool.
+/// Removing the component drops callbacks and keeps current content and pool.
 #[derive(Component, Clone)]
 pub struct GuiListContent {
     pub item_count: usize,
     renderer: Arc<ItemRenderer>,
+    provider: Option<Arc<ItemProvider>>,
 }
 impl std::fmt::Debug for GuiListContent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GuiListContent")
             .field("item_count", &self.item_count)
+            .field("has_item_provider", &self.provider.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -106,7 +111,27 @@ impl GuiListContent {
         Self {
             item_count,
             renderer: Arc::new(renderer),
+            provider: None,
         }
+    }
+    /// Choose a template for newly added rows. Existing rows retain their
+    /// templates, including when the provider changes. None/empty uses the
+    /// exported default; local names and registered ui:// URLs are accepted.
+    pub fn with_item_provider(
+        mut self,
+        provider: impl Fn(usize) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.set_item_provider(provider);
+        self
+    }
+    pub fn set_item_provider(
+        &mut self,
+        provider: impl Fn(usize) -> Option<String> + Send + Sync + 'static,
+    ) {
+        self.provider = Some(Arc::new(provider));
+    }
+    pub fn clear_item_provider(&mut self) {
+        self.provider = None;
     }
     pub fn set_renderer(
         &mut self,
@@ -124,7 +149,9 @@ pub enum GuiListContentError {
     VirtualList,
     #[error("list default item cannot be resolved")]
     MissingDefaultItem,
-    #[error("cannot construct list default item {0}")]
+    #[error("list item resource cannot be resolved: {0}")]
+    MissingResource(String),
+    #[error("cannot construct list item {0}")]
     CreationFailed(String),
 }
 /// Last ordinary list configuration result. The actual count and row entities
@@ -196,6 +223,14 @@ pub(crate) fn sync_list_content(
             && binding.is_some_and(|binding| binding.0 == reference.0)
             && current.is_some_and(|current| {
                 matches!(current.error, Some(GuiListContentError::VirtualList)) == conflict
+                    && !matches!(
+                        current.error,
+                        Some(
+                            GuiListContentError::MissingDefaultItem
+                                | GuiListContentError::MissingResource(_)
+                                | GuiListContentError::CreationFailed(_)
+                        )
+                    )
             })
         {
             continue;
@@ -207,6 +242,12 @@ pub(crate) fn sync_list_content(
             runtime.configure_list_content(
                 reference.0,
                 config.item_count,
+                |index| {
+                    config
+                        .provider
+                        .as_ref()
+                        .and_then(|provider| provider(index))
+                },
                 |store, index, object| {
                     (config.renderer)(
                         index,

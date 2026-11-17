@@ -5,7 +5,7 @@ use crate::{
 };
 use fairygui_core::package::{FuiPackage, ObjectType};
 
-fn fixture(package: &str, bytes: &[u8], name: &str) -> (App, Entity, GObjectId, Entity) {
+pub(super) fn fixture(package: &str, bytes: &[u8], name: &str) -> (App, Entity, GObjectId, Entity) {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,

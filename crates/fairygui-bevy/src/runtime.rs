@@ -742,7 +742,8 @@ impl GuiRuntime {
                 tracing::warn!(?list, %url, "recursive list item reference rejected");
                 continue;
             }
-            let item = if let Some(item) = self.store.take_prepared_list_item(list, &template.url) {
+            let item = if let Some(item) = self.store.take_list_item_from_pool(list, &template.url)
+            {
                 self.remember_asset_tree(item, &template.handle);
                 Some(item)
             } else {

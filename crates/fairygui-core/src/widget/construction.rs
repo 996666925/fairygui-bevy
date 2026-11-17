@@ -226,7 +226,7 @@ impl BuildPlan {
                     let items = self.pool.split_off(start);
                     let object = store.create(kind);
                     // Prepared rows never enter the display hierarchy.
-                    store.cache_prepared_list_items(object, rows.into_iter().zip(items).collect());
+                    store.cache_list_item_pool(object, rows.into_iter().zip(items).collect());
                     store.object_mut(object).unwrap().source_package_id = Some(package);
                     object
                 }

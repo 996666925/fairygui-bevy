@@ -7,6 +7,7 @@ impl GuiRuntime {
         &mut self,
         list: GObjectId,
         count: usize,
+        mut provider: impl FnMut(usize) -> Option<String>,
         mut render: impl FnMut(&mut ObjectStore, usize, GObjectId),
     ) -> Result<(), GuiListContentError> {
         let Some(object) = self.store.object(list) else {
@@ -25,33 +26,61 @@ impl GuiRuntime {
             let package = object
                 .source_package_id()
                 .and_then(|id| self.registry.get_by_id(id))
-                .cloned()
-                .ok_or(GuiListContentError::MissingDefaultItem)?;
-            let reference = data
-                .default_item
-                .as_deref()
-                .ok_or(GuiListContentError::MissingDefaultItem)?;
-            let template = self
-                .resolve_template(&package, reference)
-                .ok_or(GuiListContentError::MissingDefaultItem)?;
-            let mut created = Vec::new();
-            for _ in rows.len()..count {
-                let Some(row) = self.create_template(&template) else {
-                    for row in created {
-                        self.store.remove(row);
+                .cloned();
+            let default = data.default_item.clone();
+            // Resolve every new row before acquiring objects. A missing late
+            // package or a panicking provider cannot leak detached candidates
+            // or partially replace the existing content.
+            let mut templates = Vec::new();
+            for index in rows.len()..count {
+                let provided = provider(index).filter(|url| !url.is_empty());
+                let reference = provided
+                    .as_ref()
+                    .or(default.as_ref())
+                    .ok_or(GuiListContentError::MissingDefaultItem)?;
+                let owner = package
+                    .as_ref()
+                    .or_else(|| self.registry.resolve_url(reference).map(|(owner, _)| owner));
+                let template = owner
+                    .and_then(|owner| self.resolve_template(owner, reference))
+                    .ok_or_else(|| {
+                        if provided.is_some() {
+                            GuiListContentError::MissingResource(reference.clone())
+                        } else {
+                            GuiListContentError::MissingDefaultItem
+                        }
+                    })?;
+                templates.push(template);
+            }
+            let mut created: Vec<(GObjectId, bool)> = Vec::new();
+            for template in templates {
+                let pooled = self.store.take_list_item_from_pool(list, &template.url);
+                let row = pooled.or_else(|| self.create_template(&template));
+                let Some(row) = row else {
+                    for (row, from_pool) in created {
+                        if !from_pool || !self.store.return_list_item_to_pool(list, row) {
+                            self.store.remove(row);
+                        }
                     }
                     return Err(GuiListContentError::CreationFailed(template.url));
                 };
-                self.prepare_subtree(&template.package, row);
-                created.push(row);
+                let needs_preparation = pooled.is_none() || !self.object_assets.contains_key(&row);
+                self.remember_asset_tree(row, &template.handle);
+                if needs_preparation {
+                    self.prepare_subtree(&template.package, row);
+                }
+                created.push((row, pooled.is_some()));
             }
-            for row in created {
+            for (row, _) in created {
+                self.store.set_visible(row, true);
                 self.store.set_parent(row, Some(list));
                 rows.push(row);
             }
         }
         for row in rows.drain(count.min(rows.len())..) {
-            self.store.remove(row);
+            if !self.store.return_list_item_to_pool(list, row) {
+                self.store.remove(row);
+            }
         }
         for (index, row) in rows.into_iter().enumerate() {
             render(&mut self.store, index, row);
