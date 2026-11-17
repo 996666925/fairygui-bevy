@@ -764,9 +764,11 @@ impl GuiObjectMut<'_> {
         let valid = matches!(runtime.store().object(object).map(|o|o.control()),Some(ControlData::Tree(data)) if index<data.node_count());
         if valid {
             runtime.expand_tree_to(object, index);
-            runtime
-                .store_mut()
-                .add_list_selection_with_scroll(object, index, scroll_to_view);
+            if let Some(visible) = runtime.store().tree_visible_index_of_node(object, index) {
+                runtime
+                    .store_mut()
+                    .add_list_selection_with_scroll(object, visible, scroll_to_view);
+            }
         }
     }
     /// Select a node by its current visible GTree child index.
@@ -781,8 +783,13 @@ impl GuiObjectMut<'_> {
         };
         runtime.expand_tree_to(object, index);
         runtime
-            .store_mut()
-            .add_list_selection_with_scroll(object, index, scroll_to_view)
+            .store()
+            .tree_visible_index_of_node(object, index)
+            .is_some_and(|visible| {
+                runtime
+                    .store_mut()
+                    .add_list_selection_with_scroll(object, visible, scroll_to_view)
+            })
     }
     /// Lock a scroll header in logical pixels; zero releases it. Call in Respond
     /// to set the boundary before the first release animation tick. Returns

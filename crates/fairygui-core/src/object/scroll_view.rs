@@ -134,7 +134,7 @@ impl ObjectStore {
                 .item_rect(index)
                 .is_some_and(|rect| self.scroll_rect_to_view(list, rect, animated, set_first));
         }
-        let Some(item) = self.list_item_at(list, index) else {
+        let Some(item) = self.list_selection_row(list, index) else {
             return false;
         };
         self.layout_list(list);

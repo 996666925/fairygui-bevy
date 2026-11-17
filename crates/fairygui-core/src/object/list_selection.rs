@@ -13,6 +13,34 @@ mod tests;
 mod navigation_tests;
 
 impl ObjectStore {
+    pub(super) fn list_selection_rows(&self, list: GObjectId) -> Option<Vec<(usize, GObjectId)>> {
+        let ControlData::Tree(data) = self.object(list)?.control() else {
+            return Some(self.list_items(list)?.into_iter().enumerate().collect());
+        };
+        Some(
+            data.visible_nodes()
+                .iter()
+                .enumerate()
+                .filter_map(|(visible, &node)| {
+                    self.list_item_at(list, node)
+                        .map(|object| (visible, object))
+                })
+                .collect(),
+        )
+    }
+
+    pub(super) fn list_selection_row(&self, list: GObjectId, index: usize) -> Option<GObjectId> {
+        if matches!(
+            self.object(list).map(|object| object.control()),
+            Some(ControlData::Tree(_))
+        ) {
+            self.tree_node_at_visible_index(list, index)
+                .and_then(|node| self.list_item_at(list, node))
+        } else {
+            self.list_item_at(list, index)
+        }
+    }
+
     /// Explicit GList.handleArrowKey navigation. Starts at the first selected
     /// index, replaces the selection and reveals the destination without
     /// synthesizing click/state events. No selection or a boundary is a no-op.
@@ -53,9 +81,9 @@ impl ObjectStore {
             (layout, direction),
             (FlowHorizontal | Pagination, Up | Down) | (FlowVertical, Left | Right)
         ) {
-            let rows = self.list_items(list).unwrap();
+            let rows = self.list_selection_rows(list).unwrap();
             let coordinate = |i: usize| {
-                let row = self.object(*rows.get(i)?)?;
+                let row = self.object(rows.get(i)?.1)?;
                 Some(if layout == FlowVertical {
                     row.x()
                 } else {
@@ -157,10 +185,9 @@ impl ObjectStore {
             return Some(result);
         }
         Some(
-            self.list_items(list)?
+            self.list_selection_rows(list)?
                 .into_iter()
-                .enumerate()
-                .filter_map(|(i, id)| (self.button_selected(id) == Some(true)).then_some(i))
+                .filter_map(|(index, id)| (self.button_selected(id) == Some(true)).then_some(index))
                 .collect(),
         )
     }
@@ -363,7 +390,7 @@ impl ObjectStore {
             row.selected = selected;
             row.object
         } else {
-            self.list_item_at(list, index)
+            self.list_selection_row(list, index)
         };
         item.is_some_and(|item| {
             let needs_setter = self
@@ -447,10 +474,10 @@ impl ObjectStore {
             self.finish_list_selection(list, outer);
             return self.list_selections(list) != before;
         }
-        let children = self.list_items(list).unwrap();
+        let children = self.list_selection_rows(list).unwrap();
         let mut changed = false;
         let mut last = None;
-        for (index, item) in children.into_iter().enumerate() {
+        for (index, item) in children {
             let selected = !reverse || self.button_selected(item) != Some(true);
             if self.set_button_selected(item, selected) {
                 changed = true;
@@ -496,6 +523,17 @@ impl ObjectStore {
         let data = self.list_data(list).unwrap();
         let mode = data.selection_mode;
         let anchor = data.last_selected_index;
+        let index = if matches!(
+            self.object(list).map(|object| object.control()),
+            Some(ControlData::Tree(_))
+        ) {
+            let Some(index) = self.tree_visible_index_of_node(list, index) else {
+                return false;
+            };
+            index
+        } else {
+            index
+        };
         if mode == ListSelectionMode::None || self.button_selected(item).is_none() {
             return false;
         }

@@ -375,7 +375,14 @@ pub(crate) fn sync_tree_state(
             selected: runtime
                 .store()
                 .list_selections(reference.0)
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|index| {
+                    runtime
+                        .store()
+                        .tree_node_at_visible_index(reference.0, index)
+                })
+                .collect(),
             indent: data.indent,
             click_to_expand: data.click_to_expand,
         };

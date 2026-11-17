@@ -148,3 +148,64 @@ fn tree_visible_indices_map_to_stable_nodes_and_skip_collapsed_descendants() {
     assert_eq!(store.tree_visible_index_of_node(tree, 2), Some(1));
     assert_eq!(store.tree_visible_index_of_node(tree, 3), Some(2));
 }
+
+#[test]
+fn tree_selection_uses_visible_indices_and_shift_ranges_skip_collapsed_rows() {
+    let mut store = ObjectStore::new();
+    let tree = store.create(ObjectType::Tree);
+    let ControlData::Tree(data) = &mut store.objects[tree].control else {
+        unreachable!()
+    };
+    data.nodes = vec![
+        TreeNodeData {
+            is_folder: true,
+            level: 0,
+            ..Default::default()
+        },
+        TreeNodeData {
+            level: 1,
+            ..Default::default()
+        },
+        TreeNodeData {
+            is_folder: true,
+            level: 0,
+            ..Default::default()
+        },
+        TreeNodeData {
+            level: 1,
+            ..Default::default()
+        },
+    ];
+    data.expanded = vec![false, true, true, true];
+    data.list.selection_mode = crate::widget::ListSelectionMode::Multiple;
+    let rows: Vec<_> = (0..4)
+        .map(|_| {
+            let row = store.create(ObjectType::Button);
+            store.object_mut(row).unwrap().control =
+                ControlData::Button(Box::new(crate::widget::ButtonData {
+                    mode: crate::widget::ButtonMode::Check,
+                    ..Default::default()
+                }));
+            store.set_parent(row, Some(tree));
+            row
+        })
+        .collect();
+    store.initialize_tree_cells(tree);
+
+    assert_eq!(store.list_num_items(tree), 3);
+    assert!(store.add_list_selection(tree, 1));
+    assert_eq!(store.list_selections(tree), Some(vec![1]));
+    assert_eq!(store.button_selected(rows[2]), Some(true));
+    assert_eq!(store.button_selected(rows[1]), Some(false));
+
+    assert!(store.select_clicked_item_with_modifiers(rows[3], true, false));
+    assert_eq!(store.list_selections(tree), Some(vec![1, 2]));
+    assert_eq!(store.button_selected(rows[2]), Some(true));
+    assert_eq!(store.button_selected(rows[3]), Some(true));
+    assert_eq!(store.button_selected(rows[1]), Some(false));
+
+    assert!(store.set_tree_node_expanded(tree, 2, false));
+    assert_eq!(store.list_num_items(tree), 2);
+    assert_eq!(store.list_selections(tree), Some(vec![1]));
+    assert_eq!(store.button_selected(rows[3]), Some(false));
+}

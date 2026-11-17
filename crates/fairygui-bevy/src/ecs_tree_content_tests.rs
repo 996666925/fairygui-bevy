@@ -74,10 +74,12 @@ fn writable_tree_selection_waits_for_keyed_content_without_expanding_collapsed_f
         .insert((config(), GuiListSelection(vec![1])));
     app.update();
     let file = view(&app, tree, "file");
+    let other = view(&app, tree, "other");
     let state = app.world().get::<GuiTreeState>(tree).unwrap();
     assert_eq!(state.visible_nodes(), [0, 2]);
-    assert_eq!(state.selected_nodes(), [1]);
-    assert!(app.world().get::<GuiButtonSelected>(file).unwrap().0);
+    assert_eq!(state.selected_nodes(), [2]);
+    assert!(!app.world().get::<GuiButtonSelected>(file).unwrap().0);
+    assert!(app.world().get::<GuiButtonSelected>(other).unwrap().0);
 
     let mut updated = config();
     updated.items.swap(0, 1);

@@ -1468,7 +1468,8 @@ fn register(app: &mut App) {
 节点逻辑索引在展开/收起间保持稳定；`node_at_visible_index` 和
 `visible_index_of_node` 可在稳定索引与原版可见子项索引间转换。树的
 `GuiListItemClick.index` 使用当前可见子项索引，`select_tree_visible_node` 可按该索引选择；
-`select_tree_node` 仍接受稳定逻辑索引。收起的行保留实体但隐藏并从布局中折叠。
+通用列表选择 API 与 `GuiListSelection` 对树也使用可见子项索引。`select_tree_node` 和
+`GuiTreeState.selected_nodes()` 仍使用稳定逻辑索引。收起的行保留实体但隐藏并从布局中折叠。
 
 ```rust,ignore
 gui_edit.edit(tree, |object: &mut GuiObjectMut| object.collapse_tree());

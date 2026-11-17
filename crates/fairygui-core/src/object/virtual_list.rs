@@ -143,9 +143,15 @@ impl ObjectStore {
             .position(|e| e.object == Some(object))
     }
     pub fn list_num_items(&self, list: GObjectId) -> usize {
-        self.virtual_states
-            .get(&list)
-            .map_or_else(|| self.list_item_count(list), |s| s.num_items)
+        if let Some(state) = self.virtual_states.get(&list) {
+            state.num_items
+        } else if let Some(crate::widget::ControlData::Tree(data)) =
+            self.object(list).map(|object| object.control())
+        {
+            data.visible_nodes().len()
+        } else {
+            self.list_item_count(list)
+        }
     }
     pub fn list_first_item_in_view(&self, list: GObjectId) -> Option<usize> {
         let rows = self.list_items(list)?;
