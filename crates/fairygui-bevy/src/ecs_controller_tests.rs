@@ -112,6 +112,15 @@ fn delayed_initial_pages_apply_before_initialize_and_publish_exported_metadata()
 
 #[test]
 fn component_edits_preserve_indirect_controller_changes_and_native_gear_tweens() {
+    #[derive(Resource, Default)]
+    struct GeometryEvents(Vec<fairygui_core::object::EventKind>);
+    fn xy(event: On<GuiXyChanged>, mut seen: ResMut<GeometryEvents>) {
+        seen.0.push(event.event.kind.clone());
+    }
+    fn size(event: On<GuiSizeChanged>, mut seen: ResMut<GeometryEvents>) {
+        seen.0.push(event.event.kind.clone());
+    }
+
     let (mut app, owner, _) = fixture("Demo_Controller", true);
     let view = app.world().get::<GuiRootView>(owner).unwrap().0;
     let button = child(&mut app, owner, "n11");
@@ -131,6 +140,8 @@ fn component_edits_preserve_indirect_controller_changes_and_native_gear_tweens()
     assert!(app.world().get::<GuiButtonSelected>(button).unwrap().0);
     let object = app.world().get::<GuiRootInstance>(owner).unwrap().object;
     let graph = child(&mut app, owner, "n3");
+    app.init_resource::<GeometryEvents>();
+    app.world_mut().entity_mut(graph).observe(xy).observe(size);
     app.world_mut()
         .non_send_mut::<GuiRuntime>()
         .store_mut()
@@ -139,6 +150,18 @@ fn component_edits_preserve_indirect_controller_changes_and_native_gear_tweens()
     let transform = app.world().get::<GuiTransform>(graph).unwrap();
     assert_eq!(transform.position, Vec2::new(60., 328.));
     assert_eq!(transform.size, Vec2::new(196., 174.));
+    assert!(
+        app.world()
+            .resource::<GeometryEvents>()
+            .0
+            .contains(&fairygui_core::object::EventKind::XyChanged)
+    );
+    assert!(
+        app.world()
+            .resource::<GeometryEvents>()
+            .0
+            .contains(&fairygui_core::object::EventKind::SizeChanged)
+    );
     // A later direct native page change must be published, never undone by a
     // component whose c1 field was untouched during this update.
     app.world_mut()

@@ -481,10 +481,7 @@ impl GuiObjectMut<'_> {
         let runtime = &mut *self.runtime;
         let object = self.object;
         if position.is_finite() {
-            let previous_position = runtime.store().position_of(object);
-            let previous_size = runtime.store().size_of(object);
             runtime.store_mut().set_xy(object, position.x, position.y);
-            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_size_constraints(&mut self, constraints: crate::GuiSizeConstraints) {
@@ -499,30 +496,21 @@ impl GuiObjectMut<'_> {
         if width.is_finite() && width >= 0. {
             let runtime = &mut *self.runtime;
             let object = self.object;
-            let previous_position = runtime.store().position_of(object);
-            let previous_size = runtime.store().size_of(object);
             runtime.store_mut().set_width(object, width);
-            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_height(&mut self, height: f32) {
         if height.is_finite() && height >= 0. {
             let runtime = &mut *self.runtime;
             let object = self.object;
-            let previous_position = runtime.store().position_of(object);
-            let previous_size = runtime.store().size_of(object);
             runtime.store_mut().set_height(object, height);
-            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_size(&mut self, size: Vec2) {
         let runtime = &mut *self.runtime;
         let object = self.object;
         if size.is_finite() && size.min_element() >= 0.0 {
-            let previous_position = runtime.store().position_of(object);
-            let previous_size = runtime.store().size_of(object);
             runtime.store_mut().set_size(object, size.x, size.y);
-            runtime.dispatch_geometry_changes(object, previous_position, previous_size);
         }
     }
     pub fn set_visible(&mut self, visible: bool) {

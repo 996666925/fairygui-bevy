@@ -472,6 +472,7 @@ fn on_item(event: On<GuiListItemClick>, gui: GuiQuery) {
 | 按下、拖动、松开 | `On<GuiMouseDown>`、`On<GuiMouseDrag>`、`On<GuiMouseUp>` |
 | 触摸开始、移动、结束 | `On<GuiTouchBegin>`、`On<GuiTouchMove>`、`On<GuiTouchEnd>` |
 | 悬停进入、离开 | `On<GuiRollOver>`、`On<GuiRollOut>` |
+| 位置、尺寸变化 | `On<GuiXyChanged>`、`On<GuiSizeChanged>` |
 | 按钮、下拉框、滑块的值变化 | `On<GuiStateChanged>` |
 | 滚动、滚动结束 | `On<GuiScroll>`、`On<GuiScrollEnd>` |
 | 下拉刷新、上拉刷新 | `On<GuiPullDownRelease>`、`On<GuiPullUpRelease>` |

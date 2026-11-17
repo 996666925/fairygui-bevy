@@ -9,6 +9,14 @@ pub(crate) trait Property:
     Component<Mutability = bevy::ecs::component::Mutable> + Clone + PartialEq
 {
     fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self>;
+    fn changed(
+        _entity: Entity,
+        _previous: &Self,
+        _current: &Self,
+        _runtime: &mut GuiRuntime,
+        _object: GObjectId,
+    ) {
+    }
     /// Keep application writes pending while dependent content is prepared.
     fn ready(_world: &World, _entity: Entity, _object: GObjectId) -> bool {
         true
@@ -243,6 +251,18 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
             } else {
                 native
             };
+            if let Some((_, previous_projection)) = stored
+                .as_ref()
+                .filter(|(id, previous)| *id == object && *previous != next)
+            {
+                T::changed(
+                    entity,
+                    previous_projection,
+                    &next,
+                    &mut world.get_non_send_mut::<GuiRuntime>().unwrap(),
+                    object,
+                );
+            }
             if value.as_ref() != Some(&next) {
                 world.entity_mut(entity).insert(next.clone());
             }
@@ -330,9 +350,30 @@ impl Property for GuiTransform {
     fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
         runtime.store().object(object).map(Self::from_object)
     }
+    fn changed(
+        entity: Entity,
+        previous: &Self,
+        current: &Self,
+        runtime: &mut GuiRuntime,
+        object: GObjectId,
+    ) {
+        if runtime.entity_of(object).is_some_and(|view| view != entity) {
+            return;
+        }
+        if previous.position != current.position {
+            runtime.dispatch_direct_event(fairygui_core::object::UiEvent::new(
+                fairygui_core::object::EventKind::XyChanged,
+                object,
+            ));
+        }
+        if previous.size != current.size {
+            runtime.dispatch_direct_event(fairygui_core::object::UiEvent::new(
+                fairygui_core::object::EventKind::SizeChanged,
+                object,
+            ));
+        }
+    }
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
-        let previous_position = runtime.store().position_of(object);
-        let previous_size = runtime.store().size_of(object);
         // A write to one axis retains the other requested axis, even when the
         // previous frame projected a clamped size there.
         if self.size != previous.size && self.size.is_finite() && self.size.min_element() >= 0. {
@@ -393,7 +434,6 @@ impl Property for GuiTransform {
                 runtime.store_mut().set_rotation(object, self.rotation);
             }
         });
-        runtime.dispatch_geometry_changes(object, previous_position, previous_size);
     }
 }
 impl Property for GuiDisplay {

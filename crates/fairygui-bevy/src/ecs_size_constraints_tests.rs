@@ -104,11 +104,7 @@ fn ecs_geometry_retains_the_other_requested_axis_and_restores_size_after_limits_
         Size::new(450., 200.)
     );
     app.update();
-    assert_eq!(
-        app.world().resource::<Seen>().0,
-        [fairygui_core::object::EventKind::SizeChanged]
-    );
-    app.world_mut().resource_mut::<Seen>().0.clear();
+    assert!(app.world().resource::<Seen>().0.is_empty());
     app.world_mut()
         .entity_mut(owner)
         .insert(GuiSizeConstraints::default());
