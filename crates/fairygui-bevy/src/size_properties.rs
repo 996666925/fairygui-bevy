@@ -47,6 +47,8 @@ impl Property for GuiSizeConstraints {
                 max[axis] = native.max[axis];
             }
         }
+        let previous_position = runtime.store().position_of(id);
+        let previous_size = runtime.store().size_of(id);
         runtime.store_mut().set_size_constraints(
             id,
             SizeConstraints {
@@ -54,6 +56,7 @@ impl Property for GuiSizeConstraints {
                 max: Size::new(max.x, max.y),
             },
         );
+        runtime.dispatch_geometry_changes(id, previous_position, previous_size);
     }
 }
 

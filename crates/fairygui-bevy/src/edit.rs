@@ -491,12 +491,9 @@ impl GuiObjectMut<'_> {
         use crate::properties::Property;
         let object = self.object;
         let runtime = &mut *self.runtime;
-        let previous_position = runtime.store().position_of(object);
-        let previous_size = runtime.store().size_of(object);
         if let Some(native) = crate::GuiSizeConstraints::read(runtime, object) {
             constraints.apply(&native, &native, runtime, object);
         }
-        runtime.dispatch_geometry_changes(object, previous_position, previous_size);
     }
     pub fn set_width(&mut self, width: f32) {
         if width.is_finite() && width >= 0. {
