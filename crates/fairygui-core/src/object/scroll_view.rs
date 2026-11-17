@@ -120,18 +120,9 @@ impl ObjectStore {
         ) {
             return false;
         }
-        if let Some(state) = self.virtual_states.get(&list) {
-            if index >= state.num_items {
-                return false;
-            }
-            let index = if state.looping && state.num_items > 0 {
-                state.geometry.first / state.num_items * state.num_items + index
-            } else {
-                index
-            };
-            return state
-                .geometry
-                .item_rect(index)
+        if self.virtual_states.contains_key(&list) {
+            return self
+                .virtual_item_rect(list, index)
                 .is_some_and(|rect| self.scroll_rect_to_view(list, rect, animated, set_first));
         }
         let Some(item) = self.list_selection_row(list, index) else {

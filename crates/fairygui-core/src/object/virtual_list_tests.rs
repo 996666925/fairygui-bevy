@@ -114,6 +114,25 @@ fn writable_layout_refreshes_virtual_geometry_and_rejects_invalid_live_changes()
 }
 
 #[test]
+fn virtual_item_rect_exposes_cached_content_geometry_without_materializing_the_row() {
+    let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, false, false);
+    let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24.25, 19.5));
+    store.enable_virtual_list(list, "a", &mut create).unwrap();
+    store.set_virtual_item_count(list, 100).unwrap();
+
+    assert_eq!(store.virtual_item_object(list, 75), None);
+    assert_eq!(
+        store.virtual_item_rect(list, 75),
+        Some(crate::Rect::new(0., 75. * 21.5, 24.25, 19.5))
+    );
+    assert_eq!(store.virtual_item_rect(list, 100), None);
+    assert_eq!(store.virtual_item_rect(list, usize::MAX), None);
+    let stale = store.create(crate::package::ObjectType::Component);
+    store.remove(stale);
+    assert_eq!(store.virtual_item_rect(stale, 0), None);
+}
+
+#[test]
 fn virtual_rows_match_native_layout_pool_identity_measurement_and_selection_traces() {
     let lines: Vec<_> = include_str!("../../tests/fixtures/virtual-list-reference.txt")
         .lines()

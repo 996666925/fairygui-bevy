@@ -153,6 +153,24 @@ impl ObjectStore {
             self.list_item_count(list)
         }
     }
+
+    /// Current cached content-coordinate rectangle for a logical virtual item.
+    /// Offscreen rows use the retained measurement when available and the
+    /// template size otherwise. Loop lists resolve the logical row in the
+    /// sixfold record cycle containing the current first record.
+    pub fn virtual_item_rect(&self, list: GObjectId, index: usize) -> Option<crate::geom::Rect> {
+        let state = self.virtual_states.get(&list)?;
+        if index >= state.num_items || state.num_items == 0 {
+            return None;
+        }
+        let record = if state.looping {
+            state.geometry.first / state.num_items * state.num_items + index
+        } else {
+            index
+        };
+        state.geometry.item_rect(record)
+    }
+
     pub fn list_first_item_in_view(&self, list: GObjectId) -> Option<usize> {
         let rows = self.list_items(list)?;
         let child = rows.iter().position(|&id| {

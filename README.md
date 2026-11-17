@@ -759,6 +759,8 @@ gui.scroll_object_to_view(container, target, true, false);
 滚动偏移；目标自身缩放不参与直属外框计算。动画先设置逻辑终点，再逐帧更新显示位置。
 独占系统使用 `World::gui_scroll_object_to_view`；离屏虚拟行仍用 `scroll_list_item_to_view`
 的逻辑索引。`--smoke-scroll-view` 验证实体定位后的动画、可见行、裁剪和实际点击。
+需要查询行的内容坐标矩形时，`ObjectStore::virtual_item_rect(list, index)` 可读取缓存的虚拟行几何，
+无需实例化离屏行；循环列表返回当前六倍记录周期中的矩形。
 原有 `set_scroll_position` 直接设置
 位置，允许选择是否越界；动画是否进行中可通过 `is_animating()` 查询。
 

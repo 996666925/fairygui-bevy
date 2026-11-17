@@ -821,6 +821,11 @@ impl GuiObjectMut<'_> {
             .store_mut()
             .scroll_list_item_to_view(self.object, index, animated, false);
     }
+    /// Read a cached virtual-row rectangle in logical content coordinates.
+    /// Returns None for non-virtual lists or indices outside the logical count.
+    pub fn virtual_item_rect(&self, index: usize) -> Option<fairygui_core::Rect> {
+        self.runtime.store().virtual_item_rect(self.object, index)
+    }
     pub fn select_list_index(&mut self, index: usize, scroll_to_view: bool) {
         let runtime = &mut *self.runtime;
         let object = self.object;

@@ -3,6 +3,23 @@ use super::*;
 use std::cell::{Cell, RefCell};
 
 #[test]
+fn loop_virtual_item_rect_uses_the_current_sixfold_record_cycle() {
+    let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, false, false);
+    let mut factory = |store: &mut ObjectStore, _: &str| Some(button(store, 24.25, 19.5));
+    store
+        .enable_loop_virtual_list(list, "a", &mut factory)
+        .unwrap();
+    store.set_virtual_item_count(list, 10).unwrap();
+    let state = &store.virtual_states[&list];
+    let logical = 3;
+    let record = state.geometry.first / state.num_items * state.num_items + logical;
+    let expected = state.geometry.item_rect(record).unwrap();
+
+    assert_eq!(store.virtual_item_rect(list, logical), Some(expected));
+    assert_eq!(store.virtual_item_rect(list, 10), None);
+}
+
+#[test]
 fn loop_lists_match_native_sixfold_records_commands_drag_tweens_and_selection() {
     let lines: Vec<_> = include_str!("../../tests/fixtures/loop-list-reference.txt")
         .lines()

@@ -46,6 +46,25 @@ fn fixture() -> (App, GObjectId, GObjectId) {
 #[test]
 fn virtual_thousand_rows_refresh_automatically_retain_views_and_dispose_their_pool() {
     let (mut app, root, list) = fixture();
+    let list_view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(list)
+        .unwrap();
+    let distant = app
+        .world_mut()
+        .gui_mut(list_view)
+        .unwrap()
+        .virtual_item_rect(999)
+        .unwrap();
+    assert!(distant.y > 0. && distant.height > 0.);
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .virtual_item_object(list, 999),
+        None
+    );
     let (views, initial_objects) = {
         let gui = app.world().non_send::<GuiRuntime>();
         let info = gui.store().virtual_list_info(list).unwrap();
