@@ -2,6 +2,7 @@ use super::*;
 use crate::FairyGuiPlugin;
 use crate::ecs::{GuiDisplay, GuiObjectInfo, GuiQuery, GuiText, GuiTransform};
 use bevy::ecs::system::SystemState;
+use fairygui_core::object::EventKind;
 
 #[path = "ecs_async_root_tests.rs"]
 mod async_roots;
@@ -91,6 +92,35 @@ fn startup_root_properties_apply_before_the_first_view_is_spawned() {
     assert_eq!(
         app.world().get::<Visibility>(view),
         Some(&Visibility::Hidden)
+    );
+}
+
+#[test]
+fn direct_geometry_edits_publish_typed_xy_and_size_events() {
+    #[derive(Resource, Default)]
+    struct Seen(Vec<EventKind>);
+    fn xy(event: On<GuiXyChanged>, mut seen: ResMut<Seen>) {
+        seen.0.push(event.event.kind.clone());
+    }
+    fn size(event: On<GuiSizeChanged>, mut seen: ResMut<Seen>) {
+        seen.0.push(event.event.kind.clone());
+    }
+
+    let (mut app, asset) = app();
+    load(&mut app, &asset);
+    app.init_resource::<Seen>();
+    let owner = app.world_mut().spawn(FairyGuiRoot::new(asset, "Main")).id();
+    app.update();
+    let view = app.world().get::<GuiRootView>(owner).unwrap().0;
+    app.world_mut().entity_mut(view).observe(xy).observe(size);
+    send(&mut app, owner, |object| {
+        object.set_position(Vec2::new(37., 42.));
+        object.set_size(Vec2::new(700., 500.));
+    });
+    app.update();
+    assert_eq!(
+        app.world().resource::<Seen>().0,
+        vec![EventKind::XyChanged, EventKind::SizeChanged]
     );
 }
 
