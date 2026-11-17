@@ -1,6 +1,8 @@
 use super::*;
 use crate::GuiWorldExt as _;
-use crate::{FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiInput, GuiQuery, GuiVirtualList};
+use crate::{
+    FairyGuiPlugin, FairyGuiRoot, FuiAsset, GuiInput, GuiQuery, GuiTouchBegin, GuiVirtualList,
+};
 use bevy::ecs::system::SystemState;
 use bevy::window::PrimaryWindow;
 
@@ -108,6 +110,121 @@ fn move_to(app: &mut App, window: Entity, position: Vec2) {
         .set_cursor_position(Some(position));
     app.update();
 }
+
+#[test]
+fn additional_touch_windows_route_independently_from_the_selected_mouse_window() {
+    use bevy::input::touch::{TouchInput, TouchPhase};
+    use bevy::picking::{backend::HitData, hover::HoverMap};
+
+    #[derive(Resource, Default)]
+    struct TouchStarts(Vec<(u64, Entity)>);
+    fn started(event: On<GuiTouchBegin>, mut seen: ResMut<TouchStarts>) {
+        seen.0
+            .push((event.event().event.touch_id.unwrap(), event.entity));
+    }
+
+    let (mut app, primary_window, _list, rows) = fixture();
+    let mut secondary_window = Window {
+        focused: true,
+        ..default()
+    };
+    secondary_window.set_cursor_position(Some(Vec2::splat(200.)));
+    let secondary = app.world_mut().spawn(secondary_window).id();
+    app.init_resource::<TouchStarts>()
+        .init_resource::<HoverMap>();
+    app.world_mut().entity_mut(rows[0]).observe(started);
+    app.world_mut().resource_mut::<HoverMap>().insert(
+        PointerId::Touch(71),
+        [(
+            rows[0],
+            HitData::new(Entity::PLACEHOLDER, 0., Some(Vec3::ZERO), None),
+        )]
+        .into(),
+    );
+    app.world_mut().write_message(TouchInput {
+        id: 71,
+        window: secondary,
+        phase: TouchPhase::Started,
+        position: Vec2::splat(200.),
+        force: None,
+    });
+    app.update();
+    assert!(app.world().resource::<TouchStarts>().0.is_empty());
+
+    app.world_mut().resource_mut::<HoverMap>().insert(
+        PointerId::Touch(73),
+        [(
+            rows[0],
+            HitData::new(Entity::PLACEHOLDER, 0., Some(Vec3::ZERO), None),
+        )]
+        .into(),
+    );
+    app.world_mut().write_message(TouchInput {
+        id: 73,
+        window: primary_window,
+        phase: TouchPhase::Started,
+        position: Vec2::splat(200.),
+        force: None,
+    });
+    app.update();
+    assert_eq!(app.world().resource::<TouchStarts>().0, [(73, rows[0])]);
+
+    app.world_mut()
+        .resource_mut::<GuiInputSettings>()
+        .additional_touch_windows
+        .push(secondary);
+    app.world_mut().resource_mut::<HoverMap>().insert(
+        PointerId::Touch(72),
+        [(
+            rows[0],
+            HitData::new(Entity::PLACEHOLDER, 0., Some(Vec3::ZERO), None),
+        )]
+        .into(),
+    );
+    app.world_mut().write_message(TouchInput {
+        id: 72,
+        window: secondary,
+        phase: TouchPhase::Started,
+        position: Vec2::splat(200.),
+        force: None,
+    });
+    app.update();
+    assert_eq!(
+        app.world().resource::<TouchStarts>().0,
+        [(73, rows[0]), (72, rows[0])]
+    );
+    let captures = app.world().resource::<GuiInputState>().captures();
+    assert_eq!(
+        captures
+            .iter()
+            .filter_map(|capture| match capture.pointer() {
+                GuiPointerId::Touch(id) => Some((id, capture.window())),
+                GuiPointerId::Mouse(_) => None,
+            })
+            .collect::<Vec<_>>(),
+        [(72, secondary), (73, primary_window)]
+    );
+    app.world_mut()
+        .resource_mut::<GuiInputSettings>()
+        .additional_touch_windows
+        .clear();
+    app.update();
+    let captures = app.world().resource::<GuiInputState>().captures();
+    assert_eq!(
+        captures
+            .iter()
+            .find(|capture| capture.pointer() == GuiPointerId::Touch(72)),
+        None
+    );
+    assert_eq!(
+        captures
+            .iter()
+            .find(|capture| capture.pointer() == GuiPointerId::Touch(73))
+            .map(GuiPointerCapture::window),
+        Some(primary_window)
+    );
+}
+
 fn offset(app: &App, entity: Entity) -> Vec2 {
     app.world()
         .get::<crate::GuiScrollState>(entity)

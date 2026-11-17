@@ -86,18 +86,17 @@ pub(super) fn route_touches(
 ) {
     let views = &hover.views;
     let click_time = views.time_ms(&time);
-    let window = windows.iter().find(|(entity, _, primary)| {
-        settings
-            .window
-            .map_or(primary.is_some(), |chosen| chosen == *entity)
-    });
-    // Window focus/selection can change without a new OS touch message.
+    // Window focus/selection can change without a new OS touch message. Touch
+    // captures on explicitly enabled secondary windows remain independent.
     let cancelled: Vec<_> = state
         .touches
         .iter()
         .filter_map(|(&id, c)| {
-            window
-                .is_none_or(|(entity, w, _)| entity != c.window || !w.focused)
+            windows
+                .get(c.window)
+                .map_or(true, |(_, window, primary)| {
+                    !settings.accepts_touch_window(c.window, primary.is_some()) || !window.focused
+                })
                 .then_some(id)
         })
         .collect();
@@ -155,12 +154,16 @@ pub(super) fn route_touches(
         *counts.entry(event.id).or_default() += 1;
     }
     for event in samples {
-        let Some((window_entity, window, _)) = window else {
+        let Ok((window_entity, window, primary)) = windows.get(event.window) else {
             continue;
         };
-        if event.window != window_entity || !window.focused || !event.position.is_finite() {
+        if !settings.accepts_touch_window(window_entity, primary.is_some())
+            || !window.focused
+            || !event.position.is_finite()
+        {
             continue;
         }
+        let selected_window = settings.selects_window(window_entity, primary.is_some());
         let dt = time.delta_secs() / counts[&event.id] as f32;
         let position = event.position;
         let scale = window.scale_factor();
@@ -238,7 +241,8 @@ pub(super) fn route_touches(
                 .collect();
             let input = raw_hit
                 .filter(|(entity, owner, ..)| {
-                    (editors.contains(*entity) || views.inputs.contains(*entity))
+                    selected_window
+                        && (editors.contains(*entity) || views.inputs.contains(*entity))
                         && runtime.store().input_field_of(owner.0) == Some(owner.0)
                 })
                 .map(|(entity, ..)| entity);
@@ -264,7 +268,7 @@ pub(super) fn route_touches(
                         + editor.viewport.offset;
                     editor.queue_edit(bevy::text::TextEdit::MoveToPoint(point));
                 }
-            } else if runtime.focused_input().is_some() {
+            } else if selected_window && runtime.focused_input().is_some() {
                 focus.clear();
                 state.text_press = None;
             }

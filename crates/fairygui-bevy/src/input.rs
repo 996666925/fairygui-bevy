@@ -235,14 +235,26 @@ fn self_hit(
 pub struct GuiInputSettings {
     /// Input window; `None` selects the primary window.
     pub window: Option<Entity>,
+    /// Additional windows that may receive independent touch input.
+    pub additional_touch_windows: Vec<Entity>,
     pub drag_threshold: f32,
 }
 impl Default for GuiInputSettings {
     fn default() -> Self {
         Self {
             window: None,
+            additional_touch_windows: Vec::new(),
             drag_threshold: 6.0,
         }
+    }
+}
+impl GuiInputSettings {
+    pub(crate) fn selects_window(&self, entity: Entity, primary: bool) -> bool {
+        self.window.map_or(primary, |chosen| chosen == entity)
+    }
+
+    pub(crate) fn accepts_touch_window(&self, entity: Entity, primary: bool) -> bool {
+        self.selects_window(entity, primary) || self.additional_touch_windows.contains(&entity)
     }
 }
 

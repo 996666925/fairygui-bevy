@@ -110,10 +110,9 @@ pub(crate) fn sync_state(
     let window = windows
         .iter()
         .find(|(entity, _, primary)| settings.window.map_or(*primary, |chosen| chosen == *entity));
-    let active = window.is_some_and(|(_, window, _)| window.focused);
-    let mouse_active = active
-        && window
-            .is_some_and(|(_, window, _)| window.cursor_position().is_some_and(|p| p.is_finite()));
+    let mouse_active = window.is_some_and(|(_, window, _)| {
+        window.focused && window.cursor_position().is_some_and(|p| p.is_finite())
+    });
     let resolve = |object| {
         if !eligible(&runtime, object) {
             return None;
@@ -197,25 +196,27 @@ pub(crate) fn sync_state(
             );
         }
     }
-    if active {
-        let mut touches: Vec<_> = router.touches.iter().collect();
-        touches.sort_by_key(|(id, _)| **id);
-        for (&id, capture) in touches {
-            if window.is_some_and(|(entity, _, _)| entity == capture.window)
-                && eligible(&runtime, capture.target)
-                && capture.gesture.valid(&runtime)
-            {
-                push(
-                    GuiPointerId::Touch(id),
-                    capture.window,
-                    capture.target,
-                    capture.hovered.and_then(resolve),
-                    capture.start,
-                    capture.last,
-                    capture.dragged,
-                    capture.moved,
-                );
-            }
+    let mut touches: Vec<_> = router.touches.iter().collect();
+    touches.sort_by_key(|(id, _)| **id);
+    for (&id, capture) in touches {
+        if windows
+            .get(capture.window)
+            .is_ok_and(|(_, window, primary)| {
+                settings.accepts_touch_window(capture.window, primary) && window.focused
+            })
+            && eligible(&runtime, capture.target)
+            && capture.gesture.valid(&runtime)
+        {
+            push(
+                GuiPointerId::Touch(id),
+                capture.window,
+                capture.target,
+                capture.hovered.and_then(resolve),
+                capture.start,
+                capture.last,
+                capture.dragged,
+                capture.moved,
+            );
         }
     }
     next.focused = router.focused_entity.filter(|&entity| {

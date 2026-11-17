@@ -69,6 +69,9 @@ let template = ui::basics::WindowA::ITEM_NAME;
 `GuiSystems::Respond`，保证本帧点击在本帧同步到视图。`GuiClick` 等具体事件以 Bevy
 entity observer 事件形式发布；`GuiInputSettings` 配置拖动阈值与输入窗口，
 `GuiInputState` 提供悬停、指针捕获与游戏输入仲裁状态。
+鼠标、键盘和根节点窗口尺寸跟随 `window` 选择的窗口；其他窗口可加入
+`additional_touch_windows`，为按钮、列表和滚动等触摸交互提供独立捕获与命中路由。
+额外窗口不接管文本键盘焦点，文本编辑仍使用所选窗口。
 
 点击保存按下时的目标及祖先路径。原目标仍连接舞台时，即使抬起命中其他对象或空白，
 仍点击原目标；原目标已退场时，沿抬起目标的祖先查找按下路径中最近的在舞台对象。

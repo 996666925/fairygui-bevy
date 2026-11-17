@@ -941,8 +941,13 @@ immediately and continue using their relative cursor coordinates while captured.
 Wheel line units use the core scroll step; pixel units retain their pixel distance.
 Window and scroll drag deltas account for ancestor axis scaling.
 
-Use `GuiInputSettings` to change the threshold or select the input window (the
-primary window by default). `GuiInputState::hovered()`, `captured()`, and
+Use `GuiInputSettings` to change the threshold or select the mouse/keyboard
+window (the primary window by default). Add other window entities to
+`additional_touch_windows` to route independent touch pointers there as well;
+this enables touch interaction with controls, lists and scroll panes. Removing
+a window from this list cancels its active touch captures. Mouse, text keyboard
+focus and viewport sizing still use the selected window.
+`GuiInputState::hovered()`, `captured()`, and
 `wants_pointer_input()` let gameplay systems arbitrate pointer ownership after
 `GuiSystems::Input` without inspecting UI entities.
 
@@ -960,12 +965,13 @@ The standalone input router also resolves manually materialized GObjectRef views
 normal runtime mappings take precedence. The unused InteractionState marker was
 removed; application pointer history belongs on its own ECS components.
 Mouse captures retain their source window. Changing GuiInputSettings.window
-invalidates old captures without emitting a cross-window drag; cancellation Up
-notifications use the last position in the original window. Touch snapshots also
-exclude captures from a window that is no longer selected.
+invalidates old mouse captures without emitting a cross-window drag; cancellation
+Up notifications use the last position in the original window. Touch captures
+remain active on the selected or explicitly enabled touch windows and are cancelled
+when their window loses focus or is no longer enabled.
 
-The adapter routes one mouse pointer plus concurrent touch pointers within the
-selected UI window. Simultaneous input across multiple windows is not implemented.
+The adapter routes one mouse pointer within the selected UI window and concurrent
+touch pointers in that window and explicitly enabled additional touch windows.
 Touch hit candidates come from Bevy's latest completed picking pass, with per-event
 positions transformed into the node's local coordinates for geometry and gestures.
 Bevy remains responsible for rectangular hit geometry and clipping;
