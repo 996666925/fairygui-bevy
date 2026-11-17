@@ -75,7 +75,7 @@ pub struct GuiSliderValue(pub f64);
 pub struct GuiButtonSelected(pub bool);
 
 /// Global FairyGUI defaults captured by the next package construction pass.
-#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Resource, Debug, Default, Clone, PartialEq)]
 pub struct GuiConfig {
     /// Global scroll-pane defaults used while loading `.fui` components.
     pub scroll: fairygui_core::scroll::ScrollDefaults,
@@ -3864,7 +3864,7 @@ pub fn advance_async_builds(mut runtime: NonSendMut<GuiRuntime>, assets: Res<Ass
 
 pub fn sync_ui_config(config: Res<GuiConfig>, mut runtime: NonSendMut<GuiRuntime>) {
     if config.is_changed() {
-        runtime.set_scroll_defaults(config.scroll);
+        runtime.set_scroll_defaults(config.scroll.clone());
     }
 }
 

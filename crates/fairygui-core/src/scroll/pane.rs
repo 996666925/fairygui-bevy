@@ -93,7 +93,7 @@ impl ScrollBarDisplayType {
 }
 
 /// Global fallbacks used when a component's scroll block does not override them.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScrollDefaults {
     /// Fallback when the exported scroll block uses the Default bar mode.
     pub bar_display: ScrollBarDisplayType,
@@ -109,6 +109,10 @@ pub struct ScrollDefaults {
     pub paging_threshold: f64,
     /// Virtual-list item snap fraction, matching UIConfig.defaultScrollSnappingThreshold.
     pub snapping_threshold: f64,
+    /// Fallback vertical scrollbar URL when the export leaves it empty.
+    pub vertical_scroll_bar: Option<String>,
+    /// Fallback horizontal scrollbar URL when the export leaves it empty.
+    pub horizontal_scroll_bar: Option<String>,
 }
 
 impl Default for ScrollDefaults {
@@ -128,6 +132,8 @@ impl ScrollDefaults {
             deceleration_rate: 0.967,
             paging_threshold: 0.3,
             snapping_threshold: 0.1,
+            vertical_scroll_bar: None,
+            horizontal_scroll_bar: None,
         }
     }
 
@@ -355,8 +361,8 @@ impl ScrollPane {
             self.scroll_bar_margin.right = buffer.read_i32()? as f32;
         }
 
-        self.vertical_bar_res = buffer.read_s(table)?;
-        self.horizontal_bar_res = buffer.read_s(table)?;
+        self.vertical_bar_res = buffer.read_s(table)?.or(defaults.vertical_scroll_bar);
+        self.horizontal_bar_res = buffer.read_s(table)?.or(defaults.horizontal_scroll_bar);
         self.header_res = buffer.read_s(table)?;
         self.footer_res = buffer.read_s(table)?;
 

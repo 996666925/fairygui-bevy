@@ -126,7 +126,7 @@ impl PackageRegistry {
     }
 
     pub fn scroll_defaults(&self) -> ScrollDefaults {
-        self.scroll_defaults
+        self.scroll_defaults.clone()
     }
 
     pub fn set_scroll_defaults(&mut self, defaults: ScrollDefaults) {
@@ -150,7 +150,7 @@ impl PackageRegistry {
         LoadContext {
             branch_index: package.branch_index_of(&self.branch),
             content_scale_level: self.content_scale_level,
-            scroll_defaults: self.scroll_defaults,
+            scroll_defaults: self.scroll_defaults.clone(),
         }
     }
 

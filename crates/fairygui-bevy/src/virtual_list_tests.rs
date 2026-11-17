@@ -353,6 +353,7 @@ fn gui_config_is_captured_by_ecs_roots_without_rebuilding_existing_panes() {
         deceleration_rate: 0.91,
         paging_threshold: 0.4,
         snapping_threshold: 0.25,
+        ..fairygui_core::scroll::ScrollDefaults::default()
     };
 
     app.update();

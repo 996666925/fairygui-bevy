@@ -304,7 +304,11 @@ fn build_component(
         let saved = buffer.position();
         if buffer.seek(0, 7)? {
             let mut pane = crate::scroll::ScrollPane::default();
-            pane.setup_with_defaults(&mut buffer, package.string_table(), ctx.scroll_defaults)?;
+            pane.setup_with_defaults(
+                &mut buffer,
+                package.string_table(),
+                ctx.scroll_defaults.clone(),
+            )?;
             pane.set_view_size(crate::geom::Size::new(source_width, source_height));
             component.scroll_pane = Some(pane);
         }
@@ -390,7 +394,7 @@ fn build_component(
         } else if let Some((owner, source_index)) = source {
             let owner_ctx = LoadContext {
                 branch_index: owner.branch_index_of(&construction.branch),
-                ..*ctx
+                ..ctx.clone()
             };
             create_with_context(store, owner, source_index, &owner_ctx, construction)?
         } else {
@@ -491,7 +495,7 @@ fn build_component(
                         table,
                         child_pos,
                         true,
-                        ctx.scroll_defaults,
+                        ctx.scroll_defaults.clone(),
                     )?;
                 }
                 ControlData::Tree(data) => {
@@ -500,7 +504,7 @@ fn build_component(
                         &mut buffer,
                         table,
                         child_pos,
-                        ctx.scroll_defaults,
+                        ctx.scroll_defaults.clone(),
                     )?;
                 }
                 _ => {}

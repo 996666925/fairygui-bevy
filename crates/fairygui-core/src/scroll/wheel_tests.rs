@@ -136,6 +136,7 @@ fn scroll_setup_uses_global_defaults_only_when_the_export_keeps_defaults() {
                         deceleration_rate: 0.91,
                         paging_threshold: 0.45,
                         snapping_threshold: 0.25,
+                        ..ScrollDefaults::default()
                     };
                     let mut bytes = vec![1, exported_display];
                     bytes.extend_from_slice(&flags.to_be_bytes());
@@ -202,6 +203,35 @@ fn global_paging_threshold_changes_short_drag_page_snapping() {
     pane.set_paging_threshold(0.3);
     assert!(pane.set_pos_animated(0., 40., false));
     assert_eq!(pane.pos().y, 100.);
+}
+
+#[test]
+fn exported_scroll_bar_urls_override_global_fallbacks() {
+    let mut bytes = vec![1, 0];
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    bytes.push(0);
+    bytes.extend_from_slice(&0_u16.to_be_bytes());
+    bytes.extend_from_slice(&1_u16.to_be_bytes());
+    bytes.extend_from_slice(&65534_u16.to_be_bytes());
+    bytes.extend_from_slice(&65534_u16.to_be_bytes());
+
+    let mut table = StringTable::new();
+    table.push(Some("exported-vertical".into()));
+    table.push(Some("exported-horizontal".into()));
+    let defaults = ScrollDefaults {
+        vertical_scroll_bar: Some("default-vertical".into()),
+        horizontal_scroll_bar: Some("default-horizontal".into()),
+        ..ScrollDefaults::default()
+    };
+    let mut pane = ScrollPane::default();
+    pane.setup_with_defaults(&mut ByteBuffer::new(&bytes), &table, defaults)
+        .unwrap();
+
+    assert_eq!(pane.vertical_bar_res.as_deref(), Some("exported-vertical"));
+    assert_eq!(
+        pane.horizontal_bar_res.as_deref(),
+        Some("exported-horizontal")
+    );
 }
 
 #[test]

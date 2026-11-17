@@ -66,7 +66,7 @@ impl BuildPlan {
     ) -> Result<()> {
         let context = LoadContext {
             branch_index: package.branch_index_of(&self.branch),
-            ..*context
+            ..context.clone()
         };
         let source_index = index;
         let index = package.resolve_branch(index, &context);

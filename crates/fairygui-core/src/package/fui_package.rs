@@ -41,7 +41,7 @@ mod block {
 /// 加载上下文。
 ///
 /// 分支与内容缩放等级会影响资源的实际取用，因此解析依赖资源的接口都要带上它。
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LoadContext {
     /// 当前分支编号，`-1` 表示未启用分支。
     pub branch_index: i32,

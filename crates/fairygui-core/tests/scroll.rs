@@ -62,6 +62,8 @@ fn package_registry_scroll_defaults_reach_nested_component_and_list_panes() {
         deceleration_rate: 0.91,
         paging_threshold: 0.45,
         snapping_threshold: 0.25,
+        vertical_scroll_bar: Some("ui://Basics/VerticalScrollBar".into()),
+        horizontal_scroll_bar: Some("ui://Basics/HorizontalScrollBar".into()),
     });
 
     let mut list_panes = 0;
@@ -81,6 +83,14 @@ fn package_registry_scroll_defaults_reach_nested_component_and_list_panes() {
                 assert_eq!(pane.physics().deceleration_rate, 0.91);
                 assert_eq!(pane.paging_threshold(), 0.45);
                 assert_eq!(pane.snapping_threshold(), 0.25);
+                assert_eq!(
+                    pane.vertical_bar_res.as_deref(),
+                    Some("ui://Basics/VerticalScrollBar")
+                );
+                assert_eq!(
+                    pane.horizontal_bar_res.as_deref(),
+                    Some("ui://Basics/HorizontalScrollBar")
+                );
                 if matches!(
                     store.object(object).unwrap().control(),
                     fairygui_core::widget::ControlData::List(_)
