@@ -76,6 +76,51 @@ fn atlas_sampling_respects_rects_and_subpixels_without_neighbor_bleeding() {
 }
 
 #[test]
+fn overlapping_masks_union_coverage_without_counting_identical_masks_twice() {
+    let mut images = Assets::<Image>::default();
+    let mut atlas = image(128, UVec2::ONE);
+    atlas.sampler = bevy::image::ImageSampler::nearest();
+    let texture = images.add(atlas);
+    let mask = Mask {
+        texture: texture.id(),
+        rect: Rect::from_corners(Vec2::ZERO, Vec2::ONE),
+        position: Vec2::splat(0.5),
+        color: GuiColor::new(1., 0., 0., 1.),
+    };
+    let pixel = |masks: Vec<Mask>, images: &Assets<Image>| {
+        raster_tile(
+            &Projection {
+                section: 0,
+                line: 0,
+                members: vec![0],
+                strokes: masks,
+                fills: Vec::new(),
+                matrix: None,
+            },
+            Vec2::ZERO,
+            UVec2::ONE,
+            images,
+        )
+    };
+
+    assert_eq!(
+        pixel(vec![mask.clone(), mask.clone()], &images),
+        [255, 0, 0, 128],
+        "identical glyph geometry represents one covered shape"
+    );
+
+    let shifted = Mask {
+        position: Vec2::splat(0.6),
+        ..mask.clone()
+    };
+    assert_eq!(
+        pixel(vec![mask, shifted], &images),
+        [255, 0, 0, 192],
+        "distinct overlapping shapes contribute their combined coverage"
+    );
+}
+
+#[test]
 fn wide_commands_tile_with_identical_coverage_and_filter_after_composition() {
     let mut images = Assets::<Image>::default();
     let atlas = images.add(image(255, UVec2::new(TILE + 8, 2)));

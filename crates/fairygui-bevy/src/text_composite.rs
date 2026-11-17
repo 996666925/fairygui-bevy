@@ -224,7 +224,25 @@ fn raster_tile(group: &Projection, origin: Vec2, size: UVec2, images: &Assets<Im
         }
         for color in paints {
             let mut coverage = vec![0f32; count];
+            let mut applied = HashSet::new();
             for mask in masks.iter().filter(|m| m.color == color) {
+                // Repeated glyphs can produce the exact same positioned mask
+                // (for example a duplicated combining mark). A path union must
+                // count that geometry once, while distinct overlapping glyph
+                // masks contribute their shared subpixel coverage.
+                let bits = |value: f32| if value == 0. { 0 } else { value.to_bits() };
+                let identity = (
+                    mask.texture,
+                    bits(mask.rect.min.x),
+                    bits(mask.rect.min.y),
+                    bits(mask.rect.max.x),
+                    bits(mask.rect.max.y),
+                    bits(mask.position.x),
+                    bits(mask.position.y),
+                );
+                if !applied.insert(identity) {
+                    continue;
+                }
                 let Some(image) = images.get(mask.texture) else {
                     continue;
                 };
@@ -242,7 +260,8 @@ fn raster_tile(group: &Projection, origin: Vec2, size: UVec2, images: &Assets<Im
                     for x in start.x..end.x {
                         let uv = mask.rect.min + Vec2::new(x as f32 + 0.5, y as f32 + 0.5) - low;
                         let index = (y * size.x + x) as usize;
-                        coverage[index] = coverage[index].max(sample(image, mask.rect, uv));
+                        let next = sample(image, mask.rect, uv);
+                        coverage[index] += next * (1. - coverage[index]);
                     }
                 }
             }
