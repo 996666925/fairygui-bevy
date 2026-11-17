@@ -44,6 +44,127 @@ fn fixture() -> (App, GObjectId, GObjectId) {
 }
 
 #[test]
+fn renderer_panic_preserves_callbacks_new_row_assets_and_retryable_views() {
+    use std::{cell::Cell, rc::Rc};
+    for operation in ["enable", "configure", "refresh"] {
+        let (mut app, root, list) = fixture();
+        let fail = Rc::new(Cell::new(false));
+        let make_renderer = |label: &'static str| {
+            let fail = fail.clone();
+            move |store: &mut ObjectStore, index: usize, row: GObjectId| {
+                store.set_object_text(row, &format!("{label} {index}"));
+                if index >= 10 && fail.get() {
+                    std::panic::panic_any(String::from("virtual renderer failure"));
+                }
+            }
+        };
+        let created = {
+            let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+            gui.enable_virtual_list(
+                list,
+                make_renderer(if operation == "refresh" {
+                    "Recovered"
+                } else {
+                    "Previous"
+                }),
+            )
+            .unwrap();
+            let before: std::collections::HashSet<_> =
+                gui.store().iter().map(|(id, _)| id).collect();
+            gui.store_mut().set_size(list, 400., 3000.);
+            fail.set(true);
+            let panic =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match operation {
+                    "enable" => gui.enable_virtual_list(list, make_renderer("Recovered")),
+                    "configure" => gui.configure_ecs_virtual_list(
+                        list,
+                        1000,
+                        false,
+                        |_| None,
+                        make_renderer("Recovered"),
+                    ),
+                    "refresh" => gui.refresh_virtual_list(list).map(|_| ()),
+                    _ => unreachable!(),
+                }));
+            assert_eq!(
+                panic
+                    .unwrap_err()
+                    .downcast_ref::<String>()
+                    .map(String::as_str),
+                Some("virtual renderer failure")
+            );
+            assert!(gui.virtual_renderers.contains_key(&list), "{operation}");
+            assert_eq!(gui.store().list_item_count(list), 0, "{operation}");
+            let created: Vec<_> = gui
+                .store()
+                .iter()
+                .filter_map(|(id, _)| (!before.contains(&id)).then_some(id))
+                .collect();
+            assert!(
+                !created.is_empty(),
+                "{operation} must create rows before the panic"
+            );
+            assert!(
+                created.iter().all(|id| gui.object_assets.contains_key(id)),
+                "{operation}: every new row descendant retains its package"
+            );
+            fail.set(false);
+            created
+        };
+        app.update();
+        {
+            let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+            let rows = gui.store().list_items(list).unwrap();
+            assert!(rows.len() > 10, "{operation}");
+            for row in rows {
+                let index = gui.store().virtual_item_index(list, row).unwrap();
+                let ControlData::Button(button) = gui.store().object(row).unwrap().control() else {
+                    panic!("button row");
+                };
+                assert_eq!(button.title, format!("Recovered {index}"));
+                assert!(
+                    gui.entity_of(row).is_some(),
+                    "{operation}: recovered row view"
+                );
+            }
+            gui.store_mut().remove(root);
+        }
+        app.update();
+        let gui = app.world().non_send::<GuiRuntime>();
+        assert!(!gui.virtual_renderers.contains_key(&list));
+        assert!(
+            created
+                .iter()
+                .all(|&id| !gui.store().contains(id) && gui.entity_of(id).is_none())
+        );
+    }
+}
+
+#[test]
+fn provider_panic_preserves_the_registered_provider_for_the_next_refresh() {
+    use std::{cell::Cell, rc::Rc};
+    let (mut app, _, list) = fixture();
+    let fail = Rc::new(Cell::new(true));
+    let calls = Rc::new(Cell::new(0));
+    let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+    let provider_fail = fail.clone();
+    let provider_calls = calls.clone();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        gui.set_virtual_item_provider(list, move |_| {
+            provider_calls.set(provider_calls.get() + 1);
+            assert!(!provider_fail.get(), "virtual provider failure");
+            None
+        })
+    }));
+    assert!(panic.is_err());
+    fail.set(false);
+    let before = calls.get();
+    assert!(gui.refresh_virtual_list(list).unwrap() > 0);
+    assert!(calls.get() > before, "retry invokes the retained provider");
+    assert!(gui.virtual_list_error(list).is_none());
+}
+
+#[test]
 fn virtual_thousand_rows_refresh_automatically_retain_views_and_dispose_their_pool() {
     let (mut app, root, list) = fixture();
     let list_view = app

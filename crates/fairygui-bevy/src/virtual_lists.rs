@@ -1,6 +1,7 @@
 //! Automatic, synchronous visible-row rendering with retained per-list pools.
 use super::*;
 use fairygui_core::object::{VirtualItemProvider, VirtualItemRenderer, VirtualListError};
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 
 pub(super) struct VirtualCallbacks {
     renderer: Box<VirtualItemRenderer<'static>>,
@@ -35,19 +36,13 @@ impl GuiRuntime {
         looping: bool,
         renderer: impl FnMut(&mut ObjectStore, usize, GObjectId) + 'static,
     ) -> Result<(), VirtualListError> {
-        let mut callbacks = VirtualCallbacks {
+        let callbacks = VirtualCallbacks {
             renderer: Box::new(renderer),
             provider: Box::new(|_| None),
             error: None,
         };
-        let result = self.render_virtual_rows(list, &mut callbacks, Some(looping), None);
-        callbacks.error = result.as_ref().err().cloned();
-        if self.store.is_virtual_list(list)
-            && !matches!(result, Err(VirtualListError::LoopModeMismatch))
-        {
-            self.virtual_renderers.insert(list, callbacks);
-        }
-        result.map(|_| ())
+        self.run_virtual_callbacks(list, callbacks, Some(looping), None)
+            .map(|_| ())
     }
 
     pub(crate) fn configure_ecs_virtual_list(
@@ -58,19 +53,13 @@ impl GuiRuntime {
         provider: impl FnMut(usize) -> Option<String> + 'static,
         renderer: impl FnMut(&mut ObjectStore, usize, GObjectId) + 'static,
     ) -> Result<(), VirtualListError> {
-        let mut callbacks = VirtualCallbacks {
+        let callbacks = VirtualCallbacks {
             renderer: Box::new(renderer),
             provider: Box::new(provider),
             error: None,
         };
-        let result = self.render_virtual_rows(list, &mut callbacks, Some(looping), Some(count));
-        callbacks.error = result.as_ref().err().cloned();
-        if self.store.is_virtual_list(list)
-            && !matches!(result, Err(VirtualListError::LoopModeMismatch))
-        {
-            self.virtual_renderers.insert(list, callbacks);
-        }
-        result.map(|_| ())
+        self.run_virtual_callbacks(list, callbacks, Some(looping), Some(count))
+            .map(|_| ())
     }
 
     pub(crate) fn clear_ecs_virtual_list(&mut self, list: GObjectId) {
@@ -123,16 +112,37 @@ impl GuiRuntime {
     /// Refresh after direct scroll/layout mutations. The frame pipeline also
     /// does this automatically before spawning and mirroring row views.
     pub fn refresh_virtual_list(&mut self, list: GObjectId) -> Result<usize, VirtualListError> {
-        let mut callbacks = self
+        let callbacks = self
             .virtual_renderers
             .remove(&list)
             .ok_or(VirtualListError::MissingPane)?;
-        let result = self.render_virtual_rows(list, &mut callbacks, None, None);
-        callbacks.error = result.as_ref().err().cloned();
-        if self.store.is_virtual_list(list) {
+        self.run_virtual_callbacks(list, callbacks, None, None)
+    }
+
+    fn run_virtual_callbacks(
+        &mut self,
+        list: GObjectId,
+        mut callbacks: VirtualCallbacks,
+        enable: Option<bool>,
+        count: Option<usize>,
+    ) -> Result<usize, VirtualListError> {
+        // A caller may catch a user callback's panic. Retain the actual callback
+        // state so retry cannot silently lose the renderer/provider registration.
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            self.render_virtual_rows(list, &mut callbacks, enable, count)
+        }));
+        if let Ok(result) = &result {
+            callbacks.error = result.as_ref().err().cloned();
+        }
+        if self.store.is_virtual_list(list)
+            && !matches!(&result, Ok(Err(VirtualListError::LoopModeMismatch)))
+        {
             self.virtual_renderers.insert(list, callbacks);
         }
-        result
+        match result {
+            Ok(result) => result,
+            Err(payload) => resume_unwind(payload),
+        }
     }
 
     fn render_virtual_rows(
@@ -199,7 +209,7 @@ impl GuiRuntime {
             }
             Some(resolve(&reference).map_or(reference, |resource| resource.url))
         };
-        let result = (|| {
+        let result = catch_unwind(AssertUnwindSafe(|| {
             if let Some(looping) = enable {
                 if looping {
                     self.store
@@ -218,8 +228,9 @@ impl GuiRuntime {
                 &mut provider,
                 callbacks.renderer.as_mut(),
             )
-        })();
-        // Asset ownership must survive detachment and cross-package pooling.
+        }));
+        // Asset ownership must survive detachment and cross-package pooling,
+        // including rows returned to the pool while a callback unwinds.
         for (id, resource) in created {
             if !self.store.contains(id) {
                 continue;
@@ -231,7 +242,10 @@ impl GuiRuntime {
         if self.store.contains(list) {
             self.queue_subtree(list);
         }
-        result
+        match result {
+            Ok(result) => result,
+            Err(payload) => resume_unwind(payload),
+        }
     }
 }
 
