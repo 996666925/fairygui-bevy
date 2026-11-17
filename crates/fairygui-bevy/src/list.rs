@@ -280,12 +280,17 @@ impl GuiListRow {
 }
 
 /// Attach to a list view to configure virtual rows through ECS. Only visible rows
-/// are rendered. Change `item_count` or replace the component/renderer to refresh.
+/// are rendered. Change `item_count`, `item_size` or the renderer to refresh.
 /// Removing it empties the list and drops the callback, retaining the native pool
 /// until its list owner is disposed. Virtual/loop mode is fixed at initialization.
 #[derive(Component, Clone)]
 pub struct GuiVirtualList {
     pub item_count: usize,
+    /// Override native virtualItemSize after initialization and before growing
+    /// the item records. Must be finite and positive. Existing cached row sizes
+    /// and the pane's scroll step are retained. None stops assigning a baseline;
+    /// it does not restore the package template's original size.
+    pub item_size: Option<Vec2>,
     looping: bool,
     renderer: Arc<ItemRenderer>,
     provider: Option<Arc<ItemProvider>>,
@@ -295,6 +300,7 @@ impl std::fmt::Debug for GuiVirtualList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GuiVirtualList")
             .field("item_count", &self.item_count)
+            .field("item_size", &self.item_size)
             .field("looping", &self.looping)
             .field("has_item_provider", &self.provider.is_some())
             .finish_non_exhaustive()
@@ -308,10 +314,16 @@ impl GuiVirtualList {
     ) -> Self {
         Self {
             item_count,
+            item_size: None,
             looping: false,
             renderer: Arc::new(renderer),
             provider: None,
         }
+    }
+    /// Set the native baseline before the initial item records are allocated.
+    pub fn with_item_size(mut self, size: Vec2) -> Self {
+        self.item_size = Some(size);
+        self
     }
     /// Configure native sixfold loop records. Apply before the list initializes.
     pub fn looping(mut self) -> Self {
@@ -414,6 +426,9 @@ pub(crate) fn sync_virtual_list_bindings(
             reference.0,
             config.item_count,
             config.looping,
+            config
+                .item_size
+                .map(|size| fairygui_core::Size::new(size.x, size.y)),
             move |index| provider.as_ref().and_then(|provider| provider(index)),
             move |store, index, object| {
                 renderer(

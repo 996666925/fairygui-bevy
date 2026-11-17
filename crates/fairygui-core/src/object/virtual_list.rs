@@ -10,6 +10,9 @@ use std::collections::VecDeque;
 #[path = "loop_list_tests.rs"]
 mod loop_tests;
 #[cfg(test)]
+#[path = "virtual_item_size_tests.rs"]
+mod size_tests;
+#[cfg(test)]
 #[path = "virtual_list_tests.rs"]
 mod tests;
 
@@ -39,6 +42,8 @@ pub enum VirtualListError {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VirtualListInfo {
+    /// Baseline used for inferred line counts and future item records.
+    pub item_size: Size,
     pub item_count: usize,
     pub real_item_count: usize,
     pub looping: bool,
@@ -84,6 +89,7 @@ impl ObjectStore {
     pub fn virtual_list_info(&self, list: GObjectId) -> Option<VirtualListInfo> {
         let s = self.virtual_states.get(&list)?;
         Some(VirtualListInfo {
+            item_size: s.geometry.item_size,
             item_count: s.num_items,
             real_item_count: s.geometry.count,
             looping: s.looping,
@@ -98,6 +104,35 @@ impl ObjectStore {
                 .count(),
             alignment: s.alignment,
         })
+    }
+    pub fn virtual_item_size(&self, list: GObjectId) -> Option<Size> {
+        Some(self.virtual_states.get(&list)?.geometry.item_size)
+    }
+
+    /// Native virtualItemSize: change the baseline and schedule a full layout
+    /// refresh. Existing records keep their cached dimensions, including rows
+    /// that have never been rendered; only newly allocated records use size.
+    /// Like native, this does not change the pane's initialized scroll step.
+    /// Requires an initialized virtual list and valid positive geometry.
+    pub fn set_virtual_item_size(
+        &mut self,
+        list: GObjectId,
+        size: Size,
+    ) -> Result<(), VirtualListError> {
+        let config = self
+            .virtual_config(list)
+            .ok_or(VirtualListError::MissingPane)?;
+        let state = self
+            .virtual_states
+            .get_mut(&list)
+            .ok_or(VirtualListError::MissingPane)?;
+        if !config.valid(size) {
+            return Err(VirtualListError::InvalidGeometry);
+        }
+        state.geometry.item_size = size;
+        state.force = true;
+        state.layout_dirty = true;
+        Ok(())
     }
     pub fn virtual_item_object(&self, list: GObjectId, index: usize) -> Option<GObjectId> {
         let s = self.virtual_states.get(&list)?;

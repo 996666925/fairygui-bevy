@@ -80,6 +80,7 @@ fn renderer_panic_preserves_callbacks_new_row_assets_and_retryable_views() {
                         list,
                         1000,
                         false,
+                        None,
                         |_| None,
                         make_renderer("Recovered"),
                     ),

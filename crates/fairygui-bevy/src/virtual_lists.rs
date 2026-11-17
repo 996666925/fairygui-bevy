@@ -41,7 +41,7 @@ impl GuiRuntime {
             provider: Box::new(|_| None),
             error: None,
         };
-        self.run_virtual_callbacks(list, callbacks, Some(looping), None)
+        self.run_virtual_callbacks(list, callbacks, Some(looping), None, None)
             .map(|_| ())
     }
 
@@ -50,6 +50,7 @@ impl GuiRuntime {
         list: GObjectId,
         count: usize,
         looping: bool,
+        item_size: Option<fairygui_core::Size>,
         provider: impl FnMut(usize) -> Option<String> + 'static,
         renderer: impl FnMut(&mut ObjectStore, usize, GObjectId) + 'static,
     ) -> Result<(), VirtualListError> {
@@ -58,7 +59,7 @@ impl GuiRuntime {
             provider: Box::new(provider),
             error: None,
         };
-        self.run_virtual_callbacks(list, callbacks, Some(looping), Some(count))
+        self.run_virtual_callbacks(list, callbacks, Some(looping), Some(count), item_size)
             .map(|_| ())
     }
 
@@ -116,7 +117,7 @@ impl GuiRuntime {
             .virtual_renderers
             .remove(&list)
             .ok_or(VirtualListError::MissingPane)?;
-        self.run_virtual_callbacks(list, callbacks, None, None)
+        self.run_virtual_callbacks(list, callbacks, None, None, None)
     }
 
     fn run_virtual_callbacks(
@@ -125,11 +126,12 @@ impl GuiRuntime {
         mut callbacks: VirtualCallbacks,
         enable: Option<bool>,
         count: Option<usize>,
+        item_size: Option<fairygui_core::Size>,
     ) -> Result<usize, VirtualListError> {
         // A caller may catch a user callback's panic. Retain the actual callback
         // state so retry cannot silently lose the renderer/provider registration.
         let result = catch_unwind(AssertUnwindSafe(|| {
-            self.render_virtual_rows(list, &mut callbacks, enable, count)
+            self.render_virtual_rows(list, &mut callbacks, enable, count, item_size)
         }));
         if let Ok(result) = &result {
             callbacks.error = result.as_ref().err().cloned();
@@ -151,6 +153,7 @@ impl GuiRuntime {
         callbacks: &mut VirtualCallbacks,
         enable: Option<bool>,
         count: Option<usize>,
+        item_size: Option<fairygui_core::Size>,
     ) -> Result<usize, VirtualListError> {
         self.store.layout_scroll_bars(list);
         let object = self.store.object(list).ok_or(VirtualListError::Removed)?;
@@ -218,6 +221,9 @@ impl GuiRuntime {
                     self.store
                         .enable_virtual_list(list, &default_url, &mut factory)?;
                 }
+            }
+            if let Some(item_size) = item_size {
+                self.store.set_virtual_item_size(list, item_size)?;
             }
             if let Some(count) = count {
                 self.store.set_virtual_item_count(list, count)?;

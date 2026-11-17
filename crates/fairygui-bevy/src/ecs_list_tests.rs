@@ -45,6 +45,124 @@ fn config(count: usize) -> GuiVirtualList {
 }
 
 #[test]
+fn virtual_item_size_configuration_preserves_cached_rows_rejects_invalid_sizes_and_projects_changes()
+ {
+    let (mut app, owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.world_mut().entity_mut(view).insert(
+        GuiVirtualList::new(100, |_, row| row.set_size(Vec2::new(40., 20.)))
+            .with_item_size(Vec2::new(70., 50.)),
+    );
+    app.update();
+    let (first, step) = {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        let store = runtime.store();
+        assert_eq!(
+            store.virtual_item_size(list),
+            Some(fairygui_core::Size::new(70., 50.))
+        );
+        let rect = store.virtual_item_rect(list, 80).unwrap();
+        assert_eq!((rect.width, rect.height), (70., 50.));
+        (
+            runtime
+                .entity_of(store.virtual_item_object(list, 0).unwrap())
+                .unwrap(),
+            store.scroll_pane(list).unwrap().scroll_step(),
+        )
+    };
+    {
+        let mut config = app.world_mut().get_mut::<GuiVirtualList>(view).unwrap();
+        config.item_size = Some(Vec2::new(90., 60.));
+        config.item_count = 120;
+    }
+    app.update();
+    {
+        let runtime = app.world().non_send::<GuiRuntime>();
+        let store = runtime.store();
+        let old = store.virtual_item_rect(list, 80).unwrap();
+        let new = store.virtual_item_rect(list, 119).unwrap();
+        // Native scrollToView uses the current baseline on the cross axis,
+        // while the old record's cached height stays unchanged.
+        assert_eq!((old.width, old.height), (90., 50.));
+        assert_eq!((new.width, new.height), (90., 60.));
+        assert_eq!(
+            runtime.entity_of(store.virtual_item_object(list, 0).unwrap()),
+            Some(first)
+        );
+        assert_eq!(store.scroll_pane(list).unwrap().scroll_step(), step);
+    }
+    let state = app.world().get::<GuiVirtualListState>(view).unwrap();
+    assert_eq!(
+        state.info().unwrap().item_size,
+        fairygui_core::Size::new(90., 60.)
+    );
+    assert_eq!(state.error(), None);
+    {
+        let mut config = app.world_mut().get_mut::<GuiVirtualList>(view).unwrap();
+        config.item_size = Some(Vec2::new(0., 60.));
+        config.item_count = 140;
+    }
+    app.update();
+    let state = app.world().get::<GuiVirtualListState>(view).unwrap();
+    assert_eq!(state.error(), Some(&VirtualListError::InvalidGeometry));
+    assert_eq!(state.info().unwrap().item_count, 120);
+    assert_eq!(
+        state.info().unwrap().item_size,
+        fairygui_core::Size::new(90., 60.)
+    );
+    app.world_mut()
+        .get_mut::<GuiVirtualList>(view)
+        .unwrap()
+        .item_size = Some(Vec2::new(100., 65.));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiVirtualListState>(view)
+            .unwrap()
+            .error(),
+        None
+    );
+    {
+        let mut config = app.world_mut().get_mut::<GuiVirtualList>(view).unwrap();
+        config.item_size = None;
+        config.item_count = 150;
+    }
+    app.update();
+    let rect = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .store()
+        .virtual_item_rect(list, 149)
+        .unwrap();
+    assert_eq!((rect.width, rect.height), (100., 65.));
+    {
+        let mut object = app.world_mut().gui_mut(view).unwrap();
+        assert_eq!(object.virtual_item_size(), Some(Vec2::new(100., 65.)));
+        assert_eq!(
+            object.set_virtual_item_size(Vec2::new(f32::NAN, 75.)),
+            Err(VirtualListError::InvalidGeometry)
+        );
+        object.set_virtual_item_size(Vec2::new(110., 75.)).unwrap();
+    }
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiVirtualListState>(view)
+            .unwrap()
+            .info()
+            .unwrap()
+            .item_size,
+        fairygui_core::Size::new(110., 75.)
+    );
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(app.world_mut().gui_mut(view).is_none());
+}
+
+#[test]
 fn resize_to_fit_from_a_system_projects_list_and_pane_geometry_in_the_same_frame() {
     use crate::{GuiListLayout, GuiMut};
     let (mut app, owner, list, view) = fixture(

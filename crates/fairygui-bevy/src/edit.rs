@@ -855,6 +855,23 @@ impl GuiObjectMut<'_> {
     pub fn virtual_item_rect(&self, index: usize) -> Option<fairygui_core::Rect> {
         self.runtime.store().virtual_item_rect(self.object, index)
     }
+    /// Native virtualItemSize baseline, independent of measured row dimensions.
+    pub fn virtual_item_size(&self) -> Option<Vec2> {
+        self.runtime
+            .store()
+            .virtual_item_size(self.object)
+            .map(|size| Vec2::new(size.width, size.height))
+    }
+    /// Change an initialized virtual list's baseline. Existing cached row sizes
+    /// and the pane's scroll step remain intact. Sync refreshes visible rows.
+    pub fn set_virtual_item_size(
+        &mut self,
+        size: Vec2,
+    ) -> Result<(), fairygui_core::object::VirtualListError> {
+        self.runtime
+            .store_mut()
+            .set_virtual_item_size(self.object, fairygui_core::Size::new(size.x, size.y))
+    }
     pub fn select_list_index(&mut self, index: usize, scroll_to_view: bool) {
         let runtime = &mut *self.runtime;
         let object = self.object;

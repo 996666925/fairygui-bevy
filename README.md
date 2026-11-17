@@ -1389,6 +1389,12 @@ if let Some(list) = gui.child_by_name(root_entity, "mailList") {
 数量和渲染器一起修改时，先更新数量，旧索引不会访问新的短数据集。
 外部共享数据更新后也可用 `Mut<GuiVirtualList>::set_changed()` 请求重绘。
 
+可通过 `.with_item_size(Vec2::new(width, height))` 配置原版 `virtualItemSize`，之后直接修改
+`GuiVirtualList.item_size`。它影响自动推算的行列数、`resize_list_to_fit` 和新分配项的估算尺寸；
+已有项的缓存尺寸和滚动步长保留。`None` 停止指定基准，不恢复原模板尺寸。非正数或非有限值
+会报告 `InvalidGeometry`，保留上次有效基准。实际基准位于 `GuiVirtualListState::info()`
+返回的 `item_size` 中；已初始化的列表也可通过 `GuiObjectMut::virtual_item_size` / `set_virtual_item_size` 读写。
+
 Both/Height 自动尺寸文本默认在原生布局前同步测量，文字修改会在本帧更新气泡等
 关联对象，再由列表计算行高；无需再发送单独的测量命令。根创建时也会先测量再
 生成视图，`Initialize` 能读到已经就绪的文字尺寸。普通列表和虚拟列表的 renderer
