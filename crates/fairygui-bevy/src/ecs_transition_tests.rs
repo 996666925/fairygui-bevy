@@ -223,6 +223,33 @@ fn ecs_transition_completion_captures_immediate_playbacks_and_preserves_each_gen
 }
 
 #[test]
+fn transition_completion_is_available_to_entity_observers_and_messages() {
+    #[derive(Resource, Default)]
+    struct Seen(Vec<u64>);
+
+    let (mut app, owner, view) = fixture("PowerUp");
+    app.init_resource::<Seen>();
+    app.world_mut().entity_mut(view).observe(
+        move |event: On<GuiTransitionComplete>, mut seen: ResMut<Seen>| {
+            assert_eq!(event.entity, view);
+            seen.0.push(event.play_generation);
+        },
+    );
+    send(&mut app, owner, |object| {
+        object.play_transition_with_options(
+            "t0",
+            TransitionPlayOptions {
+                end_time: Some(0.),
+                ..Default::default()
+            },
+        )
+    });
+    app.update();
+    assert_eq!(app.world().resource::<Seen>().0.len(), 1);
+    assert_eq!(take(&mut app).len(), 1);
+}
+
+#[test]
 fn ecs_transition_state_tracks_pause_speed_reverse_and_stop_without_fake_completion() {
     let (mut app, owner, view) = fixture("PowerUp");
     send(&mut app, owner, |object: &mut crate::GuiObjectMut| {

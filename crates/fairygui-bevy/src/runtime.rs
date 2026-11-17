@@ -462,14 +462,14 @@ pub fn emit_link_messages(
 }
 
 /// Transition label notification, published with the owner view after Sync.
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Message, Debug, Clone)]
 pub struct GuiTransitionHook {
     pub entity: Entity,
     pub hook: fairygui_core::transition::TransitionHook,
 }
 
 /// 通过 set_transition_hook 绑定的用户编号；原有标签消息仍独立发布。
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Message, Debug, Clone)]
 pub struct GuiTransitionCallback {
     pub entity: Entity,
     pub callback: fairygui_core::transition::TransitionCallback,
@@ -477,7 +477,7 @@ pub struct GuiTransitionCallback {
 
 /// One naturally completed playback, after all repetitions and nested tasks.
 /// Published after Sync, including playbacks started and finished in that Sync.
-#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[derive(EntityEvent, Message, Debug, Clone, PartialEq, Eq)]
 pub struct GuiTransitionComplete {
     pub entity: Entity,
     pub transition: String,
@@ -487,14 +487,17 @@ pub struct GuiTransitionComplete {
 pub fn emit_transition_completions(
     mut runtime: NonSendMut<GuiRuntime>,
     mut completed: MessageWriter<GuiTransitionComplete>,
+    mut commands: Commands,
 ) {
     for completion in runtime.store_mut().take_transition_completions() {
         if let Some(entity) = runtime.entity_of(completion.owner) {
-            completed.write(GuiTransitionComplete {
+            let event = GuiTransitionComplete {
                 entity,
                 transition: completion.transition,
                 play_generation: completion.play_generation,
-            });
+            };
+            completed.write(event.clone());
+            commands.trigger(event);
         }
     }
 }
@@ -528,10 +531,13 @@ pub fn emit_animation_completions(
 pub fn emit_transition_hooks(
     mut runtime: NonSendMut<GuiRuntime>,
     mut hooks: MessageWriter<GuiTransitionHook>,
+    mut commands: Commands,
 ) {
     for hook in runtime.store_mut().take_transition_hooks() {
         if let Some(entity) = runtime.entity_of(hook.owner) {
-            hooks.write(GuiTransitionHook { entity, hook });
+            let event = GuiTransitionHook { entity, hook };
+            hooks.write(event.clone());
+            commands.trigger(event);
         }
     }
 }
@@ -539,10 +545,13 @@ pub fn emit_transition_hooks(
 pub fn emit_transition_callbacks(
     mut runtime: NonSendMut<GuiRuntime>,
     mut callbacks: MessageWriter<GuiTransitionCallback>,
+    mut commands: Commands,
 ) {
     for callback in runtime.store_mut().take_transition_callbacks() {
         if let Some(entity) = runtime.entity_of(callback.hook.owner) {
-            callbacks.write(GuiTransitionCallback { entity, callback });
+            let event = GuiTransitionCallback { entity, callback };
+            callbacks.write(event.clone());
+            commands.trigger(event);
         }
     }
 }
