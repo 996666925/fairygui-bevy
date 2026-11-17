@@ -3,6 +3,13 @@ use super::*;
 use fairygui_core::geom::{Point, Rect as GuiRect};
 use fairygui_core::widget::ComboPopup;
 
+pub(super) struct PendingComboClick {
+    combo: GObjectId,
+    dropdown: GObjectId,
+    index: i32,
+    event: fairygui_core::object::UiEvent,
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct RetainedCombo {
     popup: ComboPopup,
@@ -14,6 +21,26 @@ pub(super) struct RetainedCombo {
 }
 
 impl GuiRuntime {
+    pub(crate) fn queue_combo_click(
+        &mut self,
+        combo: GObjectId,
+        index: i32,
+        event: fairygui_core::object::UiEvent,
+    ) {
+        // Laya CallLater deduplicates by caller/method and keeps the first args.
+        if self.combo_clicks.iter().any(|click| click.combo == combo) {
+            return;
+        }
+        if let Some(popup) = self.store.combo_popup(combo) {
+            self.combo_clicks.push(PendingComboClick {
+                combo,
+                dropdown: popup.dropdown,
+                index,
+                event,
+            });
+        }
+    }
+
     pub fn show_combo_dropdown(
         &mut self,
         commands: &mut Commands,
@@ -293,6 +320,47 @@ impl GuiRuntime {
             height + (old_frame.height - old_list.height),
         );
     }
+}
+
+/// Run after item observers and their ECS edits, before application Respond.
+pub(crate) fn commit_combo_clicks(world: &mut World) {
+    if world.non_send::<GuiRuntime>().combo_clicks.is_empty() {
+        return;
+    }
+    crate::properties::sync(world);
+    {
+        let mut runtime = world.non_send_mut::<GuiRuntime>();
+        for click in std::mem::take(&mut runtime.combo_clicks) {
+            if !matches!(
+                runtime
+                    .store
+                    .object(click.combo)
+                    .map(|object| object.control()),
+                Some(ControlData::ComboBox(_))
+            ) {
+                continue;
+            }
+            if let Some(root) = runtime.root_container()
+                && runtime
+                    .store
+                    .object(click.dropdown)
+                    .and_then(|object| object.parent())
+                    == Some(root)
+            {
+                runtime.hide_popup(None);
+            }
+            runtime
+                .store
+                .select_combo_index_from_input(click.combo, click.index);
+            runtime.dispatch_event(click.event);
+            // Keep application notifications enqueued by item observers for the
+            // next Publish; only this deferred change belongs to this second pass.
+            if let Some(event) = runtime.gui_events.pop() {
+                runtime.combo_events.push(event);
+            }
+        }
+    }
+    crate::properties::sync(world);
 }
 
 pub(crate) fn cleanup_retained_popups(mut runtime: NonSendMut<GuiRuntime>) {

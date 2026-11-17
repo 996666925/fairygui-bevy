@@ -14,9 +14,36 @@ struct State {
 }
 #[derive(Resource, Default)]
 struct Events(Vec<(i32, String)>);
-fn changed(event: On<GuiStateChanged>, gui: GuiQuery, mut events: ResMut<Events>) {
+#[derive(Resource, Default)]
+struct ItemEvents(Vec<(i32, bool)>);
+fn item_clicked(
+    event: On<GuiListItemClick>,
+    state: Res<State>,
+    gui: GuiQuery,
+    mut edit: GuiMut,
+    mut items: ResMut<ItemEvents>,
+) {
+    assert_eq!(event.index, 0);
+    let target = state.combo.unwrap();
+    let combo = gui.combo_box(target).unwrap();
+    assert!(
+        combo.is_open(),
+        "item observer must run before popup closure"
+    );
+    items.0.push((combo.selected_index(), combo.is_open()));
+    edit.get_mut(target).unwrap().set_text("item observer");
+}
+fn changed(
+    event: On<GuiStateChanged>,
+    gui: GuiQuery,
+    items: Res<ItemEvents>,
+    mut events: ResMut<Events>,
+) {
     if !event.event.bubbling {
         let combo = gui.combo_box(event.entity).unwrap();
+        assert_eq!(items.0.len(), events.0.len() + 1);
+        assert!(!combo.is_open());
+        assert_eq!(gui.text(event.entity), Some("Apple"));
         events
             .0
             .push((combo.selected_index(), combo.value().unwrap().into()));
@@ -25,6 +52,7 @@ fn changed(event: On<GuiStateChanged>, gui: GuiQuery, mut events: ResMut<Events>
 pub(super) fn install(app: &mut App) {
     app.init_resource::<State>()
         .init_resource::<Events>()
+        .init_resource::<ItemEvents>()
         .add_systems(
             PreUpdate,
             drive
@@ -41,6 +69,7 @@ fn drive(
     mut packages: ResMut<Assets<fairygui_bevy::FuiAsset>>,
     gui: GuiQuery,
     events: Res<Events>,
+    items: Res<ItemEvents>,
     existing: Query<()>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     mut windows: Query<(Entity, &mut Window), With<bevy::window::PrimaryWindow>>,
@@ -138,6 +167,7 @@ fn drive(
             assert!(combo.is_open());
             assert_eq!(combo.visible_item_count(), 2);
             let list = combo.list().unwrap();
+            commands.entity(list).observe(item_clicked);
             let rows = gui.get(list).unwrap().children();
             assert_eq!(rows.len(), 3);
             for (index, &row) in rows.iter().enumerate() {
@@ -330,8 +360,9 @@ fn drive(
         }
         32 if elapsed > 6 => {
             assert!(!existing.contains(state.combo.unwrap()));
+            assert_eq!(items.0, [(1, true), (0, true)]);
             info!(
-                "demo smoke PASSED: ECS combo configuration, real select/reselect, retained dropdown/rows, exported direct/nested title colors, initial parent selection, retained runtime edits and disposal"
+                "demo smoke PASSED: combo item observers before deferred selection, title reapply on select/reselect, ECS configuration, retained dropdown/rows, exported title colors, parent selection, runtime edits and disposal"
             );
             exit.write(AppExit::Success);
             next = true;

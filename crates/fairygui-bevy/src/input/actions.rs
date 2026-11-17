@@ -5,21 +5,18 @@ pub(super) fn combo_click(
     object: GObjectId,
     cursor: Vec2,
     touch_id: Option<u64>,
+    click_count: u8,
 ) -> bool {
     if let Some(combo) = runtime.store().combo_of_popup(object) {
         if let Some(index) = list_child_index(runtime, combo, object) {
-            // Native defers the item handler, hides the complete root popup
-            // stack, then forces the selected title/icon to reapply on reselect.
-            runtime.hide_popup(None);
-            runtime
-                .store_mut()
-                .select_combo_index_from_input(combo, index as i32);
             let mut event = UiEvent::new(EventKind::StateChanged, combo)
-                .with_pointer(Point::new(cursor.x, cursor.y));
+                .with_pointer(Point::new(cursor.x, cursor.y))
+                .with_click_count(click_count);
             event.touch_id = touch_id;
-            runtime.dispatch_event(event);
-            return true;
+            runtime.queue_combo_click(combo, index as i32, event);
         }
+        // The dropdown is still a native list: publish its selection and item
+        // event before the deferred combo handler closes it and changes value.
         return false;
     }
     // Opening/toggling belongs to mouse-down. A release on the combo consumes

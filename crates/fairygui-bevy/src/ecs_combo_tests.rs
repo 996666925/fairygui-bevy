@@ -3,6 +3,9 @@ use crate::prelude::*;
 use bevy::ecs::system::{RunSystemOnce, SystemState};
 use fairygui_core::{object::EventKind, package::FuiPackage};
 
+#[path = "ecs_combo_click_tests.rs"]
+mod clicks;
+
 #[test]
 fn exported_combo_instance_colors_and_parent_selection_are_correct_on_the_first_frame() {
     let mut app = App::new();

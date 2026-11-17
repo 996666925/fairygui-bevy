@@ -283,7 +283,26 @@ pub fn emit_gui_events(
     mut runtime: NonSendMut<GuiRuntime>,
     entities: Query<(Entity, &GObjectRef)>,
 ) {
-    for pending in runtime.take_gui_events() {
+    let pending = runtime.take_gui_events();
+    emit_pending_events(&mut commands, &runtime, &entities, pending);
+}
+
+pub(crate) fn emit_combo_events(
+    mut commands: Commands,
+    mut runtime: NonSendMut<GuiRuntime>,
+    entities: Query<(Entity, &GObjectRef)>,
+) {
+    let pending = std::mem::take(&mut runtime.combo_events);
+    emit_pending_events(&mut commands, &runtime, &entities, pending);
+}
+
+fn emit_pending_events(
+    commands: &mut Commands,
+    runtime: &GuiRuntime,
+    entities: &Query<(Entity, &GObjectRef)>,
+    pending: Vec<PendingGuiEvent>,
+) {
+    for pending in pending {
         let resolve = |object| {
             runtime
                 .entity_of(object)
@@ -328,19 +347,19 @@ pub fn emit_gui_events(
             let first_is_resolved = tail.first().map(|(_, id)| *id) == first_saved;
             match context.event.kind {
                 EventKind::MouseUp => {
-                    trigger_release(&mut commands, context, tail, first_is_resolved, |context| {
+                    trigger_release(commands, context, tail, first_is_resolved, |context| {
                         GuiMouseUp { context }
                     })
                 }
                 EventKind::RightMouseUp => {
-                    trigger_release(&mut commands, context, tail, first_is_resolved, |context| {
+                    trigger_release(commands, context, tail, first_is_resolved, |context| {
                         GuiRightMouseUp { context }
                     })
                 }
                 _ => unreachable!("only pointer releases have a saved press phase"),
             }
         } else {
-            trigger_typed(&mut commands, context);
+            trigger_typed(commands, context);
         }
     }
 }

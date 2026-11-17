@@ -444,7 +444,7 @@ fn release_closing_window_rejects_same_frame_wheel_on_disposed_hit() {
 }
 
 #[test]
-fn release_hiding_combo_popup_rejects_same_frame_wheel_on_retained_off_stage_pane() {
+fn combo_wheel_runs_before_deferred_close_and_later_wheel_rejects_retained_off_stage_pane() {
     let (mut app, window) = setup();
     let package = FuiPackage::parse(
         "Basics",
@@ -502,9 +502,25 @@ fn release_hiding_combo_popup_rejects_same_frame_wheel_on_retained_off_stage_pan
         phase: bevy::input::touch::TouchPhase::Moved,
     });
     release(&mut app);
+    let position = {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        assert!(gui.popup_stack().is_empty());
+        assert!(!gui.store().is_on_stage(leaf));
+        let position = gui.store().scroll_pane(pane).unwrap().pos();
+        assert!(
+            position.y > 0.,
+            "the wheel precedes the deferred popup close"
+        );
+        assert_eq!(
+            gui.drain_events()
+                .filter(|e| e.kind == EventKind::MouseWheel && e.is_at_target())
+                .count(),
+            1
+        );
+        position
+    };
+    send(&mut app, window, MouseScrollUnit::Line, 0., -1.);
     let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
-    assert!(gui.popup_stack().is_empty());
-    assert!(!gui.store().is_on_stage(leaf));
-    assert_eq!(gui.store().scroll_pane(pane).unwrap().pos(), Point::ZERO);
+    assert_eq!(gui.store().scroll_pane(pane).unwrap().pos(), position);
     assert!(gui.drain_events().all(|e| e.kind != EventKind::MouseWheel));
 }

@@ -394,6 +394,7 @@ struct TouchCapture {
 
 pub fn register(app: &mut App) {
     app.init_resource::<GuiInputSettings>()
+        .init_resource::<crate::GuiPopupState>()
         .init_resource::<crate::properties::InitialNativeValues<crate::GuiText>>()
         .init_resource::<InputRouter>()
         .init_resource::<GuiInputState>()
@@ -417,6 +418,22 @@ pub fn register(app: &mut App) {
             )
                 .chain()
                 .in_set(crate::GuiSystems::Input),
+        )
+        .configure_sets(
+            Update,
+            (crate::GuiSystems::Input, crate::GuiSystems::Publish).chain(),
+        )
+        .add_systems(
+            Update,
+            (
+                crate::runtime::commit_combo_clicks,
+                crate::popup::sync_popup_state,
+                crate::events::emit_combo_events,
+            )
+                .chain()
+                .in_set(crate::GuiSystems::Publish)
+                .after(crate::runtime::emit_gui_events)
+                .after(crate::runtime::emit_list_item_messages),
         );
     editing::register(app);
     text_selection::install(app);
@@ -1207,7 +1224,7 @@ fn apply_click(
         if hit.is_some() {
             runtime.activate_menu_item(target, Some(Point::new(cursor.x, cursor.y)));
         }
-    } else if !actions::combo_click(runtime, target, cursor, touch_id) {
+    } else if !actions::combo_click(runtime, target, cursor, touch_id, click_count) {
         runtime
             .store_mut()
             .select_clicked_item_with_modifiers(target, shift, ctrl);

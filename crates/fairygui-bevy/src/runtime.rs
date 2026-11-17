@@ -304,6 +304,7 @@ pub(crate) use loader_status::sync_loader_states;
 pub(crate) use loader_status::sync_loader_status;
 pub use loader_status::{GuiLoaderFailure, GuiLoaderState};
 pub(crate) use popup_widgets::cleanup_retained_popups;
+pub(crate) use popup_widgets::commit_combo_clicks;
 #[path = "popup_menu.rs"]
 mod popup_menu;
 pub use popup_menu::emit_menu_actions;
@@ -578,6 +579,8 @@ pub struct GuiRuntime {
     popups: Vec<GObjectId>,
     pub(crate) pending_popups: Vec<crate::popup::PendingPopup>,
     retained_combos: HashMap<GObjectId, popup_widgets::RetainedCombo>,
+    combo_clicks: Vec<popup_widgets::PendingComboClick>,
+    pub(crate) combo_events: Vec<PendingGuiEvent>,
     retained_menu: Option<popup_menu::RetainedMenu>,
     pending_menu_click: Option<popup_menu::PendingMenuClick>,
     menu_actions: Vec<GuiMenuAction>,

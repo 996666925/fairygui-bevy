@@ -8,6 +8,9 @@ mod tests;
 
 /// Snapshot on every combo view, refreshed before input events publish and
 /// after Sync. Programmatic setters do not emit a user StateChanged event.
+/// Dropdown item observers run while this still holds the previous value and
+/// open popup. Their edits apply before selection commits and GuiStateChanged
+/// publishes, in the same Publish phase before application Respond systems.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct GuiComboBoxState {
     pub items: Vec<String>,
