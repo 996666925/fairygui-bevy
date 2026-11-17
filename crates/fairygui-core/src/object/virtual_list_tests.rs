@@ -517,6 +517,64 @@ fn renderer_count_and_resize_changes_are_refreshed_before_return() {
 }
 
 #[test]
+fn renderer_scroll_changes_reconcile_the_visible_window_before_return() {
+    for layout in [ListLayoutType::SingleColumn, ListLayoutType::Pagination] {
+        let (mut store, _, list) = fixture(layout, false, false);
+        let mut create = |store: &mut ObjectStore, _: &str| Some(button(store, 24., 20.));
+        store.enable_virtual_list(list, "a", &mut create).unwrap();
+        store.set_virtual_item_count(list, 1000).unwrap();
+        let changed = Cell::new(false);
+
+        store
+            .refresh_virtual_list(list, &mut create, &mut |_| None, &mut |store, _, _| {
+                if !changed.replace(true) {
+                    store.set_scroll_pos(
+                        list,
+                        if layout == ListLayoutType::Pagination {
+                            2000.
+                        } else {
+                            0.
+                        },
+                        if layout == ListLayoutType::Pagination {
+                            0.
+                        } else {
+                            2000.
+                        },
+                        false,
+                    );
+                }
+            })
+            .unwrap();
+
+        let info = store.virtual_list_info(list).unwrap();
+        assert!(info.first_index >= 90, "{layout:?}: {info:?}");
+        assert!(
+            info.active_count > 0 && info.active_count < 20,
+            "{layout:?}: {info:?}"
+        );
+        let position = store.scroll_pane(list).unwrap().scrolling_pos();
+        if layout == ListLayoutType::Pagination {
+            assert_eq!(position.x, 2000., "{layout:?}");
+        } else {
+            assert_eq!(position.y, 2000., "{layout:?}");
+        }
+        for row in store.list_items(list).unwrap() {
+            let index = store.virtual_item_index(list, row).unwrap();
+            assert!(
+                index >= 90
+                    && index
+                        < if layout == ListLayoutType::Pagination {
+                            300
+                        } else {
+                            120
+                        },
+                "{layout:?}: row {index}"
+            );
+        }
+    }
+}
+
+#[test]
 fn virtual_sequential_navigation_reveals_logical_offscreen_rows_and_guards_missing_children() {
     use crate::widget::ListNavigationDirection;
     let (mut store, _, list) = fixture(ListLayoutType::SingleColumn, false, false);

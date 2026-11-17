@@ -491,6 +491,10 @@ impl ObjectStore {
             let mut rendered = 0;
             for pass in 0..=20 {
                 self.virtual_sync_anchor(list);
+                let pass_scroll_revision = self
+                    .scroll_pane(list)
+                    .ok_or(VirtualListError::Removed)?
+                    .scroll_revision();
                 let (count, again) = if config.layout == ListLayoutType::Pagination {
                     (
                         self.virtual_scroll_pages(list, force, create, provider, render)?,
@@ -509,8 +513,12 @@ impl ObjectStore {
                     .virtual_states
                     .get(&list)
                     .ok_or(VirtualListError::Removed)?;
-                let restart =
-                    state.force || state.layout_dirty || next_config != state.geometry.config;
+                let restart = state.force
+                    || state.layout_dirty
+                    || next_config != state.geometry.config
+                    || self
+                        .scroll_pane(list)
+                        .is_none_or(|pane| pane.scroll_revision() != pass_scroll_revision);
                 if restart {
                     let item_size = self.virtual_states[&list].geometry.item_size;
                     if !next_config.valid(item_size) {
