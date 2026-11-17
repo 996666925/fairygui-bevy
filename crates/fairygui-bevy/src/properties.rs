@@ -9,14 +9,7 @@ pub(crate) trait Property:
     Component<Mutability = bevy::ecs::component::Mutable> + Clone + PartialEq
 {
     fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self>;
-    fn changed(
-        _entity: Entity,
-        _previous: &Self,
-        _current: &Self,
-        _runtime: &mut GuiRuntime,
-        _object: GObjectId,
-    ) {
-    }
+    fn observe(_entity: Entity, _runtime: &mut GuiRuntime, _object: GObjectId) {}
     /// Keep application writes pending while dependent content is prepared.
     fn ready(_world: &World, _entity: Entity, _object: GObjectId) -> bool {
         true
@@ -178,6 +171,9 @@ pub(crate) fn sync(world: &mut World) {
         sync_property::<GuiTransform>(world);
         sync_property::<GuiDisplay>(world);
     }
+    world
+        .non_send_mut::<GuiRuntime>()
+        .prune_geometry_event_snapshots();
 }
 
 fn snapshot<T: Property>(world: &World, object: GObjectId) -> Option<T> {
@@ -251,18 +247,11 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
             } else {
                 native
             };
-            if let Some((_, previous_projection)) = stored
-                .as_ref()
-                .filter(|(id, previous)| *id == object && *previous != next)
-            {
-                T::changed(
-                    entity,
-                    previous_projection,
-                    &next,
-                    &mut world.get_non_send_mut::<GuiRuntime>().unwrap(),
-                    object,
-                );
-            }
+            T::observe(
+                entity,
+                &mut world.get_non_send_mut::<GuiRuntime>().unwrap(),
+                object,
+            );
             if value.as_ref() != Some(&next) {
                 world.entity_mut(entity).insert(next.clone());
             }
@@ -350,28 +339,8 @@ impl Property for GuiTransform {
     fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
         runtime.store().object(object).map(Self::from_object)
     }
-    fn changed(
-        entity: Entity,
-        previous: &Self,
-        current: &Self,
-        runtime: &mut GuiRuntime,
-        object: GObjectId,
-    ) {
-        if runtime.entity_of(object).is_some_and(|view| view != entity) {
-            return;
-        }
-        if previous.position != current.position {
-            runtime.dispatch_direct_event(fairygui_core::object::UiEvent::new(
-                fairygui_core::object::EventKind::XyChanged,
-                object,
-            ));
-        }
-        if previous.size != current.size {
-            runtime.dispatch_direct_event(fairygui_core::object::UiEvent::new(
-                fairygui_core::object::EventKind::SizeChanged,
-                object,
-            ));
-        }
+    fn observe(entity: Entity, runtime: &mut GuiRuntime, object: GObjectId) {
+        runtime.observe_geometry_changes(entity, object);
     }
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId) {
         // A write to one axis retains the other requested axis, even when the

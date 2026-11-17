@@ -49,6 +49,13 @@ pub(crate) mod windows;
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GObjectRef(pub GObjectId);
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct GeometryEventSnapshot {
+    position: fairygui_core::Point,
+    size: fairygui_core::Size,
+    requested_size: fairygui_core::Size,
+}
+
 /// Writable selected row indices, in native logical order. Replacing the vector
 /// clears the previous selection, then selects its valid indices without
 /// scrolling. Single mode keeps the last valid entry; an empty vector clears.
@@ -568,6 +575,7 @@ pub struct GuiRuntime {
     pub(crate) input_submit: Option<(GObjectId, bool)>,
     /// Bevy entity events waiting for `GuiSystems::Publish`.
     gui_events: Vec<PendingGuiEvent>,
+    geometry_event_snapshots: HashMap<GObjectId, GeometryEventSnapshot>,
     /// 进行中的分帧构建。
     pending_builds: Vec<PendingBuild>,
     /// 多语言翻译表。文本在转成实体时按它改写。
@@ -2010,6 +2018,41 @@ impl GuiRuntime {
     pub(crate) fn dispatch_direct_event(&mut self, event: fairygui_core::object::UiEvent) {
         self.gui_events.push(PendingGuiEvent::direct(event.clone()));
         self.events.push(event);
+    }
+
+    pub(crate) fn observe_geometry_changes(&mut self, entity: Entity, object: GObjectId) {
+        if self.entity_of(object).is_some_and(|view| view != entity) {
+            return;
+        }
+        let Some(native) = self.store.object(object) else {
+            self.geometry_event_snapshots.remove(&object);
+            return;
+        };
+        let current = GeometryEventSnapshot {
+            position: native.position(),
+            size: native.size(),
+            requested_size: native.requested_size(),
+        };
+        let Some(previous) = self.geometry_event_snapshots.insert(object, current) else {
+            return;
+        };
+        if previous.position != current.position {
+            self.dispatch_direct_event(fairygui_core::object::UiEvent::new(
+                fairygui_core::object::EventKind::XyChanged,
+                object,
+            ));
+        }
+        if previous.size != current.size || previous.requested_size != current.requested_size {
+            self.dispatch_direct_event(fairygui_core::object::UiEvent::new(
+                fairygui_core::object::EventKind::SizeChanged,
+                object,
+            ));
+        }
+    }
+
+    pub(crate) fn prune_geometry_event_snapshots(&mut self) {
+        self.geometry_event_snapshots
+            .retain(|object, _| self.store.contains(*object));
     }
 
     /// Captured motion follows press-time recipients, including existing offstage
