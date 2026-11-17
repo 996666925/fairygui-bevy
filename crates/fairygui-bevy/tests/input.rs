@@ -9,6 +9,8 @@ mod button_fire;
 mod click_targets;
 #[path = "input/double_click.rs"]
 mod double_click;
+#[path = "input/hover.rs"]
+mod hover;
 #[path = "input/list_selection.rs"]
 mod list_selection;
 #[path = "input/motion.rs"]

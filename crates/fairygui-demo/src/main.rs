@@ -245,6 +245,8 @@ fn main() -> AppExit {
         smoke::install_image_flip(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-graph-properties") {
         smoke::install_graph_properties(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-hover-targets") {
+        smoke::install_hover_targets(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-drag-targets") {
         smoke::install_drag_targets(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-click-targets") {

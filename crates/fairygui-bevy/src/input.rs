@@ -5,6 +5,7 @@ mod clicks;
 pub(crate) mod editing;
 mod motion;
 mod releases;
+mod rollover;
 pub use editing::{GuiInput, GuiTextSelection};
 mod gestures;
 mod masks;
@@ -703,14 +704,7 @@ fn route_pointer(
     state.last_position = cursor.map(|_| position);
     if hit != state.hovered {
         let old_hovered = state.hovered;
-        if let Some(old) = old_hovered
-            && runtime.store().object(old).is_some()
-        {
-            dispatch(&mut runtime, EventKind::RollOut, old, position);
-        }
-        if let Some(new) = hit {
-            dispatch(&mut runtime, EventKind::RollOver, new, position);
-        }
+        rollover::dispatch(&mut runtime, old_hovered, hit, position, None);
         state.hovered = hit;
         if let Some(old) = old_hovered {
             update_button_from_pointers(&mut runtime, &state, old);

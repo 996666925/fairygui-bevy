@@ -7,6 +7,11 @@ use bevy::picking::{
 };
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::UiSystems;
+#[path = "smoke_hover_targets.rs"]
+mod hover_targets;
+pub(super) fn install_hover_targets(app: &mut App) {
+    hover_targets::install(app);
+}
 #[path = "smoke_drag_targets.rs"]
 mod drag_targets;
 pub(super) fn install_drag_targets(app: &mut App) {

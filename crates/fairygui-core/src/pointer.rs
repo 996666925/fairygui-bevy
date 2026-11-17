@@ -16,6 +16,54 @@ pub struct PointerReleaseRoute {
     pub pressed: Vec<GObjectId>,
 }
 
+/// Direct hover notifications below the first common ancestor. Every recipient
+/// is its own event target; these are independent notifications, not bubbling.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct HoverChange {
+    pub exited: Vec<GObjectId>,
+    pub entered: Vec<GObjectId>,
+}
+
+impl HoverChange {
+    /// Native InputManager.handleRollOver reads both current ancestor chains.
+    /// Existing outgoing nodes are notified even if off stage. Incoming nodes
+    /// must still be staged. A disposed previous target has no remaining chain.
+    pub fn between(
+        store: &ObjectStore,
+        previous: Option<GObjectId>,
+        next: Option<GObjectId>,
+    ) -> Self {
+        let mut exited = Vec::new();
+        let mut current = previous;
+        while let Some(id) = current {
+            let Some(object) = store.object(id) else {
+                break;
+            };
+            exited.push(id);
+            current = object.parent();
+        }
+        let mut entered = Vec::new();
+        current = next;
+        while let Some(id) = current {
+            if let Some(index) = exited.iter().position(|&old| old == id) {
+                exited.truncate(index);
+                break;
+            }
+            let Some(object) = store.object(id) else {
+                break;
+            };
+            entered.push(id);
+            current = object.parent();
+        }
+        entered.retain(|&id| store.is_on_stage(id));
+        Self { exited, entered }
+    }
+}
+
+#[cfg(test)]
+#[path = "pointer_hover_tests.rs"]
+mod hover_tests;
+
 impl ClickTargets {
     /// Record the logical target and its ancestors before press handlers mutate
     /// the tree. A built-in mouse-down propagation stop bounds this path.

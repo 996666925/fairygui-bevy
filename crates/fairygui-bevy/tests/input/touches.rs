@@ -111,7 +111,11 @@ fn two_fingers_capture_and_release_independently_with_bubbling_ids() {
     for id in [101, 202] {
         let at_target: Vec<_> = events
             .iter()
-            .filter(|e| e.touch_id == Some(id) && e.is_at_target())
+            .filter(|e| {
+                e.touch_id == Some(id)
+                    && e.is_at_target()
+                    && e.target == if id == 101 { first } else { second }
+            })
             .map(|e| e.kind.clone())
             .collect();
         assert_eq!(

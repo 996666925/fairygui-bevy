@@ -29,7 +29,9 @@ pub enum EventKind {
     Link,
     MouseDown,
     MouseUp,
+    /// Physical hover entry is direct: target == current_target for each changed node.
     RollOver,
+    /// Physical hover exit excludes unchanged common ancestors and does not bubble.
     RollOut,
     MouseWheel,
 

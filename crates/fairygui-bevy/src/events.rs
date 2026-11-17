@@ -82,6 +82,8 @@ fn trigger_release<E>(
 /// Physical MouseUp/RightMouseUp additionally enter their saved press phase:
 /// its first omitted press recipient runs even if the hit path stopped, then
 /// inherits that stop flag as in native TouchInfo.bubble.
+/// Physical RollOver/RollOut notify each changed node directly, with that node
+/// as the target. Stopping one notification does not skip another node's event.
 #[derive(Debug, Clone)]
 pub struct GuiEvent {
     /// Current recipient, updated together with event.current_target.
@@ -144,7 +146,7 @@ pub trait GuiEventType: EntityEvent + Deref<Target = GuiEvent> + DerefMut {
 macro_rules! event_types {
     ($($name:ident => $kind:ident),* $(,)?) => {
         $(
-            #[doc = concat!("Typed `", stringify!($kind), "` notification with logical bubbling.")]
+            #[doc = concat!("Typed `", stringify!($kind), "` notification. Runtime supplies its logical delivery route.")]
             #[derive(EntityEvent, Debug, Clone)]
             #[entity_event(trigger = PropagateEntityTrigger<true, Self, GuiEventTraversal>)]
             pub struct $name { #[event_target] context: GuiEvent }

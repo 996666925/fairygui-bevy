@@ -63,11 +63,7 @@ fn finish(
 }
 
 fn roll_out(runtime: &mut GuiRuntime, capture: &TouchCapture, id: u64) {
-    if let Some(old) = capture.hovered
-        && runtime.store().object(old).is_some()
-    {
-        emit(runtime, EventKind::RollOut, old, capture.last, id);
-    }
+    rollover::dispatch(runtime, capture.hovered, None, capture.last, Some(id));
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -277,13 +273,7 @@ pub(super) fn route_touches(
             let Some(target) = hit.filter(|id| eligible(&runtime, *id)) else {
                 continue;
             };
-            emit(
-                &mut runtime,
-                EventKind::RollOver,
-                target,
-                position,
-                event.id,
-            );
+            rollover::dispatch(&mut runtime, None, Some(target), position, Some(event.id));
             let stop = pointer_down_stop(&runtime, target);
             let click_targets =
                 fairygui_core::pointer::ClickTargets::begin(runtime.store(), target, stop);
@@ -403,16 +393,7 @@ pub(super) fn route_touches(
             runtime.update_drag(Point::new(position.x, position.y), hit);
         }
         if capture.hovered != hit {
-            roll_out(&mut runtime, &capture, event.id);
-            if let Some(target) = hit {
-                emit(
-                    &mut runtime,
-                    EventKind::RollOver,
-                    target,
-                    position,
-                    event.id,
-                );
-            }
+            rollover::dispatch(&mut runtime, capture.hovered, hit, position, Some(event.id));
             capture.hovered = hit;
         }
         capture.moved |= position.distance(capture.start) > settings.drag_threshold.max(0.0);
