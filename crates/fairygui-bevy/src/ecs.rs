@@ -596,6 +596,7 @@ pub struct GuiQuery<'w, 's> {
     image_flips: Query<'w, 's, &'static crate::GuiImageFlip>,
     opaque: Query<'w, 's, &'static crate::GuiOpaque>,
     clip_softness: Query<'w, 's, &'static crate::GuiClipSoftness>,
+    margins: Query<'w, 's, &'static crate::GuiMargin>,
     loader_settings: Query<'w, 's, &'static crate::GuiLoaderSettings>,
     sorting_orders: Query<'w, 's, &'static GuiSortingOrder>,
     render_orders: Query<'w, 's, &'static GuiRenderOrder>,
@@ -619,6 +620,9 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn margin(&self, entity: Entity) -> Option<&crate::GuiMargin> {
+        self.margins.get(self.view(entity)?).ok()
+    }
     pub fn size_constraints(&self, entity: Entity) -> Option<&crate::GuiSizeConstraints> {
         self.size_constraints.get(self.view(entity)?).ok()
     }

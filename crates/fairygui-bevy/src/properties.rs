@@ -137,6 +137,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiButtonSettings>(world);
     crate::button_popup::sync(world);
     sync_property::<GuiScrollSettings>(world);
+    sync_property::<GuiMargin>(world);
     sync_property::<GuiListLayout>(world);
     sync_property::<GuiGroupLayout>(world);
     sync_property::<GuiListSettings>(world);

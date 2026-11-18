@@ -807,6 +807,25 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 `set_height` 和 `set_size_constraints`。可用 `gui.size_constraints(entity)` 查询当前约束。
 非有限值、负约束和最大值小于最小值的约束轴会保留原配置，其余有效轴仍可更新。
 
+容器、列表和树的内容边距可直接修改 `GuiMargin`，按左、上、右、下使用局部逻辑像素：
+
+```rust,ignore
+fn update_margin(mut margins: Query<&mut GuiMargin>) {
+    for mut margin in &mut margins {
+        margin.left = 12.;
+        margin.right = 12.;
+    }
+}
+// 创建根节点时也可以附加 GuiMargin::all(8.) 或 GuiMargin::new(12., 8., 12., 8.)。
+```
+
+修改边距会更新列表排版、滚动视口和软裁剪参数，控件外部尺寸保持不变。
+与 FairyGUI 一致，Visible 溢出的容器保留原内容原点；列表之后的对齐偏移变化时才重新定位。
+Hidden 溢出和滚动容器立即更新内容原点。普通滚动条仍贴合外部边缘，刷新头尾跟随视口原点。
+允许有限负值；非有限字段恢复原值，其余有效字段继续生效。
+查询使用 `gui.margin(entity)`，即时修改使用 `GuiObjectMut::set_margin`。
+硬裁剪仍使用现有 Bevy overflow 范围，尚未完整复刻非零边距下 Laya `scrollRect` 的位移与裁剪语义。
+
 组件、列表和树中导出的 `clipSoftness` 会保留并渲染为边缘渐隐，也可通过
 `GuiClipSoftness(Vec2::new(24., 20.))` 修改，宽度单位为控件局部逻辑像素，零值关闭。
 该效果遵循 FairyGUI 标准运行时的软裁剪规则；Laya 参考运行时会跳过这组导出数据。

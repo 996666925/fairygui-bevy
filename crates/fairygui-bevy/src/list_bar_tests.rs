@@ -347,3 +347,72 @@ fn real_headless_bevy_layout_keeps_the_bar_stationary_while_rows_scroll() {
     assert_eq!(bar_position, initial_bar);
     assert_eq!(row_position, initial_row - Vec2::new(0., 60.));
 }
+
+#[test]
+fn changed_margins_project_content_and_owner_bars_at_the_same_coordinates_as_core() {
+    let (mut app, _, list) = fixture_with_layout(true);
+    app.add_systems(Update, sync_scroll_extents.after(sync_dirty));
+    app.add_systems(
+        PostUpdate,
+        project_scroll_overflow
+            .after(bevy::ui::UiSystems::Layout)
+            .before(bevy::ui::update::update_clipping_system),
+    );
+    let (row, bar) = {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        for row in gui.store().list_items(list).unwrap() {
+            gui.store_mut().remove(row);
+        }
+        gui.store_mut().set_size(list, 300., 100.);
+        let row = gui
+            .store_mut()
+            .create(fairygui_core::package::ObjectType::Graph);
+        gui.store_mut().set_size(row, 250., 400.);
+        gui.store_mut().set_parent(row, Some(list));
+        gui.queue_subtree(row);
+        let bar = gui.store().scroll_pane(list).unwrap().vt_bar.unwrap();
+        (row, bar)
+    };
+    for margin in [
+        crate::GuiMargin::all(0.),
+        crate::GuiMargin::new(10., 15., 20., 25.),
+    ] {
+        let list_view = app
+            .world()
+            .non_send::<GuiRuntime>()
+            .entity_of(list)
+            .unwrap();
+        app.world_mut()
+            .gui_mut(list_view)
+            .unwrap()
+            .set_margin(margin);
+        app.update();
+        app.update();
+        let gui = app.world().non_send::<GuiRuntime>();
+        let owner_node = app.world().get::<ComputedNode>(list_view).unwrap();
+        let owner_transform = app.world().get::<UiGlobalTransform>(list_view).unwrap();
+        let owner_native = gui
+            .store()
+            .local_to_global(list, fairygui_core::Point::ZERO)
+            .unwrap();
+        for id in [row, bar] {
+            let view = gui.entity_of(id).unwrap();
+            let node = app.world().get::<ComputedNode>(view).unwrap();
+            let transform = app.world().get::<UiGlobalTransform>(view).unwrap();
+            let point = gui
+                .store()
+                .local_to_global(id, fairygui_core::Point::ZERO)
+                .unwrap();
+            let expected = owner_transform.transform_point2(owner_node.content_box().min)
+                + owner_transform.transform_vector2(
+                    Vec2::new(point.x - owner_native.x, point.y - owner_native.y)
+                        / owner_node.inverse_scale_factor(),
+                );
+            let actual = transform.transform_point2(node.content_box().min);
+            assert!(
+                (actual - expected).length() <= 1.,
+                "{margin:?} {id:?}: {actual:?} vs {expected:?}"
+            );
+        }
+    }
+}

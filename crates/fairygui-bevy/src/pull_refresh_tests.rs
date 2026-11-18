@@ -37,6 +37,66 @@ fn fixture() -> (App, usize, GObjectId, GObjectId) {
 }
 
 #[test]
+fn margin_changes_move_refresh_bars_with_the_mask_instead_of_the_scrolling_content() {
+    let (mut app, _, list, _) = fixture();
+    {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        gui.store_mut()
+            .set_component_margin(list, fairygui_core::geom::Margin::new(13., 17., 19., 23.));
+        gui.store_mut().begin_scroll_drag(list);
+        gui.store_mut().drag_scroll_by(list, 0., 180., 0.1);
+        gui.store_mut().end_scroll_drag(list);
+        gui.store_mut().lock_scroll_header(list, 71.);
+        gui.store_mut().advance_scrolls(0.3);
+    }
+    app.update();
+    app.update();
+    let gui = app.world().non_send::<GuiRuntime>();
+    let header = gui.store().scroll_header(list).unwrap();
+    let pane = gui.store().scroll_pane(list).unwrap();
+    let gutter = if pane.display_on_left && !pane.floating {
+        pane.vt_bar
+            .and_then(|bar| gui.store().object(bar))
+            .map_or(0., |bar| bar.width())
+    } else {
+        0.
+    };
+    let mask = if pane.dont_clip_margin {
+        Vec2::new(gutter, 0.)
+    } else {
+        Vec2::new(gutter + 13., 17.)
+    };
+    let position = gui.store().object(header).unwrap().position();
+    let expected_offset = mask + Vec2::new(position.x, position.y);
+    assert_eq!(pane.display_pos().y, -71.);
+    let owner = gui.entity_of(list).unwrap();
+    let header_view = gui.entity_of(header).unwrap();
+    let owner_node = app.world().get::<ComputedNode>(owner).unwrap();
+    let owner_transform = app.world().get::<UiGlobalTransform>(owner).unwrap();
+    let header_node = app.world().get::<ComputedNode>(header_view).unwrap();
+    let header_transform = app.world().get::<UiGlobalTransform>(header_view).unwrap();
+    let expected = owner_transform.transform_point2(owner_node.content_box().min)
+        + owner_transform.transform_vector2(expected_offset / owner_node.inverse_scale_factor());
+    let actual = header_transform.transform_point2(header_node.content_box().min);
+    assert!(
+        (actual - expected).length() <= 1.,
+        "{actual:?} vs {expected:?}"
+    );
+    let owner_global = gui
+        .store()
+        .local_to_global(list, fairygui_core::Point::ZERO)
+        .unwrap();
+    let global = gui
+        .store()
+        .local_to_global(header, fairygui_core::Point::ZERO)
+        .unwrap();
+    assert_eq!(
+        Vec2::new(global.x - owner_global.x, global.y - owner_global.y),
+        expected_offset
+    );
+}
+
+#[test]
 fn exported_refresh_components_keep_views_and_clip_at_native_positions_through_lock_and_disposal() {
     let (mut app, index, first, second) = fixture();
     let gui = app.world().non_send::<GuiRuntime>();

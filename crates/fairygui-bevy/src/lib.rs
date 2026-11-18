@@ -96,6 +96,8 @@ pub mod progress;
 mod properties;
 mod size_properties;
 pub use size_properties::GuiSizeConstraints;
+mod margin_property;
+pub use margin_property::GuiMargin;
 mod scroll_properties;
 pub use scroll_properties::GuiScrollSettings;
 mod visual_properties;
@@ -218,7 +220,7 @@ pub mod prelude {
         GuiIcon, GuiImageFill, GuiImageFlip, GuiInput, GuiInputSettings, GuiInputState, GuiLink,
         GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
         GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings, GuiListState,
-        GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMenuAction, GuiMut,
+        GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMargin, GuiMenuAction, GuiMut,
         GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
         GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
         GuiProgressTweenComplete, GuiProgressValue, GuiPullDownRelease, GuiPullPart,

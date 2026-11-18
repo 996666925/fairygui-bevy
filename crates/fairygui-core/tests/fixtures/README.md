@@ -377,3 +377,15 @@ header hashes the complete extracted TouchInfo class. Coverage includes strict
 button changes, repeated clicks, absent targets, explicit cancellation and the
 native zero-time startup sentinel. It does not exercise browser/OS input or
 native clickTest recipient selection. See docs/button-interaction.md.
+
+`component-margin-reference.txt` executes unchanged FairyGUI-layabox
+GComponent margin/setupOverflow/updateMask/handleSizeChanged, GList
+handleAlign/handleSizeChanged and ScrollPane onOwnerSizeChanged/
+adjustMaskContainer/setSize methods from revision
+`0a9368b7873e82bfe372323e0059685ee443bef8`. Its 120 scenarios and 840 snapshots
+compare content Sprite positions and viewport dimensions across component/list, overflow,
+alignment, initial/changed/negative margins, deferred resize, left/right bars,
+floating bars and dontClipMargin. Scalar Sprite/Point holders and inert scheduling
+replace Laya infrastructure; list bounds are a single 50-by-20 row. Pane content
+clamping, refresh bars, hit tests, painting, OS input and GPU are not simulated.
+Extracted method hashes are in the header; method numbers follow the order above.

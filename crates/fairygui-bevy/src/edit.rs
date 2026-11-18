@@ -324,6 +324,12 @@ impl GuiObjectMut<'_> {
             fairygui_core::Point::new(softness.x, softness.y),
         );
     }
+    pub fn set_margin(&mut self, margin: crate::GuiMargin) {
+        use crate::properties::Property;
+        if let Some(native) = crate::GuiMargin::read(self.runtime, self.object) {
+            margin.apply(&native, &native, self.runtime, self.object);
+        }
+    }
     pub fn set_image_flip(&mut self, flip: crate::FlipType) {
         self.runtime.store_mut().set_image_flip(self.object, flip);
     }

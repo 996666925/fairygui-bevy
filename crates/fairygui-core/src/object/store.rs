@@ -32,6 +32,8 @@ mod slider;
 mod animation_tests;
 #[path = "component_input.rs"]
 mod component_input;
+#[path = "component_margin.rs"]
+mod component_margin;
 #[path = "image.rs"]
 mod image;
 #[path = "size_constraints.rs"]
@@ -212,6 +214,8 @@ pub struct ObjectStore {
     objects: slotmap::SlotMap<GObjectId, GObject>,
     dirty_ids: HashSet<GObjectId>,
     list_bounds: std::collections::HashMap<GObjectId, Size>,
+    list_alignments: std::collections::HashMap<GObjectId, Point>,
+    visible_content_origins: std::collections::HashMap<GObjectId, Point>,
     pending_list_layouts: HashSet<GObjectId>,
     pending_group_layouts: HashSet<GObjectId>,
     updating_groups: HashSet<GObjectId>,
@@ -349,6 +353,10 @@ impl ObjectStore {
         self.virtual_states
             .retain(|owner, _| !removed_set.contains(owner));
         self.list_bounds
+            .retain(|owner, _| !removed_set.contains(owner));
+        self.list_alignments
+            .retain(|owner, _| !removed_set.contains(owner));
+        self.visible_content_origins
             .retain(|owner, _| !removed_set.contains(owner));
         self.pending_list_layouts
             .retain(|owner| !removed_set.contains(owner));
@@ -1686,6 +1694,16 @@ impl ObjectStore {
         }
 
         self.list_bounds.insert(list, layout.content);
+        let alignment = self.list_alignment(list);
+        let previous = self
+            .list_alignments
+            .insert(list, alignment)
+            .unwrap_or(Point::ZERO);
+        // GList.handleAlign repositions the content Sprite only when its
+        // alignment changes, even if margins changed since the last layout.
+        if previous != alignment {
+            self.visible_content_origins.remove(&list);
+        }
         self.update_scroll_content_size(list, layout.content);
 
         applied

@@ -22,7 +22,10 @@ pub(crate) fn project_scroll_overflow(
         let max = pane.map_or(fairygui_core::geom::Point::ZERO, |p| p.max_scroll_pos());
         let display = pane.map_or(fairygui_core::geom::Point::ZERO, |p| p.display_pos());
         let scale = node.inverse_scale_factor().recip();
-        let align = runtime.store().list_alignment(owner.0);
+        let origin = runtime
+            .store()
+            .component_content_origin(owner.0)
+            .unwrap_or_default();
         let offset = Vec2::new(
             if display.x < 0. || display.x > max.x {
                 node.scroll_position.x - display.x * scale
@@ -34,30 +37,33 @@ pub(crate) fn project_scroll_overflow(
             } else {
                 0.
             },
-        ) + Vec2::new(
-            align.x + component.margin.left,
-            align.y + component.margin.top,
-        ) * scale;
-        if !offset.is_finite() || offset == Vec2::ZERO {
-            continue;
-        }
-        // Only logical content moves. Registered bars and the ECS-only extent
-        // stay in the pane coordinate system. All paint descendants move once.
+        ) + Vec2::new(origin.x, origin.y) * scale;
+        // Content follows its retained origin; refresh bars follow the mask.
+        // Ordinary scrollbars and the ECS-only extent stay on the owner.
+        // All paint descendants receive each ancestor's offset once.
         for object in runtime
             .store()
             .object(owner.0)
             .map_or(&[][..], |object| object.children())
             .iter()
             .copied()
-            .filter(|&id| !runtime.store().is_scroll_overlay(id))
+            .filter(|&id| !runtime.store().is_scroll_bar_overlay(id))
         {
             let Some(root) = runtime.entity_of(object) else {
                 continue;
             };
-            let effective = ignored
-                .get(root)
-                .map_or(offset, |ignore| offset * Vec2::from(!ignore.0));
-            if effective == Vec2::ZERO {
+            let effective = if runtime.store().is_scroll_refresh_overlay(object) {
+                let origin = runtime
+                    .store()
+                    .scroll_mask_origin(owner.0)
+                    .unwrap_or_default();
+                Vec2::new(origin.x, origin.y) * scale
+            } else {
+                ignored
+                    .get(root)
+                    .map_or(offset, |ignore| offset * Vec2::from(!ignore.0))
+            };
+            if !effective.is_finite() || effective == Vec2::ZERO {
                 continue;
             }
             let delta = transform.transform_vector2(effective);

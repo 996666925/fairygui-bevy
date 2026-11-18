@@ -208,13 +208,21 @@ impl ObjectStore {
             if let Some(parent) = object.parent()
                 && let Some(component) = self.object(parent)?.control().component()
             {
-                let scroll = component
-                    .scroll_pane
-                    .as_ref()
-                    .map_or(Point::ZERO, |p| p.display_pos());
-                let align = self.list_alignment(parent);
-                local.tx += f64::from(component.margin.left - scroll.x + align.x);
-                local.ty += f64::from(component.margin.top - scroll.y + align.y);
+                let offset = if self.is_scroll_bar_overlay(id) {
+                    Point::ZERO
+                } else if self.is_scroll_refresh_overlay(id) {
+                    self.scroll_mask_origin(parent).unwrap_or(Point::ZERO)
+                } else {
+                    let mut origin = self.component_content_origin(parent)?;
+                    let scroll = component
+                        .scroll_pane
+                        .as_ref()
+                        .map_or(Point::ZERO, |p| p.display_pos());
+                    origin.offset(-scroll.x, -scroll.y);
+                    origin
+                };
+                local.tx += f64::from(offset.x);
+                local.ty += f64::from(offset.y);
             }
             result = local.mul(result);
             current = object.parent();

@@ -1,0 +1,971 @@
+# Native GComponent margin/setupOverflow/updateMask/handleSizeChanged, GList handleAlign/handleSizeChanged, ScrollPane onOwnerSizeChanged/adjustMaskContainer/setSize.
+# Scalar Sprite host; pane content clamping and painting are not simulated.
+# method 0 sha256 51741927bdf7f12b866d55feb44f566e813a2c3a795b86f14f506e1846c99e7d
+# method 1 sha256 2af28a56984cb2fb02a1a27609180266daa4d7d75902f4867c025136cc243e92
+# method 2 sha256 36c5c528d10b2452edcfa333a69d1450db37ce784eaeca96354c50115b2fcd56
+# method 3 sha256 28efc34964305a4dd4e386d068f8c7f2785ed5529dc117bd5c912dc5f3e87d0c
+# method 4 sha256 8c2304bb310a8f6203c0423123010d7dc9cce912f03b35cb00de94614e544a98
+# method 5 sha256 7adb7db42b49e44c0fb4f9459b741106a322e62c61b6087c3e26a443580383f4
+# method 6 sha256 d46e991689434b227c06fce527bdd7525b1879d06743e0fee660177f53dfc10a
+# method 7 sha256 ceb5be48b948eae62c385db8364a11ef0773fdef9e4121846dbc029f80a70874
+# method 8 sha256 4d928f9d09b483a8c77526b18fb31a0162bddd13752e36ddc79af8f57e9ecfd8
+case 0 0 0 0 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 0 0 100 60
+layout : 0 0 100 60
+margin -4 7 8 11 : 0 0 116 62
+layout : 0 0 116 62
+resize 60 : 0 0 56 62
+case 1 0 0 0 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 3 5 100 60
+layout : 3 5 100 60
+margin -4 7 8 11 : 3 5 116 62
+layout : 3 5 116 62
+resize 60 : 3 5 56 62
+case 2 0 0 1 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 0 0 100 60
+layout : 0 0 100 60
+margin -4 7 8 11 : 0 0 116 62
+layout : 0 0 116 62
+resize 60 : 0 0 56 62
+case 3 0 0 1 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 3 5 100 60
+layout : 3 5 100 60
+margin -4 7 8 11 : 3 5 116 62
+layout : 3 5 116 62
+resize 60 : 3 5 56 62
+case 4 0 0 2 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 0 0 100 60
+layout : 0 0 100 60
+margin -4 7 8 11 : 0 0 116 62
+layout : 0 0 116 62
+resize 60 : 0 0 56 62
+case 5 0 0 2 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 3 5 100 60
+layout : 3 5 100 60
+margin -4 7 8 11 : 3 5 116 62
+layout : 3 5 116 62
+resize 60 : 3 5 56 62
+case 6 0 1 0 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 7 0 1 0 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 8 0 1 1 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 9 0 1 1 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 10 0 1 2 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 11 0 1 2 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 12 0 2 0 0 0 0 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 13 0 2 0 0 0 1 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 14 0 2 0 0 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 15 0 2 0 0 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 16 0 2 0 1 0 0 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 17 0 2 0 1 0 1 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 18 0 2 0 1 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 19 0 2 0 1 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 20 0 2 0 0 0 0 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 21 0 2 0 0 0 1 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 22 0 2 0 0 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 23 0 2 0 0 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 24 0 2 0 1 0 0 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 25 0 2 0 1 0 1 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 26 0 2 0 1 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 27 0 2 0 1 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 28 0 2 1 0 0 0 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 29 0 2 1 0 0 1 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 30 0 2 1 0 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 31 0 2 1 0 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 32 0 2 1 1 0 0 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 33 0 2 1 1 0 1 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 34 0 2 1 1 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 35 0 2 1 1 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 36 0 2 1 0 0 0 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 37 0 2 1 0 0 1 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 38 0 2 1 0 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 39 0 2 1 0 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 40 0 2 1 1 0 0 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 41 0 2 1 1 0 1 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 42 0 2 1 1 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 43 0 2 1 1 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 44 0 2 2 0 0 0 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 45 0 2 2 0 0 1 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 46 0 2 2 0 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 47 0 2 2 0 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 48 0 2 2 1 0 0 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 49 0 2 2 1 0 1 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 50 0 2 2 1 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 51 0 2 2 1 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 52 0 2 2 0 0 0 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 53 0 2 2 0 0 1 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 54 0 2 2 0 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 55 0 2 2 0 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 56 0 2 2 1 0 0 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 57 0 2 2 1 0 1 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 58 0 2 2 1 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 59 0 2 2 1 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 60 1 0 0 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 0 0 100 60
+layout : 0 0 100 60
+margin -4 7 8 11 : 0 0 116 62
+layout : 0 0 116 62
+resize 60 : 0 0 56 62
+case 61 1 0 0 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 3 5 100 60
+layout : 3 5 100 60
+margin -4 7 8 11 : 3 5 116 62
+layout : 3 5 116 62
+resize 60 : 3 5 56 62
+case 62 1 0 1 0 0 0 0 0 0 0
+initial : 25 30 100 80
+width 120 : 25 30 120 80
+margin 10 10 10 10 : 25 30 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 35 30 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 63 1 0 1 0 0 0 3 5 7 9
+initial : 23 28 90 66
+width 120 : 23 28 110 66
+margin 10 10 10 10 : 23 28 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 35 30 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 64 1 0 2 0 0 0 0 0 0 0
+initial : 50 60 100 80
+width 120 : 50 60 120 80
+margin 10 10 10 10 : 50 60 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 60 50 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 65 1 0 2 0 0 0 3 5 7 9
+initial : 43 51 90 66
+width 120 : 43 51 110 66
+margin 10 10 10 10 : 43 51 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 60 50 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 66 1 1 0 0 0 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 67 1 1 0 0 0 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 68 1 1 1 0 0 0 0 0 0 0
+initial : 25 30 100 80
+width 120 : 25 30 120 80
+margin 10 10 10 10 : 35 40 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 69 1 1 1 0 0 0 3 5 7 9
+initial : 23 28 90 66
+width 120 : 23 28 110 66
+margin 10 10 10 10 : 30 33 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 70 1 1 2 0 0 0 0 0 0 0
+initial : 50 60 100 80
+width 120 : 50 60 120 80
+margin 10 10 10 10 : 60 70 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 71 1 1 2 0 0 0 3 5 7 9
+initial : 43 51 90 66
+width 120 : 43 51 110 66
+margin 10 10 10 10 : 50 56 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 72 1 2 0 0 0 0 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 73 1 2 0 0 0 1 0 0 0 0
+initial : 0 0 92 74
+width 120 : 0 0 112 74
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 74 1 2 0 0 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 75 1 2 0 0 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 76 1 2 0 1 0 0 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 77 1 2 0 1 0 1 0 0 0 0
+initial : 8 0 92 74
+width 120 : 8 0 112 74
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 78 1 2 0 1 1 0 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 79 1 2 0 1 1 1 0 0 0 0
+initial : 0 0 100 80
+width 120 : 0 0 120 80
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 80 1 2 0 0 0 0 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 81 1 2 0 0 0 1 3 5 7 9
+initial : 3 5 82 60
+width 120 : 3 5 102 60
+margin 10 10 10 10 : 10 10 92 54
+layout : 10 10 92 54
+margin -4 7 8 11 : -4 7 108 56
+layout : -4 7 108 56
+resize 60 : -4 7 48 56
+case 82 1 2 0 0 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 83 1 2 0 0 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 84 1 2 0 1 0 0 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 85 1 2 0 1 0 1 3 5 7 9
+initial : 11 5 82 60
+width 120 : 11 5 102 60
+margin 10 10 10 10 : 18 10 92 54
+layout : 18 10 92 54
+margin -4 7 8 11 : 4 7 108 56
+layout : 4 7 108 56
+resize 60 : 4 7 48 56
+case 86 1 2 0 1 1 0 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 87 1 2 0 1 1 1 3 5 7 9
+initial : 3 5 90 66
+width 120 : 3 5 110 66
+margin 10 10 10 10 : 10 10 100 60
+layout : 10 10 100 60
+margin -4 7 8 11 : -4 7 116 62
+layout : -4 7 116 62
+resize 60 : -4 7 56 62
+case 88 1 2 1 0 0 0 0 0 0 0
+initial : 21 27 92 74
+width 120 : 21 27 112 74
+margin 10 10 10 10 : 31 37 92 54
+layout : 31 27 92 54
+margin -4 7 8 11 : 17 24 108 56
+layout : 25 25 108 56
+resize 60 : -4 25 48 56
+case 89 1 2 1 0 0 1 0 0 0 0
+initial : 21 27 92 74
+width 120 : 21 27 112 74
+margin 10 10 10 10 : 31 37 92 54
+layout : 31 27 92 54
+margin -4 7 8 11 : 17 24 108 56
+layout : 25 25 108 56
+resize 60 : -4 25 48 56
+case 90 1 2 1 0 1 0 0 0 0 0
+initial : 25 30 100 80
+width 120 : 25 30 120 80
+margin 10 10 10 10 : 35 40 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 91 1 2 1 0 1 1 0 0 0 0
+initial : 25 30 100 80
+width 120 : 25 30 120 80
+margin 10 10 10 10 : 35 40 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 92 1 2 1 1 0 0 0 0 0 0
+initial : 29 27 92 74
+width 120 : 29 27 112 74
+margin 10 10 10 10 : 39 37 92 54
+layout : 39 27 92 54
+margin -4 7 8 11 : 25 24 108 56
+layout : 33 25 108 56
+resize 60 : 4 25 48 56
+case 93 1 2 1 1 0 1 0 0 0 0
+initial : 29 27 92 74
+width 120 : 29 27 112 74
+margin 10 10 10 10 : 39 37 92 54
+layout : 39 27 92 54
+margin -4 7 8 11 : 25 24 108 56
+layout : 33 25 108 56
+resize 60 : 4 25 48 56
+case 94 1 2 1 1 1 0 0 0 0 0
+initial : 25 30 100 80
+width 120 : 25 30 120 80
+margin 10 10 10 10 : 35 40 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 95 1 2 1 1 1 1 0 0 0 0
+initial : 25 30 100 80
+width 120 : 25 30 120 80
+margin 10 10 10 10 : 35 40 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 96 1 2 1 0 0 0 3 5 7 9
+initial : 19 25 82 60
+width 120 : 19 25 102 60
+margin 10 10 10 10 : 26 30 92 54
+layout : 31 27 92 54
+margin -4 7 8 11 : 17 24 108 56
+layout : 25 25 108 56
+resize 60 : -4 25 48 56
+case 97 1 2 1 0 0 1 3 5 7 9
+initial : 19 25 82 60
+width 120 : 19 25 102 60
+margin 10 10 10 10 : 26 30 92 54
+layout : 31 27 92 54
+margin -4 7 8 11 : 17 24 108 56
+layout : 25 25 108 56
+resize 60 : -4 25 48 56
+case 98 1 2 1 0 1 0 3 5 7 9
+initial : 23 28 90 66
+width 120 : 23 28 110 66
+margin 10 10 10 10 : 30 33 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 99 1 2 1 0 1 1 3 5 7 9
+initial : 23 28 90 66
+width 120 : 23 28 110 66
+margin 10 10 10 10 : 30 33 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 100 1 2 1 1 0 0 3 5 7 9
+initial : 27 25 82 60
+width 120 : 27 25 102 60
+margin 10 10 10 10 : 34 30 92 54
+layout : 39 27 92 54
+margin -4 7 8 11 : 25 24 108 56
+layout : 33 25 108 56
+resize 60 : 4 25 48 56
+case 101 1 2 1 1 0 1 3 5 7 9
+initial : 27 25 82 60
+width 120 : 27 25 102 60
+margin 10 10 10 10 : 34 30 92 54
+layout : 39 27 92 54
+margin -4 7 8 11 : 25 24 108 56
+layout : 33 25 108 56
+resize 60 : 4 25 48 56
+case 102 1 2 1 1 1 0 3 5 7 9
+initial : 23 28 90 66
+width 120 : 23 28 110 66
+margin 10 10 10 10 : 30 33 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 103 1 2 1 1 1 1 3 5 7 9
+initial : 23 28 90 66
+width 120 : 23 28 110 66
+margin 10 10 10 10 : 30 33 100 60
+layout : 35 30 100 60
+margin -4 7 8 11 : 21 27 116 62
+layout : 29 28 116 62
+resize 60 : -1 28 56 62
+case 104 1 2 2 0 0 0 0 0 0 0
+initial : 42 54 92 74
+width 120 : 42 54 112 74
+margin 10 10 10 10 : 52 64 92 54
+layout : 52 44 92 54
+margin -4 7 8 11 : 38 41 108 56
+layout : 54 43 108 56
+resize 60 : -4 43 48 56
+case 105 1 2 2 0 0 1 0 0 0 0
+initial : 42 54 92 74
+width 120 : 42 54 112 74
+margin 10 10 10 10 : 52 64 92 54
+layout : 52 44 92 54
+margin -4 7 8 11 : 38 41 108 56
+layout : 54 43 108 56
+resize 60 : -4 43 48 56
+case 106 1 2 2 0 1 0 0 0 0 0
+initial : 50 60 100 80
+width 120 : 50 60 120 80
+margin 10 10 10 10 : 60 70 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 107 1 2 2 0 1 1 0 0 0 0
+initial : 50 60 100 80
+width 120 : 50 60 120 80
+margin 10 10 10 10 : 60 70 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 108 1 2 2 1 0 0 0 0 0 0
+initial : 50 54 92 74
+width 120 : 50 54 112 74
+margin 10 10 10 10 : 60 64 92 54
+layout : 60 44 92 54
+margin -4 7 8 11 : 46 41 108 56
+layout : 62 43 108 56
+resize 60 : 4 43 48 56
+case 109 1 2 2 1 0 1 0 0 0 0
+initial : 50 54 92 74
+width 120 : 50 54 112 74
+margin 10 10 10 10 : 60 64 92 54
+layout : 60 44 92 54
+margin -4 7 8 11 : 46 41 108 56
+layout : 62 43 108 56
+resize 60 : 4 43 48 56
+case 110 1 2 2 1 1 0 0 0 0 0
+initial : 50 60 100 80
+width 120 : 50 60 120 80
+margin 10 10 10 10 : 60 70 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 111 1 2 2 1 1 1 0 0 0 0
+initial : 50 60 100 80
+width 120 : 50 60 120 80
+margin 10 10 10 10 : 60 70 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 112 1 2 2 0 0 0 3 5 7 9
+initial : 35 45 82 60
+width 120 : 35 45 102 60
+margin 10 10 10 10 : 42 50 92 54
+layout : 52 44 92 54
+margin -4 7 8 11 : 38 41 108 56
+layout : 54 43 108 56
+resize 60 : -4 43 48 56
+case 113 1 2 2 0 0 1 3 5 7 9
+initial : 35 45 82 60
+width 120 : 35 45 102 60
+margin 10 10 10 10 : 42 50 92 54
+layout : 52 44 92 54
+margin -4 7 8 11 : 38 41 108 56
+layout : 54 43 108 56
+resize 60 : -4 43 48 56
+case 114 1 2 2 0 1 0 3 5 7 9
+initial : 43 51 90 66
+width 120 : 43 51 110 66
+margin 10 10 10 10 : 50 56 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 115 1 2 2 0 1 1 3 5 7 9
+initial : 43 51 90 66
+width 120 : 43 51 110 66
+margin 10 10 10 10 : 50 56 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 116 1 2 2 1 0 0 3 5 7 9
+initial : 43 45 82 60
+width 120 : 43 45 102 60
+margin 10 10 10 10 : 50 50 92 54
+layout : 60 44 92 54
+margin -4 7 8 11 : 46 41 108 56
+layout : 62 43 108 56
+resize 60 : 4 43 48 56
+case 117 1 2 2 1 0 1 3 5 7 9
+initial : 43 45 82 60
+width 120 : 43 45 102 60
+margin 10 10 10 10 : 50 50 92 54
+layout : 60 44 92 54
+margin -4 7 8 11 : 46 41 108 56
+layout : 62 43 108 56
+resize 60 : 4 43 48 56
+case 118 1 2 2 1 1 0 3 5 7 9
+initial : 43 51 90 66
+width 120 : 43 51 110 66
+margin 10 10 10 10 : 50 56 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
+case 119 1 2 2 1 1 1 3 5 7 9
+initial : 43 51 90 66
+width 120 : 43 51 110 66
+margin 10 10 10 10 : 50 56 100 60
+layout : 60 50 100 60
+margin -4 7 8 11 : 46 47 116 62
+layout : 62 49 116 62
+resize 60 : 2 49 56 62
