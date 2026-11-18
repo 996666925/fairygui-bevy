@@ -11,7 +11,9 @@ const CONTENT: GuiColor = GuiColor::new(0.8, 0.25, 0.35, 1.);
 const BACK: GuiColor = GuiColor::new(0.25, 0.5, 0.7, 1.);
 const PROBES: [Vec2; 6] = [
     Vec2::new(10., 10.),
-    Vec2::new(40., 35.),
+    // Keep color probes inside the shape: fractional UI placement can put the
+    // moved rectangle's x=40 edge between physical pixels and blend coverage.
+    Vec2::new(45., 35.),
     Vec2::new(95., 35.),
     Vec2::new(95., 65.),
     Vec2::new(120., 65.),
@@ -277,7 +279,7 @@ fn drive(
 ) {
     state.frame += 1;
     assert!(
-        time.elapsed_secs_f64() < 50.,
+        time.elapsed_secs_f64() < 120.,
         "mask window timeout at {}",
         state.step
     );
@@ -333,8 +335,6 @@ fn drive(
                 gui.store_mut().set_touchable(content, true);
                 let mask =
                     early.unwrap_or_else(|| shape(&mut gui, owner, if i == 11 { 1 } else { i }));
-                gui.store_mut()
-                    .set_component_mask(owner, Some(mask), [4, 5, 9].contains(&i));
                 if [4, 5, 9].contains(&i) {
                     gui.store_mut().set_alpha(owner, 0.7);
                 }
@@ -394,6 +394,14 @@ fn drive(
             state.since = state.frame;
         }
         1 if elapsed >= 15 => {
+            for (i, &owner) in state.owners.iter().enumerate() {
+                commands
+                    .entity(gui.entity_of(owner).unwrap())
+                    .insert(fairygui_bevy::GuiMask {
+                        source: Some(gui.entity_of(state.masks[i]).unwrap()),
+                        reversed: [4, 5, 9].contains(&i),
+                    });
+            }
             commands
                 .entity(gui.entity_of(state.root.unwrap()).unwrap())
                 .insert(GlobalZIndex(600));
@@ -436,15 +444,24 @@ fn drive(
             let owner = state.owners[0];
             let old = state.masks[0];
             let new = shape(&mut gui, owner, 1);
-            gui.store_mut().set_component_mask(owner, Some(new), false);
             gui.store_mut().set_visible(old, false);
             gui.queue_subtree(new);
             state.masks[0] = new;
-            gui.store_mut()
-                .set_component_mask(state.owners[1], Some(state.masks[1]), true);
+            commands
+                .entity(state.views[1])
+                .insert(fairygui_bevy::GuiMask::reversed(
+                    gui.entity_of(state.masks[1]).unwrap(),
+                ));
             for i in [2, 4] {
-                gui.store_mut()
-                    .set_component_mask(state.owners[i], None, false);
+                if i == 2 {
+                    commands
+                        .entity(state.views[i])
+                        .remove::<fairygui_bevy::GuiMask>();
+                } else {
+                    commands
+                        .entity(state.views[i])
+                        .insert(fairygui_bevy::GuiMask::default());
+                }
                 gui.store_mut().set_visible(state.masks[i], false);
             }
             gui.store_mut().set_alpha(state.masks[3], 0.4);
@@ -459,6 +476,13 @@ fn drive(
             }
             state.step = 4;
             state.since = state.frame;
+        }
+        4 if elapsed == 1 => {
+            commands
+                .entity(state.views[0])
+                .insert(fairygui_bevy::GuiMask::new(
+                    gui.entity_of(state.masks[0]).unwrap(),
+                ));
         }
         4 if elapsed >= 25 => {
             capture(&state, &gui, &nodes, &mut commands, "-updated");

@@ -65,6 +65,25 @@ pub struct GuiMut<'w, 's> {
     resolver: GuiObjectResolver<'w, 's>,
 }
 impl GuiMut<'_, '_> {
+    /// Assign or clear a component mask immediately using ready view/root/window
+    /// entities. Pending, stale, self and ancestor sources fail without retry.
+    pub fn set_mask(&mut self, owner: Entity, source: Option<Entity>, reversed: bool) -> bool {
+        let Some(owner) = self.object_for_entity(owner) else {
+            return false;
+        };
+        let source = match source {
+            Some(source) => {
+                let Some(source) = self.object_for_entity(source) else {
+                    return false;
+                };
+                Some(source)
+            }
+            None => None,
+        };
+        self.runtime
+            .store_mut()
+            .set_component_mask(owner, source, reversed)
+    }
     fn object_for_entity(&self, entity: Entity) -> Option<GObjectId> {
         self.resolver.object(&self.runtime, entity)
     }
@@ -1024,6 +1043,8 @@ impl GuiObjectMut<'_> {
 }
 /// Direct object access for exclusive systems and tests.
 pub trait GuiWorldExt {
+    /// Immediate equivalent of GuiMut::set_mask for exclusive systems.
+    fn gui_set_mask(&mut self, owner: Entity, source: Option<Entity>, reversed: bool) -> bool;
     fn gui_mut(&mut self, entity: Entity) -> Option<GuiObjectMut<'_>>;
     /// Equivalent of GuiMut::scroll_object_to_view for exclusive systems.
     fn gui_scroll_object_to_view(
@@ -1111,6 +1132,26 @@ fn world_object(world: &World, entity: Entity) -> Option<GObjectId> {
     )
 }
 impl GuiWorldExt for World {
+    fn gui_set_mask(&mut self, owner: Entity, source: Option<Entity>, reversed: bool) -> bool {
+        let Some(owner) = world_object(self, owner) else {
+            return false;
+        };
+        let source = match source {
+            Some(source) => {
+                let Some(source) = world_object(self, source) else {
+                    return false;
+                };
+                Some(source)
+            }
+            None => None,
+        };
+        self.get_non_send_mut::<GuiRuntime>()
+            .is_some_and(|mut runtime| {
+                runtime
+                    .store_mut()
+                    .set_component_mask(owner, source, reversed)
+            })
+    }
     fn gui_scroll_object_to_view(
         &mut self,
         container: Entity,

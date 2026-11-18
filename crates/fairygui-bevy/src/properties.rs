@@ -190,6 +190,7 @@ pub(crate) fn sync(world: &mut World) {
     // Constraints, outer geometry and list reflow can change the actual view
     // after its write was consumed. Refresh its baseline before the next pass.
     sync_property::<GuiViewSize>(world);
+    crate::mask::sync(world);
     world
         .non_send_mut::<GuiRuntime>()
         .prune_geometry_event_snapshots();

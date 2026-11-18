@@ -1245,6 +1245,29 @@ fn configure_effects(
 / `set_color_filter` 即时修改。`--smoke-compositor` 使用这些组件验证实际混合、滤镜、
 嵌套隔离与动态更新。具体模式和渲染限制见[离屏合成](docs/compositing.md)。
 
+组件遮罩可通过实体直接绑定，无需访问内部对象编号：
+
+```rust,ignore
+commands.entity(panel).insert(GuiMask::new(mask_shape));
+commands.entity(panel).insert(GuiMask::reversed(mask_shape));
+commands.entity(panel).insert(GuiMask::default()); // 清除遮罩
+// 已成功绑定的声明被移除时，也会清除它管理的遮罩。
+commands.entity(panel).remove::<GuiMask>();
+```
+
+`panel` 与 `mask_shape` 支持控件视图、根拥有者和窗口拥有者。资源尚未就绪时保留
+当前遮罩，加载后自动绑定；拥有者切换模板后重新解析，自身或祖先等非法来源不会
+修改现有遮罩。视图上的声明优先于拥有者上的声明。未变更的声明不会重复调用
+原生 setter，也不会覆盖后续的即时修改。
+
+`GuiQuery::mask` 或视图上的只读 `GuiMaskState` 提供实际遮罩源的视图实体及反向标记，
+包括 `.fui` 自带的遮罩。`assigned` 区分未设置和来源已销毁的遮罩，后者的 `source`
+为 `None`，原生身份仍被保留，避免内容突然失去遮挡。快照不会自动创建声明。即时修改使用
+`GuiMut::set_mask(panel, Some(mask_shape), reversed)`，独占系统可使用
+`World::gui_set_mask`；这些方法在来源未就绪时返回 `false`，不排队重试。
+来源销毁不会误绑定到新建对象；显式清除或移除已成功绑定的声明可释放遮罩。
+`--smoke-masks` 通过 ECS 声明验证真实窗口中的普通/反向遮罩、替换、清除及输入命中。
+
 组件空白区域是否参与命中，通过 `GuiOpaque` 修改：
 
 ```rust,ignore
