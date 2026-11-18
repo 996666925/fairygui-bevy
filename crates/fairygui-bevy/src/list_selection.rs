@@ -3,6 +3,10 @@ use crate::{GuiListSelection, GuiRuntime, core::GObjectId, properties::Property}
 use bevy::prelude::*;
 
 impl Property for GuiListSelection {
+    fn apply_repeated_writes() -> bool {
+        true
+    }
+
     fn read(runtime: &GuiRuntime, object: GObjectId) -> Option<Self> {
         runtime.store().list_selections(object).map(Self)
     }

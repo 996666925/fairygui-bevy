@@ -68,6 +68,12 @@ fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObject
 #[test]
 fn keyed_tree_waits_for_late_templates_preserves_rows_and_applies_pending_selection_after_recovery()
 {
+    for initial_selection in [0, 2] {
+        check_tree_resource_selection(initial_selection);
+    }
+}
+
+fn check_tree_resource_selection(initial_selection: usize) {
     use crate::GuiListSelection;
     let (mut app, owner, tree) = fixture();
     app.world_mut().entity_mut(tree).insert(config());
@@ -76,7 +82,7 @@ fn keyed_tree_waits_for_late_templates_preserves_rows_and_applies_pending_select
     app.world_mut()
         .gui_mut(tree)
         .unwrap()
-        .select_tree_node(2, false);
+        .select_tree_node(initial_selection, false);
     app.update();
     let old = app.world().get::<GuiTreeState>(tree).unwrap().clone();
     let original: Vec<_> = old
@@ -84,7 +90,7 @@ fn keyed_tree_waits_for_late_templates_preserves_rows_and_applies_pending_select
         .iter()
         .map(|node| node.view().unwrap())
         .collect();
-    assert_eq!(old.selected_nodes(), [2]);
+    assert_eq!(old.selected_nodes(), [initial_selection]);
     let mut next = config();
     let mut foreign = GuiTreeItem::leaf("foreign", "Foreign row");
     foreign.template = Some("ui://VirtualList/mailItem".into());
@@ -226,6 +232,75 @@ fn keyed_tree_with_no_source_metadata_uses_explicit_registered_template_urls() {
             .unwrap()
             .source_package_id(),
         None
+    );
+}
+
+#[test]
+fn keyed_tree_reasserts_the_same_selection_value_on_new_content_without_replaying_projections() {
+    use crate::GuiListSelection;
+    let (mut app, _, tree) = fixture();
+    app.world_mut().entity_mut(tree).insert(config());
+    app.update();
+    app.world_mut()
+        .gui_mut(tree)
+        .unwrap()
+        .select_tree_node(0, false);
+    app.update();
+    let folder = view(&app, tree, "folder");
+    let other = view(&app, tree, "other");
+    assert_eq!(app.world().get::<GuiListSelection>(tree).unwrap().0, [0]);
+    let mut reordered = config();
+    reordered.items.swap(0, 1);
+    // This is a new application write even though the index equals the old
+    // projection. It requests the node now at index zero, not the old key.
+    app.world_mut()
+        .entity_mut(tree)
+        .insert((reordered, GuiListSelection(vec![0])));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .selected_nodes(),
+        [0]
+    );
+    assert_eq!(view(&app, tree, "other"), other);
+    assert_eq!(app.world().get::<GuiListSelection>(tree).unwrap().0, [0]);
+    // Without another application selection write, reordering preserves the
+    // selected object. Native projections must not become fresh requests.
+    app.world_mut().entity_mut(tree).insert(config());
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .selected_nodes(),
+        [2]
+    );
+    assert_eq!(app.world().get::<GuiListSelection>(tree).unwrap().0, [1]);
+    assert_eq!(view(&app, tree, "folder"), folder);
+    assert_eq!(view(&app, tree, "other"), other);
+    let tick = app
+        .world()
+        .entity(tree)
+        .get_ref::<GuiListSelection>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(tree)
+            .get_ref::<GuiListSelection>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .selected_nodes(),
+        [2]
     );
 }
 

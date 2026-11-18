@@ -14,6 +14,12 @@ pub(crate) trait Property:
     fn ready(_world: &World, _entity: Entity, _object: GObjectId) -> bool {
         true
     }
+    /// Whole-value properties may treat a new component write as a request even
+    /// when its value equals the previous projection. Acknowledge projections
+    /// separately so native updates never replay themselves as application edits.
+    fn apply_repeated_writes() -> bool {
+        false
+    }
     /// Add read-only metadata owned by the materialized ECS view.
     fn read_view(&mut self, _world: &World, _object: GObjectId) {}
     fn apply(&self, previous: &Self, native: &Self, runtime: &mut GuiRuntime, object: GObjectId);
@@ -23,6 +29,13 @@ pub(crate) trait Property:
 pub(crate) struct NativeValue<T: Property> {
     object: GObjectId,
     value: T,
+}
+
+#[derive(Component)]
+struct AppliedWriteTick<T: Property> {
+    object: GObjectId,
+    tick: bevy::ecs::change_detection::Tick,
+    property: std::marker::PhantomData<fn() -> T>,
 }
 
 impl<T: Property> NativeValue<T> {
@@ -212,13 +225,24 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
                 .filter(|baseline| reference.is_some() || baseline.object == object);
             let Some(native) = snapshot::<T>(world, object) else {
                 if value.is_some() || stored.is_some() {
-                    world.entity_mut(entity).remove::<(T, NativeValue<T>)>();
+                    world
+                        .entity_mut(entity)
+                        .remove::<(T, NativeValue<T>, AppliedWriteTick<T>)>();
                 }
                 continue;
             };
             if !T::ready(world, entity, object) {
                 continue;
             }
+            let repeated_write = T::apply_repeated_writes()
+                && world.get::<AppliedWriteTick<T>>(entity).is_some_and(|ack| {
+                    ack.object == object
+                        && world.entity(entity).get_ref::<T>().is_some_and(|value| {
+                            value
+                                .last_changed()
+                                .is_newer_than(ack.tick, world.read_change_tick())
+                        })
+                });
             let baseline = initial
                 .as_ref()
                 .map(|baseline| &baseline.value)
@@ -234,7 +258,7 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
                 .unwrap_or(&native);
             let next = if let Some(value) = &value
                 && *value != native
-                && value != baseline
+                && (value != baseline || repeated_write)
             {
                 value.apply(
                     baseline,
@@ -262,6 +286,21 @@ pub(crate) fn sync_property<T: Property>(world: &mut World) {
                 world.entity_mut(entity).insert(NativeValue {
                     object,
                     value: next,
+                });
+            }
+            if T::apply_repeated_writes()
+                && let Some(tick) = world
+                    .entity(entity)
+                    .get_ref::<T>()
+                    .map(|value| value.last_changed())
+                && world
+                    .get::<AppliedWriteTick<T>>(entity)
+                    .is_none_or(|ack| ack.object != object || ack.tick != tick)
+            {
+                world.entity_mut(entity).insert(AppliedWriteTick::<T> {
+                    object,
+                    tick,
+                    property: std::marker::PhantomData,
                 });
             }
         }

@@ -1273,6 +1273,8 @@ Guide 示例通过 ECS 拥有可复用的 `GuideLayer`，用坐标查询对齐�
 按原生选择规则归一化，单选模式保留最后一个有效项。选择会联动行按钮和选择控制器，
 不会自动滚动、展开树节点或生成点击事件。可与 `GuiListContent`、`GuiVirtualList` 或 `GuiTreeContent`
 同批插入；选择会在内容准备后应用。虚拟列表支持尚未生成视图的离屏索引。
+树内容按 key 重排时，显式重新写入相同索引也会选中新位置上的节点；仅修改内容时则保留
+当前选中节点。库同步索引时不会把旧选择重放成新的写入，资源等待期间也保留显式写入的意图。
 
 ```rust,ignore
 fn select_mail(mut lists: Query<&mut GuiListSelection>, target: Entity) {
