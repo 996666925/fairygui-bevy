@@ -1491,6 +1491,10 @@ gui_edit.edit(tree, |object: &mut GuiObjectMut| object.select_tree_node(3, true)
 
 `select_tree_node` 会展开祖先再加入选择；`set_tree_expanded`、`toggle_tree_node`、
 `expand_tree` 和 `collapse_tree` 控制展开。全部收起包含顶层文件夹，顶层行仍显示。
+`expand_tree_branch(index)` / `collapse_tree_branch(index)` 对指定文件夹及其全部后代文件夹
+操作，使用当前内容的逻辑前序索引；可从行上的 `GuiTreeNode::index()` 取得。祖先与其他分支
+保留状态，隐藏分支也会更新，但不会因此展开祖先。行实体保留，收起分支只清除该分支中
+变为隐藏的选择；重复操作、叶节点及无效索引返回 `false`。
 箭头的 `expanded` 控制器与节点状态双向同步；行点击遵循包的 `clickToExpand`
 配置。状态在 Publish 前、PostLayout 前和 Sync 末尾刷新，未变化时保留变更标记。
 `--smoke-tree` 验证导出树的真实点击、缩进、布局折叠、隐藏节点选择和回收。

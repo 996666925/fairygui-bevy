@@ -95,6 +95,25 @@ impl TreeData {
         self.set_expanded(index, !current)
     }
 
+    /// Apply native expandAll/collapseAll to one folder and its descendant
+    /// folders. Ancestors and sibling branches keep their current state, even
+    /// when the requested folder is hidden. Leaves/invalid indices are no-ops.
+    pub fn set_branch_expanded(&mut self, index: usize, expanded: bool) -> bool {
+        let Some(folder) = self.nodes.get(index).filter(|node| node.is_folder) else {
+            return false;
+        };
+        let level = folder.level;
+        let end = self.nodes[index + 1..]
+            .iter()
+            .position(|node| node.level <= level)
+            .map_or(self.nodes.len(), |offset| index + 1 + offset);
+        let mut changed = false;
+        for node in index..end {
+            changed |= self.set_expanded(node, expanded);
+        }
+        changed
+    }
+
     /// 展开某个节点的全部祖先，使它变为可见。
     ///
     /// 官方在选中节点时会这么做。返回是否有状态变化。

@@ -3,6 +3,9 @@ use super::*;
 use crate::widget::ControlData;
 
 #[cfg(test)]
+#[path = "tree_branch_tests.rs"]
+mod branch_tests;
+#[cfg(test)]
 #[path = "tree_click_tests.rs"]
 mod click_tests;
 
@@ -122,6 +125,26 @@ impl ObjectStore {
     ) -> bool {
         let changed = match self.objects.get_mut(tree).map(|object| &mut object.control) {
             Some(ControlData::Tree(data)) => data.set_expanded(index, expanded),
+            _ => return false,
+        };
+        if changed {
+            self.refresh_tree_visibility(tree);
+        }
+        changed
+    }
+
+    /// Native expandAll/collapseAll for one logical preorder folder index.
+    /// Updates all descendant folders, including hidden ones, then refreshes
+    /// cell controllers, selection, visibility and layout once. Returns whether
+    /// any folder state changed. Ancestors and other branches are preserved.
+    pub fn set_tree_branch_expanded(
+        &mut self,
+        tree: GObjectId,
+        index: usize,
+        expanded: bool,
+    ) -> bool {
+        let changed = match self.objects.get_mut(tree).map(|object| &mut object.control) {
+            Some(ControlData::Tree(data)) => data.set_branch_expanded(index, expanded),
             _ => return false,
         };
         if changed {

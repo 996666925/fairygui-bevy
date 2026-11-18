@@ -758,6 +758,22 @@ impl GuiObjectMut<'_> {
         let object = self.object;
         runtime.collapse_tree(object);
     }
+    /// Expand a folder and every descendant folder using its current logical
+    /// preorder index, as in native GTree.expandAll(folder). Ancestors and other
+    /// branches keep their states. Returns whether any folder state changed.
+    pub fn expand_tree_branch(&mut self, index: usize) -> bool {
+        self.runtime
+            .store_mut()
+            .set_tree_branch_expanded(self.object, index, true)
+    }
+    /// Collapse a folder and every descendant folder, including hidden ones.
+    /// Uses the logical preorder index (not the visible row index). Row entities
+    /// are retained; Sync publishes visibility, layout and selection changes.
+    pub fn collapse_tree_branch(&mut self, index: usize) -> bool {
+        self.runtime
+            .store_mut()
+            .set_tree_branch_expanded(self.object, index, false)
+    }
     pub fn select_tree_node(&mut self, index: usize, scroll_to_view: bool) {
         let runtime = &mut *self.runtime;
         let object = self.object;

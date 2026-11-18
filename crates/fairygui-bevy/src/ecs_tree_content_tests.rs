@@ -66,6 +66,175 @@ fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObject
 }
 
 #[test]
+fn tree_branch_operations_retain_rows_preserve_other_selections_and_update_hidden_folders() {
+    use crate::{
+        GuiControllers, GuiDisplay, GuiListSelection, GuiListSettings, GuiSystems,
+        ListSelectionMode,
+    };
+    fn leaf(key: &str) -> GuiTreeItem {
+        GuiTreeItem::leaf(key, key)
+    }
+    fn folder(key: &str, children: Vec<GuiTreeItem>) -> GuiTreeItem {
+        GuiTreeItem::folder(key, key, children)
+    }
+    let (mut app, owner, tree) = fixture();
+    app.world_mut()
+        .entity_mut(tree)
+        .insert(GuiTreeContent::new(vec![
+            folder(
+                "a",
+                vec![
+                    leaf("a1"),
+                    folder("b", vec![folder("c", vec![leaf("c1")]), leaf("b1")]),
+                    folder("d", vec![]),
+                    leaf("a2"),
+                ],
+            ),
+            folder("e", vec![folder("f", vec![leaf("f1")]), leaf("e1")]),
+            leaf("root-leaf"),
+        ]));
+    app.update();
+    app.world_mut().gui_mut(tree).unwrap().expand_tree();
+    app.update();
+    let rows: Vec<_> = app
+        .world()
+        .get::<GuiTreeState>(tree)
+        .unwrap()
+        .nodes()
+        .iter()
+        .map(|node| node.view().unwrap())
+        .collect();
+    assert_eq!(rows.len(), 13);
+    app.world_mut()
+        .get_mut::<GuiListSettings>(tree)
+        .unwrap()
+        .selection_mode = ListSelectionMode::Multiple;
+    app.world_mut()
+        .entity_mut(tree)
+        .insert(GuiListSelection(vec![4, 10]));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .selected_nodes(),
+        [4, 10]
+    );
+    assert!(
+        app.world_mut()
+            .gui_mut(tree)
+            .unwrap()
+            .collapse_tree_branch(2)
+    );
+    app.update();
+    let state = app.world().get::<GuiTreeState>(tree).unwrap();
+    assert_eq!(state.visible_nodes(), [0, 1, 2, 6, 7, 8, 9, 10, 11, 12]);
+    assert_eq!(state.selected_nodes(), [10]);
+    assert!(!state.node(3).unwrap().is_expanded());
+    assert!(state.node(8).unwrap().is_expanded());
+    assert_eq!(
+        app.world()
+            .get::<GuiControllers>(rows[3])
+            .unwrap()
+            .get("expanded")
+            .unwrap()
+            .selected_index(),
+        0
+    );
+    assert!(
+        app.world_mut()
+            .gui_mut(tree)
+            .unwrap()
+            .collapse_tree_branch(0)
+    );
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeState>(tree)
+            .unwrap()
+            .visible_nodes(),
+        [0, 8, 9, 10, 11, 12]
+    );
+    let branch = rows[2];
+    app.add_systems(
+        Update,
+        (move |mut gui: crate::GuiMut, nodes: Query<&GuiTreeNode>, mut done: Local<bool>| {
+            if !*done {
+                let node = nodes.get(branch).unwrap();
+                assert!(
+                    gui.get_mut(node.tree())
+                        .unwrap()
+                        .expand_tree_branch(node.index())
+                );
+                *done = true;
+            }
+        })
+        .in_set(GuiSystems::Respond),
+    );
+    app.update();
+    let state = app.world().get::<GuiTreeState>(tree).unwrap();
+    assert_eq!(
+        state.visible_nodes(),
+        [0, 8, 9, 10, 11, 12],
+        "expanding a hidden branch keeps its ancestor closed"
+    );
+    assert!(!state.node(0).unwrap().is_expanded());
+    assert!(state.node(2).unwrap().is_expanded());
+    assert!(state.node(3).unwrap().is_expanded());
+    assert!(
+        !state.node(6).unwrap().is_expanded(),
+        "other descendant branches keep their states"
+    );
+    assert!(!app.world().get::<GuiDisplay>(branch).unwrap().visible());
+    assert_eq!(
+        app.world()
+            .get::<GuiControllers>(rows[3])
+            .unwrap()
+            .get("expanded")
+            .unwrap()
+            .selected_index(),
+        1
+    );
+    assert!(app.world_mut().gui_mut(tree).unwrap().expand_tree_branch(0));
+    app.update();
+    let state = app.world().get::<GuiTreeState>(tree).unwrap();
+    assert_eq!(state.visible_nodes(), (0..13).collect::<Vec<_>>());
+    assert_eq!(state.selected_nodes(), [10]);
+    assert_eq!(
+        state
+            .nodes()
+            .iter()
+            .map(|node| node.view().unwrap())
+            .collect::<Vec<_>>(),
+        rows
+    );
+    let tick = app
+        .world()
+        .entity(tree)
+        .get_ref::<GuiTreeState>()
+        .unwrap()
+        .last_changed();
+    {
+        let mut object = app.world_mut().gui_mut(tree).unwrap();
+        assert!(!object.expand_tree_branch(0));
+        assert!(!object.collapse_tree_branch(1), "leaf is not a folder");
+        assert!(!object.expand_tree_branch(usize::MAX));
+    }
+    app.update();
+    assert_eq!(
+        app.world()
+            .entity(tree)
+            .get_ref::<GuiTreeState>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(rows.iter().all(|&row| app.world().get_entity(row).is_err()));
+}
+
+#[test]
 fn writable_tree_selection_waits_for_keyed_content_without_expanding_collapsed_folders() {
     use crate::{GuiButtonSelected, GuiListSelection};
     let (mut app, _, tree) = fixture();
