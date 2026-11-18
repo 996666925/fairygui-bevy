@@ -13,12 +13,69 @@ struct State {
     owner: Option<Entity>,
     view: Option<Entity>,
     button: Option<Entity>,
+    fresh: Option<Entity>,
     cursor: Option<Vec2>,
 }
 #[derive(Resource, Default)]
 struct Results {
     initialized: bool,
+    first_frame_checked: bool,
     clicks: Vec<i32>,
+}
+
+#[derive(Resource)]
+struct EnvironmentFixture(Handle<FuiAsset>);
+
+pub(super) fn install_package_variables(app: &mut App) {
+    install(app);
+    app.add_systems(Startup, environment_setup)
+        .add_systems(Last, inspect_environment_first_frame);
+}
+
+fn environment_setup(
+    mut config: ResMut<GuiConfig>,
+    mut assets: ResMut<Assets<FuiAsset>>,
+    mut commands: Commands,
+) {
+    config.package_variables.insert("mode".into(), "".into());
+    let asset = assets.add(FuiAsset {
+        package: fairygui_core::FuiPackage::parse(
+            "Basics",
+            include_bytes!("../../fairygui-core/tests/fixtures/ControllerEnv.fui"),
+        )
+        .unwrap(),
+        res_key: "ui/Basics".into(),
+    });
+    commands.insert_resource(EnvironmentFixture(asset));
+}
+
+fn inspect_environment_first_frame(
+    state: Res<State>,
+    gui: GuiQuery,
+    nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
+    mut results: ResMut<Results>,
+) {
+    if results.first_frame_checked {
+        return;
+    }
+    let Some(owner) = state.owner.filter(|&owner| gui.view(owner).is_some()) else {
+        return;
+    };
+    assert_eq!(gui.controller(owner, "c1").unwrap().selected_index, 1);
+    assert_eq!(gui.controller(owner, "c1").unwrap().previous_index(), -1);
+    let graph = gui.child_by_name(owner, "n3").unwrap();
+    assert_eq!(
+        gui.transform(graph).unwrap().position(),
+        Vec2::new(60., 328.)
+    );
+    let (node, transform) = nodes.get(graph).unwrap();
+    let expected = gui.local_to_global(graph, Vec2::ZERO).unwrap() / node.inverse_scale_factor();
+    let actual = transform.transform_point2(node.border_box().min);
+    assert!(
+        actual.distance(expected) < 0.5,
+        "first-frame homepage gear projection {actual:?}, expected {expected:?}"
+    );
+    results.first_frame_checked = true;
 }
 fn initialize(
     roots: Query<Entity, (With<Panel>, Added<GuiRootView>)>,
@@ -65,6 +122,8 @@ fn drive(
     mut ui: ParamSet<(GuiQuery, Query<&mut GuiControllers>)>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     assets: Res<AssetServer>,
+    environment: Option<Res<EnvironmentFixture>>,
+    mut config: ResMut<GuiConfig>,
     mut windows: Query<(Entity, &mut Window), With<bevy::window::PrimaryWindow>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut pointers: MessageWriter<PointerInput>,
@@ -93,19 +152,23 @@ fn drive(
                 return;
             };
             objects.get_mut(menu).unwrap().set_visible(false);
-            state.owner = Some(
-                commands
-                    .spawn((
-                        FairyGuiRoot::new(assets.load("ui/Basics.fui"), "Demo_Controller")
-                            .with_position(Vec2::new(40., 60.)),
-                        Panel,
-                        GuiControllers::new([("c1", 1)]),
-                    ))
-                    .id(),
-            );
+            let asset = environment
+                .as_ref()
+                .map_or_else(|| assets.load("ui/Basics.fui"), |env| env.0.clone());
+            let mut root = commands.spawn((
+                FairyGuiRoot::new(asset, "Demo_Controller").with_position(Vec2::new(40., 60.)),
+                Panel,
+            ));
+            if environment.is_none() {
+                root.insert(GuiControllers::new([("c1", 1)]));
+            }
+            state.owner = Some(root.id());
             next = true;
         }
         1 if elapsed >= 30 && results.initialized => {
+            if environment.is_some() {
+                assert!(results.first_frame_checked);
+            }
             let (view, button, graph) = {
                 let gui = ui.p0();
                 let owner = state.owner.unwrap();
@@ -174,6 +237,12 @@ fn drive(
             next = true;
         }
         6 if elapsed >= 4 => {
+            if let Some(environment) = &environment {
+                config.package_variables.remove("mode");
+                let mut source = FairyGuiRoot::new(environment.0.clone(), "Demo_Controller");
+                source.active = false;
+                state.fresh = Some(commands.spawn(source).id());
+            }
             ui.p1()
                 .get_mut(state.view.unwrap())
                 .unwrap()
@@ -183,6 +252,9 @@ fn drive(
             next = true;
         }
         7 if elapsed >= 30 => {
+            if let Some(fresh) = state.fresh {
+                assert_eq!(ui.p0().controller(fresh, "c1").unwrap().selected_index, 0);
+            }
             assert_eq!(
                 ui.p0()
                     .controller(state.owner.unwrap(), "c1")
@@ -209,10 +281,18 @@ fn drive(
             assert_eq!(state_page.previous_index(), 1);
             assert!(state_page.selected_page_id().is_none());
             commands.entity(state.owner.unwrap()).despawn();
+            if let Some(fresh) = state.fresh {
+                commands.entity(fresh).despawn();
+            }
             next = true;
         }
         12 if elapsed >= 4 => {
             assert!(ui.p0().get(state.view.unwrap()).is_none());
+            if environment.is_some() {
+                eprintln!(
+                    "package variables smoke PASSED: exported home rule, first-frame gear geometry, removal for new roots, explicit live selection, real button input and disposal"
+                );
+            }
             println!(
                 "demo smoke PASSED: delayed controller initial pages, writable ECS selection, native gear tween geometry and visibility, real linked button input, current observer state, same-frame second-controller edits, page IDs, invalid indices and disposal"
             );

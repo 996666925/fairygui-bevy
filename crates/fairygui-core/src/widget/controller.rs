@@ -174,8 +174,11 @@ impl Controller {
                     3 => {
                         // 由全局变量决定首屏页面。
                         let key = buffer.read_s(table)?.unwrap_or_default();
-                        let value = env.vars.get(&key).cloned().unwrap_or_default();
-                        home_page_index = self.index_of(&value).map_or(0, |index| index as i32);
+                        home_page_index = env
+                            .vars
+                            .get(&key)
+                            .and_then(|value| self.index_of(value))
+                            .map_or(0, |index| index as i32);
                     }
                     _ => {}
                 }
@@ -348,3 +351,7 @@ mod tests {
         assert!(!controller.auto_radio_group_depth);
     }
 }
+
+#[cfg(test)]
+#[path = "controller_home_tests.rs"]
+mod home_tests;

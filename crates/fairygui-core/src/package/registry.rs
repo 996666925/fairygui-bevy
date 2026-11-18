@@ -138,6 +138,17 @@ impl PackageRegistry {
         self.vars.get(key).map(String::as_str)
     }
 
+    /// Current UIPackage variables, read when each component is constructed.
+    pub fn vars(&self) -> &HashMap<String, String> {
+        &self.vars
+    }
+
+    /// Replace the global table, including removals. Existing controller
+    /// selections remain unchanged; pending components read the latest values.
+    pub fn set_vars(&mut self, vars: HashMap<String, String>) {
+        self.vars = vars;
+    }
+
     /// 设置全局变量。
     pub fn set_var(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.vars.insert(key.into(), value.into());

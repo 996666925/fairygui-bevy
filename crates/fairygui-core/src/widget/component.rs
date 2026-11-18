@@ -321,12 +321,17 @@ fn build_component(
 
     // ---- 块 1：控制器 ----
     let env = super::controller::PackageEnv {
-        branch: package
-            .branches()
-            .get(ctx.branch_index.max(0) as usize)
-            .cloned()
+        // Controller homepage rules read the global branch, even when this
+        // package has no asset branch with that name. Standalone construction
+        // keeps the explicitly supplied branch context.
+        branch: construction.registry.map_or_else(
+            || construction.branch.clone(),
+            |registry| registry.branch().to_owned(),
+        ),
+        vars: construction
+            .registry
+            .map(|registry| registry.vars().clone())
             .unwrap_or_default(),
-        vars: std::collections::HashMap::new(),
     };
 
     if buffer.seek(0, 1)? {

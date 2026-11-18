@@ -274,6 +274,8 @@ fn main() -> AppExit {
         smoke::install_render_order(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-controllers") {
         smoke::install_controllers(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-package-vars") {
+        smoke::install_package_variables(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-child-order") {
         smoke::install_child_order(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-root-mount") {

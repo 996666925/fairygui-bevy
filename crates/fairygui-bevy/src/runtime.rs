@@ -82,6 +82,11 @@ pub struct GuiConfig {
     /// Default click sound captured by newly constructed buttons. An exported
     /// resource sound takes priority; an empty instance sound explicitly mutes.
     pub button: fairygui_core::widget::ButtonDefaults,
+    /// UIPackage variables used by exported controller homepage type 3. Values
+    /// are page names. Removing a key restores the missing-variable fallback.
+    /// Existing controllers keep their selection; each pending component reads
+    /// the latest table when it is actually constructed.
+    pub package_variables: HashMap<String, String>,
 }
 
 /// ECS-owned FairyGUI root. Add this component to any entity to create the
@@ -3915,6 +3920,7 @@ pub fn sync_ui_config(config: Res<GuiConfig>, mut runtime: NonSendMut<GuiRuntime
         runtime
             .store_mut()
             .set_button_defaults(config.button.clone());
+        runtime.registry.set_vars(config.package_variables.clone());
     }
 }
 

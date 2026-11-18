@@ -1793,6 +1793,24 @@ fn show_help(_: On<GuiClick>, mut tooltip: GuiTooltip) {
 `--smoke-tooltip` 验证真实悬停、边缘定位、复用及提示覆盖按钮时
 的点击穿透。
 
+包的全局变量通过 `GuiConfig.package_variables` 配置，对应原版 `UIPackage.setVar`：
+
+```rust,ignore
+fn configure_pages(mut config: ResMut<GuiConfig>) {
+    config.package_variables.insert("language".into(), "zh-CN".into());
+}
+```
+
+在编辑器中把控制器首页设为变量 `language`、页面名称设为 `zh-CN`，构建时就会
+选中该页并立即应用初始齿轮。变量值使用页面名称，变量缺失或名称不匹配时回到
+第一页；显式空字符串仍是合法页面名称。删除键或清空变量表会恢复缺失变量的回退。
+建议在 Startup 或 `GuiSystems::Respond` 写入，插件在构建前同步配置。
+
+现有控制器保留选中页；同步、嵌套、分帧构建中的新组件，在各自实际构建时读取
+最新变量。尚未完成的构建不会把请求帧的变量冻结到最终首页。显式的
+`GuiControllers` 组件可以覆盖导出的首页选择。`--smoke-package-vars` 验证
+首帧 Bevy 布局、齿轮状态、变量移除后的新界面和真实按钮输入。
+
 按钮的全局默认音效通过 `GuiConfig.button` 配置：
 
 ```rust,ignore

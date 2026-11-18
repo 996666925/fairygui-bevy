@@ -12,6 +12,7 @@
 | `Transition.fui` | 条目数量较多，用于验证条目表与精灵表的规模 |
 | `Basics.fui` | 控制器、齿轮、按钮与可滚动容器 |
 | `ButtonDefaults.fui` | 从 Basics 派生，Button1 资源音效设为 null、Button2 设为空串，用于全局默认音效的同步与分帧构建测试 |
+| `ControllerEnv.fui` | 从 Basics 派生，验证变量/分支首页、初始齿轮与嵌套、分帧构建 |
 | `Chat.fui` | 唯一配置了滚动条的示例包，用于验证滚动条的实例化与联动 |
 | `Cooldown.fui` | 径向填充进度条的初始化、实际取值与稳定图片尺寸 |
 
@@ -25,6 +26,18 @@
 `constructExtension` 和 `setup_afterAdd`。夹具记录源文件和类源码 SHA256，覆盖
 288 种默认声音、默认音量、缺失/空/显式资源声音以及实例静音和音量覆盖的组合。
 这证明构造和覆盖顺序，不证明音频设备或最终波形与原版一致。
+
+`ControllerEnv.fui` 的包编号为 `env00001`，包名为 `ControllerEnv`。保留 Basics
+的资源布局、齿轮、页面 ID 和控制器动作；修改 Demo_Controller 的 c1 为变量
+`mode` 首页，页面名为 `base` 与空字符串。c2 使用分支首页，页面名为 `base`、
+`other`、`night`；包只声明 `other` 资源分支，以验证全局 `night` 名称不会被
+错误地替换为包内分支编号。Demo_Popup 的首个子组件引用该 Demo_Controller，
+用于嵌套与分帧构建。包身份及内部 URL 同步重写，其余资源保留官方内容。
+
+`controller-home-reference.txt` 执行未经改动的原版 `Controller.setup`，记录类源码
+SHA256，覆盖 2,352 组包版本、首页类型、显式索引、分支、缺失/空/未知变量值、
+空页面名和重复页面名。控制器父对象存在，动作表为空；该对照证明首页索引解析，
+初始齿轮另由真实包构建和窗口用例验证。
 
 `PopupHost.fui`、`PopupTheme.fui`、`PopupCycle.fui` 是基于上述 `Basics.fui`
 生成的依赖测试夹具。运行 `python tools/generate_popup_packages.py` 可确定性重建。

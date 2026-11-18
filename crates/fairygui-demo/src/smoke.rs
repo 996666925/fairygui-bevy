@@ -157,6 +157,9 @@ mod controllers;
 pub(super) fn install_controllers(app: &mut App) {
     controllers::install(app);
 }
+pub(super) fn install_package_variables(app: &mut App) {
+    controllers::install_package_variables(app);
+}
 #[path = "smoke_child_order.rs"]
 mod child_order;
 pub(super) fn install_child_order(app: &mut App) {

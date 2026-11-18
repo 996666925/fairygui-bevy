@@ -111,6 +111,8 @@ pub use scroll_properties::GuiScrollSettings;
 mod visual_properties;
 pub use visual_properties::{GuiColor, GuiImageFill, GuiImageFlip, GuiLoaderSettings};
 #[cfg(test)]
+mod ecs_package_variables_tests;
+#[cfg(test)]
 mod ecs_pull_tests;
 #[cfg(test)]
 mod group_edit_tests;
