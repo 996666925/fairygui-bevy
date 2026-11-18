@@ -69,8 +69,10 @@ impl GuiRuntime {
                 .as_deref()
                 .or(default_item.as_deref())
                 .unwrap_or_default();
-            let template = package
+            let owner = package
                 .as_ref()
+                .or_else(|| self.registry.resolve_url(reference).map(|(owner, _)| owner));
+            let template = owner
                 .and_then(|package| self.resolve_template(package, reference))
                 .ok_or_else(|| Error::MissingTemplate(reference.to_owned()))?;
             templates.push(template);

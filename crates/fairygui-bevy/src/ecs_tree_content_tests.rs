@@ -66,6 +66,170 @@ fn send(app: &mut App, target: Entity, action: impl FnOnce(&mut crate::GuiObject
 }
 
 #[test]
+fn keyed_tree_waits_for_late_templates_preserves_rows_and_applies_pending_selection_after_recovery()
+{
+    use crate::GuiListSelection;
+    let (mut app, owner, tree) = fixture();
+    app.world_mut().entity_mut(tree).insert(config());
+    app.update();
+    app.world_mut().gui_mut(tree).unwrap().expand_tree();
+    app.world_mut()
+        .gui_mut(tree)
+        .unwrap()
+        .select_tree_node(2, false);
+    app.update();
+    let old = app.world().get::<GuiTreeState>(tree).unwrap().clone();
+    let original: Vec<_> = old
+        .nodes()
+        .iter()
+        .map(|node| node.view().unwrap())
+        .collect();
+    assert_eq!(old.selected_nodes(), [2]);
+    let mut next = config();
+    let mut foreign = GuiTreeItem::leaf("foreign", "Foreign row");
+    foreign.template = Some("ui://VirtualList/mailItem".into());
+    next.items.insert(0, foreign);
+    app.world_mut()
+        .entity_mut(tree)
+        .insert((next, GuiListSelection(vec![0])));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeContentState>(tree)
+            .unwrap()
+            .error(),
+        Some(&GuiTreeContentError::MissingTemplate(
+            "ui://VirtualList/mailItem".into()
+        ))
+    );
+    assert_eq!(
+        app.world().get::<GuiTreeState>(tree).unwrap(),
+        &old,
+        "new selection must not target the old node at index zero"
+    );
+    assert_eq!(app.world().get::<GuiListSelection>(tree).unwrap().0, [0]);
+    let tick = app
+        .world()
+        .entity(tree)
+        .get_ref::<GuiTreeContentState>()
+        .unwrap()
+        .last_changed();
+    app.update();
+    assert_eq!(app.world().get::<GuiTreeState>(tree).unwrap(), &old);
+    assert_eq!(
+        app.world()
+            .entity(tree)
+            .get_ref::<GuiTreeContentState>()
+            .unwrap()
+            .last_changed(),
+        tick
+    );
+    let package = FuiPackage::parse(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+    )
+    .unwrap();
+    let handle = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: package.clone(),
+            res_key: "foreign/VirtualList".into(),
+        });
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .register_package(handle.clone(), &package);
+    // The content component stays unchanged when its missing package arrives.
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeContentState>(tree)
+            .unwrap()
+            .error(),
+        None
+    );
+    let state = app.world().get::<GuiTreeState>(tree).unwrap();
+    assert_eq!(state.visible_nodes(), [0, 1, 2, 3]);
+    assert_eq!(state.selected_nodes(), [0]);
+    assert!(state.node_by_key("folder").unwrap().is_expanded());
+    for (key, &row) in ["folder", "file", "other"].into_iter().zip(&original) {
+        assert_eq!(state.node_by_key(key).unwrap().view(), Some(row));
+    }
+    let foreign = state.node_by_key("foreign").unwrap().view().unwrap();
+    let object = app.world().get::<crate::GObjectRef>(foreign).unwrap().0;
+    let runtime = app.world().non_send::<GuiRuntime>();
+    assert_eq!(
+        runtime.store().object(object).unwrap().source_package_id(),
+        Some(package.id())
+    );
+    assert_eq!(runtime.asset_handle_for(object), Some(handle));
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(
+        original
+            .iter()
+            .chain(std::iter::once(&foreign))
+            .all(|&row| app.world().get_entity(row).is_err())
+    );
+}
+
+#[test]
+fn keyed_tree_with_no_source_metadata_uses_explicit_registered_template_urls() {
+    let (mut app, owner, exported) = fixture();
+    let root = app.world().get::<GuiRootInstance>(owner).unwrap().object;
+    let exported = app.world().get::<crate::GObjectRef>(exported).unwrap().0;
+    let (tree, template) = {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        let crate::core::widget::ControlData::Tree(data) =
+            runtime.store().object(exported).unwrap().control()
+        else {
+            unreachable!()
+        };
+        let template = data.list.default_item.clone().unwrap();
+        assert!(template.starts_with("ui://"));
+        let tree = runtime
+            .store_mut()
+            .create(crate::core::package::ObjectType::Tree);
+        runtime.store_mut().set_size(tree, 200., 120.);
+        runtime.store_mut().set_parent(tree, Some(root));
+        runtime.queue_subtree(tree);
+        (tree, template)
+    };
+    app.update();
+    let view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(tree)
+        .unwrap();
+    let mut node = GuiTreeItem::leaf("leaf", "Explicit template");
+    node.template = Some(template);
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiTreeContent::new(vec![node]));
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiTreeContentState>(view)
+            .unwrap()
+            .error(),
+        None
+    );
+    assert_eq!(
+        app.world().get::<GuiTreeState>(view).unwrap().nodes().len(),
+        1
+    );
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object(tree)
+            .unwrap()
+            .source_package_id(),
+        None
+    );
+}
+
+#[test]
 fn tree_branch_operations_retain_rows_preserve_other_selections_and_update_hidden_folders() {
     use crate::{
         GuiControllers, GuiDisplay, GuiListSelection, GuiListSettings, GuiSystems,

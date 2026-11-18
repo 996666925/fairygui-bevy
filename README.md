@@ -1516,7 +1516,9 @@ key 在整棵树内唯一；相同 key、模板和节点类型会复用行实体
 `template` 可指定本地模板名或已登记的 `ui://` URL，默认使用树的默认项。
 
 修改组件后按 key 更新，重复 key、无效层级或模板错误会保留当前树，并在
-`GuiTreeContentState::error()` 报告；修改组件或标记变更可重试。移除配置组件保留
+`GuiTreeContentState::error()` 报告。模板缺失或构造失败会自动重试，期间保留旧内容、
+行实体和展开状态，同批写入的 `GuiListSelection` 等待新内容就绪后再应用；结构校验错误
+仍需修改配置或标记变更后重试。显式 `ui://` 模板也可用于没有导出来源信息的树。移除配置组件保留
 当前内容和 key，重新挂载可继续复用；空内容回收全部数据行。TreeView 右侧的
 动态文件夹和文件已使用这套接口。`GuiClickItem` 在列表/树实体上发布一次，
 observer 可直接查询本次选择和行文本。
@@ -1547,6 +1549,7 @@ commands.entity(list_entity).insert(GuiListContent::new(6, |index, row| {
 配置只适用于普通 List，树和虚拟列表会报错，`GuiVirtualList` 的配置优先。
 业务数据更新后可替换渲染器、替换组件或标记组件已变更。缺失的跨包模板登记后会自动
 重试并清除资源错误；新增模板会先全部解析和构造，失败时保留现有内容、池的 FIFO 顺序及缓存行的可见状态。
+资源等待期间的 `GuiListSelection` 写入会保留到对应内容就绪，避免选中新索引时提前清除旧内容的选择。
 
 `GuiControllers`（或 `gui.controller(entity, "c1")`）提供当前和上一个页面索引、
 页面 ID 及名称表。选中页可通过 ECS 组件直接修改；页面表、名称与上一个页面保持只读。

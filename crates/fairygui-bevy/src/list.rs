@@ -154,6 +154,14 @@ pub enum GuiListContentError {
     #[error("cannot construct list item {0}")]
     CreationFailed(String),
 }
+impl GuiListContentError {
+    fn waits_for_resources(&self) -> bool {
+        matches!(
+            self,
+            Self::MissingDefaultItem | Self::MissingResource(_) | Self::CreationFailed(_)
+        )
+    }
+}
 /// Last ordinary list configuration result. The actual count and row entities
 /// remain available in GuiListState even if configuration fails.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
@@ -171,12 +179,15 @@ pub(crate) struct ContentBinding(GObjectId, bevy::ecs::change_detection::Tick);
 pub(crate) fn content_pending(world: &World, entity: Entity, object: GObjectId) -> bool {
     let view = world.entity(entity);
     if let Some(config) = view.get_ref::<GuiListContent>()
-        && view.get::<ContentBinding>().is_none_or(|binding| {
+        && (view.get::<ContentBinding>().is_none_or(|binding| {
             binding.0 != object
                 || config
                     .last_changed()
                     .is_newer_than(binding.1, world.read_change_tick())
-        })
+        }) || view
+            .get::<GuiListContentState>()
+            .and_then(|state| state.error.as_ref())
+            .is_some_and(GuiListContentError::waits_for_resources))
     {
         return true;
     }
@@ -223,14 +234,10 @@ pub(crate) fn sync_list_content(
             && binding.is_some_and(|binding| binding.0 == reference.0)
             && current.is_some_and(|current| {
                 matches!(current.error, Some(GuiListContentError::VirtualList)) == conflict
-                    && !matches!(
-                        current.error,
-                        Some(
-                            GuiListContentError::MissingDefaultItem
-                                | GuiListContentError::MissingResource(_)
-                                | GuiListContentError::CreationFailed(_)
-                        )
-                    )
+                    && !current
+                        .error
+                        .as_ref()
+                        .is_some_and(GuiListContentError::waits_for_resources)
             })
         {
             continue;

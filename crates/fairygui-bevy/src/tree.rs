@@ -77,6 +77,11 @@ pub enum GuiTreeContentError {
     #[error("tree node template must be a component: {0}")]
     InvalidTemplate(String),
 }
+impl GuiTreeContentError {
+    fn waits_for_resources(&self) -> bool {
+        matches!(self, Self::MissingTemplate(_) | Self::CreationFailed(_))
+    }
+}
 #[derive(Component, Debug, Default, Clone, PartialEq, Eq)]
 pub struct GuiTreeContentState {
     error: Option<GuiTreeContentError>,
@@ -98,6 +103,10 @@ pub(crate) fn content_pending(
     view.get_ref::<GuiTreeContent>().is_some_and(|config| {
         view.get::<GuiTreeContentState>().is_none_or(|state| {
             state.object != Some(object)
+                || state
+                    .error
+                    .as_ref()
+                    .is_some_and(GuiTreeContentError::waits_for_resources)
                 || state.revision.is_none_or(|revision| {
                     config
                         .last_changed()
@@ -140,7 +149,15 @@ pub(crate) fn sync_tree_content(
         if runtime.entity_of(reference.0) != Some(entity) {
             continue;
         }
-        if !config.is_changed() && current.is_some_and(|state| state.object == Some(reference.0)) {
+        if !config.is_changed()
+            && current.is_some_and(|state| {
+                state.object == Some(reference.0)
+                    && !state
+                        .error
+                        .as_ref()
+                        .is_some_and(GuiTreeContentError::waits_for_resources)
+            })
+        {
             continue;
         }
         let result = runtime.configure_tree_content(reference.0, &config, binding);

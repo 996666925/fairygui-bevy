@@ -334,6 +334,111 @@ fn ordinary_provider_panic_does_not_allocate_detached_rows_or_replace_existing_c
 }
 
 #[test]
+fn ordinary_pending_selection_waits_for_late_templates_without_clearing_existing_selection() {
+    use crate::GuiListSelection;
+    let (mut app, owner, list, view) = fixture(
+        "VirtualList",
+        include_bytes!("../../fairygui-demo/assets/ui/VirtualList.fui"),
+        "mailList",
+    );
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiListContent::new(2, |_, _| {}));
+    app.update();
+    let original = app
+        .world()
+        .get::<GuiListState>(view)
+        .unwrap()
+        .items()
+        .to_vec();
+    app.world_mut()
+        .gui_mut(view)
+        .unwrap()
+        .select_list_index(1, false);
+    app.update();
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [1]);
+    {
+        let mut config = app.world_mut().get_mut::<GuiListContent>(view).unwrap();
+        config.item_count = 3;
+        config.set_item_provider(|_| Some("ui://ListEffect/mailItem".into()));
+    }
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiListSelection(vec![2]));
+    for _ in 0..2 {
+        app.update();
+        assert!(matches!(
+            app.world()
+                .get::<GuiListContentState>(view)
+                .unwrap()
+                .error(),
+            Some(GuiListContentError::MissingResource(_))
+        ));
+        assert_eq!(
+            app.world().get::<GuiListState>(view).unwrap().items(),
+            original
+        );
+        assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [2]);
+        assert_eq!(
+            app.world()
+                .non_send::<GuiRuntime>()
+                .store()
+                .list_selections(list),
+            Some(vec![1])
+        );
+    }
+    let package = fairygui_core::FuiPackage::parse(
+        "ListEffect",
+        include_bytes!("../../fairygui-demo/assets/ui/ListEffect.fui"),
+    )
+    .unwrap();
+    let handle = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: package.clone(),
+            res_key: "foreign/ListEffect".into(),
+        });
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .register_package(handle.clone(), &package);
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<GuiListContentState>(view)
+            .unwrap()
+            .error(),
+        None
+    );
+    let rows = app
+        .world()
+        .get::<GuiListState>(view)
+        .unwrap()
+        .items()
+        .to_vec();
+    assert_eq!(&rows[..2], &original);
+    assert_eq!(rows.len(), 3);
+    assert_eq!(app.world().get::<GuiListSelection>(view).unwrap().0, [2]);
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .list_selections(list),
+        Some(vec![2])
+    );
+    let foreign = app.world().get::<GObjectRef>(rows[2]).unwrap().0;
+    assert_eq!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .asset_handle_for(foreign),
+        Some(handle)
+    );
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(rows.iter().all(|&row| app.world().get_entity(row).is_err()));
+}
+
+#[test]
 fn failed_ordinary_growth_preserves_pooled_row_order_visibility_and_owned_subtrees() {
     let (mut app, owner, list, view) = fixture(
         "Chat",
