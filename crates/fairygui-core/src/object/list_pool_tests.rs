@@ -27,6 +27,8 @@ fn list_pool_is_owned_fifo_preserves_state_and_rejects_duplicates_foreign_rows_a
     assert!(!store.object(first).unwrap().visible());
     assert!(!store.is_on_stage(nested));
     assert!(store.return_list_item_to_pool(list, second));
+    assert_eq!(store.list_item_pool_count(list, "ui://pa"), 2);
+    assert_eq!(store.list_item_pool_count(list, "ui://pmissing"), 0);
     assert_eq!(store.take_list_item_from_pool(list, "ui://pa"), Some(first));
     assert!(store.object(first).unwrap().visible());
     assert_eq!(store.object(nested).unwrap().parent(), Some(first));
@@ -36,6 +38,7 @@ fn list_pool_is_owned_fifo_preserves_state_and_rejects_duplicates_foreign_rows_a
         Some(second)
     );
     let foreign = object(&mut store, ObjectType::List, "foreign");
+    assert_eq!(store.list_item_pool_count(list, "ui://pa"), 0);
     store.set_parent(second, Some(foreign));
     assert!(!store.return_list_item_to_pool(list, second));
     assert!(store.return_list_item_to_pool(foreign, list));
@@ -92,6 +95,8 @@ fn enabling_virtual_layout_consumes_the_ordinary_pool_in_native_fifo_order() {
         vec![rows[3], rows[0], rows[1], rows[2]]
     );
     assert!(store.take_list_item_from_pool(list, "ui://pa").is_none());
+    assert_eq!(store.list_item_pool_count(list, "ui://pa"), 2);
+    assert_eq!(store.list_item_pool_count(list, "ui://pb"), 2);
     assert!(
         !store.return_list_item_to_pool(list, rows[2]),
         "virtual pool retains exclusive ownership"
@@ -117,6 +122,7 @@ fn list_pool_does_not_detach_scroll_overlays_and_drops_disposed_cached_rows() {
     store.set_parent(row, Some(list));
     assert!(store.return_list_item_to_pool(list, row));
     store.remove(row);
+    assert_eq!(store.list_item_pool_count(list, "ui://pa"), 0);
     assert!(store.take_list_item_from_pool(list, "ui://pa").is_none());
     store.remove(list);
     assert!(store.is_empty());

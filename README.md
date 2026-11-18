@@ -1542,7 +1542,7 @@ commands.entity(list_entity).insert(GuiListContent::new(6, |index, row| {
 `GuiListContentState::error()` 提供配置错误；增长时若模板缺失，已有内容保持不变。
 配置只适用于普通 List，树和虚拟列表会报错，`GuiVirtualList` 的配置优先。
 业务数据更新后可替换渲染器、替换组件或标记组件已变更。缺失的跨包模板登记后会自动
-重试并清除资源错误；新增模板会先全部解析，失败时保留现有内容。
+重试并清除资源错误；新增模板会先全部解析和构造，失败时保留现有内容、池的 FIFO 顺序及缓存行的可见状态。
 
 `GuiControllers`（或 `gui.controller(entity, "c1")`）提供当前和上一个页面索引、
 页面 ID 及名称表。选中页可通过 ECS 组件直接修改；页面表、名称与上一个页面保持只读。

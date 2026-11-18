@@ -332,3 +332,132 @@ fn ordinary_provider_panic_does_not_allocate_detached_rows_or_replace_existing_c
     assert_eq!(runtime.store().len(), before);
     assert_eq!(runtime.store().list_items(list).unwrap(), rows);
 }
+
+#[test]
+fn failed_ordinary_growth_preserves_pooled_row_order_visibility_and_owned_subtrees() {
+    let (mut app, owner, list, view) = fixture(
+        "Chat",
+        include_bytes!("../../fairygui-demo/assets/ui/Chat.fui"),
+        "list",
+    );
+    {
+        let mut runtime = app.world_mut().non_send_mut::<GuiRuntime>();
+        for row in runtime.store().list_items(list).unwrap() {
+            runtime.store_mut().remove(row);
+        }
+    }
+    app.world_mut()
+        .entity_mut(view)
+        .insert(GuiListContent::new(3, |_, _| {}).with_item_provider(|_| Some("chatLeft".into())));
+    app.update();
+    let original = app
+        .world()
+        .get::<GuiListState>(view)
+        .unwrap()
+        .items()
+        .to_vec();
+    let first = app.world().get::<GObjectRef>(original[0]).unwrap().0;
+    app.world_mut()
+        .gui_mut(original[0])
+        .unwrap()
+        .set_visible(false);
+    app.world_mut()
+        .get_mut::<GuiListContent>(view)
+        .unwrap()
+        .item_count = 0;
+    app.update();
+    let package = fairygui_core::FuiPackage::parse(
+        "cycle",
+        include_bytes!("../../fairygui-core/tests/fixtures/PopupCycle.fui"),
+    )
+    .unwrap();
+    let bad_url = format!("ui://{}/Demo_Popup", package.name());
+    let handle = app
+        .world_mut()
+        .resource_mut::<Assets<FuiAsset>>()
+        .add(FuiAsset {
+            package: package.clone(),
+            res_key: "cycle".into(),
+        });
+    app.world_mut()
+        .non_send_mut::<GuiRuntime>()
+        .register_package(handle, &package);
+    let before = app.world().non_send::<GuiRuntime>().store().len();
+    {
+        let mut config = app.world_mut().get_mut::<GuiListContent>(view).unwrap();
+        config.item_count = 3;
+        config.set_item_provider(move |index| {
+            Some(match index {
+                0 => "chatLeft".into(),
+                1 => "chatRight".into(),
+                _ => bad_url.clone(),
+            })
+        });
+    }
+    // Resource retries must leave the same reusable rows untouched each time.
+    for _ in 0..2 {
+        app.update();
+        assert!(matches!(
+            app.world()
+                .get::<GuiListContentState>(view)
+                .unwrap()
+                .error(),
+            Some(GuiListContentError::CreationFailed(_))
+        ));
+        assert!(
+            app.world()
+                .get::<GuiListState>(view)
+                .unwrap()
+                .items()
+                .is_empty()
+        );
+        let runtime = app.world().non_send::<GuiRuntime>();
+        assert_eq!(
+            runtime.store().len(),
+            before,
+            "partially constructed rows must not leak"
+        );
+        assert!(
+            !runtime.store().object(first).unwrap().visible(),
+            "failed growth must preserve a cached row's visibility"
+        );
+        for &row in &original {
+            let object = app.world().get::<GObjectRef>(row).unwrap().0;
+            assert!(runtime.store().contains(object));
+            assert!(!runtime.store().is_on_stage(object));
+            assert!(runtime.asset_handle_for(object).is_some());
+            assert!(app.world().get::<GuiListRow>(row).is_none());
+        }
+    }
+    app.world_mut()
+        .get_mut::<GuiListContent>(view)
+        .unwrap()
+        .set_item_provider(|_| Some("chatLeft".into()));
+    app.update();
+    assert_eq!(
+        app.world().get::<GuiListState>(view).unwrap().items(),
+        original
+    );
+    assert!(
+        app.world()
+            .non_send::<GuiRuntime>()
+            .store()
+            .object(first)
+            .unwrap()
+            .visible()
+    );
+    assert_eq!(
+        app.world()
+            .get::<GuiListContentState>(view)
+            .unwrap()
+            .error(),
+        None
+    );
+    app.world_mut().despawn(owner);
+    app.update();
+    assert!(
+        original
+            .iter()
+            .all(|&row| app.world().get_entity(row).is_err())
+    );
+}

@@ -52,26 +52,45 @@ impl GuiRuntime {
                     })?;
                 templates.push(template);
             }
-            let mut created: Vec<(GObjectId, bool)> = Vec::new();
+            // Keep pool acquisition and its visible=true side effect pending
+            // until every fresh template is constructed. Returning candidates
+            // after failure would reorder the FIFO and change hidden rows.
+            let mut available = HashMap::new();
+            let mut pending: Vec<(templates::ResolvedTemplate, Option<GObjectId>)> = Vec::new();
             for template in templates {
-                let pooled = self.store.take_list_item_from_pool(list, &template.url);
-                let row = pooled.or_else(|| self.create_template(&template));
-                let Some(row) = row else {
-                    for (row, from_pool) in created {
-                        if !from_pool || !self.store.return_list_item_to_pool(list, row) {
-                            self.store.remove(row);
+                let cached = available
+                    .entry(template.url.clone())
+                    .or_insert_with(|| self.store.list_item_pool_count(list, &template.url));
+                if *cached > 0 {
+                    *cached -= 1;
+                    pending.push((template, None));
+                    continue;
+                }
+                let Some(row) = self.create_template(&template) else {
+                    for (_, row) in pending {
+                        if let Some(row) = row {
+                            for removed in self.store.remove(row) {
+                                self.object_assets.remove(&removed);
+                            }
                         }
                     }
                     return Err(GuiListContentError::CreationFailed(template.url));
                 };
-                let needs_preparation = pooled.is_none() || !self.object_assets.contains_key(&row);
-                self.remember_asset_tree(row, &template.handle);
-                if needs_preparation {
+                self.prepare_subtree(&template.package, row);
+                pending.push((template, Some(row)));
+            }
+            for (template, fresh) in pending {
+                // No application callbacks run between reservation and commit;
+                // construction only touches newly allocated, detached subtrees.
+                let row = fresh.unwrap_or_else(|| {
+                    self.store
+                        .take_list_item_from_pool(list, &template.url)
+                        .expect("reserved list row remains in its pool")
+                });
+                if !self.object_assets.contains_key(&row) {
+                    self.remember_asset_tree(row, &template.handle);
                     self.prepare_subtree(&template.package, row);
                 }
-                created.push((row, pooled.is_some()));
-            }
-            for (row, _) in created {
                 self.store.set_visible(row, true);
                 self.store.set_parent(row, Some(list));
                 rows.push(row);

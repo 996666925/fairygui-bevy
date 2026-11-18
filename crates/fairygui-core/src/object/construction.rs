@@ -34,6 +34,20 @@ impl ObjectStore {
         }
     }
 
+    /// Number of live cached rows with a canonical template URL. Includes
+    /// asynchronously prepared rows and an initialized virtual list's pool.
+    pub fn list_item_pool_count(&self, list: GObjectId, url: &str) -> usize {
+        self.list_item_pools
+            .get(&list)
+            .or_else(|| self.virtual_states.get(&list).map(|state| &state.pool))
+            .map_or(0, |items| {
+                items
+                    .iter()
+                    .filter(|(key, object)| key == url && self.contains(*object))
+                    .count()
+            })
+    }
+
     /// Take a cached row by canonical ui:// package/item IDs, consuming equal
     /// templates FIFO. Also publishes any asynchronously constructed row.
     /// Native getFromPool makes the row visible; the caller attaches it.
