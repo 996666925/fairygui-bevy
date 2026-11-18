@@ -1185,21 +1185,79 @@ fn drive(
                 );
             }
             69 => {
-                ui.p2().get_mut(state.front.unwrap()).unwrap().skew = Vec2::ZERO;
+                let front = state.front.unwrap();
+                {
+                    let mut transforms = ui.p2();
+                    let mut t = transforms.get_mut(front).unwrap();
+                    t.skew = Vec2::ZERO;
+                    t.position = Vec2::new(250.5, 180.5);
+                }
+                commands.entity(front).insert(GuiPixelSnapping(true));
                 next = true;
             }
             70 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let gui = ui.p0();
+                assert_eq!(gui.pixel_snapping(front), Some(true));
+                assert_eq!(
+                    gui.transform(front).unwrap().position,
+                    Vec2::new(250.5, 180.5)
+                );
+                let native = gui.local_to_global(front, Vec2::ZERO).unwrap();
+                let local = gui.global_to_local(state.owner.unwrap(), native).unwrap();
+                assert!(local.abs_diff_eq(Vec2::new(251., 181.), 0.001));
                 check_graph_layout(
-                    state.front.unwrap(),
+                    front,
                     state.child.unwrap(),
-                    drawing(state.front.unwrap(), &faces),
+                    drawing(front, &faces),
                     Vec2::new(120., 90.),
                     &nodes,
+                );
+                let owner = gui.view(state.owner.unwrap()).unwrap();
+                let (on, ot) = nodes.get(owner).unwrap();
+                let expected =
+                    ot.transform_point2(on.border_box().min + local / on.inverse_scale_factor());
+                let (_, ft) = nodes.get(front).unwrap();
+                assert!(
+                    ft.translation.abs_diff_eq(expected, 0.001),
+                    "snapped rendering {actual:?} vs {expected:?}",
+                    actual = ft.translation
+                );
+                capture_grays(
+                    &mut commands,
+                    front,
+                    &[(Vec2::new(30., 25.), 0.5), (Vec2::new(80., 55.), 0.5)],
+                    &nodes,
+                    "target/fairygui-demo-pixel-snapping.png",
+                );
+                next = true;
+            }
+            71 if state.pixel_checks >= 5 => {
+                commands
+                    .entity(state.front.unwrap())
+                    .insert(GuiPixelSnapping(false));
+                next = true;
+            }
+            72 if elapsed >= 8 => {
+                let front = state.front.unwrap();
+                let gui = ui.p0();
+                assert_eq!(gui.pixel_snapping(front), Some(false));
+                let global = gui.local_to_global(front, Vec2::ZERO).unwrap();
+                let local = gui.global_to_local(state.owner.unwrap(), global).unwrap();
+                assert!(local.abs_diff_eq(Vec2::new(250.5, 180.5), 0.001));
+                let owner = gui.view(state.owner.unwrap()).unwrap();
+                let (on, ot) = nodes.get(owner).unwrap();
+                let expected =
+                    ot.transform_point2(on.border_box().min + local / on.inverse_scale_factor());
+                let (_, ft) = nodes.get(front).unwrap();
+                assert!(
+                    ft.translation.abs_diff_eq(expected, 0.001),
+                    "fractional rendering did not restore"
                 );
                 commands.entity(state.owner.unwrap()).despawn();
                 next = true;
             }
-            71 if elapsed >= 8 => {
+            73 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -1208,9 +1266,9 @@ fn drive(
                     assert!(!entities.contains(entity));
                 }
                 assert_eq!(clicks.0.len(), 16);
-                assert_eq!(state.pixel_checks, 4);
+                assert_eq!(state.pixel_checks, 5);
                 println!(
-                    "demo smoke PASSED: native primitive paths and triangle fills, self-intersection paint versus hit policy, GPU pixel checks, skew rendering/model/child geometry and clicks, reset, zero-size recovery and disposal"
+                    "demo smoke PASSED: native primitive paths and triangle fills, self-intersection paint versus hit policy, GPU pixel checks, skew and pixel snapping rendering/model/child geometry, clicks, fractional restore and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;

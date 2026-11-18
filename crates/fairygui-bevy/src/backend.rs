@@ -54,7 +54,16 @@ pub fn transform_for(object: &GObject) -> UiTransform {
     if object.pivot_as_anchor() {
         offset -= Vec2::new(pivot.x * object.width(), pivot.y * object.height());
     }
-    if let Some(position) = object.image_display_position() {
+    if object.pixel_snapping() {
+        let base = object.display_base_position();
+        let anchor = if object.pivot_as_anchor() {
+            Vec2::new(pivot.x * object.width(), pivot.y * object.height())
+        } else {
+            Vec2::ZERO
+        };
+        offset += Vec2::new(base.x, base.y) - Vec2::new(object.x(), object.y()) + anchor;
+    }
+    if let Some(position) = object.display_position() {
         // GImage's cached Sprite position includes flip compensation, which is
         // parent-space and need not refresh on a size/scale change.
         let center = Vec2::new(object.width(), object.height()) * 0.5;

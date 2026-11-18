@@ -188,7 +188,7 @@ fn local_skew(object: &crate::core::GObject, mut baseline: Affine2, scale: f32) 
     );
     baseline.matrix2 += delta;
     baseline.translation += delta
-        * if object.image_display_position().is_some() {
+        * if object.display_position().is_some() {
             center
         } else {
             center - pivot

@@ -413,3 +413,12 @@ reflections and zero scales. Source hashes are recorded; no GPU or OS input is
 used. `image-flip-reference.txt` now also executes the actual Sprite matrix
 getter, replacing its earlier scalar trigonometry stub. The scroll-view skew
 scenario passes logical skewX through FairyGUI's negative Sprite conversion.
+
+`pixel-snapping-reference.txt` executes unchanged GObject pixelSnapping,
+geometry and pivot methods, GImage flip/XY handling, and Sprite.transform/
+toParentPoint in scalar hosts. Its 12 cases and 252 snapshots retain logical
+geometry, display XY and three API points through positive/negative half ties,
+anchors, skew, rotation, mirror scales, pivot resizing, repeated writes and
+snapping toggles. Source hashes are recorded; no renderer or OS input runs.
+The first explicit false assignment refreshes the display, matching native's
+initial undefined state; subsequent identical assignments preserve its cache.

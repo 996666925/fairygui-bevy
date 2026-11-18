@@ -794,6 +794,14 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 可通过 `transform.skew = Vec2::new(15., -8.)` 修改，清零即可恢复；支持负缩放和零缩放。
 `GuiSpace` 的坐标转换遵循原版 FairyGUI 到 Laya 的倾斜角符号转换。
 
+`GuiPixelSnapping(true)` 开启原版像素对齐，也可通过 `GuiObjectMut::set_pixel_snapping`
+即时修改，用 `gui.pixel_snapping(entity)` 查询。默认关闭；根或窗口拥有实体可声明初始值。
+它在父容器局部逻辑坐标中，先扣除锚点再按 JavaScript `Math.round` 舍入位置，随后应用
+轴心补偿和 DPI 缩放；负半整数向正方向取整，例如 `-0.5` 变成 `0`。
+`GuiTransform.position`、尺寸、布局和关联保留原有小数，显示位置和 `GuiSpace` 同步更新，
+单独切换对齐不会发布 `GuiXyChanged`。GUI 视图默认关闭 Bevy 的布局舍入，关闭此属性即可
+恢复小数位置；它不保证经过父级旋转、缩放或非整数 DPI 后仍落在屏幕物理像素上。
+
 按钮的 `GuiButtonSettings.related_controller` 按当前父对象的控制器名称绑定，
 `related_page_id` 指定关联页面 ID；两者先于同帧的 `GuiButtonSelected` 写入生效。
 更换或解除控制器会清空关联页面 ID，同帧明确修改的页面 ID 会随后应用。

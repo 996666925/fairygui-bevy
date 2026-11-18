@@ -267,11 +267,7 @@ impl CoordinateTransform {
             f64::from(o.pivot().x * o.width()),
             f64::from(o.pivot().y * o.height()),
         );
-        let (offset_x, offset_y) = if o.pivot_as_anchor() {
-            (0., 0.)
-        } else {
-            (px, py)
-        };
+        let position = o.display_base_position();
         let scroll = o.component_scroll_offset();
         Self {
             a,
@@ -279,14 +275,14 @@ impl CoordinateTransform {
             c,
             d,
             tx: o
-                .image_display_position()
-                .map_or(f64::from(o.x()) + offset_x - a * px - c * py, |p| {
+                .display_position()
+                .map_or(f64::from(position.x) + px - a * px - c * py, |p| {
                     f64::from(p.x)
                 })
                 - f64::from(scroll.x * o.scale_x()),
             ty: o
-                .image_display_position()
-                .map_or(f64::from(o.y()) + offset_y - b * px - d * py, |p| {
+                .display_position()
+                .map_or(f64::from(position.y) + py - b * px - d * py, |p| {
                     f64::from(p.y)
                 })
                 - f64::from(scroll.y * o.scale_y()),

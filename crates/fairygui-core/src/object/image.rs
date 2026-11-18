@@ -2,7 +2,7 @@
 use super::{ObjectStore, dirty};
 use crate::{
     GObject, Point,
-    object::{GObjectId, object::ImageTransformState},
+    object::{GObjectId, object::DisplayTransformState},
     widget::{ControlData, FlipType},
 };
 
@@ -22,20 +22,28 @@ impl GObject {
     /// Actual cached Sprite position once native GImage flip handling is active.
     /// Logical x/y remain unchanged; resize/scale need not refresh this position.
     pub fn image_display_position(&self) -> Option<Point> {
-        self.image_transform.map(|state| state.position)
+        matches!(self.control, ControlData::Image(_))
+            .then(|| self.display_position())
+            .flatten()
     }
 
-    pub(crate) fn initialize_image_transform(&mut self) {
-        self.image_transform = Some(ImageTransformState {
+    /// Retained Sprite position after native XY/pivot/snap handlers. Flipped
+    /// images and objects with an assigned pixelSnapping value retain it.
+    pub fn display_position(&self) -> Option<Point> {
+        self.display_transform.map(|state| state.position)
+    }
+
+    pub(crate) fn initialize_display_transform(&mut self) {
+        self.display_transform = Some(DisplayTransformState {
             pivot_offset: Point::ZERO,
             position: Point::ZERO,
         });
-        self.update_image_pivot_offset();
-        self.refresh_image_position();
+        self.update_display_pivot_offset();
+        self.refresh_display_position();
     }
-    pub(crate) fn update_image_pivot_offset(&mut self) {
+    pub(crate) fn update_display_pivot_offset(&mut self) {
         let [a, b, c, d] = self.transform_axes();
-        let Some(state) = &mut self.image_transform else {
+        let Some(state) = &mut self.display_transform else {
             return;
         };
         let px = f64::from(self.pivot_x * self.width);
@@ -43,26 +51,22 @@ impl GObject {
         state.pivot_offset =
             Point::new((px - px * a - py * c) as f32, (py - px * b - py * d) as f32);
     }
-    pub(crate) fn refresh_image_position(&mut self) {
-        let Some(state) = &mut self.image_transform else {
+    pub(crate) fn refresh_display_position(&mut self) {
+        let position = self.display_base_position();
+        let Some(state) = &mut self.display_transform else {
             return;
-        };
-        let anchor = if self.pivot_as_anchor {
-            Point::new(self.pivot_x * self.width, self.pivot_y * self.height)
-        } else {
-            Point::ZERO
         };
         let flipped =
             matches!(&self.control, ControlData::Image(data) if data.flip != FlipType::None);
         state.position = Point::new(
-            self.x - anchor.x
+            position.x
                 + state.pivot_offset.x
                 + if flipped && self.scale_x == -1. {
                     self.width
                 } else {
                     0.
                 },
-            self.y - anchor.y
+            position.y
                 + state.pivot_offset.y
                 + if flipped && self.scale_y == -1. {
                     self.height
@@ -71,10 +75,10 @@ impl GObject {
                 },
         );
     }
-    pub(crate) fn apply_image_pivot(&mut self) {
+    pub(crate) fn apply_display_pivot(&mut self) {
         if self.pivot_x != 0. || self.pivot_y != 0. {
-            self.update_image_pivot_offset();
-            self.refresh_image_position();
+            self.update_display_pivot_offset();
+            self.refresh_display_position();
         }
     }
 }
@@ -93,8 +97,8 @@ impl ObjectStore {
             return;
         }
         let object = self.objects.get_mut(id).unwrap();
-        if object.image_transform.is_none() {
-            object.initialize_image_transform();
+        if object.display_transform.is_none() {
+            object.initialize_display_transform();
         }
         let ControlData::Image(data) = &mut object.control else {
             unreachable!()
@@ -102,7 +106,7 @@ impl ObjectStore {
         data.flip = flip;
         let (x, y) = flip.scale();
         self.set_scale(id, x, y);
-        self.objects.get_mut(id).unwrap().refresh_image_position();
+        self.objects.get_mut(id).unwrap().refresh_display_position();
         self.touch(id, dirty::LOOK);
     }
 }

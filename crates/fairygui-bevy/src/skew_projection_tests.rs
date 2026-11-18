@@ -1,7 +1,7 @@
 use super::*;
 use fairygui_core::{Point, package::ObjectType};
 
-fn fixture() -> (App, GObjectId) {
+pub(super) fn fixture() -> (App, GObjectId) {
     let (mut app, root, _) = super::list_bar_tests::fixture_with_layout(true);
     app.add_systems(
         Update,
@@ -39,7 +39,7 @@ fn fixture() -> (App, GObjectId) {
     (app, root)
 }
 
-fn assert_native_points(app: &App, root: GObjectId, objects: &[GObjectId]) {
+pub(super) fn assert_native_points(app: &App, root: GObjectId, objects: &[GObjectId]) {
     let gui = app.world().non_send::<GuiRuntime>();
     let root_view = gui.entity_of(root).unwrap();
     let root_t = app.world().get::<UiGlobalTransform>(root_view).unwrap();

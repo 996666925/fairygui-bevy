@@ -233,6 +233,9 @@ mod list_bar_tests;
 #[cfg(test)]
 #[path = "native_clipping_tests.rs"]
 mod native_clipping_tests;
+#[cfg(test)]
+#[path = "pixel_snapping_render_tests.rs"]
+mod pixel_snapping_render_tests;
 #[path = "scroll_extent.rs"]
 mod scroll_extent;
 #[cfg(test)]
@@ -2790,6 +2793,11 @@ fn spawn_object(
 
     let mut entity = commands.spawn((
         node,
+        // FairyGUI keeps logical fractional layout. Its optional pixelSnapping
+        // rounds parent-local coordinates before pivot compensation, not DPI.
+        bevy::ui::LayoutConfig {
+            use_rounding: false,
+        },
         backend::transform_for(gobject),
         GObjectRef(object),
         Name::new(name),

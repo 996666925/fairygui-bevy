@@ -853,7 +853,7 @@ pub(crate) fn setup_before_add(
         && data.flip != FlipType::None
     {
         (object.scale_x, object.scale_y) = data.flip.scale();
-        object.initialize_image_transform();
+        object.initialize_display_transform();
     }
     Ok(())
 }

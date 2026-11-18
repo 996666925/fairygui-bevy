@@ -324,6 +324,11 @@ impl GuiObjectMut<'_> {
             fairygui_core::Point::new(softness.x, softness.y),
         );
     }
+    pub fn set_pixel_snapping(&mut self, enabled: bool) {
+        self.runtime
+            .store_mut()
+            .set_pixel_snapping(self.object, enabled);
+    }
     pub fn set_margin(&mut self, margin: crate::GuiMargin) {
         use crate::properties::Property;
         if let Some(native) = crate::GuiMargin::read(self.runtime, self.object) {

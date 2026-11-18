@@ -13,7 +13,7 @@ slotmap::new_key_type! {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ImageTransformState {
+pub(crate) struct DisplayTransformState {
     pub pivot_offset: Point,
     pub position: Point,
 }
@@ -77,6 +77,8 @@ pub struct GObject {
 
     pub(crate) x: f32,
     pub(crate) y: f32,
+    pub(crate) pixel_snapping: bool,
+    pub(crate) pixel_snapping_initialized: bool,
     pub(crate) width: f32,
     pub(crate) height: f32,
     /// Requested dimensions before applying min/max restrictions.
@@ -90,7 +92,7 @@ pub struct GObject {
     pub(crate) source_width: f32,
     pub(crate) source_height: f32,
     pub(crate) scale_x: f32,
-    pub(crate) image_transform: Option<ImageTransformState>,
+    pub(crate) display_transform: Option<DisplayTransformState>,
     pub(crate) scale_y: f32,
     pub(crate) skew_x: f32,
     pub(crate) skew_y: f32,
@@ -153,6 +155,8 @@ impl GObject {
             source_package_id: None,
             x: 0.0,
             y: 0.0,
+            pixel_snapping: false,
+            pixel_snapping_initialized: false,
             width: 0.0,
             height: 0.0,
             requested_size: None,
@@ -165,7 +169,7 @@ impl GObject {
             source_width: 0.0,
             source_height: 0.0,
             scale_x: 1.0,
-            image_transform: None,
+            display_transform: None,
             scale_y: 1.0,
             skew_x: 0.0,
             skew_y: 0.0,

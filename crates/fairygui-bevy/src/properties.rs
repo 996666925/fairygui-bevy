@@ -161,6 +161,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiImageFlip>(world);
     sync_property::<GuiSortingOrder>(world);
     sync_property::<GuiSizeConstraints>(world);
+    sync_property::<GuiPixelSnapping>(world);
     sync_property::<GuiTransform>(world);
     sync_property::<GuiDisplay>(world);
     sync_property::<GuiText>(world);

@@ -578,6 +578,7 @@ pub struct GuiQuery<'w, 's> {
     roots: Query<'w, 's, &'static GuiRootView>,
     objects: Query<'w, 's, &'static GuiObjectInfo>,
     transforms: Query<'w, 's, &'static GuiTransform>,
+    pixel_snapping: Query<'w, 's, &'static crate::GuiPixelSnapping>,
     size_constraints: Query<'w, 's, &'static crate::GuiSizeConstraints>,
     spaces: Query<'w, 's, &'static GuiSpace>,
     texts: Query<'w, 's, &'static GuiText>,
@@ -620,6 +621,9 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn pixel_snapping(&self, entity: Entity) -> Option<bool> {
+        Some(self.pixel_snapping.get(self.view(entity)?).ok()?.0)
+    }
     pub fn margin(&self, entity: Entity) -> Option<&crate::GuiMargin> {
         self.margins.get(self.view(entity)?).ok()
     }

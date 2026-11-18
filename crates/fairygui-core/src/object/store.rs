@@ -38,6 +38,8 @@ mod component_input;
 mod component_margin;
 #[path = "image.rs"]
 mod image;
+#[path = "pixel_snapping.rs"]
+mod pixel_snapping;
 #[path = "size_constraints.rs"]
 mod size_constraints;
 pub use size_constraints::SizeConstraints;
@@ -729,7 +731,7 @@ impl ObjectStore {
                 let delta = Point::new(x - object.x, y - object.y);
                 object.x = x;
                 object.y = y;
-                object.refresh_image_position();
+                object.refresh_display_position();
                 Some(delta)
             }
             _ => None,
@@ -846,7 +848,7 @@ impl ObjectStore {
             && (object.pivot_x != 0. || object.pivot_y != 0.)
         {
             if object.pivot_as_anchor {
-                self.objects.get_mut(id).unwrap().apply_image_pivot();
+                self.objects.get_mut(id).unwrap().apply_display_pivot();
             } else {
                 let x = object.x - object.pivot_x * (width - old_width);
                 let y = object.y - object.pivot_y * (height - old_height);
@@ -856,7 +858,7 @@ impl ObjectStore {
                 self.objects
                     .get_mut(id)
                     .unwrap()
-                    .update_image_pivot_offset();
+                    .update_display_pivot_offset();
             }
         }
 
@@ -969,7 +971,7 @@ impl ObjectStore {
             Some(object) if object.scale_x != scale_x || object.scale_y != scale_y => {
                 object.scale_x = scale_x;
                 object.scale_y = scale_y;
-                object.apply_image_pivot();
+                object.apply_display_pivot();
                 true
             }
             _ => false,
@@ -986,7 +988,7 @@ impl ObjectStore {
             Some(object) if object.skew_x != skew_x || object.skew_y != skew_y => {
                 object.skew_x = skew_x;
                 object.skew_y = skew_y;
-                object.apply_image_pivot();
+                object.apply_display_pivot();
                 true
             }
             _ => false,
@@ -1007,8 +1009,8 @@ impl ObjectStore {
                 object.pivot_x = pivot_x;
                 object.pivot_y = pivot_y;
                 object.pivot_as_anchor = as_anchor;
-                object.update_image_pivot_offset();
-                object.refresh_image_position();
+                object.update_display_pivot_offset();
+                object.refresh_display_position();
                 true
             }
             _ => false,
@@ -1024,7 +1026,7 @@ impl ObjectStore {
         let changed = match self.objects.get_mut(id) {
             Some(object) if object.rotation != rotation => {
                 object.rotation = rotation;
-                object.apply_image_pivot();
+                object.apply_display_pivot();
                 true
             }
             _ => false,

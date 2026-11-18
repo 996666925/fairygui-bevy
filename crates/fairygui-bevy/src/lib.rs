@@ -91,10 +91,12 @@ mod list_settings;
 pub use list_settings::GuiListSettings;
 mod list_selection;
 pub mod movie;
+mod pixel_snapping;
 pub mod popup;
 pub mod progress;
 mod properties;
 mod size_properties;
+pub use pixel_snapping::GuiPixelSnapping;
 pub use size_properties::GuiSizeConstraints;
 mod margin_property;
 pub use margin_property::GuiMargin;
@@ -223,16 +225,16 @@ pub mod prelude {
         GuiListContent, GuiListContentError, GuiListContentState, GuiListItem, GuiListItemClick,
         GuiListLayout, GuiListRow, GuiListSelection, GuiListSettings, GuiListState,
         GuiLoaderFailure, GuiLoaderSettings, GuiLoaderState, GuiMargin, GuiMenuAction, GuiMut,
-        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPointerCapture,
-        GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu, GuiPopupState, GuiProgressState,
-        GuiProgressTweenComplete, GuiProgressValue, GuiPullDownRelease, GuiPullPart,
-        GuiPullUpRelease, GuiQuery, GuiRenderOrder, GuiRootBuildProgress, GuiRootInstance,
-        GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollSettings, GuiScrollState,
-        GuiSizeConstraints, GuiSliderState, GuiSliderValue, GuiSortingOrder, GuiSpace, GuiSystems,
-        GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings, GuiTextSelection, GuiTextVars,
-        GuiTooltip, GuiTooltipError, GuiTooltipSettings, GuiTooltipState, GuiTooltips,
-        GuiTransform, GuiTransitionCallback, GuiTransitionComplete, GuiTransitionHook,
-        GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
+        GuiObjectDragState, GuiObjectInfo, GuiObjectMut, GuiOpaque, GuiPixelSnapping,
+        GuiPointerCapture, GuiPointerId, GuiPopup, GuiPopupDirection, GuiPopupMenu, GuiPopupState,
+        GuiProgressState, GuiProgressTweenComplete, GuiProgressValue, GuiPullDownRelease,
+        GuiPullPart, GuiPullUpRelease, GuiQuery, GuiRenderOrder, GuiRootBuildProgress,
+        GuiRootInstance, GuiRootMountState, GuiRootView, GuiRuntime, GuiScrollSettings,
+        GuiScrollState, GuiSizeConstraints, GuiSliderState, GuiSliderValue, GuiSortingOrder,
+        GuiSpace, GuiSystems, GuiText, GuiTextFormat, GuiTextInput, GuiTextInputSettings,
+        GuiTextSelection, GuiTextVars, GuiTooltip, GuiTooltipError, GuiTooltipSettings,
+        GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
+        GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
         GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
         GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
