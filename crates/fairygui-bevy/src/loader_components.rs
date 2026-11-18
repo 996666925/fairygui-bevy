@@ -6,6 +6,7 @@ pub(super) struct LoadedComponent {
     content: GObjectId,
     url: String,
     source: Size,
+    context: fairygui_core::package::ResourceContext,
     // Retain the content's package independently of the loader's source package.
     _handle: Handle<FuiAsset>,
 }
@@ -96,6 +97,10 @@ pub(crate) fn sync_loader_components(
                 || gui.loader_url(*loader) != Some(&loaded.url)
                 || gui
                     .store
+                    .object(*loader)
+                    .is_some_and(|object| object.resource_context() != &loaded.context)
+                || gui
+                    .store
                     .object(loaded.content)
                     .is_none_or(|content| content.parent() != Some(*loader)))
             .then_some(*loader)
@@ -151,7 +156,12 @@ pub(crate) fn sync_loader_components(
             }
             continue;
         }
-        let Some(content) = gui.create_template(&template) else {
+        let selection = gui.store.object(loader).unwrap().resource_context().clone();
+        let mut context = gui.registry.load_context(&package);
+        context.branch_index = package.branch_index_of(&selection.branch);
+        context.branch_name = Some(selection.branch.clone());
+        context.content_scale_level = selection.content_scale_level;
+        let Some(content) = gui.create_template_with_context(&template, &context) else {
             continue;
         };
         if gui
@@ -162,7 +172,7 @@ pub(crate) fn sync_loader_components(
             gui.store.remove(content);
             continue;
         }
-        let index = package.resolve_branch(index, &gui.registry.load_context(&package));
+        let index = package.resolve_branch(index, &context);
         let item = package.item(index).unwrap();
         let source = Size::new(item.width, item.height);
         gui.initialize_loaded_subtree(&package, content, &handle);
@@ -173,6 +183,7 @@ pub(crate) fn sync_loader_components(
                 content,
                 url,
                 source,
+                context: selection,
                 _handle: handle,
             },
         );

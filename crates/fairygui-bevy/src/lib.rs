@@ -325,14 +325,14 @@ impl Plugin for FairyGuiPlugin {
             Update,
             // Consume Respond edits before any clock advances. In particular,
             // an ECS pause must stop this tick instead of one tick later.
-            properties::sync
+            (runtime::sync_ui_config, properties::sync)
+                .chain()
                 .after(GuiSystems::Respond)
                 .before(GuiSystems::Advance),
         )
         .add_systems(
             Update,
             (
-                runtime::sync_ui_config,
                 runtime::sync_gui_font,
                 runtime::text_measure::sync_assets,
                 runtime::advance_async_builds,

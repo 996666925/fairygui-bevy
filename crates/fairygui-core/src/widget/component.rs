@@ -150,11 +150,7 @@ pub fn create_from_package(
         &mut Construction {
             registry: None,
             active: Vec::new(),
-            branch: package
-                .branches()
-                .get(ctx.branch_index as usize)
-                .cloned()
-                .unwrap_or_default(),
+            branch: ctx.resources(package).branch,
             children: None,
         },
     )
@@ -177,11 +173,7 @@ pub fn create_from_package_with_registry(
         &mut Construction {
             registry: Some(registry),
             active: Vec::new(),
-            branch: package
-                .branches()
-                .get(ctx.branch_index as usize)
-                .cloned()
-                .unwrap_or_default(),
+            branch: ctx.resources(package).branch,
             children: None,
         },
     )
@@ -219,7 +211,24 @@ fn create_with_context(
     construction.active.push(identity);
     let object = store.create(item.object_type);
     store.object_mut(object).unwrap().source_package_id = Some(package.id().into());
-    store.set_source(object, item.object_type, Some(item.id.clone()));
+    // GObject.packageItem retains the requested identity; GImage/GMovieClip's
+    // content item may differ after branch and density selection.
+    store.set_source(
+        object,
+        item.object_type,
+        Some(package.item(item_index).unwrap().id.clone()),
+    );
+    let content = if matches!(
+        item.item_type,
+        PackageItemType::Image | PackageItemType::MovieClip
+    ) {
+        package.resolve_high_resolution(index, ctx)
+    } else {
+        index
+    };
+    let target = store.object_mut(object).unwrap();
+    target.content_item_id = Some(package.item(content).unwrap().id.clone());
+    target.resource_context = ctx.resources(package);
     store.set_init_size(object, item.width, item.height);
     store.set_source_size(object, item.width, item.height);
     store.set_size(object, item.width, item.height);
@@ -399,12 +408,15 @@ fn build_component(
         } else if let Some((owner, source_index)) = source {
             let owner_ctx = LoadContext {
                 branch_index: owner.branch_index_of(&construction.branch),
+                branch_name: Some(construction.branch.clone()),
                 ..ctx.clone()
             };
             create_with_context(store, owner, source_index, &owner_ctx, construction)?
         } else {
             let child = store.create(ObjectType::from_code(kind_code as u8));
-            store.object_mut(child).unwrap().source_package_id = Some(package.id().into());
+            let target = store.object_mut(child).unwrap();
+            target.source_package_id = Some(package.id().into());
+            target.resource_context = ctx.resources(package);
             child
         };
         let kind = store.object(child).unwrap().kind();

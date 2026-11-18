@@ -160,6 +160,7 @@ impl PackageRegistry {
     pub fn load_context(&self, package: &FuiPackage) -> LoadContext {
         LoadContext {
             branch_index: package.branch_index_of(&self.branch),
+            branch_name: Some(self.branch.clone()),
             content_scale_level: self.content_scale_level,
             scroll_defaults: self.scroll_defaults.clone(),
         }

@@ -234,6 +234,9 @@ impl ObjectStore {
             return false;
         }
         field.font = font.map(str::to_owned);
+        self.objects[target]
+            .resource_context
+            .clone_from(&self.resource_defaults);
         self.touch(target, dirty::TEXT);
         true
     }

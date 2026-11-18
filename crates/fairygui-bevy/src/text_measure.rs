@@ -42,6 +42,7 @@ pub(crate) struct TextMeasurer {
 
 #[derive(PartialEq)]
 struct Key {
+    resources: fairygui_core::package::ResourceContext,
     data: fairygui_core::widget::TextFieldData,
     text: String,
     width: Option<f32>,
@@ -90,6 +91,7 @@ impl TextMeasurer {
         self.requested.insert(id);
         let text = text_fonts::display_text(object, &self.translations.translate(&data.text));
         let key = Key {
+            resources: object.resource_context().clone(),
             data: data.clone(),
             text: text.clone(),
             width: (data.auto_size == 2).then_some(object.width()),
@@ -194,9 +196,14 @@ impl TextMeasurer {
         };
         // Bitmap measurement shares the same native layout used to draw glyphs.
         if let Some((_, font)) = asset.and_then(|asset| {
-            data.font
-                .as_deref()
-                .and_then(|name| text_fonts::resolve_bitmap_font(asset, &self.packages, name))
+            data.font.as_deref().and_then(|name| {
+                text_fonts::resolve_bitmap_font(
+                    asset,
+                    &self.packages,
+                    name,
+                    object.resource_context(),
+                )
+            })
         }) {
             if !data.ubb_enabled && !data.html_enabled {
                 let result = fairygui_core::bitmap_text::layout_bitmap_text(

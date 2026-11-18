@@ -427,6 +427,7 @@ pub fn register(app: &mut App) {
             (
                 // Apply component edits before the current pointer/keyboard input,
                 // using the same controller/property precedence as later passes.
+                crate::runtime::sync_ui_config,
                 crate::properties::sync,
                 crate::runtime::object_drag::prepare_object_drags,
                 crate::runtime::ecs_drag_drop::prepare_drag_targets,

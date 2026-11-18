@@ -33,6 +33,9 @@ pub(crate) mod object_drag;
 #[cfg(test)]
 #[path = "relation_target_tests.rs"]
 mod relation_target_tests;
+#[cfg(test)]
+#[path = "resource_context_tests.rs"]
+mod resource_context_tests;
 #[path = "root_mount.rs"]
 pub(crate) mod root_mount;
 pub use edit::{GuiMut, GuiObjectMut, GuiWorldExt};
@@ -87,6 +90,12 @@ pub struct GuiConfig {
     /// Existing controllers keep their selection; each pending component reads
     /// the latest table when it is actually constructed.
     pub package_variables: HashMap<String, String>,
+    /// UIPackage.branch for subsequent resource requests. Existing views keep
+    /// their selected content; changing a Loader URL/font captures new defaults.
+    pub package_branch: String,
+    /// None follows the selected window's DPI times UiScale using native
+    /// 1.5/2.5/3.5 thresholds. Some(0) forces base assets; negatives clamp to zero.
+    pub content_scale_level: Option<i32>,
 }
 
 /// ECS-owned FairyGUI root. Add this component to any entity to create the
@@ -2844,7 +2853,7 @@ fn spawn_object(
     }
     // 图片：直接以子区域方式引用图集纹理。
     if matches!(gobject.control(), ControlData::Image(_))
-        && let Some(item_id) = gobject.package_item_id()
+        && let Some(item_id) = gobject.content_item_id()
         && let Some(index) = asset.package.item_index_by_id(item_id)
         && let Some(sprite) = asset.package.sprite_for(index)
         && let Some(atlas) = asset.package.item(sprite.atlas_item)
@@ -2940,7 +2949,7 @@ fn spawn_object(
 
     // 序列帧：解析帧数据并挂上播放状态，此后只更新纹理子区域。
     if let ControlData::MovieClip(data) = gobject.control()
-        && let Some(item_id) = gobject.package_item_id()
+        && let Some(item_id) = gobject.content_item_id()
         && let Some(index) = asset.package.item_index_by_id(item_id)
         && let Some(player) =
             movie_sources::player_for(asset, asset_server, index, data.frame, data.playing)
@@ -2985,10 +2994,15 @@ fn spawn_object(
                 entity.insert(movie_sources::MovieSource {
                     url: url.to_string(),
                     visual: None,
+                    context: gobject.resource_context().clone(),
                 });
-            } else if let Some(index) = asset.package.resolve_local_url(url)
-                && let Some(player) =
-                    movie_sources::player_for(asset, asset_server, index, data.frame, data.playing)
+            } else if let Some(index) = asset.package.resolve_local_url(url).map(|index| {
+                asset.package.resolve(
+                    index,
+                    &gobject.resource_context().load_context(&asset.package),
+                )
+            }) && let Some(player) =
+                movie_sources::player_for(asset, asset_server, index, data.frame, data.playing)
             {
                 let mut image = ImageNode {
                     image_mode: bevy::ui::widget::NodeImageMode::Stretch,
@@ -3005,10 +3019,15 @@ fn spawn_object(
                     movie_sources::MovieSource {
                         url: url.to_string(),
                         visual: Some(visual),
+                        context: gobject.resource_context().clone(),
                     },
                 ));
             } else {
-                match resolve_loader_url(asset, url) {
+                match resolve_loader_url(
+                    asset,
+                    url,
+                    &gobject.resource_context().load_context(&asset.package),
+                ) {
                     Some(LoadedSource {
                         image,
                         sprite,
@@ -3043,6 +3062,7 @@ fn spawn_object(
                         entity.insert(movie_sources::MovieSource {
                             url: url.to_string(),
                             visual: Some(visual),
+                            context: gobject.resource_context().clone(),
                         });
                     }
                     None => {
@@ -3054,6 +3074,7 @@ fn spawn_object(
             entity.insert(movie_sources::MovieSource {
                 url: String::new(),
                 visual: None,
+                context: gobject.resource_context().clone(),
             });
         }
     }
@@ -3154,7 +3175,7 @@ fn resolve_current_sprite(
     assets: &Assets<FuiAsset>,
     gobject: &fairygui_core::GObject,
 ) -> Option<fairygui_core::package::AtlasSprite> {
-    if let Some(item_id) = gobject.package_item_id()
+    if let Some(item_id) = gobject.content_item_id()
         && let Some(sprite) = assets.iter().find_map(|(_, asset)| {
             if gobject
                 .source_package_id()
@@ -3188,6 +3209,10 @@ fn resolve_current_sprite(
             }
             asset.package.item_index_by_name(url.rsplit('/').next()?)?
         };
+        let index = asset.package.resolve(
+            index,
+            &gobject.resource_context().load_context(&asset.package),
+        );
         asset.package.sprite_for(index).cloned()
     })
 }
@@ -3207,7 +3232,11 @@ struct LoadedSource {
 /// 支持两种形式：
 /// - 包内资源 `ui://<包名>/<条目名>`：图片条目取其所在图集与切片，其余取其文件；
 /// - 其它地址按「相对包所在目录」的路径处理。
-fn resolve_loader_url(asset: &FuiAsset, url: &str) -> Option<LoadedSource> {
+fn resolve_loader_url(
+    asset: &FuiAsset,
+    url: &str,
+    context: &fairygui_core::package::LoadContext,
+) -> Option<LoadedSource> {
     if url.is_empty() {
         return None;
     }
@@ -3222,7 +3251,9 @@ fn resolve_loader_url(asset: &FuiAsset, url: &str) -> Option<LoadedSource> {
         });
     }
 
-    let index = asset.package.resolve_local_url(url)?;
+    let index = asset
+        .package
+        .resolve(asset.package.resolve_local_url(url)?, context);
     let item = asset.package.item(index)?;
     if item.item_type != fairygui_core::package::PackageItemType::Image {
         return None;
@@ -3874,11 +3905,9 @@ pub(crate) fn sync_dirty(
             continue;
         };
         let content = text_fonts::display_text(gobject, &runtime.translate(&data.text));
-        let Some((font_asset, font)) = data
-            .font
-            .as_deref()
-            .and_then(|name| text_fonts::resolve_bitmap_font(asset, &assets, name))
-        else {
+        let Some((font_asset, font)) = data.font.as_deref().and_then(|name| {
+            text_fonts::resolve_bitmap_font(asset, &assets, name, gobject.resource_context())
+        }) else {
             continue;
         };
 
@@ -3914,13 +3943,44 @@ pub fn advance_async_builds(mut runtime: NonSendMut<GuiRuntime>, assets: Res<Ass
     runtime.advance_builds(&assets);
 }
 
-pub fn sync_ui_config(config: Res<GuiConfig>, mut runtime: NonSendMut<GuiRuntime>) {
+pub fn sync_ui_config(
+    config: Option<Res<GuiConfig>>,
+    mut runtime: NonSendMut<GuiRuntime>,
+    windows: Query<(Entity, &Window, Has<bevy::window::PrimaryWindow>)>,
+    input: Option<Res<crate::GuiInputSettings>>,
+    scale: Option<Res<UiScale>>,
+) {
+    let Some(config) = config else { return };
+    let level = config
+        .content_scale_level
+        .map(|level| level.max(0))
+        .unwrap_or_else(|| {
+            let window = windows.iter().find(|(entity, _, primary)| {
+                input
+                    .as_ref()
+                    .and_then(|input| input.window)
+                    .map_or(*primary, |chosen| chosen == *entity)
+            });
+            fairygui_core::package::ResourceContext::scale_level(
+                window.map_or(1., |(_, window, _)| window.scale_factor())
+                    * scale.as_ref().map_or(1., |scale| scale.0),
+            )
+        });
     if config.is_changed() {
         runtime.set_scroll_defaults(config.scroll.clone());
         runtime
             .store_mut()
             .set_button_defaults(config.button.clone());
         runtime.registry.set_vars(config.package_variables.clone());
+        runtime.registry.set_branch(config.package_branch.clone());
+    }
+    runtime.registry.set_content_scale_level(level);
+    let selected = fairygui_core::package::ResourceContext {
+        branch: runtime.registry.branch().into(),
+        content_scale_level: level,
+    };
+    if runtime.store.resource_defaults() != &selected {
+        runtime.store.set_resource_defaults(selected);
     }
 }
 

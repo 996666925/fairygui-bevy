@@ -570,6 +570,7 @@ mod tests {
                 crate::runtime::MovieSource {
                     url: String::new(),
                     visual: None,
+                    context: Default::default(),
                 },
             ))
             .id();
@@ -625,6 +626,7 @@ mod tests {
             crate::runtime::MovieSource {
                 url: "picture.png".into(),
                 visual: Some(visual),
+                context: Default::default(),
             },
         ));
         app.update();

@@ -10,6 +10,7 @@ pub(crate) struct InputPromptView(Entity);
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub(crate) struct PromptSnapshot {
+    resources: fairygui_core::package::ResourceContext,
     text: String,
     data: fairygui_core::widget::TextFieldData,
     color: fairygui_core::color::Color,
@@ -83,15 +84,14 @@ pub(crate) fn sync_input_prompts(
         let bitmap = own
             .filter(|_| font.is_none_or(|font| !font.editing()))
             .and_then(|asset| {
-                input
-                    .text_field
-                    .font
-                    .as_deref()
-                    .and_then(|name| text_fonts::resolve_bitmap_font(asset, &assets, name))
+                input.text_field.font.as_deref().and_then(|name| {
+                    text_fonts::resolve_bitmap_font(asset, &assets, name, object.resource_context())
+                })
             });
         let mut data = input.text_field.clone();
         data.text.clear();
         let snapshot = PromptSnapshot {
+            resources: object.resource_context().clone(),
             text,
             data,
             color: input.prompt_color,

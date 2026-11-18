@@ -41,10 +41,13 @@ mod block {
 /// 加载上下文。
 ///
 /// 分支与内容缩放等级会影响资源的实际取用，因此解析依赖资源的接口都要带上它。
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LoadContext {
     /// 当前分支编号，`-1` 表示未启用分支。
     pub branch_index: i32,
+    /// Global branch name, retained across packages with different branch lists.
+    /// None lets standalone callers select a package-local branch_index.
+    pub branch_name: Option<String>,
     /// 内容缩放等级，`0` 表示标准分辨率。
     pub content_scale_level: i32,
     /// FairyGUI global fallbacks used by scroll panes with no exported override.
@@ -56,8 +59,58 @@ impl LoadContext {
     pub const fn none() -> Self {
         Self {
             branch_index: -1,
+            branch_name: None,
             content_scale_level: 0,
             scroll_defaults: ScrollDefaults::new(),
+        }
+    }
+
+    pub fn resources(&self, package: &FuiPackage) -> ResourceContext {
+        ResourceContext {
+            branch: self.branch_name.clone().unwrap_or_else(|| {
+                package
+                    .branches()
+                    .get(self.branch_index as usize)
+                    .cloned()
+                    .unwrap_or_default()
+            }),
+            content_scale_level: self.content_scale_level.max(0),
+        }
+    }
+}
+
+impl Default for LoadContext {
+    fn default() -> Self {
+        Self::none()
+    }
+}
+
+/// Branch and density captured by a resource request. Existing images/fonts
+/// keep their selection when global defaults change.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct ResourceContext {
+    pub branch: String,
+    pub content_scale_level: i32,
+}
+impl ResourceContext {
+    pub fn load_context(&self, package: &FuiPackage) -> LoadContext {
+        LoadContext {
+            branch_index: package.branch_index_of(&self.branch),
+            branch_name: Some(self.branch.clone()),
+            content_scale_level: self.content_scale_level.max(0),
+            ..LoadContext::none()
+        }
+    }
+    /// Native GRoot density thresholds, based on canvas scale rather than size.
+    pub fn scale_level(scale: f32) -> i32 {
+        if scale >= 3.5 {
+            3
+        } else if scale >= 2.5 {
+            2
+        } else if scale >= 1.5 {
+            1
+        } else {
+            0
         }
     }
 }

@@ -97,6 +97,7 @@ impl GuiRuntime {
         ) {
             return false;
         }
+        self.store.refresh_resource_context(loader);
         self.loader_retries.insert(loader);
         true
     }
@@ -193,9 +194,13 @@ fn load_state(
     }) else {
         return State::Failed(Failure::MissingResource);
     };
-    let index = asset
-        .package
-        .resolve_branch(index, &gui.registry.load_context(&asset.package));
+    let context = gui
+        .store
+        .object(loader)
+        .unwrap()
+        .resource_context()
+        .load_context(&asset.package);
+    let index = asset.package.resolve(index, &context);
     let item = asset.package.item(index).unwrap();
     match item.item_type {
         PackageItemType::Component => {
@@ -205,14 +210,14 @@ fn load_state(
                 State::Failed(Failure::ComponentConstruction)
             }
         }
-        PackageItemType::Image => resolve_loader_url(asset, url)
+        PackageItemType::Image => resolve_loader_url(asset, url, &context)
             .map_or(State::Failed(Failure::MissingResource), |source| {
                 image_state(server, images, source.image, retry)
             }),
         PackageItemType::MovieClip => {
             let Ok(clip) = asset
                 .package
-                .load_movie_clip(index, &gui.registry.load_context(&asset.package))
+                .load_movie_clip(index, &fairygui_core::package::LoadContext::none())
             else {
                 return State::Failed(Failure::MissingResource);
             };

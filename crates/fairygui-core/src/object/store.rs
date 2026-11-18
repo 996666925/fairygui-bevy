@@ -217,6 +217,7 @@ pub struct GearTween {
 /// 对象竞技场。
 #[derive(Debug, Default)]
 pub struct ObjectStore {
+    resource_defaults: crate::package::ResourceContext,
     button_defaults: crate::widget::ButtonDefaults,
     objects: slotmap::SlotMap<GObjectId, GObject>,
     dirty_ids: HashSet<GObjectId>,
@@ -286,6 +287,38 @@ impl ObjectStore {
         Self::default()
     }
 
+    pub fn resource_defaults(&self) -> &crate::package::ResourceContext {
+        &self.resource_defaults
+    }
+
+    /// Global defaults for subsequent font/Loader requests and bare objects.
+    /// Package constructors capture their explicit loading context separately.
+    pub fn set_resource_defaults(&mut self, mut context: crate::package::ResourceContext) {
+        context.content_scale_level = context.content_scale_level.max(0);
+        self.resource_defaults = context;
+    }
+
+    /// Explicitly reloadable fields can capture new global resource defaults
+    /// without changing their URL/name. Ordinary exported images stay retained.
+    pub fn refresh_resource_context(&mut self, id: GObjectId) -> bool {
+        let Some(object) = self.objects.get_mut(id) else {
+            return false;
+        };
+        let dirty = match object.control {
+            crate::widget::ControlData::Loader(_) => dirty::IMAGE,
+            crate::widget::ControlData::Text(_) | crate::widget::ControlData::TextInput(_) => {
+                dirty::TEXT
+            }
+            _ => return false,
+        };
+        if object.resource_context == self.resource_defaults {
+            return false;
+        }
+        object.resource_context.clone_from(&self.resource_defaults);
+        self.touch(id, dirty);
+        true
+    }
+
     /// 已存在的对象数量。
     pub fn len(&self) -> usize {
         self.objects.len()
@@ -327,6 +360,7 @@ impl ObjectStore {
     /// 解析到真正的描述后，这些默认值会被覆盖。
     pub fn create(&mut self, kind: ObjectType) -> GObjectId {
         let mut object = GObject::new(kind);
+        object.resource_context.clone_from(&self.resource_defaults);
         object.control = crate::widget::ControlData::for_kind(kind);
         if let crate::widget::ControlData::Button(data) = &mut object.control {
             data.sound.clone_from(&self.button_defaults.sound);
@@ -1860,6 +1894,9 @@ impl ObjectStore {
         *current = Some(icon.to_owned());
 
         if changed {
+            if !compound {
+                target.resource_context.clone_from(&self.resource_defaults);
+            }
             self.touch(object, dirty::IMAGE);
         }
         if compound {

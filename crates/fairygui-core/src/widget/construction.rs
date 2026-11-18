@@ -14,6 +14,7 @@ enum Step {
     Plain {
         kind: ObjectType,
         package: String,
+        context: crate::package::ResourceContext,
         rows: Vec<String>,
     },
 }
@@ -38,11 +39,7 @@ impl BuildPlan {
             steps: VecDeque::new(),
             pool: Vec::new(),
             owned: Vec::new(),
-            branch: package
-                .branches()
-                .get(context.branch_index as usize)
-                .cloned()
-                .unwrap_or_default(),
+            branch: context.resources(package).branch,
             total: 0,
         };
         plan.collect(
@@ -66,6 +63,7 @@ impl BuildPlan {
     ) -> Result<()> {
         let context = LoadContext {
             branch_index: package.branch_index_of(&self.branch),
+            branch_name: Some(self.branch.clone()),
             ..context.clone()
         };
         let source_index = index;
@@ -128,6 +126,7 @@ impl BuildPlan {
                     self.steps.push_back(Step::Plain {
                         kind,
                         package: package.id().into(),
+                        context: context.resources(&package),
                         rows,
                     });
                 }
@@ -217,6 +216,7 @@ impl BuildPlan {
                 Step::Plain {
                     kind,
                     package,
+                    context,
                     rows,
                 } => {
                     let start =
@@ -228,6 +228,7 @@ impl BuildPlan {
                     // Prepared rows never enter the display hierarchy.
                     store.cache_list_item_pool(object, rows.into_iter().zip(items).collect());
                     store.object_mut(object).unwrap().source_package_id = Some(package);
+                    store.object_mut(object).unwrap().resource_context = context;
                     object
                 }
                 Step::Resource {

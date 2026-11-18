@@ -5,6 +5,7 @@ use crate::movie::MovieClipPlayer;
 pub(crate) struct MovieSource {
     pub url: String,
     pub visual: Option<Entity>,
+    pub context: fairygui_core::package::ResourceContext,
 }
 
 pub(super) fn player_for(
@@ -50,9 +51,10 @@ pub(crate) fn sync_movie_sources(
             continue;
         };
         let data = data.clone();
+        let selection = gobject.resource_context().clone();
         let url = data.url.as_deref().unwrap_or("");
         if !runtime.loader_retries.contains(&object.0)
-            && current.is_some_and(|current| current.url == url)
+            && current.is_some_and(|current| current.url == url && current.context == selection)
         {
             continue;
         }
@@ -65,6 +67,7 @@ pub(crate) fn sync_movie_sources(
             entity.insert(MovieSource {
                 url: String::new(),
                 visual: None,
+                context: selection,
             });
             if data.auto_size {
                 runtime.store_mut().set_size(object.0, 50.0, 30.0);
@@ -88,12 +91,15 @@ pub(crate) fn sync_movie_sources(
             entity.insert(MovieSource {
                 url: String::new(),
                 visual: None,
+                context: selection,
             });
             if data.auto_size {
                 runtime.store_mut().set_size(object.0, 50.0, 30.0);
             }
             continue;
         };
+        let context = selection.load_context(&asset.package);
+        let index = index.map(|index| asset.package.resolve(index, &context));
         if index.is_some_and(|index| {
             asset.package.item(index).is_some_and(|item| {
                 item.item_type == fairygui_core::package::PackageItemType::Component
@@ -104,6 +110,7 @@ pub(crate) fn sync_movie_sources(
             entity.insert(MovieSource {
                 url: url.to_string(),
                 visual: None,
+                context: selection,
             });
             continue;
         }
@@ -123,7 +130,7 @@ pub(crate) fn sync_movie_sources(
                     .map_or(Vec2::ZERO, |item| Vec2::new(item.width, item.height)),
                 None,
             )
-        } else if let Some(source) = resolve_loader_url(asset, url) {
+        } else if let Some(source) = resolve_loader_url(asset, url, &context) {
             image.image = asset_server.load(source.image);
             image.rect = source.sprite.as_ref().map(|sprite| {
                 Rect::new(
@@ -147,6 +154,7 @@ pub(crate) fn sync_movie_sources(
             entity.insert(MovieSource {
                 url: String::new(),
                 visual: None,
+                context: selection,
             });
             if data.auto_size {
                 runtime.store_mut().set_size(object.0, 50.0, 30.0);
@@ -158,6 +166,7 @@ pub(crate) fn sync_movie_sources(
             MovieSource {
                 url: url.to_string(),
                 visual: Some(visual),
+                context: selection,
             },
             if runtime.store().display_visible(object.0) {
                 Visibility::Inherited

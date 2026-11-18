@@ -307,11 +307,9 @@ pub(crate) fn sync_bitmap_rich_text(
         {
             continue;
         }
-        let Some((font_asset, font)) = data
-            .font
-            .as_deref()
-            .and_then(|name| text_fonts::resolve_bitmap_font(asset, &assets, name))
-        else {
+        let Some((font_asset, font)) = data.font.as_deref().and_then(|name| {
+            text_fonts::resolve_bitmap_font(asset, &assets, name, object.resource_context())
+        }) else {
             continue;
         };
         for &glyph in &glyphs.0 {

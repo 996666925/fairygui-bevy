@@ -11,6 +11,7 @@ struct BitmapSource {
     package_id: String,
     res_key: String,
     item: usize,
+    context: fairygui_core::package::ResourceContext,
 }
 
 #[derive(Component, Debug, Clone, PartialEq)]
@@ -145,11 +146,12 @@ pub(super) fn resolve_bitmap_font<'a>(
     asset: &'a FuiAsset,
     assets: &'a Assets<FuiAsset>,
     name: &str,
+    context: &fairygui_core::package::ResourceContext,
 ) -> Option<(&'a FuiAsset, BitmapFontData)> {
     let (source, index) = font_source(asset, assets, name)?;
     let font = source
         .package
-        .load_bitmap_font(index, &fairygui_core::package::LoadContext::none())
+        .load_bitmap_font(index, &context.load_context(&source.package))
         .ok()?;
     Some((source, font))
 }
@@ -174,6 +176,7 @@ fn binding(
             package_id: source.package.id().into(),
             res_key: source.res_key.clone(),
             item,
+            context: object.resource_context().clone(),
         });
     let (raster, request) = raster_font(
         data.font.as_deref().filter(|_| bitmap.is_none()),
@@ -285,7 +288,7 @@ pub(super) fn spawn_text(
         && let Some((source, bitmap)) = data
             .font
             .as_deref()
-            .and_then(|name| resolve_bitmap_font(asset, assets, name))
+            .and_then(|name| resolve_bitmap_font(asset, assets, name, object.resource_context()))
     {
         if data.ubb_enabled || data.html_enabled {
             bitmap_rich_text::spawn(

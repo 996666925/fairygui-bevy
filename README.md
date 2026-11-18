@@ -1793,6 +1793,22 @@ fn show_help(_: On<GuiClick>, mut tooltip: GuiTooltip) {
 `--smoke-tooltip` 验证真实悬停、边缘定位、复用及提示覆盖按钮时
 的点击穿透。
 
+资源分支和高清替代资源通过 `GuiConfig` 配置：
+
+```rust,ignore
+fn configure_resources(mut config: ResMut<GuiConfig>) {
+    config.package_branch = "night".into(); // 空字符串关闭分支
+    config.content_scale_level = None; // 自动选择；Some(0) 强制基础分辨率
+}
+```
+
+自动等级按输入窗口的 DPI × `UiScale` 计算，1.5／2.5／3.5 分别选择 1／2／3 级。
+分支按名称在每个包中查找，高清项缺失时保留当前分支资源。图片和序列帧保留分支的
+逻辑尺寸，显示内容可使用高清项；原始包／条目身份保持稳定，类型绑定和对象池仍使用
+原资源地址。Loader 按其选中内容的尺寸布局，位图字体的图片字形保留逻辑字形尺寸。
+更改配置影响后续资源请求，已有对象保持原选择；修改 Loader URL、重试加载或更换字体
+会使用新配置。分帧构建的资源选择在开始构建时保留到完成。
+
 包的全局变量通过 `GuiConfig.package_variables` 配置，对应原版 `UIPackage.setVar`：
 
 ```rust,ignore

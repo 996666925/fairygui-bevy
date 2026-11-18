@@ -13,7 +13,7 @@ mod movie;
 mod registry;
 
 pub use font::{BitmapFontData, BmGlyph, GlyphTexture};
-pub use fui_package::{FuiPackage, LoadContext, PackageDependency};
+pub use fui_package::{FuiPackage, LoadContext, PackageDependency, ResourceContext};
 pub use item::{AtlasSprite, ObjectType, PackageItem, PackageItemType, PixelHitTestData};
 pub use movie::{FrameTexture, MovieClipData, MovieFrame};
 pub use registry::PackageRegistry;

@@ -43,11 +43,20 @@ impl GuiRuntime {
     }
 
     pub(super) fn create_template(&mut self, template: &ResolvedTemplate) -> Option<GObjectId> {
+        let context = self.registry.load_context(&template.package);
+        self.create_template_with_context(template, &context)
+    }
+
+    pub(super) fn create_template_with_context(
+        &mut self,
+        template: &ResolvedTemplate,
+        context: &fairygui_core::package::LoadContext,
+    ) -> Option<GObjectId> {
         let object = fairygui_core::widget::create_from_package_with_registry(
             &mut self.store,
             &template.package,
             template.index,
-            &self.registry.load_context(&template.package),
+            context,
             &self.registry,
         )
         .ok()?;

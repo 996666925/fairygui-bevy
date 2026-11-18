@@ -65,7 +65,7 @@ impl MovieClipData {
 impl FuiPackage {
     /// 解析序列帧条目。
     pub fn load_movie_clip(&self, item_index: usize, ctx: &LoadContext) -> Result<MovieClipData> {
-        let index = self.resolve_branch(item_index, ctx);
+        let index = self.resolve(item_index, ctx);
         let item = self
             .item(index)
             .ok_or_else(|| Error::ItemNotFound(format!("#{item_index}")))?;

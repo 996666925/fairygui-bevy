@@ -237,9 +237,13 @@ fn plain_bitmap_underlines_follow_native_lines_color_alpha_resize_empty_and_disp
             let data = object.control().as_text_field().unwrap();
             let assets = app.world().resource::<Assets<FuiAsset>>();
             let asset = assets.get(&gui.asset_handle_for(owner).unwrap()).unwrap();
-            let (_, font) =
-                text_fonts::resolve_bitmap_font(asset, assets, data.font.as_deref().unwrap())
-                    .unwrap();
+            let (_, font) = text_fonts::resolve_bitmap_font(
+                asset,
+                assets,
+                data.font.as_deref().unwrap(),
+                object.resource_context(),
+            )
+            .unwrap();
             fairygui_core::bitmap_text::layout_bitmap_text(&font, data, content, object.size())
         };
         assert_eq!(layout.underlines.len(), before.len());

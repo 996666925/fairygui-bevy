@@ -73,6 +73,8 @@ pub struct GObject {
     /// 编辑器导出的容器内实例 ID，与包资源条目 ID 和竞技场句柄分开保存。
     pub(crate) instance_id: Option<String>,
     pub(crate) package_item_id: Option<String>,
+    pub(crate) content_item_id: Option<String>,
+    pub(crate) resource_context: crate::package::ResourceContext,
     pub(crate) source_package_id: Option<String>,
 
     pub(crate) x: f32,
@@ -152,6 +154,8 @@ impl GObject {
             name: String::new(),
             instance_id: None,
             package_item_id: None,
+            content_item_id: None,
+            resource_context: crate::package::ResourceContext::default(),
             source_package_id: None,
             x: 0.0,
             y: 0.0,
@@ -228,6 +232,15 @@ impl GObject {
     /// 来源的包条目编号。
     pub fn package_item_id(&self) -> Option<&str> {
         self.package_item_id.as_deref()
+    }
+
+    /// Retained branch/HD content, independent of the base resource identity.
+    pub fn content_item_id(&self) -> Option<&str> {
+        self.content_item_id.as_deref().or(self.package_item_id())
+    }
+
+    pub fn resource_context(&self) -> &crate::package::ResourceContext {
+        &self.resource_context
     }
 
     /// Package owning the object's resource and local URLs. Inline objects
