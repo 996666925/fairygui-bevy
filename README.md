@@ -789,6 +789,11 @@ Sync 末尾更新。`play_transition_with_options { name, options }` 支持延�
 `GuiTextFormat`、`GuiTooltips`、`GuiData`、`GuiButtonSelected`、`GuiSliderValue`、`GuiProgressValue` 以及滑动条、进度条、下拉框的完整状态。
 将业务系统放在 `GuiSystems::Respond`，插件在推进动画前应用修改，并在本帧 Sync 更新 Bevy UI。
 
+`GuiTransform.skew` 使用 FairyGUI 的横、纵倾斜角，单位为度；与旋转、缩放和轴心一起作用于
+控件、子控件和应用挂载的 Bevy UI 子节点。渲染、裁剪和指针命中使用投影后的同一矩阵。
+可通过 `transform.skew = Vec2::new(15., -8.)` 修改，清零即可恢复；支持负缩放和零缩放。
+`GuiSpace` 的坐标转换遵循原版 FairyGUI 到 Laya 的倾斜角符号转换。
+
 按钮的 `GuiButtonSettings.related_controller` 按当前父对象的控制器名称绑定，
 `related_page_id` 指定关联页面 ID；两者先于同帧的 `GuiButtonSelected` 写入生效。
 更换或解除控制器会清空关联页面 ID，同帧明确修改的页面 ID 会随后应用。

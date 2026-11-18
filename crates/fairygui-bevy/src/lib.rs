@@ -100,6 +100,7 @@ mod margin_property;
 pub use margin_property::GuiMargin;
 mod native_clipping;
 mod scroll_properties;
+mod skew_projection;
 pub use scroll_properties::GuiScrollSettings;
 mod visual_properties;
 pub use visual_properties::{GuiColor, GuiImageFill, GuiImageFlip, GuiLoaderSettings};
@@ -599,6 +600,15 @@ impl Plugin for FairyGuiPlugin {
                 .after(bevy::ui::widget::update_editable_text_layout)
                 .after(runtime::publish_password_layout)
                 .before(runtime::position_inline_images)
+                .before(bevy::ui::update::update_clipping_system),
+        );
+        app.add_systems(
+            PostUpdate,
+            skew_projection::project
+                .after(bevy::ui::UiSystems::Layout)
+                .before(runtime::project_scroll_overflow)
+                .before(bevy::ui::widget::text_system)
+                .before(bevy::ui::widget::sync_editable_text_viewports)
                 .before(bevy::ui::update::update_clipping_system),
         );
         app.add_systems(

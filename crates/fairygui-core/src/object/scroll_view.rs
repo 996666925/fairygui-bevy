@@ -262,17 +262,7 @@ impl CoordinateTransform {
     };
 
     fn object(o: &crate::GObject) -> Self {
-        // Sprite.transform uses this native degree conversion and skew signs.
-        let x = f64::from(o.rotation() - o.skew_x()) * 0.0174532922222222;
-        let y = f64::from(o.rotation() + o.skew_y()) * 0.0174532922222222;
-        let (a, b) = (
-            f64::from(o.scale_x()) * y.cos(),
-            f64::from(o.scale_x()) * y.sin(),
-        );
-        let (c, d) = (
-            -f64::from(o.scale_y()) * x.sin(),
-            f64::from(o.scale_y()) * x.cos(),
-        );
+        let [a, b, c, d] = o.transform_axes();
         let (px, py) = (
             f64::from(o.pivot().x * o.width()),
             f64::from(o.pivot().y * o.height()),

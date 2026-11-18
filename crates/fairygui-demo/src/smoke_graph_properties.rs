@@ -1092,10 +1092,114 @@ fn drive(
                 next = true;
             }
             65 if elapsed >= 8 => {
+                let (front, back) = (state.front.unwrap(), state.back.unwrap());
+                for (entity, color) in
+                    [(front, Color::srgba(1., 1., 1., 0.5)), (back, Color::BLACK)]
+                {
+                    *ui.p1().get_mut(entity).unwrap() = GuiGraph {
+                        kind: GraphType::Rect,
+                        fill_color: color,
+                        ..default()
+                    };
+                }
+                {
+                    let mut transforms = ui.p2();
+                    let mut t = transforms.get_mut(front).unwrap();
+                    t.position = Vec2::new(250., 180.);
+                    t.size = Vec2::new(120., 90.);
+                    t.pivot = Vec2::splat(0.5);
+                    t.pivot_as_anchor = true;
+                    t.rotation = 17.;
+                    t.scale = Vec2::new(1.2, 0.8);
+                    t.skew = Vec2::new(20., -12.);
+                    let mut t = transforms.get_mut(back).unwrap();
+                    t.position = Vec2::ZERO;
+                    t.size = Vec2::new(900., 500.);
+                }
+                next = true;
+            }
+            66 if elapsed >= 12 => {
+                let front = state.front.unwrap();
+                let owner = state.owner.unwrap();
+                let gui = ui.p0();
+                let root = gui.view(owner).unwrap();
+                let (n, t) = nodes.get(root).unwrap();
+                let (front_n, front_t) = nodes.get(front).unwrap();
+                for p in [Vec2::ZERO, Vec2::new(30., 20.), Vec2::new(60., 45.)] {
+                    let native = gui.local_to_global(front, p).unwrap();
+                    let local = gui.global_to_local(owner, native).unwrap();
+                    let expected =
+                        t.transform_point2(n.border_box().min + local / n.inverse_scale_factor());
+                    let actual = front_t.transform_point2(
+                        front_n.border_box().min
+                            + (p + Vec2::new(60., 45.)) / front_n.inverse_scale_factor(),
+                    );
+                    assert!(
+                        actual.abs_diff_eq(expected, 1.),
+                        "skew model/render mismatch: {actual:?} vs {expected:?}"
+                    );
+                }
+                check_graph_layout(
+                    front,
+                    state.child.unwrap(),
+                    drawing(front, &faces),
+                    Vec2::new(120., 90.),
+                    &nodes,
+                );
+                capture_grays(
+                    &mut commands,
+                    front,
+                    &[
+                        (Vec2::new(30., 25.), 0.5),
+                        (Vec2::new(80., 55.), 0.5),
+                        (Vec2::new(-12., 45.), 0.),
+                        (Vec2::new(132., 45.), 0.),
+                    ],
+                    &nodes,
+                    "target/fairygui-demo-skew-transform.png",
+                );
+                next = true;
+            }
+            67 if state.pixel_checks >= 4 => {
+                let front = state.front.unwrap();
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(30., 25.),
+                    front,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            68 => {
+                let (front, back) = (state.front.unwrap(), state.back.unwrap());
+                click_at(
+                    &mut state,
+                    &clicks,
+                    front,
+                    Vec2::new(-12., 45.),
+                    back,
+                    &nodes,
+                    window.scale_factor(),
+                );
+            }
+            69 => {
+                ui.p2().get_mut(state.front.unwrap()).unwrap().skew = Vec2::ZERO;
+                next = true;
+            }
+            70 if elapsed >= 8 => {
+                check_graph_layout(
+                    state.front.unwrap(),
+                    state.child.unwrap(),
+                    drawing(state.front.unwrap(), &faces),
+                    Vec2::new(120., 90.),
+                    &nodes,
+                );
                 commands.entity(state.owner.unwrap()).despawn();
                 next = true;
             }
-            66 if elapsed >= 8 => {
+            71 if elapsed >= 8 => {
                 for entity in [
                     state.front.unwrap(),
                     state.back.unwrap(),
@@ -1103,10 +1207,10 @@ fn drive(
                 ] {
                     assert!(!entities.contains(entity));
                 }
-                assert_eq!(clicks.0.len(), 14);
-                assert_eq!(state.pixel_checks, 3);
+                assert_eq!(clicks.0.len(), 16);
+                assert_eq!(state.pixel_checks, 4);
                 println!(
-                    "demo smoke PASSED: native primitive paths and triangle fills, self-intersection paint versus hit policy, GPU pixel checks for shared edges and overlapping alpha, signed regular polygons, stroke-free layout, zero-size recovery, retained geometry and disposal"
+                    "demo smoke PASSED: native primitive paths and triangle fills, self-intersection paint versus hit policy, GPU pixel checks, skew rendering/model/child geometry and clicks, reset, zero-size recovery and disposal"
                 );
                 exit.write(AppExit::Success);
                 next = true;

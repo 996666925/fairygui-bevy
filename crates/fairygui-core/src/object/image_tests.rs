@@ -135,3 +135,71 @@ fn changed_flip_captures_size_gear_and_unchanged_flip_keeps_custom_scale_and_dir
     store.set_image_flip(root, FlipType::Both);
     assert_eq!(store.image_flip(root), None);
 }
+#[test]
+fn skew_axes_and_api_points_match_native_gobject_and_sprite_conversion() {
+    use crate::{geom::Point, package::ObjectType, widget::FlipType};
+    let mut cases = 0;
+    for line in include_str!("../../tests/fixtures/skew-transform-reference.txt").lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let (command, expected) = line.split_once(':').unwrap();
+        let v: Vec<f32> = command
+            .split_whitespace()
+            .skip(1)
+            .map(|s| s.parse().unwrap())
+            .collect();
+        let mut store = ObjectStore::new();
+        let id = store.create(if v[0] == 1. {
+            ObjectType::Image
+        } else {
+            ObjectType::Component
+        });
+        store.set_size(id, 100., 60.);
+        store.set_xy(id, 130., 90.);
+        store.set_pivot(id, 0.25, 0.75, v[1] == 1.);
+        if v[0] == 1. {
+            store.set_image_flip(id, FlipType::Horizontal);
+        }
+        store.set_scale(id, v[2], v[3]);
+        store.set_rotation(id, v[4]);
+        store.set_skew(id, v[5], v[6]);
+        let object = store.object(id).unwrap();
+        let axes = object.transform_axes();
+        let pivot = Point::new(25., 45.);
+        let position = object.image_display_position().unwrap_or(Point::new(
+            object.x()
+                + if object.pivot_as_anchor() {
+                    0.
+                } else {
+                    pivot.x
+                }
+                - (axes[0] * f64::from(pivot.x) + axes[2] * f64::from(pivot.y)) as f32,
+            object.y()
+                + if object.pivot_as_anchor() {
+                    0.
+                } else {
+                    pivot.y
+                }
+                - (axes[1] * f64::from(pivot.x) + axes[3] * f64::from(pivot.y)) as f32,
+        ));
+        let mut actual = axes.to_vec();
+        actual.extend([f64::from(position.x), f64::from(position.y)]);
+        for p in [Point::ZERO, Point::new(13., 9.), Point::new(100., 60.)] {
+            let p = store.local_to_global(id, p).unwrap();
+            actual.extend([f64::from(p.x), f64::from(p.y)]);
+        }
+        let expected: Vec<f64> = expected
+            .split_whitespace()
+            .map(|s| s.parse().unwrap())
+            .collect();
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert!(
+                (actual - expected).abs() < 0.00004,
+                "{line}: {actual} != {expected}"
+            );
+        }
+        cases += 1;
+    }
+    assert_eq!(cases, 192);
+}

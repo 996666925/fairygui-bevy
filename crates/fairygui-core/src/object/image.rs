@@ -7,6 +7,18 @@ use crate::{
 };
 
 impl GObject {
+    /// Native Sprite linear matrix [a, b, c, d], including FairyGUI's
+    /// setSkew(-skewX, skewY) conversion before Laya computes its axes.
+    pub fn transform_axes(&self) -> [f64; 4] {
+        let x = f64::from(self.rotation + self.skew_x) * 0.0174532922222222;
+        let y = f64::from(self.rotation + self.skew_y) * 0.0174532922222222;
+        [
+            f64::from(self.scale_x) * y.cos(),
+            f64::from(self.scale_x) * y.sin(),
+            -f64::from(self.scale_y) * x.sin(),
+            f64::from(self.scale_y) * x.cos(),
+        ]
+    }
     /// Actual cached Sprite position once native GImage flip handling is active.
     /// Logical x/y remain unchanged; resize/scale need not refresh this position.
     pub fn image_display_position(&self) -> Option<Point> {
@@ -22,19 +34,14 @@ impl GObject {
         self.refresh_image_position();
     }
     pub(crate) fn update_image_pivot_offset(&mut self) {
+        let [a, b, c, d] = self.transform_axes();
         let Some(state) = &mut self.image_transform else {
             return;
         };
         let px = f64::from(self.pivot_x * self.width);
         let py = f64::from(self.pivot_y * self.height);
-        let x = f64::from(self.rotation - self.skew_x) * 0.0174532922222222;
-        let y = f64::from(self.rotation + self.skew_y) * 0.0174532922222222;
-        state.pivot_offset = Point::new(
-            (px - px * f64::from(self.scale_x) * y.cos() + py * f64::from(self.scale_y) * x.sin())
-                as f32,
-            (py - px * f64::from(self.scale_x) * y.sin() - py * f64::from(self.scale_y) * x.cos())
-                as f32,
-        );
+        state.pivot_offset =
+            Point::new((px - px * a - py * c) as f32, (py - px * b - py * d) as f32);
     }
     pub(crate) fn refresh_image_position(&mut self) {
         let Some(state) = &mut self.image_transform else {

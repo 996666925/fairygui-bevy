@@ -404,3 +404,12 @@ metadata and Demo_Graph's component overflow byte from Visible to Hidden.
 Its original children, resources, controllers and geometry remain unchanged;
 tests use the Basics atlas prefix. It supplies an actual serialized Hidden
 component for Bevy layout and clipping regressions.
+
+`skew-transform-reference.txt` executes unchanged GObject geometry/pivot/skew
+methods, GImage flip/handleXYChanged and Laya Sprite.transform/toParentPoint in
+scalar Sprite/Matrix hosts. Its 192 cases record axes, cached Sprite positions
+and three API points across images/components, anchor modes, rotations, skews,
+reflections and zero scales. Source hashes are recorded; no GPU or OS input is
+used. `image-flip-reference.txt` now also executes the actual Sprite matrix
+getter, replacing its earlier scalar trigonometry stub. The scroll-view skew
+scenario passes logical skewX through FairyGUI's negative Sprite conversion.

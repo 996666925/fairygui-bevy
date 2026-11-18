@@ -238,6 +238,9 @@ mod scroll_extent;
 #[cfg(test)]
 #[path = "scroll_pages_tests.rs"]
 mod scroll_pages_tests;
+#[cfg(test)]
+#[path = "skew_projection_tests.rs"]
+mod skew_projection_tests;
 pub(crate) use scroll_extent::sync_scroll_extents;
 #[path = "list_content.rs"]
 mod list_content;
