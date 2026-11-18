@@ -98,6 +98,8 @@ mod properties;
 mod size_properties;
 pub use pixel_snapping::GuiPixelSnapping;
 pub use size_properties::GuiSizeConstraints;
+mod view_size;
+pub use view_size::GuiViewSize;
 mod margin_property;
 pub use margin_property::GuiMargin;
 mod native_clipping;
@@ -236,8 +238,8 @@ pub mod prelude {
         GuiTooltipState, GuiTooltips, GuiTransform, GuiTransitionCallback, GuiTransitionComplete,
         GuiTransitionHook, GuiTransitionState, GuiTransitions, GuiTreeContent, GuiTreeContentError,
         GuiTreeContentState, GuiTreeItem, GuiTreeNode, GuiTreeNodeState, GuiTreeSettings,
-        GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiVirtualList,
-        GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
+        GuiTreeState, GuiTweenComplete, GuiTweenProperty, GuiTweenTarget, GuiViewSize,
+        GuiVirtualList, GuiVirtualListState, GuiWindowState, GuiWorldExt, ListInteractionSettings,
         ListLayoutSettings, ListLayoutType, ListNavigationDirection, ListSelectionMode,
         PopupMenuTemplates, RelationType, TreeSettings,
     };

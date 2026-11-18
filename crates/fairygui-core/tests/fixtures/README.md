@@ -422,3 +422,12 @@ anchors, skew, rotation, mirror scales, pivot resizing, repeated writes and
 snapping toggles. Source hashes are recorded; no renderer or OS input runs.
 The first explicit false assignment refreshes the display, matching native's
 initial undefined state; subsequent identical assignments preserve its cache.
+
+`component-view-size-reference.txt` executes unchanged GComponent/ScrollPane
+viewWidth/viewHeight getters/setters and GObject width/height/setSize, with
+native ScrollPane sizing in scalar Sprite/Matrix hosts. Its 54 configurations
+and 594 snapshots record outer/requested sizes and viewport sizes through
+per-axis writes, negative values, margins, horizontal/vertical/floating bars
+and size limits. It does not simulate list reflow, events, GPU or OS input.
+Method hashes identify the extracted bodies; view edits preserve the other
+axis's raw request using the native width/height setters.

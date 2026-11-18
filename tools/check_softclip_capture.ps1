@@ -4,7 +4,7 @@ Add-Type -AssemblyName System.Drawing
 $total = 0
 $failures = 0
 $worst = 0
-foreach ($suffix in @('', '-scrolled', '-viewport', '-disabled', '-margins')) {
+foreach ($suffix in @('', '-scrolled', '-viewport', '-disabled', '-margins', '-view-size')) {
     $capturePath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../target/fairygui-demo-softclip$suffix.png"))
     $bitmap = [System.Drawing.Bitmap]::new($capturePath)
     try {

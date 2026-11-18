@@ -36,6 +36,8 @@ mod component_clip;
 mod component_input;
 #[path = "component_margin.rs"]
 mod component_margin;
+#[path = "component_view_size.rs"]
+mod component_view_size;
 #[path = "image.rs"]
 mod image;
 #[path = "pixel_snapping.rs"]

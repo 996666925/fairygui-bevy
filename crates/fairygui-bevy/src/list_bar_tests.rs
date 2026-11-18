@@ -416,3 +416,79 @@ fn changed_margins_project_content_and_owner_bars_at_the_same_coordinates_as_cor
         }
     }
 }
+
+#[test]
+fn ecs_view_size_resizes_outer_geometry_rows_and_clips_in_the_same_frame() {
+    let (mut app, _, list) = fixture_with_layout(true);
+    app.add_systems(
+        Update,
+        crate::properties::sync
+            .after(spawn_pending_objects)
+            .before(sync_dirty),
+    );
+    app.add_systems(Update, sync_scroll_extents.after(sync_dirty));
+    app.add_systems(
+        PostUpdate,
+        project_scroll_overflow
+            .after(bevy::ui::UiSystems::Layout)
+            .before(bevy::ui::update::update_clipping_system),
+    );
+    app.add_systems(
+        PostUpdate,
+        crate::native_clipping::project.after(bevy::ui::update::update_clipping_system),
+    );
+    let row = {
+        let mut gui = app.world_mut().non_send_mut::<GuiRuntime>();
+        for row in gui.store().list_items(list).unwrap() {
+            gui.store_mut().remove(row);
+        }
+        let row = gui
+            .store_mut()
+            .create(fairygui_core::package::ObjectType::Graph);
+        gui.store_mut().set_size(row, 250., 400.);
+        gui.store_mut().set_parent(row, Some(list));
+        gui.queue_subtree(row);
+        row
+    };
+    app.update();
+    let view = app
+        .world()
+        .non_send::<GuiRuntime>()
+        .entity_of(list)
+        .unwrap();
+    app.world_mut().entity_mut(view).insert((
+        crate::GuiMargin::new(10., 12., 20., 18.),
+        crate::GuiViewSize(Vec2::new(180.25, 90.75)),
+    ));
+    app.update();
+    let gui = app.world().non_send::<GuiRuntime>();
+    let bar = gui.store().scroll_pane(list).unwrap().vt_bar.unwrap();
+    let bar_width = gui.store().object(bar).unwrap().width();
+    let object = gui.store().object(list).unwrap();
+    assert_eq!(
+        gui.store().component_view_size(list),
+        Some(fairygui_core::Size::new(180.25, 90.75))
+    );
+    assert_eq!(object.width(), 210.25 + bar_width);
+    assert_eq!(object.height(), 120.75);
+    assert_eq!(
+        app.world().get::<crate::GuiViewSize>(view).unwrap().0,
+        Vec2::new(180.25, 90.75)
+    );
+    let node = app.world().get::<ComputedNode>(view).unwrap();
+    assert!(
+        (node.size() * node.inverse_scale_factor())
+            .abs_diff_eq(Vec2::new(object.width(), object.height()), 0.001)
+    );
+    let owner_t = app.world().get::<UiGlobalTransform>(view).unwrap();
+    let row_view = gui.entity_of(row).unwrap();
+    let clip = app
+        .world()
+        .get::<bevy::ui::CalculatedClip>(row_view)
+        .unwrap();
+    for (p, inside) in [(Vec2::new(20., 25.), true), (Vec2::new(20., 105.), false)] {
+        let screen =
+            owner_t.transform_point2(node.border_box().min + p / node.inverse_scale_factor());
+        assert_eq!(clip.contains_point(screen), inside);
+    }
+}

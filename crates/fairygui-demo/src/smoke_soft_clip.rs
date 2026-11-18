@@ -27,6 +27,7 @@ fn drive(
     mut gui: NonSendMut<GuiRuntime>,
     nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     settings: Query<&GuiScrollSettings>,
+    view_sizes: Query<&GuiViewSize>,
     mut cameras: Query<&mut Camera, With<Camera2d>>,
     windows: Query<&Window>,
     clear: Res<ClearColor>,
@@ -174,12 +175,47 @@ fn drive(
             next = true;
         }
         10 if elapsed >= 20 => {
-            capture_hard_margins(&state, &gui, &nodes, &mut commands, clear.0);
+            capture_hard_margins(&state, &gui, &nodes, &mut commands, clear.0, "-margins");
             next = true;
         }
         11 if elapsed >= 20 => {
+            for &id in &state.owners {
+                commands
+                    .entity(gui.entity_of(id).unwrap())
+                    .insert(GuiViewSize(Vec2::new(120., 90.)));
+            }
+            next = true;
+        }
+        12 if elapsed >= 20 => {
+            for &id in &state.owners {
+                let entity = gui.entity_of(id).unwrap();
+                assert_eq!(view_sizes.get(entity).unwrap().0, Vec2::new(120., 90.));
+                let object = gui.store().object(id).unwrap();
+                let pane = object.control().component().unwrap().scroll_pane.as_ref();
+                let vertical = pane
+                    .filter(|p| !p.floating)
+                    .and_then(|p| p.vt_bar)
+                    .and_then(|b| gui.store().object(b))
+                    .map_or(0., |b| b.width());
+                let horizontal = pane
+                    .filter(|p| !p.floating)
+                    .and_then(|p| p.hz_bar)
+                    .and_then(|b| gui.store().object(b))
+                    .map_or(0., |b| b.height());
+                assert_eq!(object.width(), 162. + vertical);
+                assert_eq!(object.height(), 122. + horizontal);
+                let (node, _) = nodes.get(entity).unwrap();
+                assert!(
+                    (node.size() * node.inverse_scale_factor())
+                        .abs_diff_eq(Vec2::new(object.width(), object.height()), 0.001)
+                );
+            }
+            capture_hard_margins(&state, &gui, &nodes, &mut commands, clear.0, "-view-size");
+            next = true;
+        }
+        13 if elapsed >= 20 => {
             eprintln!(
-                "soft clip smoke PASSED: ECS fade updates, opaque overlaps, additive blending, transformed owners, scroll edges, viewport offsets, disabling and hard clips with margins; GPU samples captured"
+                "soft clip smoke PASSED: ECS fade updates, opaque overlaps, additive blending, transformed owners, scroll edges, viewport offsets, margins and writable view sizes; GPU samples captured"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -198,6 +234,7 @@ fn capture_hard_margins(
     nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
     commands: &mut Commands,
     clear: Color,
+    suffix: &str,
 ) {
     let mut csv = String::from("panel,x,y,r,g,b\n");
     for (index, &owner) in state.owners.iter().enumerate() {
@@ -266,10 +303,12 @@ fn capture_hard_margins(
             .unwrap();
         }
     }
-    std::fs::write("target/softclip-samples-margins.csv", csv).unwrap();
+    std::fs::write(format!("target/softclip-samples{suffix}.csv"), csv).unwrap();
     commands
         .spawn(Screenshot::primary_window())
-        .observe(save_to_disk("target/fairygui-demo-softclip-margins.png"));
+        .observe(save_to_disk(format!(
+            "target/fairygui-demo-softclip{suffix}.png"
+        )));
 }
 
 fn capture(

@@ -161,6 +161,7 @@ pub(crate) fn sync(world: &mut World) {
     sync_property::<GuiImageFlip>(world);
     sync_property::<GuiSortingOrder>(world);
     sync_property::<GuiSizeConstraints>(world);
+    sync_property::<GuiViewSize>(world);
     sync_property::<GuiPixelSnapping>(world);
     sync_property::<GuiTransform>(world);
     sync_property::<GuiDisplay>(world);
@@ -186,6 +187,9 @@ pub(crate) fn sync(world: &mut World) {
         sync_property::<GuiTransform>(world);
         sync_property::<GuiDisplay>(world);
     }
+    // Constraints, outer geometry and list reflow can change the actual view
+    // after its write was consumed. Refresh its baseline before the next pass.
+    sync_property::<GuiViewSize>(world);
     world
         .non_send_mut::<GuiRuntime>()
         .prune_geometry_event_snapshots();

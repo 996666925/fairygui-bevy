@@ -598,6 +598,7 @@ pub struct GuiQuery<'w, 's> {
     opaque: Query<'w, 's, &'static crate::GuiOpaque>,
     clip_softness: Query<'w, 's, &'static crate::GuiClipSoftness>,
     margins: Query<'w, 's, &'static crate::GuiMargin>,
+    view_sizes: Query<'w, 's, &'static crate::GuiViewSize>,
     loader_settings: Query<'w, 's, &'static crate::GuiLoaderSettings>,
     sorting_orders: Query<'w, 's, &'static GuiSortingOrder>,
     render_orders: Query<'w, 's, &'static GuiRenderOrder>,
@@ -621,6 +622,9 @@ pub struct GuiQuery<'w, 's> {
 }
 
 impl GuiQuery<'_, '_> {
+    pub fn view_size(&self, entity: Entity) -> Option<Vec2> {
+        Some(self.view_sizes.get(self.view(entity)?).ok()?.0)
+    }
     pub fn pixel_snapping(&self, entity: Entity) -> Option<bool> {
         Some(self.pixel_snapping.get(self.view(entity)?).ok()?.0)
     }

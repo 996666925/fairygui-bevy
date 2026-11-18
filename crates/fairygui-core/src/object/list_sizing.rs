@@ -88,20 +88,11 @@ impl ObjectStore {
                     .max(min_size)
                 })
         };
-        let margin = data.component.margin;
-        let gutter = data
-            .component
-            .scroll_pane
-            .as_ref()
-            .filter(|pane| !pane.floating)
-            .and_then(|pane| if vertical { pane.hz_bar } else { pane.vt_bar })
-            .and_then(|bar| self.object(bar))
-            .map_or(0., |bar| if vertical { bar.height() } else { bar.width() });
         let before = self.object(list).unwrap().size();
         if vertical {
-            self.set_height(list, extent + margin.vertical() + gutter);
+            self.set_component_view_height(list, extent);
         } else {
-            self.set_width(list, extent + margin.horizontal() + gutter);
+            self.set_component_view_width(list, extent);
         }
         self.layout_list(list);
         self.layout_scroll_bars(list);

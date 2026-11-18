@@ -510,6 +510,25 @@ impl GuiObjectMut<'_> {
             runtime.store_mut().set_width(object, width);
         }
     }
+    pub fn view_size(&self) -> Option<Vec2> {
+        let size = self.runtime.store().component_view_size(self.object)?;
+        Some(Vec2::new(size.width, size.height))
+    }
+    pub fn set_view_width(&mut self, width: f32) {
+        self.runtime
+            .store_mut()
+            .set_component_view_width(self.object, width);
+    }
+    pub fn set_view_height(&mut self, height: f32) {
+        self.runtime
+            .store_mut()
+            .set_component_view_height(self.object, height);
+    }
+    pub fn set_view_size(&mut self, size: Vec2) {
+        self.runtime
+            .store_mut()
+            .set_component_view_size(self.object, fairygui_core::Size::new(size.x, size.y));
+    }
     pub fn set_height(&mut self, height: f32) {
         if height.is_finite() && height >= 0. {
             let runtime = &mut *self.runtime;
