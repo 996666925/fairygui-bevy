@@ -383,3 +383,21 @@ fn scroll_soft_edges_follow_content_and_exclude_scrollbars_and_masks() {
         .set_component_mask(owner, Some(child), false);
     assert!(policy(&gui, child).groups.iter().all(|g| g.clip.is_none()));
 }
+
+#[test]
+fn hidden_soft_edges_use_the_native_scroll_rect_bounds_after_margin_changes() {
+    let (mut gui, owner, child) = clip_fixture("Component1");
+    gui.store_mut().set_size(owner, 100., 80.);
+    gui.store_mut()
+        .set_component_margin(owner, crate::core::geom::Margin::new(12., 8., 20., 16.));
+    let clip = policy(&gui, child)
+        .groups
+        .into_iter()
+        .find_map(|g| g.clip)
+        .unwrap();
+    assert_eq!(
+        clip.rect,
+        Rect::from_corners(Vec2::ZERO, Vec2::new(80., 64.))
+    );
+    assert_eq!(clip.edges, Vec4::new(24., 20., 24., 20.));
+}

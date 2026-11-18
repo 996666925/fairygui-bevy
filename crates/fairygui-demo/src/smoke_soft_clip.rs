@@ -29,6 +29,7 @@ fn drive(
     settings: Query<&GuiScrollSettings>,
     mut cameras: Query<&mut Camera, With<Camera2d>>,
     windows: Query<&Window>,
+    clear: Res<ClearColor>,
     mut commands: Commands,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -165,8 +166,20 @@ fn drive(
             next = true;
         }
         9 if elapsed >= 20 => {
+            for &id in &state.owners {
+                commands
+                    .entity(gui.entity_of(id).unwrap())
+                    .insert(GuiMargin::new(12., 8., 30., 24.));
+            }
+            next = true;
+        }
+        10 if elapsed >= 20 => {
+            capture_hard_margins(&state, &gui, &nodes, &mut commands, clear.0);
+            next = true;
+        }
+        11 if elapsed >= 20 => {
             eprintln!(
-                "soft clip smoke PASSED: ECS fade updates, opaque overlaps, additive blending, transformed owners, scroll edges, viewport offsets and disabling; GPU samples captured"
+                "soft clip smoke PASSED: ECS fade updates, opaque overlaps, additive blending, transformed owners, scroll edges, viewport offsets, disabling and hard clips with margins; GPU samples captured"
             );
             exit.write(AppExit::Success);
             next = true;
@@ -177,6 +190,86 @@ fn drive(
         state.step += 1;
         state.since = state.frame;
     }
+}
+
+fn capture_hard_margins(
+    state: &State,
+    gui: &GuiRuntime,
+    nodes: &Query<(&ComputedNode, &UiGlobalTransform)>,
+    commands: &mut Commands,
+    clear: Color,
+) {
+    let mut csv = String::from("panel,x,y,r,g,b\n");
+    for (index, &owner) in state.owners.iter().enumerate() {
+        let object = gui.store().object(owner).unwrap();
+        // Independent expectations from the assigned margins and native
+        // updateMask/setSize, rather than the projected CalculatedClip.
+        let pane = object.control().component().unwrap().scroll_pane.as_ref();
+        let min = if pane.is_some() {
+            Vec2::new(12., 8.)
+        } else {
+            Vec2::ZERO
+        };
+        let size = if let Some(pane) = pane {
+            let v = pane
+                .vt_bar
+                .and_then(|id| gui.store().object(id))
+                .map_or(0., |b| b.width());
+            let h = pane
+                .hz_bar
+                .and_then(|id| gui.store().object(id))
+                .map_or(0., |b| b.height());
+            Vec2::new(object.width() - v - 42., object.height() - h - 32.)
+        } else {
+            Vec2::new(object.width() - 30., object.height() - 24.)
+        };
+        let (node, transform) = nodes.get(gui.entity_of(owner).unwrap()).unwrap();
+        for (p, inside) in [
+            (min + Vec2::splat(3.), true),
+            (min + size - Vec2::splat(3.), true),
+            (min + Vec2::new(size.x * 0.5, size.y * 0.5), true),
+            (min + Vec2::new(-3., size.y * 0.4), false),
+            (min + Vec2::new(size.x + 3., size.y * 0.4), false),
+            (min + Vec2::new(size.x * 0.4, -3.), false),
+            (min + Vec2::new(size.x * 0.4, size.y + 3.), false),
+        ] {
+            let screen = transform
+                .transform_point2(p / node.inverse_scale_factor() - node.size() * 0.5)
+                + state.offset;
+            let color = if inside {
+                if index == 4 {
+                    let src = SRC.to_linear();
+                    let bg = BG.to_linear();
+                    Color::linear_rgb(
+                        (src.red + bg.red).min(1.),
+                        (src.green + bg.green).min(1.),
+                        (src.blue + bg.blue).min(1.),
+                    )
+                } else {
+                    SRC
+                }
+            } else if pane.is_some() {
+                BG
+            } else {
+                clear
+            };
+            let c = color.to_srgba();
+            writeln!(
+                csv,
+                "{index},{},{},{},{},{}",
+                screen.x,
+                screen.y,
+                (c.red * 255.).round() as u8,
+                (c.green * 255.).round() as u8,
+                (c.blue * 255.).round() as u8
+            )
+            .unwrap();
+        }
+    }
+    std::fs::write("target/softclip-samples-margins.csv", csv).unwrap();
+    commands
+        .spawn(Screenshot::primary_window())
+        .observe(save_to_disk("target/fairygui-demo-softclip-margins.png"));
 }
 
 fn capture(

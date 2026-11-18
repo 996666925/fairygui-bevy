@@ -4,7 +4,7 @@ Add-Type -AssemblyName System.Drawing
 $total = 0
 $failures = 0
 $worst = 0
-foreach ($suffix in @('', '-scrolled', '-viewport', '-disabled')) {
+foreach ($suffix in @('', '-scrolled', '-viewport', '-disabled', '-margins')) {
     $capturePath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../target/fairygui-demo-softclip$suffix.png"))
     $bitmap = [System.Drawing.Bitmap]::new($capturePath)
     try {
@@ -14,13 +14,13 @@ foreach ($suffix in @('', '-scrolled', '-viewport', '-disabled')) {
             $pixel = $bitmap.GetPixel($x, $y)
             $actual = @($pixel.R, $pixel.G, $pixel.B)
             $expected = @([int]$sample.r, [int]$sample.g, [int]$sample.b)
-            $error = 0
-            for ($i=0; $i -lt 3; $i++) { $error = [Math]::Max($error, [Math]::Abs($actual[$i]-$expected[$i])) }
-            $worst = [Math]::Max($worst, $error)
+            $channelError = 0
+            for ($i=0; $i -lt 3; $i++) { $channelError = [Math]::Max($channelError, [Math]::Abs($actual[$i]-$expected[$i])) }
+            $worst = [Math]::Max($worst, $channelError)
             $total++
-            if ($error -gt $Tolerance) {
+            if ($channelError -gt $Tolerance) {
                 $failures++
-                Write-Output "FAIL $suffix panel=$($sample.panel) at=($x,$y) expected=$expected actual=$actual error=$error"
+                Write-Output "FAIL $suffix panel=$($sample.panel) at=($x,$y) expected=$expected actual=$actual error=$channelError"
             }
         }
     } finally { $bitmap.Dispose() }

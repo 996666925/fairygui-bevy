@@ -282,6 +282,7 @@ impl CoordinateTransform {
         } else {
             (px, py)
         };
+        let scroll = o.component_scroll_offset();
         Self {
             a,
             b,
@@ -291,12 +292,14 @@ impl CoordinateTransform {
                 .image_display_position()
                 .map_or(f64::from(o.x()) + offset_x - a * px - c * py, |p| {
                     f64::from(p.x)
-                }),
+                })
+                - f64::from(scroll.x * o.scale_x()),
             ty: o
                 .image_display_position()
                 .map_or(f64::from(o.y()) + offset_y - b * px - d * py, |p| {
                     f64::from(p.y)
-                }),
+                })
+                - f64::from(scroll.y * o.scale_y()),
         }
     }
 

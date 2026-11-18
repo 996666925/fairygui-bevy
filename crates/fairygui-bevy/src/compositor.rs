@@ -44,21 +44,20 @@ pub(super) struct SoftClip {
     pub from_screen: [Vec4; 2],
 }
 
-fn soft_clip(object: &fairygui_core::GObject) -> Option<SoftClip> {
+fn soft_clip(object: &fairygui_core::GObject, bounds: fairygui_core::Rect) -> Option<SoftClip> {
     use fairygui_core::widget::OverflowType;
     let component = object.control().component()?;
     let softness = component.clip_softness;
     if softness.x <= 0. && softness.y <= 0. {
         return None;
     }
-    let margin = component.margin;
-    let (min, size, edges) = if let Some(pane) = component.scroll_pane.as_ref() {
+    let edges = if let Some(pane) = component.scroll_pane.as_ref() {
         if !pane.clip {
             return None;
         }
         let position = pane.display_pos();
         let max = pane.max_scroll_pos();
-        let edges = Vec4::new(
+        Vec4::new(
             if pane.softness_on_top_left && position.x > 0. {
                 softness.x
             } else {
@@ -71,36 +70,14 @@ fn soft_clip(object: &fairygui_core::GObject) -> Option<SoftClip> {
             },
             if position.x < max.x { softness.x } else { 0. },
             if position.y < max.y { softness.y } else { 0. },
-        );
-        let view = pane.view_size();
-        if pane.dont_clip_margin {
-            (
-                Vec2::ZERO,
-                Vec2::new(
-                    view.width + margin.left + margin.right,
-                    view.height + margin.top + margin.bottom,
-                ),
-                edges,
-            )
-        } else {
-            (
-                Vec2::new(margin.left, margin.top),
-                Vec2::new(view.width, view.height),
-                edges,
-            )
-        }
-    } else if component.overflow == OverflowType::Hidden {
-        (
-            Vec2::new(margin.left, margin.top),
-            Vec2::new(
-                object.width() - margin.left - margin.right,
-                object.height() - margin.top - margin.bottom,
-            ),
-            Vec4::new(softness.x, softness.y, softness.x, softness.y),
         )
+    } else if component.overflow == OverflowType::Hidden {
+        Vec4::new(softness.x, softness.y, softness.x, softness.y)
     } else {
         return None;
     };
+    let min = Vec2::new(bounds.x, bounds.y);
+    let size = Vec2::new(bounds.width, bounds.height);
     Some(SoftClip {
         rect: Rect::from_corners(min, min + size.max(Vec2::ZERO)),
         edges,
@@ -231,19 +208,9 @@ fn policy(gui: &GuiRuntime, id: GObjectId) -> PaintPolicy {
             && index + 1 < chain.len()
             && !gui.store().is_scroll_overlay(chain[index + 1].0)
             && object.mask() != Some(chain[index + 1].0)
-            && let Some(mut clip) = soft_clip(object)
+            && let Some(bounds) = gui.store().component_clip_rect(id)
+            && let Some(clip) = soft_clip(object, bounds)
         {
-            if let Some(pane) = object
-                .control()
-                .component()
-                .and_then(|c| c.scroll_pane.as_ref())
-                && pane.display_on_left
-                && !pane.floating
-                && let Some(bar) = pane.vt_bar.and_then(|bar| gui.store().object(bar))
-            {
-                clip.rect.min.x += bar.width();
-                clip.rect.max.x += bar.width();
-            }
             clips.push(Group {
                 id,
                 matrix: ColorMatrix::IDENTITY,

@@ -824,7 +824,11 @@ fn update_margin(mut margins: Query<&mut GuiMargin>) {
 Hidden 溢出和滚动容器立即更新内容原点。普通滚动条仍贴合外部边缘，刷新头尾跟随视口原点。
 允许有限负值；非有限字段恢复原值，其余有效字段继续生效。
 查询使用 `gui.margin(entity)`，即时修改使用 `GuiObjectMut::set_margin`。
-硬裁剪仍使用现有 Bevy overflow 范围，尚未完整复刻非零边距下 Laya `scrollRect` 的位移与裁剪语义。
+硬裁剪使用原版容器和遮罩的作用范围，并投影为 Bevy 的 `CalculatedClip`，渲染和输入共享裁剪区域。
+Hidden 容器抵消左、上边距造成的内容平移，裁剪宽高按 Laya `updateMask` 只扣右、下边距；
+滚动容器按视口和边距裁剪内容、刷新头尾，普通滚动条保留在遮罩外。
+关闭裁剪、允许内容进入边距和按需滚动条回收空间均沿用包内配置。
+外部 Bevy 容器的裁剪及应用子节点的 overflow、`OverrideClip`、`FixedNode` 继续参与裁剪栈。
 
 组件、列表和树中导出的 `clipSoftness` 会保留并渲染为边缘渐隐，也可通过
 `GuiClipSoftness(Vec2::new(24., 20.))` 修改，宽度单位为控件局部逻辑像素，零值关闭。

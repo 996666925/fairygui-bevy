@@ -39,9 +39,16 @@ struct PointerViews<'w, 's> {
     targets: Query<'w, 's, &'static bevy::ui::ComputedUiTargetCamera>,
     cameras: Query<'w, 's, &'static Camera>,
     inputs: Query<'w, 's, (), With<crate::runtime::InputPresentation>>,
+    clips: Query<'w, 's, &'static bevy::ui::CalculatedClip>,
     clock: Option<Res<'w, Time<Real>>>,
 }
 impl PointerViews<'_, '_> {
+    fn clip_allows(&self, entity: Entity, position: Vec2, scale: f32) -> bool {
+        self.clips
+            .get(entity)
+            .ok()
+            .is_none_or(|clip| clip.contains_point(self.physical_position(entity, position, scale)))
+    }
     fn time_ms(&self, fallback: &Time) -> f64 {
         self.clock
             .as_ref()
@@ -673,6 +680,11 @@ fn route_pointer(
                         .map_or(hovered.0, |hits| hits.contains_key(entity))
                         && child.is_none()
                         && eligible(&runtime, object.0)
+                        && views.clip_allows(
+                            *entity,
+                            cursor.unwrap(),
+                            window.map_or(1., |(_, w, _)| w.scale_factor()),
+                        )
                         && masks::allowed(
                             &runtime,
                             object.0,

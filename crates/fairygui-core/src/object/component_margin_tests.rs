@@ -105,8 +105,9 @@ fn component_margin_origins_and_views_match_840_native_snapshots() {
             .collect();
         assert_eq!(actual.as_slice(), expected, "case {cases}: {line}");
         if let Some(child) = store.content_children(id).unwrap().first() {
-            assert_eq!(store.local_to_global(*child, Point::ZERO), Some(origin));
-            assert_eq!(store.global_to_local(*child, origin), Some(Point::ZERO));
+            let global = store.local_to_global(id, origin).unwrap();
+            assert_eq!(store.local_to_global(*child, Point::ZERO), Some(global));
+            assert_eq!(store.global_to_local(*child, global), Some(Point::ZERO));
         }
         snapshots += 1;
     }

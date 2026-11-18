@@ -193,6 +193,7 @@ pub(super) fn route_touches(
                     hits.contains_key(entity)
                         && child.is_none()
                         && eligible(&runtime, object.0)
+                        && views.clip_allows(*entity, position, scale)
                         && masks::allowed(
                             &runtime,
                             object.0,

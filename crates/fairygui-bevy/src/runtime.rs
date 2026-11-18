@@ -230,6 +230,9 @@ mod bitmap_text_tests;
 #[cfg(test)]
 #[path = "list_bar_tests.rs"]
 mod list_bar_tests;
+#[cfg(test)]
+#[path = "native_clipping_tests.rs"]
+mod native_clipping_tests;
 #[path = "scroll_extent.rs"]
 mod scroll_extent;
 #[cfg(test)]

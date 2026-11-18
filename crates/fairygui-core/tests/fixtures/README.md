@@ -389,3 +389,18 @@ floating bars and dontClipMargin. Scalar Sprite/Point holders and inert scheduli
 replace Laya infrastructure; list bounds are a single 50-by-20 row. Pane content
 clamping, refresh bars, hit tests, painting, OS input and GPU are not simulated.
 Extracted method hashes are in the header; method numbers follow the order above.
+
+`component-clip-reference.txt` executes unchanged GComponent.updateMask,
+ScrollPane.setSize/adjustMaskContainer/handleSizeChanged and Laya Sprite
+toParentPoint/fromParentPoint methods in scalar hosts. It records 1,024 pane
+configurations, four Hidden margins and 72 coordinate round trips with scale,
+reflection, rotation and anchor pivots. Pane events and scheduling are inert;
+native GPU and OS input are not run. Painted clip bounds use the uniform offset
+identity in ClipVertex.glsl from LayaAir revision
+`c572fdfafb48386823bf6ab1d2b04e495a5227bf`. Method and shader hashes are recorded.
+
+`Clipping.fui` derives from Basics, changing package identity/URLs, dependency
+metadata and Demo_Graph's component overflow byte from Visible to Hidden.
+Its original children, resources, controllers and geometry remain unchanged;
+tests use the Basics atlas prefix. It supplies an actual serialized Hidden
+component for Bevy layout and clipping regressions.

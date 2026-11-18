@@ -98,6 +98,7 @@ mod size_properties;
 pub use size_properties::GuiSizeConstraints;
 mod margin_property;
 pub use margin_property::GuiMargin;
+mod native_clipping;
 mod scroll_properties;
 pub use scroll_properties::GuiScrollSettings;
 mod visual_properties;
@@ -607,6 +608,10 @@ impl Plugin for FairyGuiPlugin {
                 .before(bevy::ui::widget::text_system)
                 .before(bevy::ui::widget::sync_editable_text_viewports)
                 .before(bevy::ui::update::update_clipping_system),
+        );
+        app.add_systems(
+            PostUpdate,
+            native_clipping::project.after(bevy::ui::update::update_clipping_system),
         );
         app.add_systems(
             PostUpdate,

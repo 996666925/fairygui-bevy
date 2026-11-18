@@ -26,6 +26,11 @@ pub(crate) fn project_scroll_overflow(
             .store()
             .component_content_origin(owner.0)
             .unwrap_or_default();
+        let hidden_scroll = runtime
+            .store()
+            .object(owner.0)
+            .unwrap()
+            .component_scroll_offset();
         let offset = Vec2::new(
             if display.x < 0. || display.x > max.x {
                 node.scroll_position.x - display.x * scale
@@ -37,7 +42,7 @@ pub(crate) fn project_scroll_overflow(
             } else {
                 0.
             },
-        ) + Vec2::new(origin.x, origin.y) * scale;
+        ) + Vec2::new(origin.x - hidden_scroll.x, origin.y - hidden_scroll.y) * scale;
         // Content follows its retained origin; refresh bars follow the mask.
         // Ordinary scrollbars and the ECS-only extent stay on the owner.
         // All paint descendants receive each ancestor's offset once.
