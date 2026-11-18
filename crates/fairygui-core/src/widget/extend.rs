@@ -164,6 +164,23 @@ impl Default for ButtonData {
     }
 }
 
+/// UIConfig values captured when a button is constructed. Resource and instance
+/// settings can override them; changing defaults never edits existing buttons.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ButtonDefaults {
+    pub sound: Option<String>,
+    pub sound_volume_scale: f32,
+}
+
+impl Default for ButtonDefaults {
+    fn default() -> Self {
+        Self {
+            sound: None,
+            sound_volume_scale: 1.,
+        }
+    }
+}
+
 /// 标签数据。
 #[derive(Debug, Clone, Default)]
 pub struct LabelData {
@@ -245,29 +262,30 @@ impl Default for SliderData {
     }
 }
 
-/// 读取按钮的扩展数据（组件描述块 6）。
-pub(crate) fn read_button_extension(
+/// Apply resource fields over the constructor's UIConfig defaults. Empty
+/// resource sounds inherit, whereas empty instance sounds explicitly mute.
+pub(crate) fn setup_button_extension(
+    data: &mut ButtonData,
     buffer: &mut ByteBuffer<'_>,
     table: &StringTable,
-) -> Result<(ButtonMode, Option<String>, f32, i32, f32)> {
+) -> Result<()> {
     if !buffer.seek(0, 6)? {
-        return Ok((ButtonMode::Common, None, 1.0, 0, 0.8));
+        return Ok(());
     }
 
-    let mode = ButtonMode::from_code(buffer.read_i8()?);
-    let sound = buffer.read_s(table)?;
-    let sound_volume_scale = buffer.read_f32()?;
-    let down_effect = i32::from(buffer.read_i8()?);
-    let down_effect_value = buffer.read_f32()?;
-
-    Ok((
-        mode,
-        sound,
-        sound_volume_scale,
-        down_effect,
-        down_effect_value,
-    ))
+    data.mode = ButtonMode::from_code(buffer.read_i8()?);
+    if let Some(sound) = buffer.read_s(table)?.filter(|sound| !sound.is_empty()) {
+        data.sound = Some(sound);
+    }
+    data.sound_volume_scale = buffer.read_f32()?;
+    data.down_effect = i32::from(buffer.read_i8()?);
+    data.down_effect_value = buffer.read_f32()?;
+    Ok(())
 }
+
+#[cfg(test)]
+#[path = "button_defaults_tests.rs"]
+mod button_defaults_tests;
 
 /// 读取按钮的实例数据（父容器中该子对象的块 6）。
 pub(crate) fn setup_button(

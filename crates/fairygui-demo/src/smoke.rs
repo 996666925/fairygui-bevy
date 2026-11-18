@@ -273,6 +273,8 @@ mod text_selection;
 pub(super) fn install_text_selection(app: &mut App) {
     text_selection::install(app);
 }
+#[path = "smoke_audio.rs"]
+mod audio;
 #[path = "smoke_input_policy.rs"]
 mod input_policy;
 #[path = "smoke_list_bars.rs"]
@@ -510,6 +512,9 @@ pub(super) fn install_compositor(app: &mut App) {
 
 pub(super) fn install_masks(app: &mut App) {
     masks::install(app);
+}
+pub(super) fn install_audio(app: &mut App) {
+    audio::install(app);
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]

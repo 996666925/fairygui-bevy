@@ -1793,6 +1793,27 @@ fn show_help(_: On<GuiClick>, mut tooltip: GuiTooltip) {
 `--smoke-tooltip` 验证真实悬停、边缘定位、复用及提示覆盖按钮时
 的点击穿透。
 
+按钮的全局默认音效通过 `GuiConfig.button` 配置：
+
+```rust,ignore
+fn configure_audio(mut config: ResMut<GuiConfig>) {
+    config.button.sound = Some("audio/click.wav".into());
+    config.button.sound_volume_scale = 0.5;
+}
+```
+
+新按钮在构造时捕获默认值；修改配置不会覆盖已有按钮的设置。资源扩展的音效为
+`null` 或空串时继承全局音效，非空时覆盖；实例的空串则显式静音。资源扩展始终
+覆盖其音量字段，因此导出按钮通常沿用资源音量；单个按钮可通过
+`GuiButtonSettings.sound_volume_scale` 修改。全局音量默认值用于尚无扩展数据的按钮。
+分帧构建中的按钮也在各自实际创建时读取默认值，已经构建的子按钮保持原有设置。
+
+`ui://` 音效按声音所属包的资产目录解析。普通音频路径直接交给 `AssetServer`，
+例如 `audio/click.wav` 表示 assets 根目录下的公共音效，不会再拼接控件包的目录。
+点击后即使控件在同帧销毁，已入队的音效仍会播放。播放音量夹到 0..1，NaN 按 0
+处理；一次性播放实体在结束后自动回收。`--smoke-audio` 验证真实解码、音频 sink、
+音量、回收及静音；不进行音频波形的原版逐样本对比。
+
 全局滚动默认值通过 `GuiConfig` Bevy 资源配置；scroll pane 导出项若保留默认值，
 会使用 `GuiConfig.scroll` 中的滚动条显示、触摸滚动、回弹、滚轮步长、减速率、
 分页阈值和虚拟列表项吸附阈值；减速率默认 `0.967`，虚拟列表吸附阈值默认 `0.1`。

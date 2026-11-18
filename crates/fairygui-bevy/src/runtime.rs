@@ -79,6 +79,9 @@ pub struct GuiButtonSelected(pub bool);
 pub struct GuiConfig {
     /// Global scroll-pane defaults used while loading `.fui` components.
     pub scroll: fairygui_core::scroll::ScrollDefaults,
+    /// Default click sound captured by newly constructed buttons. An exported
+    /// resource sound takes priority; an empty instance sound explicitly mutes.
+    pub button: fairygui_core::widget::ButtonDefaults,
 }
 
 /// ECS-owned FairyGUI root. Add this component to any entity to create the
@@ -1765,7 +1768,7 @@ impl GuiRuntime {
     /// 把音效地址解析成包内记录的文件名。
     ///
     /// 地址通常是 `ui://` 形式，经注册表查出条目再取它记录的文件名；
-    /// 不是地址形式时按包内文件名直接使用。
+    /// 非 ui:// 字符串保留为 AssetServer 资产路径。
     ///
     /// `ui://` 地址解析不出来就是真的找不到，返回 `None` 而不是把它当成
     /// 文件名——那样只会让资产加载器在运行时静默失败。
@@ -2693,8 +2696,8 @@ pub fn spawn_pending_objects(
 /// 地址解析成包内记录的文件名，再拼成资产路径交给 Bevy 的音频系统。
 /// 播放实体是一次性的，放完自动回收。
 ///
-/// 声音文件与界面在同一个包目录下——包内记录的文件名带包名前缀但不带目录，
-/// 这是编辑器导出的约定，与图集走的是同一套解析。
+/// ui:// 音效按声音所属包的目录解析。其他字符串直接交给 AssetServer，
+/// 可用于 assets 根目录下的公共音效或自定义资产源，且不依赖触发控件仍然存在。
 pub fn play_queued_sounds(
     mut commands: Commands,
     mut runtime: NonSendMut<GuiRuntime>,
@@ -2707,30 +2710,44 @@ pub fn play_queued_sounds(
     }
 
     for (owner, sound, volume) in queued {
-        let Some(file) = runtime.resolve_sound_file(&sound) else {
+        let Some(path) = sound_asset_path(&runtime, &assets, &sound) else {
             tracing::warn!(?owner, %sound, "找不到音效资源，已跳过");
-            continue;
-        };
-        let asset = if sound.starts_with("ui://") {
-            assets
-                .iter()
-                .find_map(|(_, asset)| asset.package.resolve_local_url(&sound).map(|_| asset))
-        } else {
-            runtime
-                .asset_handle_for(owner)
-                .and_then(|handle| assets.get(&handle))
-        };
-        let Some(asset) = asset else {
             continue;
         };
 
         commands.spawn((
-            bevy::audio::AudioPlayer::new(asset_server.load(asset.resolve_asset_path(&file))),
-            bevy::audio::PlaybackSettings::DESPAWN
-                .with_volume(bevy::audio::Volume::Linear(volume.clamp(0.0, 1.0))),
+            bevy::audio::AudioPlayer::new(asset_server.load(path)),
+            bevy::audio::PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(
+                if volume.is_nan() {
+                    0.
+                } else {
+                    volume.clamp(0.0, 1.0)
+                },
+            )),
         ));
     }
 }
+
+fn sound_asset_path(
+    runtime: &GuiRuntime,
+    assets: &Assets<FuiAsset>,
+    sound: &str,
+) -> Option<String> {
+    if sound.is_empty() {
+        return None;
+    }
+    if !sound.starts_with("ui://") {
+        return Some(sound.to_owned());
+    }
+    let (package, _) = runtime.resolve_url(sound)?;
+    let file = runtime.resolve_sound_file(sound)?;
+    let asset = assets.get(runtime.package_handles.get(package.id())?)?;
+    Some(asset.resolve_asset_path(&file))
+}
+
+#[cfg(test)]
+#[path = "audio_tests.rs"]
+mod audio_tests;
 
 /// 递归生成一个对象及其子对象的实体。
 // 生成实体树需要的上下文都要一路传下去；打包成结构体反而让递归调用更啰嗦。
@@ -3895,6 +3912,9 @@ pub fn advance_async_builds(mut runtime: NonSendMut<GuiRuntime>, assets: Res<Ass
 pub fn sync_ui_config(config: Res<GuiConfig>, mut runtime: NonSendMut<GuiRuntime>) {
     if config.is_changed() {
         runtime.set_scroll_defaults(config.scroll.clone());
+        runtime
+            .store_mut()
+            .set_button_defaults(config.button.clone());
     }
 }
 

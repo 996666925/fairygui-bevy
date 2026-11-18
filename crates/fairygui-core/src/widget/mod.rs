@@ -27,7 +27,9 @@ pub use component::{
     create_from_package_with_registry,
 };
 pub use controller::{Controller, PackageEnv};
-pub use extend::{ButtonData, ButtonMode, ButtonState, LabelData, ProgressData, SliderData};
+pub use extend::{
+    ButtonData, ButtonDefaults, ButtonMode, ButtonState, LabelData, ProgressData, SliderData,
+};
 pub use gear::{Gear, GearKind, GearTweenConfig, GearValue};
 pub use leaf::{
     FillMethod, FlipType, GraphData, GraphType, GroupData, ImageData, LoaderData, MovieClipData,

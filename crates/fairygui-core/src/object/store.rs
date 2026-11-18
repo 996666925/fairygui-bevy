@@ -217,6 +217,7 @@ pub struct GearTween {
 /// 对象竞技场。
 #[derive(Debug, Default)]
 pub struct ObjectStore {
+    button_defaults: crate::widget::ButtonDefaults,
     objects: slotmap::SlotMap<GObjectId, GObject>,
     dirty_ids: HashSet<GObjectId>,
     list_bounds: std::collections::HashMap<GObjectId, Size>,
@@ -327,6 +328,10 @@ impl ObjectStore {
     pub fn create(&mut self, kind: ObjectType) -> GObjectId {
         let mut object = GObject::new(kind);
         object.control = crate::widget::ControlData::for_kind(kind);
+        if let crate::widget::ControlData::Button(data) = &mut object.control {
+            data.sound.clone_from(&self.button_defaults.sound);
+            data.sound_volume_scale = self.button_defaults.sound_volume_scale;
+        }
 
         let id = self.objects.insert(object);
         self.dirty_ids.insert(id);

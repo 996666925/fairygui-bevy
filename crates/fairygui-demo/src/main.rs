@@ -320,6 +320,8 @@ fn main() -> AppExit {
         smoke::install_windows(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-masks") {
         smoke::install_masks(&mut app);
+    } else if std::env::args().any(|arg| arg == "--smoke-audio") {
+        smoke::install_audio(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-compositor") {
         smoke::install_compositor(&mut app);
     } else if std::env::args().any(|arg| arg == "--smoke-loop-list") {

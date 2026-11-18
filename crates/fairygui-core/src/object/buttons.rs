@@ -10,6 +10,18 @@ pub(super) struct ButtonFeedback {
 }
 
 impl ObjectStore {
+    /// Defaults apply at construction time, including package and pooled-row
+    /// construction. Keep finite raw volume values; playback normalizes gain.
+    pub fn set_button_defaults(&mut self, mut defaults: crate::widget::ButtonDefaults) {
+        if !defaults.sound_volume_scale.is_finite() {
+            defaults.sound_volume_scale = self.button_defaults.sound_volume_scale;
+        }
+        self.button_defaults = defaults;
+    }
+
+    pub fn button_defaults(&self) -> &crate::widget::ButtonDefaults {
+        &self.button_defaults
+    }
     /// Parent controllers are installed after all child instance records. Keep
     /// their serialized index until then; a negative value preserves the binding.
     pub(crate) fn set_button_instance_controller(&mut self, id: GObjectId, index: i16) {

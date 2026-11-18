@@ -670,6 +670,14 @@ fn build_component(
     let mut control = match item.object_type {
         ObjectType::Button => ControlData::Button(Box::new(super::extend::ButtonData {
             component,
+            sound: match store.object(object).unwrap().control() {
+                ControlData::Button(data) => data.sound.clone(),
+                _ => None,
+            },
+            sound_volume_scale: match store.object(object).unwrap().control() {
+                ControlData::Button(data) => data.sound_volume_scale,
+                _ => 1.,
+            },
             ..Default::default()
         })),
         ObjectType::Label => ControlData::Label(Box::new(super::extend::LabelData {
@@ -709,13 +717,7 @@ fn build_component(
     };
 
     if let ControlData::Button(data) = &mut control {
-        let (mode, sound, volume, down_effect, down_effect_value) =
-            super::extend::read_button_extension(&mut buffer, package.string_table())?;
-        data.mode = mode;
-        data.sound = sound;
-        data.sound_volume_scale = volume;
-        data.down_effect = down_effect;
-        data.down_effect_value = down_effect_value;
+        super::extend::setup_button_extension(data, &mut buffer, package.string_table())?;
     }
 
     if let ControlData::ComboBox(data) = &mut control {

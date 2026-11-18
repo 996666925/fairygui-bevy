@@ -11,10 +11,20 @@
 | `Bag.fui` | 序列帧（影片剪辑） |
 | `Transition.fui` | 条目数量较多，用于验证条目表与精灵表的规模 |
 | `Basics.fui` | 控制器、齿轮、按钮与可滚动容器 |
+| `ButtonDefaults.fui` | 从 Basics 派生，Button1 资源音效设为 null、Button2 设为空串，用于全局默认音效的同步与分帧构建测试 |
 | `Chat.fui` | 唯一配置了滚动条的示例包，用于验证滚动条的实例化与联动 |
 | `Cooldown.fui` | 径向填充进度条的初始化、实际取值与稳定图片尺寸 |
 
 以上 `.fui` 文件用于核心运行时测试，不参与运行时的资源加载；完整工程请见上游仓库。
+
+`ButtonDefaults.fui` 的包编号为 `bdef0001`，包名为 `ButtonDefaults`。除包身份及
+包内 URL 重写外，仅改动 Button1、Button2 的资源扩展块 6 中的声音字符串索引，
+分别写入原版 null 标记 65534 和空串标记 65533；布局、实例覆盖及资源音量保留。
+
+`button-defaults-reference.txt` 执行未经改动的原版 `GButton` 构造函数、
+`constructExtension` 和 `setup_afterAdd`。夹具记录源文件和类源码 SHA256，覆盖
+288 种默认声音、默认音量、缺失/空/显式资源声音以及实例静音和音量覆盖的组合。
+这证明构造和覆盖顺序，不证明音频设备或最终波形与原版一致。
 
 `PopupHost.fui`、`PopupTheme.fui`、`PopupCycle.fui` 是基于上述 `Basics.fui`
 生成的依赖测试夹具。运行 `python tools/generate_popup_packages.py` 可确定性重建。
